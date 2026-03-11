@@ -1,0 +1,9 @@
+# Core
+Django==4.2.29
+psycopg2-binary==2.9.11
+
+# Env vars
+python-decouple==3.8
+
+# Utilities
+typing_extensions==4.15.0

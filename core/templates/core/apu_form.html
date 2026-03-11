@@ -1,0 +1,125 @@
+{% extends "core/base.html" %}
+{% block title %}APU — {{ proyecto.consecutivo }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/proyectos/">Proyectos</a></li>
+    <li class="breadcrumb-item"><a href="/proyectos/{{ proyecto.pk }}/">{{ proyecto.consecutivo }}</a></li>
+    <li class="breadcrumb-item active">Generar APU</li>
+  </ol>
+</nav>
+
+<h3 class="mb-1">💰 Generar APU — {{ proyecto.nombre }}</h3>
+<p class="text-muted mb-4">
+  Sistema: <strong>{{ ps.sistema.nombre }} / {{ ps.subsistema.nombre }}</strong>
+  · Total PowerGrip: <strong>{{ ps.total_powergip }}</strong>
+  · Cuadrilla: <strong>{{ ps.cuadrilla_personas }} personas</strong>
+</p>
+
+{% if apu %}
+<div class="alert alert-info">
+  Ya existe un APU generado para este proyecto.
+  <a href="/proyectos/{{ proyecto.pk }}/apu/detalle/" class="alert-link">Ver APU actual</a>.
+  Al enviar este formulario se sobreescribirá.
+</div>
+{% endif %}
+
+<form method="post">
+  {% csrf_token %}
+  <div class="row">
+
+    <!-- Mano de obra -->
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header fw-bold text-warning bg-dark">👷 Mano de obra</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">{{ form.hya_dia.label }}</label>
+            {{ form.hya_dia }}
+            <div class="form-text">{{ form.fields.hya_dia.help_text }}</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">{{ form.cuadrilla_dia.label }}</label>
+            {{ form.cuadrilla_dia }}
+            <div class="form-text">{{ form.fields.cuadrilla_dia.help_text }}</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">{{ form.dotacion_dia.label }}</label>
+            {{ form.dotacion_dia }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">{{ form.proteccion_dia.label }}</label>
+            {{ form.proteccion_dia }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Herramientas, transporte, admin -->
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header fw-bold text-info bg-dark">🔧 Herramientas específicas</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">{{ form.herramientas_raw.label }}</label>
+            {{ form.herramientas_raw }}
+            <div class="form-text">{{ form.fields.herramientas_raw.help_text }}</div>
+            {% if form.herramientas_raw.errors %}
+              <div class="text-danger small">{{ form.herramientas_raw.errors }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header fw-bold text-success bg-dark">🚛 Transporte y administración</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">{{ form.costo_transporte.label }}</label>
+            {{ form.costo_transporte }}
+            <div class="form-text">{{ form.fields.costo_transporte.help_text }}</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">{{ form.costo_admin.label }}</label>
+            {{ form.costo_admin }}
+            <div class="form-text">{{ form.fields.costo_admin.help_text }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Fórmulas de referencia -->
+  <div class="card mb-4">
+    <div class="card-header fw-bold">📐 Referencia de fórmulas APU</div>
+    <div class="card-body">
+      <pre class="json-view">MANO DE OBRA:
+  dias          = Total_PowerGrip / (personas × 40)
+  CU_HYA        = (hya_dia × (rend + personas) × dias × AIU × MG) / TP
+  CU_cuadrilla  = (cuadrilla_dia × personas × AIU × MG) / TP
+  CU_dotacion   = (dotacion_dia × (rend + personas) × dias × AIU × MG) / TP
+  CU_proteccion = (proteccion_dia × (rend + personas) × dias × AIU × MG) / TP
+
+HERRAMIENTAS:   CU = precio_total / Total_PowerGrip
+TRANSPORTE:     CU = costo_total / Total_PowerGrip
+ADMINISTRACIÓN: CU = costo_total / Total_PowerGrip
+
+MATERIALES: Se calculan automáticamente desde el despiece.
+  CU_material = precio × factor_IVA
+  VU_material = CU × (1 + factor_venta%)
+
+AIU   = {{ ps.proyecto.aiu_pct }}%
+Margen comercial = {{ ps.proyecto.margen_comercial_pct }}%</pre>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary btn-lg">
+      📊 Generar APU completo
+    </button>
+    <a href="/proyectos/{{ proyecto.pk }}/" class="btn btn-outline-secondary btn-lg">Cancelar</a>
+  </div>
+</form>
+{% endblock %}

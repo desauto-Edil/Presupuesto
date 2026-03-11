@@ -1,0 +1,158 @@
+{% extends "core/base.html" %}
+{% block title %}APU Detalle — {{ proyecto.consecutivo }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/proyectos/">Proyectos</a></li>
+    <li class="breadcrumb-item"><a href="/proyectos/{{ proyecto.pk }}/">{{ proyecto.consecutivo }}</a></li>
+    <li class="breadcrumb-item active">APU Detalle</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h3 class="mb-1">📊 APU — {{ proyecto.nombre }}</h3>
+    <p class="text-muted">
+      {{ ps.sistema.nombre }} / {{ ps.subsistema.nombre }}
+      · Total PowerGrip: <strong>{{ ps.total_powergip }}</strong>
+    </p>
+  </div>
+  <a href="/proyectos/{{ proyecto.pk }}/apu/" class="btn btn-outline-warning">
+    🔁 Recalcular APU
+  </a>
+</div>
+
+<!-- Totales -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card border-primary">
+      <div class="card-body text-center">
+        <div class="text-muted">TOTAL COSTO</div>
+        <div class="apu-total text-primary">${{ apu.total_costo|floatformat:0 }}</div>
+        <div class="small text-muted">COP</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card border-success">
+      <div class="card-body text-center">
+        <div class="text-muted">TOTAL VALOR VENTA</div>
+        <div class="apu-total text-success">${{ apu.total_valor_venta|floatformat:0 }}</div>
+        <div class="small text-muted">COP · Margen: {{ apu.factor_venta_pct }}%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Subtotales -->
+<div class="row g-2 mb-4">
+  {% with subtotales=apu %}
+  <div class="col">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="small text-muted">Materiales</div>
+        <div class="fw-bold">${{ apu.subtotal_materiales|floatformat:0 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="small text-muted">Mano de obra</div>
+        <div class="fw-bold">${{ apu.subtotal_mano_obra|floatformat:0 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="small text-muted">Herramientas</div>
+        <div class="fw-bold">${{ apu.subtotal_herramientas|floatformat:0 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="small text-muted">Transporte</div>
+        <div class="fw-bold">${{ apu.subtotal_transporte|floatformat:0 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="small text-muted">Administración</div>
+        <div class="fw-bold">${{ apu.subtotal_administracion|floatformat:0 }}</div>
+      </div>
+    </div>
+  </div>
+  {% endwith %}
+</div>
+
+<!-- Tiempo estimado -->
+{% if apu.dias_trabajo %}
+<div class="alert alert-secondary d-flex gap-4 mb-4">
+  <span><strong>Días de trabajo:</strong> {{ apu.dias_trabajo|floatformat:1 }}</span>
+  <span><strong>Tiempo estimado:</strong> {{ apu.tiempo_estimado_meses|floatformat:1 }} mes(es)</span>
+  <span><strong>Rendimiento:</strong> {{ apu.rendimiento_und_dia|floatformat:1 }} und/día</span>
+</div>
+{% endif %}
+
+<!-- Líneas por tipo -->
+{% for tipo_code, grupo in grupos.items %}
+{% if grupo.lineas %}
+<div class="card mb-3">
+  <div class="card-header fw-bold">
+    {% if tipo_code == 'MATERIALES' %}🔩
+    {% elif tipo_code == 'MANO_DE_OBRA' %}👷
+    {% elif tipo_code == 'HERRAMIENTAS_EQUIPOS' %}🔧
+    {% elif tipo_code == 'TRANSPORTE' %}🚛
+    {% else %}📋{% endif %}
+    {{ grupo.label }}
+    <span class="badge bg-secondary ms-2">{{ grupo.lineas|length }} líneas</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Descripción</th>
+            <th class="text-end">Rendimiento</th>
+            <th class="text-end">Precio Ref.</th>
+            <th class="text-end">Costo U.</th>
+            <th class="text-end">Valor U.</th>
+            <th class="text-end">Costo Total</th>
+            <th class="text-end">Valor Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linea in grupo.lineas %}
+          <tr>
+            <td>{{ linea.descripcion }}</td>
+            <td class="text-end">{{ linea.rendimiento|floatformat:4 }}</td>
+            <td class="text-end">${{ linea.precio_referencia|floatformat:2 }}</td>
+            <td class="text-end">${{ linea.costo_unitario|floatformat:2 }}</td>
+            <td class="text-end">${{ linea.valor_unitario|floatformat:2 }}</td>
+            <td class="text-end fw-semibold">${{ linea.costo_total|floatformat:0 }}</td>
+            <td class="text-end fw-semibold text-success">${{ linea.valor_total|floatformat:0 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<!-- Resumen JSON -->
+<div class="card mt-4">
+  <div class="card-header fw-bold">🔌 API — Resumen del APU</div>
+  <div class="card-body">
+    <pre class="json-view">GET /api/proyectos/{{ proyecto.pk }}/resumen/</pre>
+  </div>
+</div>
+
+{% endblock %}
