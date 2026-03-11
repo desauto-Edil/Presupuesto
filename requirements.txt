@@ -1,9 +1,6 @@
-# Core
+asgiref==3.11.1
 Django==4.2.29
 psycopg2-binary==2.9.11
-
-# Env vars
 python-decouple==3.8
-
-# Utilities
+sqlparse==0.5.5
 typing_extensions==4.15.0
