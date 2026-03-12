@@ -1,5 +1,6 @@
 """
-admin.py — Configuración del panel Django Admin para el sistema de presupuestos.
+admin.py — Configuración del panel Django Admin
+para el sistema de presupuestos.
 """
 
 from django.contrib import admin
@@ -67,8 +68,8 @@ class APULineaInline(admin.TabularInline):
 
 @admin.register(UsuarioSistema)
 class UsuarioSistemaAdmin(admin.ModelAdmin):
-    list_display  = ("nombre_completo", "email", "rol", "activo")
-    list_filter   = ("rol", "activo")
+    list_display = ("nombre_completo", "email", "rol", "activo")
+    list_filter = ("rol", "activo")
     search_fields = ("nombre_completo", "email")
 
 
@@ -78,16 +79,17 @@ class UsuarioSistemaAdmin(admin.ModelAdmin):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display  = ("razon_social", "nit", "ciudad", "telefono_principal", "activo")
-    list_filter   = ("activo", "ciudad")
+    list_display = ("razon_social", "nit", "ciudad", 
+                    "telefono_principal", "activo")
+    list_filter = ("activo", "ciudad")
     search_fields = ("razon_social", "nit")
-    inlines       = [ContactoClienteInline]
+    inlines = [ContactoClienteInline]
 
 
 @admin.register(ContactoCliente)
 class ContactoClienteAdmin(admin.ModelAdmin):
-    list_display  = ("nombre", "cliente", "cargo", "email", "es_principal")
-    list_filter   = ("es_principal", "activo")
+    list_display = ("nombre", "cliente", "cargo", "email", "es_principal")
+    list_filter = ("es_principal", "activo")
     search_fields = ("nombre", "cliente__razon_social")
 
 
@@ -97,11 +99,12 @@ class ContactoClienteAdmin(admin.ModelAdmin):
 
 @admin.register(Solicitud)
 class SolicitudAdmin(admin.ModelAdmin):
-    list_display   = ("consecutivo", "nombre", "cliente", "creado_por", "estado", "fecha_entrega")
-    list_filter    = ("estado",)
-    search_fields  = ("consecutivo", "nombre", "cliente__razon_social")
+    list_display = ("consecutivo", "nombre", "cliente", "creado_por", 
+                    "estado", "fecha_entrega")
+    list_filter = ("estado",)
+    search_fields = ("consecutivo", "nombre", "cliente__razon_social")
     readonly_fields = ("consecutivo", "created_at", "updated_at")
-    raw_id_fields  = ("cliente", "contacto", "creado_por")
+    raw_id_fields = ("cliente", "contacto", "creado_por")
 
     def save_model(self, request, obj, form, change):
         if not obj.pk and not obj.consecutivo:
@@ -120,7 +123,8 @@ class TipoProyectoAdmin(admin.ModelAdmin):
 
 @admin.register(Proyecto)
 class ProyectoAdmin(admin.ModelAdmin):
-    list_display   = ("consecutivo", "nombre", "cliente", "tipo_proyecto", "estado",
+    list_display   = ("consecutivo", "nombre", "cliente",
+                      "tipo_proyecto", "estado",
                       "area_total_m2", "moneda", "trm")
     list_filter    = ("estado", "moneda", "tipo_proyecto")
     search_fields  = ("consecutivo", "nombre", "cliente__razon_social")
@@ -128,7 +132,8 @@ class ProyectoAdmin(admin.ModelAdmin):
     raw_id_fields  = ("solicitud", "cliente", "creado_por")
     fieldsets = (
         ("Identificación", {
-            "fields": ("consecutivo", "solicitud", "cliente", "creado_por", "tipo_proyecto",
+            "fields": ("consecutivo", "solicitud", "cliente", 
+                       "creado_por", "tipo_proyecto",
                        "nombre", "descripcion", "estado")
         }),
         ("Métricas físicas", {
@@ -191,15 +196,16 @@ class CategoriaProductoAdmin(admin.ModelAdmin):
 
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
-    list_display   = ("codigo", "nombre", "categoria", "unidad", "origen", "activo")
-    list_filter    = ("categoria", "origen", "activo")
-    search_fields  = ("codigo", "nombre")
-    inlines        = [ProductoProveedorInline]
+    list_display = ("codigo", "nombre", "categoria", 
+                      "unidad", "origen", "activo")
+    list_filter = ("categoria", "origen", "activo")
+    search_fields = ("codigo", "nombre")
+    inlines = [ProductoProveedorInline]
 
 
 @admin.register(Proveedor)
 class ProveedorAdmin(admin.ModelAdmin):
-    list_display  = ("nombre", "nit", "ciudad", "email", "activo")
+    list_display = ("nombre", "nit", "ciudad", "email", "activo")
     search_fields = ("nombre", "nit")
 
 
@@ -216,10 +222,11 @@ class ProductoProveedorAdmin(admin.ModelAdmin):
 
 @admin.register(ReglaCalculo)
 class ReglaCalculoAdmin(admin.ModelAdmin):
-    list_display   = ("codigo", "nombre", "subsistema", "producto", "tipo_regla",
+    list_display = ("codigo", "nombre", "subsistema", 
+                      "producto", "tipo_regla",
                       "orden_ejecucion", "activa", "version")
-    list_filter    = ("tipo_regla", "activa", "subsistema")
-    search_fields  = ("codigo", "nombre", "producto__nombre")
+    list_filter = ("tipo_regla", "activa", "subsistema")
+    search_fields = ("codigo", "nombre", "producto__nombre")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
         ("Identificación", {
@@ -237,8 +244,8 @@ class ReglaCalculoAdmin(admin.ModelAdmin):
 
 @admin.register(DependenciaTecnica)
 class DependenciaTecnicaAdmin(admin.ModelAdmin):
-    list_display  = ("subsistema", "producto_origen", "producto_dependiente", "obligatoria", "tipo_regla")
-    list_filter   = ("obligatoria", "tipo_regla", "subsistema")
+    list_display = ("subsistema", "producto_origen", "producto_dependiente", "obligatoria", "tipo_regla")
+    list_filter = ("obligatoria", "tipo_regla", "subsistema")
     search_fields = ("producto_dependiente__nombre",)
 
 
@@ -248,10 +255,10 @@ class DependenciaTecnicaAdmin(admin.ModelAdmin):
 
 @admin.register(DespieceLinea)
 class DespieceLineaAdmin(admin.ModelAdmin):
-    list_display   = ("proyecto", "producto", "cantidad_calculada", "cantidad_ajustada",
+    list_display = ("proyecto", "producto", "cantidad_calculada", "cantidad_ajustada",
                       "precio_snapshot", "es_dependencia_automatica")
-    list_filter    = ("es_dependencia_automatica",)
-    search_fields  = ("proyecto__consecutivo", "producto__nombre")
+    list_filter = ("es_dependencia_automatica",)
+    search_fields = ("proyecto__consecutivo", "producto__nombre")
     readonly_fields = ("cantidad_calculada", "precio_snapshot", "created_at")
 
 
@@ -267,19 +274,19 @@ class ConfiguracionAPUAdmin(admin.ModelAdmin):
 
 @admin.register(APUProyecto)
 class APUProyectoAdmin(admin.ModelAdmin):
-    list_display   = ("proyecto_sistema", "total_costo", "total_valor_venta",
+    list_display = ("proyecto_sistema", "total_costo", "total_valor_venta",
                       "factor_venta_pct", "iva_pct", "aplica_iva")
     readonly_fields = ("subtotal_materiales", "subtotal_herramientas", "subtotal_transporte",
                        "subtotal_mano_obra", "subtotal_administracion",
                        "total_costo", "total_valor_venta",
                        "dias_trabajo", "tiempo_estimado_meses", "rendimiento_und_dia",
                        "created_at", "updated_at")
-    inlines        = [APULineaInline]
+    inlines = [APULineaInline]
 
 
 @admin.register(APULinea)
 class APULineaAdmin(admin.ModelAdmin):
-    list_display   = ("apu", "tipo", "descripcion", "rendimiento",
+    list_display = ("apu", "tipo", "descripcion", "rendimiento",
                       "precio_referencia", "costo_total", "valor_total")
-    list_filter    = ("tipo",)
+    list_filter = ("tipo",)
     readonly_fields = ("costo_unitario", "costo_total", "valor_unitario", "valor_total")

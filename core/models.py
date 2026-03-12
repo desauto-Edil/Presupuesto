@@ -1,8 +1,9 @@
 """
-models.py — Modelos de datos para el sistema de presupuestos Imperandina.
+models.py — Modelos de datos
 
 Jerarquía:
-  Cliente → Solicitud → Proyecto → ProyectoSistema (Sistema/Subsistema) → DespieceLinea → APULinea
+  Cliente → Solicitud → Proyecto → ProyectoSistema
+    (Sistema/Subsistema) → DespieceLinea → APULinea
 """
 
 from django.db import models
@@ -15,51 +16,51 @@ import re
 # ---------------------------------------------------------------------------
 
 class RolSistema(models.TextChoices):
-    ADMINISTRADOR      = "ADMINISTRADOR",      "Administrador"
-    PRESUPUESTOS       = "PRESUPUESTOS",        "Presupuestos"
-    COMPRAS            = "COMPRAS",             "Compras"
-    ASESOR_COMERCIAL   = "ASESOR_COMERCIAL",    "Asesor comercial"
-    SOLO_LECTURA       = "SOLO_LECTURA",        "Solo lectura"
+    ADMINISTRADOR = "ADMINISTRADOR", "Administrador"
+    PRESUPUESTOS = "PRESUPUESTOS", "Presupuestos"
+    COMPRAS = "COMPRAS", "Compras"
+    ASESOR_COMERCIAL = "ASESOR_COMERCIAL", "Asesor comercial"
+    SOLO_LECTURA = "SOLO_LECTURA", "Solo lectura"
 
 
 class EstadoSolicitud(models.TextChoices):
-    BORRADOR   = "BORRADOR",   "Borrador"
+    BORRADOR = "BORRADOR", "Borrador"
     EN_GESTION = "EN_GESTION", "En gestión"
-    APROBADA   = "APROBADA",   "Aprobada"
-    RECHAZADA  = "RECHAZADA",  "Rechazada"
-    CERRADA    = "CERRADA",    "Cerrada"
+    APROBADA = "APROBADA", "Aprobada"
+    RECHAZADA = "RECHAZADA", "Rechazada"
+    CERRADA = "CERRADA", "Cerrada"
 
 
 class EstadoProyecto(models.TextChoices):
-    BORRADOR         = "BORRADOR",         "Borrador"
-    SOLICITUD        = "SOLICITUD",        "Solicitud"
-    DESPIECE         = "DESPIECE",         "Despiece"
-    DESPIECE_VALIDADO = "DESPIECE_VALIDADO","Despiece validado"
-    APU              = "APU",              "APU"
-    APU_GENERADO     = "APU_GENERADO",     "APU generado"
-    COTIZADO         = "COTIZADO",         "Cotizado"
-    APROBADO         = "APROBADO",         "Aprobado"
-    CERRADO          = "CERRADO",          "Cerrado"
-    ANULADO          = "ANULADO",          "Anulado"
+    BORRADOR = "BORRADOR", "Borrador"
+    SOLICITUD = "SOLICITUD", "Solicitud"
+    DESPIECE = "DESPIECE", "Despiece"
+    DESPIECE_VALIDADO = "DESPIECE_VALIDADO", "Despiece validado"
+    APU = "APU", "APU"
+    APU_GENERADO = "APU_GENERADO", "APU generado"
+    COTIZADO = "COTIZADO", "Cotizado"
+    APROBADO = "APROBADO", "Aprobado"
+    CERRADO = "CERRADO", "Cerrado"
+    ANULADO = "ANULADO", "Anulado"
 
 
 class LineaNegocio(models.TextChoices):
     CUBIERTAS = "CUBIERTAS", "Cubiertas"
-    FACHADAS  = "FACHADAS",  "Fachadas"
-    OTROS     = "OTROS",     "Otros"
+    FACHADAS = "FACHADAS", "Fachadas"
+    OTROS = "OTROS", "Otros"
 
 
 class OrigenProducto(models.TextChoices):
-    NACIONAL   = "NACIONAL",   "Nacional"
-    IMPORTADO  = "IMPORTADO",  "Importado"
+    NACIONAL = "NACIONAL", "Nacional"
+    IMPORTADO = "IMPORTADO", "Importado"
 
 
 class TipoRegla(models.TextChoices):
-    FIJA               = "FIJA",               "Fija"
-    VARIABLE_SISTEMA   = "VARIABLE_SISTEMA",   "Variable sistema"
-    VARIABLE_PROYECTO  = "VARIABLE_PROYECTO",  "Variable proyecto"
-    EDITABLE_USUARIO   = "EDITABLE_USUARIO",   "Editable usuario"
-    DERIVADA           = "DERIVADA",           "Derivada de otro producto"
+    FIJA = "FIJA", "Fija"
+    VARIABLE_SISTEMA = "VARIABLE_SISTEMA", "Variable sistema"
+    VARIABLE_PROYECTO = "VARIABLE_PROYECTO", "Variable proyecto"
+    EDITABLE_USUARIO = "EDITABLE_USUARIO", "Editable usuario"
+    DERIVADA = "DERIVADA", "Derivada de otro producto"
 
 
 class Moneda(models.TextChoices):
@@ -69,11 +70,11 @@ class Moneda(models.TextChoices):
 
 
 class TipoAPU(models.TextChoices):
-    MATERIALES          = "MATERIALES",          "Materiales"
-    HERRAMIENTAS_EQUIPOS = "HERRAMIENTAS_EQUIPOS","Herramientas y equipos"
-    TRANSPORTE          = "TRANSPORTE",          "Transporte"
-    MANO_DE_OBRA        = "MANO_DE_OBRA",        "Mano de obra"
-    ADMINISTRACION      = "ADMINISTRACION",      "Administración"
+    MATERIALES = "MATERIALES", "Materiales"
+    HERRAMIENTAS_EQUIPOS = "HERRAMIENTAS_EQUIPOS", "Herramientas y equipos"
+    TRANSPORTE = "TRANSPORTE", "Transporte"
+    MANO_DE_OBRA = "MANO_DE_OBRA", "Mano de obra"
+    ADMINISTRACION = "ADMINISTRACION", "Administración"
 
 
 # ---------------------------------------------------------------------------
@@ -81,13 +82,16 @@ class TipoAPU(models.TextChoices):
 # ---------------------------------------------------------------------------
 
 class UsuarioSistema(models.Model):
-    email          = models.EmailField(unique=True)
+    email = models.EmailField(unique=True)
     nombre_completo = models.CharField(max_length=200)
-    password_hash  = models.TextField()
-    rol            = models.CharField(max_length=30, choices=RolSistema.choices, default=RolSistema.SOLO_LECTURA)
-    activo         = models.BooleanField(default=True)
-    created_at     = models.DateTimeField(auto_now_add=True)
-    updated_at     = models.DateTimeField(auto_now=True)
+    password_hash = models.TextField()
+    rol = models.CharField(
+        max_length=30, 
+        choices=RolSistema.choices, 
+        default=RolSistema.SOLO_LECTURA)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "usuarios"
@@ -101,15 +105,15 @@ class UsuarioSistema(models.Model):
 # ---------------------------------------------------------------------------
 
 class Cliente(models.Model):
-    nit               = models.CharField(max_length=50, unique=True)
-    razon_social      = models.CharField(max_length=300)
-    ciudad            = models.CharField(max_length=100, blank=True, null=True)
-    direccion         = models.TextField(blank=True, null=True)
+    nit = models.CharField(max_length=50, unique=True)
+    razon_social = models.CharField(max_length=300)
+    ciudad = models.CharField(max_length=100, blank=True, null=True)
+    direccion = models.TextField(blank=True, null=True)
     telefono_principal = models.CharField(max_length=30, blank=True, null=True)
-    email_principal   = models.EmailField(blank=True, null=True)
-    activo            = models.BooleanField(default=True)
-    created_at        = models.DateTimeField(auto_now_add=True)
-    updated_at        = models.DateTimeField(auto_now=True)
+    email_principal = models.EmailField(blank=True, null=True)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "clientes"
@@ -123,13 +127,14 @@ class Cliente(models.Model):
 
 
 class ContactoCliente(models.Model):
-    cliente    = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name="contactos")
-    nombre     = models.CharField(max_length=200)
-    cargo      = models.CharField(max_length=120, blank=True, null=True)
-    email      = models.EmailField(blank=True, null=True)
-    telefono   = models.CharField(max_length=30, blank=True, null=True)
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, 
+                                related_name="contactos")
+    nombre = models.CharField(max_length=200)
+    cargo = models.CharField(max_length=120, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    telefono = models.CharField(max_length=30, blank=True, null=True)
     es_principal = models.BooleanField(default=False)
-    activo     = models.BooleanField(default=True)
+    activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -145,23 +150,23 @@ class ContactoCliente(models.Model):
 # ---------------------------------------------------------------------------
 
 class Solicitud(models.Model):
-    consecutivo  = models.CharField(max_length=30, unique=True)
-    cliente      = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="solicitudes")
-    contacto     = models.ForeignKey(
+    consecutivo = models.CharField(max_length=30, unique=True)
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="solicitudes")
+    contacto = models.ForeignKey(
         ContactoCliente, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="solicitudes"
     )
-    creado_por   = models.ForeignKey(
+    creado_por = models.ForeignKey(
         UsuarioSistema, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="solicitudes_creadas"
     )
-    nombre        = models.CharField(max_length=300)
-    descripcion   = models.TextField(blank=True, null=True)
+    nombre = models.CharField(max_length=300)
+    descripcion = models.TextField(blank=True, null=True)
     fecha_entrega = models.DateField(null=True, blank=True)
-    estado        = models.CharField(max_length=20, choices=EstadoSolicitud.choices, default=EstadoSolicitud.EN_GESTION)
+    estado = models.CharField(max_length=20, choices=EstadoSolicitud.choices, default=EstadoSolicitud.EN_GESTION)
     observaciones = models.TextField(blank=True, null=True)
-    created_at    = models.DateTimeField(auto_now_add=True)
-    updated_at    = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "solicitudes"
@@ -177,9 +182,9 @@ class Solicitud(models.Model):
 
     @classmethod
     def siguiente_consecutivo(cls):
-        """Genera el siguiente consecutivo SOL-YYYY-NNNN."""
+        """Genera el siguiente consecutivo SLD-YYYY-NNNN."""
         year = timezone.now().year
-        prefix = f"SOL-{year}-"
+        prefix = f"SLD-{year}-"
         last = cls.objects.filter(consecutivo__startswith=prefix).order_by("-consecutivo").first()
         if last:
             num = int(last.consecutivo.split("-")[-1]) + 1
@@ -205,36 +210,63 @@ class TipoProyecto(models.Model):
 
 
 class Proyecto(models.Model):
-    consecutivo          = models.CharField(max_length=30, unique=True)
-    solicitud            = models.ForeignKey(
+    consecutivo = models.CharField(
+        max_length=30, 
+        unique=True)
+    solicitud = models.ForeignKey(
         Solicitud, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyectos"
     )
-    cliente              = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos")
-    creado_por           = models.ForeignKey(
+    cliente = models.ForeignKey(
+        Cliente, 
+        on_delete=models.PROTECT, 
+        related_name="proyectos")
+    creado_por = models.ForeignKey(
         UsuarioSistema, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyectos_creados"
     )
-    tipo_proyecto        = models.ForeignKey(
+    tipo_proyecto = models.ForeignKey(
         TipoProyecto, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyectos"
     )
-    nombre               = models.CharField(max_length=300)
-    descripcion          = models.TextField(blank=True, null=True)
-    fecha_proyecto       = models.DateField(auto_now_add=True)
-    area_total_m2        = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)
-    perimetro_ml         = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)
-    # Variables financieras (predeterminadas, editables por proyecto)
-    trm                  = models.DecimalField(max_digits=14, decimal_places=4, default=4200)
-    margen_comercial_pct = models.DecimalField(max_digits=8, decimal_places=4, default=20)
-    iva_pct              = models.DecimalField(max_digits=8, decimal_places=4, default=19)
-    aiu_pct              = models.DecimalField(max_digits=8, decimal_places=4, default=0)
-    moneda               = models.CharField(max_length=3, choices=Moneda.choices, default=Moneda.COP)
-    aplica_exencion_iva  = models.BooleanField(default=False)
-    observaciones        = models.TextField(blank=True, null=True)
-    estado               = models.CharField(max_length=25, choices=EstadoProyecto.choices, default=EstadoProyecto.SOLICITUD)
-    created_at           = models.DateTimeField(auto_now_add=True)
-    updated_at           = models.DateTimeField(auto_now=True)
+    nombre = models.CharField(max_length=300)
+    descripcion = models.TextField(
+        blank=True, 
+        null=True)
+    fecha_proyecto = models.DateField(auto_now_add=True)
+    area_total_m2 = models.DecimalField(
+        max_digits=14, 
+        decimal_places=4, 
+        blank=True, 
+        null=True)
+    perimetro_ml = models.DecimalField(
+        max_digits=14, 
+        decimal_places=4, 
+        blank=True, 
+        null=True)
+    # Variables finan(predeterminadas, editables)
+    trm = models.DecimalField(max_digits=14, 
+                              decimal_places=4, 
+                              default=4200)
+    margen_comercial_pct = models.DecimalField(max_digits=8, 
+                                               decimal_places=4, 
+                                               default=20)
+    iva_pct = models.DecimalField(max_digits=8, 
+                                  decimal_places=4, 
+                                  default=19)
+    aiu_pct = models.DecimalField(max_digits=8, 
+                                  decimal_places=4, 
+                                  default=0)
+    moneda = models.CharField(max_length=3, 
+                              choices=Moneda.choices, 
+                              default=Moneda.COP)
+    aplica_exencion_iva = models.BooleanField(default=False)
+    observaciones = models.TextField(blank=True, null=True)
+    estado = models.CharField(max_length=25, 
+                              choices=EstadoProyecto.choices, 
+                              default=EstadoProyecto.SOLICITUD)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "proyectos"
@@ -259,12 +291,14 @@ class Proyecto(models.Model):
             self.save(update_fields=["estado", "updated_at"])
 
     def avanzar_a_apu(self):
-        if self.estado in (EstadoProyecto.DESPIECE, EstadoProyecto.DESPIECE_VALIDADO):
+        if self.estado in (EstadoProyecto.DESPIECE, 
+                           EstadoProyecto.DESPIECE_VALIDADO):
             self.estado = EstadoProyecto.APU
             self.save(update_fields=["estado", "updated_at"])
 
     def avanzar_a_cotizado(self):
-        if self.estado in (EstadoProyecto.APU, EstadoProyecto.APU_GENERADO):
+        if self.estado in (EstadoProyecto.APU, 
+                           EstadoProyecto.APU_GENERADO):
             self.estado = EstadoProyecto.COTIZADO
             self.save(update_fields=["estado", "updated_at"])
 
@@ -276,7 +310,8 @@ class Proyecto(models.Model):
 class Sistema(models.Model):
     codigo        = models.CharField(max_length=50, unique=True)
     nombre        = models.CharField(max_length=200)
-    linea_negocio = models.CharField(max_length=20, choices=LineaNegocio.choices)
+    linea_negocio = models.CharField(max_length=20, 
+                                     choices=LineaNegocio.choices)
     descripcion   = models.TextField(blank=True, null=True)
     activo        = models.BooleanField(default=True)
     created_at    = models.DateTimeField(auto_now_add=True)
@@ -290,11 +325,13 @@ class Sistema(models.Model):
 
 
 class Subsistema(models.Model):
-    sistema    = models.ForeignKey(Sistema, on_delete=models.CASCADE, related_name="subsistemas")
-    codigo     = models.CharField(max_length=50, unique=True)
-    nombre     = models.CharField(max_length=200)
+    sistema    = models.ForeignKey(Sistema, 
+                                   on_delete=models.CASCADE, 
+                                   related_name="subsistemas")
+    codigo = models.CharField(max_length=50, unique=True)
+    nombre = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True, null=True)
-    activo     = models.BooleanField(default=True)
+    activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -306,9 +343,9 @@ class Subsistema(models.Model):
 
 
 class UnidadMedida(models.Model):
-    codigo       = models.CharField(max_length=20, unique=True)
-    nombre       = models.CharField(max_length=50)
-    abreviatura  = models.CharField(max_length=15)
+    codigo = models.CharField(max_length=20, unique=True)
+    nombre = models.CharField(max_length=50)
+    abreviatura = models.CharField(max_length=15)
 
     class Meta:
         db_table = "unidades_medida"
@@ -318,10 +355,10 @@ class UnidadMedida(models.Model):
 
 
 class CategoriaProducto(models.Model):
-    codigo      = models.CharField(max_length=40, unique=True)
-    nombre      = models.CharField(max_length=120, unique=True)
+    codigo = models.CharField(max_length=40, unique=True)
+    nombre = models.CharField(max_length=120, unique=True)
     descripcion = models.TextField(blank=True, null=True)
-    activa      = models.BooleanField(default=True)
+    activa = models.BooleanField(default=True)
 
     class Meta:
         db_table = "categorias_producto"
@@ -331,17 +368,27 @@ class CategoriaProducto(models.Model):
 
 
 class Producto(models.Model):
-    codigo      = models.CharField(max_length=50, unique=True)
-    nombre      = models.CharField(max_length=300)
-    categoria   = models.ForeignKey(CategoriaProducto, on_delete=models.PROTECT, related_name="productos")
-    unidad      = models.ForeignKey(UnidadMedida, on_delete=models.PROTECT, related_name="productos")
-    origen      = models.CharField(max_length=15, choices=OrigenProducto.choices, default=OrigenProducto.NACIONAL)
-    marca       = models.CharField(max_length=150, blank=True, null=True)
-    linea       = models.CharField(max_length=150, blank=True, null=True)
-    rendimiento = models.DecimalField(max_digits=14, decimal_places=6, blank=True, null=True)
-    activo      = models.BooleanField(default=True)
-    created_at  = models.DateTimeField(auto_now_add=True)
-    updated_at  = models.DateTimeField(auto_now=True)
+    codigo = models.CharField(max_length=50, unique=True)
+    nombre = models.CharField(max_length=300)
+    categoria = models.ForeignKey(CategoriaProducto, 
+                                  on_delete=models.PROTECT, 
+                                  related_name="productos")
+    unidad = models.ForeignKey(UnidadMedida, 
+                               on_delete=models.PROTECT, 
+                               related_name="productos")
+    origen = models.CharField(max_length=15, 
+                              choices=OrigenProducto.choices, 
+                              default=OrigenProducto.NACIONAL)
+    marca = models.CharField(max_length=150, 
+                             blank=True, null=True)
+    linea = models.CharField(max_length=150, 
+                             blank=True, null=True)
+    rendimiento = models.DecimalField(max_digits=14, 
+                                      decimal_places=6, 
+                                      blank=True, null=True)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "productos"
@@ -351,13 +398,13 @@ class Producto(models.Model):
 
 
 class Proveedor(models.Model):
-    nit       = models.CharField(max_length=50, unique=True)
-    nombre    = models.CharField(max_length=300)
-    ciudad    = models.CharField(max_length=100, blank=True, null=True)
+    nit = models.CharField(max_length=50, unique=True)
+    nombre = models.CharField(max_length=300)
+    ciudad = models.CharField(max_length=100, blank=True, null=True)
     direccion = models.TextField(blank=True, null=True)
-    telefono  = models.CharField(max_length=30, blank=True, null=True)
-    email     = models.EmailField(blank=True, null=True)
-    activo    = models.BooleanField(default=True)
+    telefono = models.CharField(max_length=30, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -369,13 +416,18 @@ class Proveedor(models.Model):
 
 
 class ProductoProveedor(models.Model):
-    producto       = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name="proveedores_producto")
-    proveedor      = models.ForeignKey(Proveedor, on_delete=models.CASCADE, related_name="productos_proveedor")
+    producto = models.ForeignKey(Producto, 
+                                       on_delete=models.CASCADE,
+                                       related_name="proveedores_producto")
+    proveedor = models.ForeignKey(Proveedor, 
+                                       on_delete=models.CASCADE, 
+                                       related_name="productos_proveedor")
     precio_unitario = models.DecimalField(max_digits=18, decimal_places=6)
-    moneda         = models.CharField(max_length=3, choices=Moneda.choices, default=Moneda.COP)
-    activo         = models.BooleanField(default=True)
-    created_at     = models.DateTimeField(auto_now_add=True)
-    updated_at     = models.DateTimeField(auto_now=True)
+    moneda = models.CharField(max_length=3, choices=Moneda.choices, 
+                                      default=Moneda.COP)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "productos_proveedor"
@@ -401,21 +453,27 @@ class ReglaCalculo(models.Model):
     Variables de contexto disponibles en la evaluación:
       Total_PowerGrip, area_m2, perimetro_ml, <nombre_producto_dependiente>
     """
-    subsistema           = models.ForeignKey(Subsistema, on_delete=models.CASCADE, related_name="reglas")
-    producto             = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name="reglas_calculo")
+    subsistema           = models.ForeignKey(Subsistema, on_delete=models.CASCADE, 
+                                             related_name="reglas")
+    producto             = models.ForeignKey(Producto, on_delete=models.CASCADE, 
+                                             related_name="reglas_calculo")
     codigo               = models.CharField(max_length=60)
     nombre               = models.CharField(max_length=200)
     variable_entrada     = models.CharField(max_length=80, blank=True, null=True,
                                             help_text="Nombre de la variable de contexto usada como base (ej: Total_PowerGrip)")
-    coeficiente          = models.DecimalField(max_digits=18, decimal_places=6, blank=True, null=True)
-    divisor              = models.DecimalField(max_digits=18, decimal_places=6, blank=True, null=True)
-    factor_desperdicio   = models.DecimalField(max_digits=12, decimal_places=6, default=1.01)
+    coeficiente          = models.DecimalField(max_digits=18, decimal_places=6, 
+                                               blank=True, null=True)
+    divisor              = models.DecimalField(max_digits=18, decimal_places=6, 
+                                               blank=True, null=True)
+    factor_desperdicio   = models.DecimalField(max_digits=12, decimal_places=6, 
+                                               default=1.01)
     formula_texto        = models.TextField(
                                help_text="Expresión legible. Ej: (8 × Total_PowerGrip) * 101%")
     formula_python       = models.TextField(
                                blank=True, null=True,
                                help_text="Expresión Python evaluable. Usa variables del contexto.")
-    tipo_regla           = models.CharField(max_length=30, choices=TipoRegla.choices, default=TipoRegla.FIJA)
+    tipo_regla           = models.CharField(max_length=30, choices=TipoRegla.choices, 
+                                            default=TipoRegla.FIJA)
     orden_ejecucion      = models.IntegerField(default=1)
     editable_por_proyecto = models.BooleanField(default=False)
     version              = models.IntegerField(default=1)
@@ -465,7 +523,7 @@ class ReglaCalculo(models.Model):
             return None
         var = self.variable_entrada
         coef = float(self.coeficiente) if self.coeficiente else 1.0
-        div  = float(self.divisor)     if self.divisor     else 1.0
+        div = float(self.divisor) if self.divisor else 1.0
         desp = float(self.factor_desperdicio)
         return f"({coef} * {var} / {div}) * {desp}"
 
@@ -475,8 +533,8 @@ class DependenciaTecnica(models.Model):
     Relación obligatoria/condicional entre un producto seleccionado
     y los productos que se deben agregar automáticamente al despiece.
     """
-    subsistema         = models.ForeignKey(Subsistema, on_delete=models.CASCADE, related_name="dependencias")
-    producto_origen    = models.ForeignKey(
+    subsistema = models.ForeignKey(Subsistema, on_delete=models.CASCADE, related_name="dependencias")
+    producto_origen = models.ForeignKey(
         Producto, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="dependencias_origen",
         help_text="Si es NULL la dependencia aplica a todo el subsistema"
@@ -484,13 +542,15 @@ class DependenciaTecnica(models.Model):
     producto_dependiente = models.ForeignKey(
         Producto, on_delete=models.CASCADE, related_name="dependencias_dependiente"
     )
-    variable_entrada   = models.CharField(max_length=80, blank=True, null=True)
-    condicion_texto    = models.TextField(blank=True, null=True)
-    obligatoria        = models.BooleanField(default=True)
-    orden              = models.IntegerField(default=1)
-    tipo_regla         = models.CharField(max_length=30, choices=TipoRegla.choices, default=TipoRegla.FIJA)
-    created_at         = models.DateTimeField(auto_now_add=True)
-    updated_at         = models.DateTimeField(auto_now=True)
+    variable_entrada = models.CharField(max_length=80, blank=True, null=True)
+    condicion_texto = models.TextField(blank=True, null=True)
+    obligatoria = models.BooleanField(default=True)
+    orden = models.IntegerField(default=1)
+    tipo_regla = models.CharField(max_length=30, 
+                                  choices=TipoRegla.choices, 
+                                  default=TipoRegla.FIJA)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "dependencias_tecnicas"
@@ -510,15 +570,19 @@ class ProyectoSistema(models.Model):
     Vincula un proyecto con un sistema y un subsistema seleccionado.
     Aquí se almacenan las variables de entrada dinámicas (ej: Total_PowerGrip).
     """
-    proyecto         = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name="proyecto_sistemas")
-    sistema          = models.ForeignKey(Sistema, on_delete=models.PROTECT, related_name="proyecto_sistemas")
-    subsistema       = models.ForeignKey(
+    proyecto = models.ForeignKey(Proyecto, 
+                                 on_delete=models.CASCADE, 
+                                 related_name="proyecto_sistemas")
+    sistema = models.ForeignKey(Sistema, 
+                                on_delete=models.PROTECT, 
+                                related_name="proyecto_sistemas")
+    subsistema = models.ForeignKey(
         Subsistema, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyecto_sistemas"
     )
-    orden            = models.IntegerField(default=1)
+    orden = models.IntegerField(default=1)
     # Variables de entrada dinámicas del despiece
-    total_powergip   = models.DecimalField(
+    total_powergip = models.DecimalField(
         max_digits=14, decimal_places=4, blank=True, null=True,
         help_text="Cantidad base de PowerGrip ingresada por el usuario"
     )
@@ -530,9 +594,9 @@ class ProyectoSistema(models.Model):
         default=dict, blank=True,
         help_text="Variables adicionales editables por proyecto en formato JSON"
     )
-    observaciones    = models.TextField(blank=True, null=True)
-    created_at       = models.DateTimeField(auto_now_add=True)
-    updated_at       = models.DateTimeField(auto_now=True)
+    observaciones = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "proyecto_sistemas"
@@ -546,9 +610,9 @@ class ProyectoSistema(models.Model):
         """Construye el diccionario de variables para evaluar reglas."""
         ctx = {
             "Total_PowerGrip": float(self.total_powergip or 0),
-            "area_m2":         float(self.proyecto.area_total_m2 or 0),
-            "perimetro_ml":    float(self.proyecto.perimetro_ml or 0),
-            "cuadrilla":       float(self.cuadrilla_personas or 0),
+            "area_m2": float(self.proyecto.area_total_m2 or 0),
+            "perimetro_ml": float(self.proyecto.perimetro_ml or 0),
+            "cuadrilla": float(self.cuadrilla_personas or 0),
         }
         ctx.update({k: float(v) for k, v in (self.variables_extra or {}).items()})
         return ctx
@@ -592,24 +656,32 @@ class DespieceLinea(models.Model):
     Línea de despiece: un producto con su cantidad calculada/ajustada
     para un proyecto y un proyecto_sistema específico.
     """
-    proyecto                  = models.ForeignKey(Proyecto, on_delete=models.CASCADE, related_name="despiece_lineas")
-    proyecto_sistema          = models.ForeignKey(
+    proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, 
+                                 related_name="despiece_lineas")
+    proyecto_sistema = models.ForeignKey(
         ProyectoSistema, on_delete=models.CASCADE,
         blank=True, null=True, related_name="despiece_lineas"
     )
-    producto                  = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name="despiece_lineas")
-    regla                     = models.ForeignKey(
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, 
+                                 related_name="despiece_lineas")
+    regla = models.ForeignKey(
         ReglaCalculo, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="despiece_lineas"
     )
-    cantidad_calculada        = models.DecimalField(max_digits=18, decimal_places=6)
-    cantidad_ajustada         = models.DecimalField(max_digits=18, decimal_places=6, blank=True, null=True)
-    motivo_ajuste             = models.TextField(blank=True, null=True)
-    precio_snapshot           = models.DecimalField(max_digits=18, decimal_places=6, blank=True, null=True,
-                                                    help_text="Precio unitario al momento de calcular el despiece")
+    cantidad_calculada = models.DecimalField(max_digits=18, 
+                                             decimal_places=6)
+    cantidad_ajustada = models.DecimalField(max_digits=18, 
+                                            decimal_places=6, 
+                                            blank=True, null=True)
+    motivo_ajuste = models.TextField(blank=True, null=True)
+    precio_snapshot  = models.DecimalField(max_digits=18, 
+                                           decimal_places=6, 
+                                           blank=True, 
+                                           null=True, 
+                                           help_text="Precio unitario al momento de calcular el despiece")
     es_dependencia_automatica = models.BooleanField(default=False)
-    created_at                = models.DateTimeField(auto_now_add=True)
-    updated_at                = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "despiece_lineas"
@@ -638,18 +710,26 @@ class ConfiguracionAPU(models.Model):
     Valores predeterminados del APU, configurables por Administrador.
     Solo debe existir un registro activo.
     """
-    nombre                    = models.CharField(max_length=100, default="Configuración global")
-    porcentaje_ganancia       = models.DecimalField(max_digits=8, decimal_places=4, default=20)
-    aiu_contratista           = models.DecimalField(max_digits=8, decimal_places=4, default=30)
-    desperdicio               = models.DecimalField(max_digits=8, decimal_places=4, default=3)
-    margen_ganancia_contratista = models.DecimalField(max_digits=8, decimal_places=4, default=30)
-    activa                    = models.BooleanField(default=True)
-    modificado_por            = models.ForeignKey(
+    nombre = models.CharField(max_length=100, default="Configuración global")
+    porcentaje_ganancia = models.DecimalField(max_digits=8, 
+                                              decimal_places=4, 
+                                              default=20)
+    aiu_contratista = models.DecimalField(max_digits=8, 
+                                          decimal_places=4, 
+                                          default=30)
+    desperdicio  = models.DecimalField(max_digits=8, 
+                                       decimal_places=4, 
+                                       default=3)
+    margen_ganancia_contratista = models.DecimalField(max_digits=8, 
+                                                      decimal_places=4, 
+                                                      default=30)
+    activa = models.BooleanField(default=True)
+    modificado_por = models.ForeignKey(
         UsuarioSistema, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="configs_apu"
     )
-    created_at                = models.DateTimeField(auto_now_add=True)
-    updated_at                = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "configuracion_apu"
@@ -670,28 +750,42 @@ class APUProyecto(models.Model):
     Cabecera del APU para un ProyectoSistema. Almacena las variables
     de entrada del cálculo de mano de obra y los totales por categoría.
     """
-    proyecto_sistema          = models.OneToOneField(ProyectoSistema, on_delete=models.CASCADE, related_name="apu")
+    proyecto_sistema = models.OneToOneField(ProyectoSistema, on_delete=models.CASCADE, related_name="apu")
     # Variables de entrada (Nivel 4)
-    factor_venta_pct          = models.DecimalField(max_digits=8, decimal_places=4, default=20,
+    factor_venta_pct = models.DecimalField(max_digits=8, decimal_places=4, default=20,
                                                     help_text="% margen sobre costo unitario → valor unitario")
-    iva_pct                   = models.DecimalField(max_digits=8, decimal_places=4, default=19)
-    aplica_iva                = models.BooleanField(default=True)
-    aiu_contratista_pct       = models.DecimalField(max_digits=8, decimal_places=4, default=30)
-    margen_contratista_pct    = models.DecimalField(max_digits=8, decimal_places=4, default=30)
+    iva_pct = models.DecimalField(max_digits=8, decimal_places=4, default=19)
+    aplica_iva = models.BooleanField(default=True)
+    aiu_contratista_pct = models.DecimalField(max_digits=8, 
+                                              decimal_places=4, 
+                                              default=30)
+    margen_contratista_pct = models.DecimalField(max_digits=8, 
+                                                 decimal_places=4, 
+                                                 default=30)
     # Parámetros de mano de obra
-    dias_trabajo              = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
-    tiempo_estimado_meses     = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
-    rendimiento_und_dia       = models.DecimalField(max_digits=14, decimal_places=6, blank=True, null=True)
+    dias_trabajo = models.DecimalField(max_digits=10, decimal_places=4, 
+                                       blank=True, null=True)
+    tiempo_estimado_meses = models.DecimalField(max_digits=10, 
+                                                decimal_places=4, 
+                                                blank=True, null=True)
+    rendimiento_und_dia = models.DecimalField(max_digits=14, decimal_places=6, 
+                                              blank=True, null=True)
     # Totales calculados (se actualizan al recalcular)
-    subtotal_materiales       = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    subtotal_herramientas     = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    subtotal_transporte       = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    subtotal_mano_obra        = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    subtotal_administracion   = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    total_costo               = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    total_valor_venta         = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    created_at                = models.DateTimeField(auto_now_add=True)
-    updated_at                = models.DateTimeField(auto_now=True)
+    subtotal_materiales = models.DecimalField(max_digits=18, decimal_places=4, 
+                                              default=0)
+    subtotal_herramientas = models.DecimalField(max_digits=18, decimal_places=4, 
+                                                default=0)
+    subtotal_transporte = models.DecimalField(max_digits=18, decimal_places=4, 
+                                              default=0)
+    subtotal_mano_obra = models.DecimalField(max_digits=18, decimal_places=4, 
+                                             default=0)
+    subtotal_administracion = models.DecimalField(max_digits=18, decimal_places=4, 
+                                                  default=0)
+    total_costo = models.DecimalField(max_digits=18, decimal_places=4, default=0)
+    total_valor_venta = models.DecimalField(max_digits=18, decimal_places=4, 
+                                            default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "apu_proyectos"
@@ -708,12 +802,13 @@ class APUProyecto(models.Model):
                 costo=Sum("costo_total"),
                 valor=Sum("valor_total")
             )
-            totales[tipo] = {"costo": float(agg["costo"] or 0), "valor": float(agg["valor"] or 0)}
+            totales[tipo] = {"costo": float(agg["costo"] or 0), 
+                             "valor": float(agg["valor"] or 0)}
 
-        self.subtotal_materiales     = totales[TipoAPU.MATERIALES]["costo"]
-        self.subtotal_herramientas   = totales[TipoAPU.HERRAMIENTAS_EQUIPOS]["costo"]
-        self.subtotal_transporte     = totales[TipoAPU.TRANSPORTE]["costo"]
-        self.subtotal_mano_obra      = totales[TipoAPU.MANO_DE_OBRA]["costo"]
+        self.subtotal_materiales = totales[TipoAPU.MATERIALES]["costo"]
+        self.subtotal_herramientas = totales[TipoAPU.HERRAMIENTAS_EQUIPOS]["costo"]
+        self.subtotal_transporte = totales[TipoAPU.TRANSPORTE]["costo"]
+        self.subtotal_mano_obra = totales[TipoAPU.MANO_DE_OBRA]["costo"]
         self.subtotal_administracion = totales[TipoAPU.ADMINISTRACION]["costo"]
 
         self.total_costo = (
@@ -749,28 +844,28 @@ class APULinea(models.Model):
       valor_unitario = costo_unitario * (1 + factor_venta/100)
       valor_total    = rendimiento_apu * valor_unitario
     """
-    apu              = models.ForeignKey(APUProyecto, on_delete=models.CASCADE, related_name="lineas")
-    tipo             = models.CharField(max_length=30, choices=TipoAPU.choices)
-    descripcion      = models.CharField(max_length=300)
-    despiece_linea   = models.ForeignKey(
+    apu = models.ForeignKey(APUProyecto, on_delete=models.CASCADE, related_name="lineas")
+    tipo = models.CharField(max_length=30, choices=TipoAPU.choices)
+    descripcion = models.CharField(max_length=300)
+    despiece_linea = models.ForeignKey(
         DespieceLinea, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="apu_lineas",
         help_text="Referencia al ítem de despiece origen (solo materiales)"
     )
-    rendimiento      = models.DecimalField(max_digits=14, decimal_places=6, default=1,
+    rendimiento = models.DecimalField(max_digits=14, decimal_places=6, default=1,
                                            help_text="Cantidad de producto que rinde por unidad de APU")
     precio_referencia = models.DecimalField(max_digits=18, decimal_places=6, default=0,
                                             help_text="Precio unitario del insumo/recurso")
-    iva_aplicado     = models.BooleanField(default=True)
+    iva_aplicado = models.BooleanField(default=True)
     # Calculados automáticamente
-    costo_unitario   = models.DecimalField(max_digits=18, decimal_places=6, default=0)
-    costo_total      = models.DecimalField(max_digits=18, decimal_places=6, default=0)
-    valor_unitario   = models.DecimalField(max_digits=18, decimal_places=6, default=0)
-    valor_total      = models.DecimalField(max_digits=18, decimal_places=6, default=0)
-    editable         = models.BooleanField(default=False,
+    costo_unitario = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    costo_total = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    valor_unitario = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    valor_total = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    editable = models.BooleanField(default=False,
                                            help_text="Si True, el usuario puede modificar precio_referencia/rendimiento")
-    created_at       = models.DateTimeField(auto_now_add=True)
-    updated_at       = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "apu_lineas"
@@ -791,7 +886,7 @@ class APULinea(models.Model):
         precio = float(self.precio_referencia)
 
         self.costo_unitario = precio * iva_factor
-        self.costo_total    = rend * float(self.costo_unitario)
+        self.costo_total = rend * float(self.costo_unitario)
         self.valor_unitario = float(self.costo_unitario) * factor_venta
-        self.valor_total    = rend * float(self.valor_unitario)
+        self.valor_total = rend * float(self.valor_unitario)
         self.save(update_fields=["costo_unitario", "costo_total", "valor_unitario", "valor_total", "updated_at"])

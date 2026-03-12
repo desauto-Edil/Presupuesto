@@ -2,10 +2,10 @@
 services.py — Capa de servicios del motor de presupuestos.
 
 Contiene:
-  1. DespieceService   — algoritmos de despiece paramétrico (PowerGrip Universal 7 y Plus TPO)
+  1. DespieceService — algoritmos de despiece paramétrico (PowerGrip Universal 7 y Plus TPO)
   2. DependenciaService — inyección automática de dependencias
-  3. APUService         — motor de APU automático (Nivel 4)
-  4. ProyectoService    — orquestador del flujo de estados
+  3. APUService — motor de APU automático (Nivel 4)
+  4. ProyectoService — orquestador del flujo de estados
 """
 
 from __future__ import annotations
