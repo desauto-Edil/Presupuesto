@@ -1,0 +1,68 @@
+{% extends "core/base.html" %}
+{% block title %}{{ solicitud.consecutivo }}{% endblock %}
+{% block nav_solicitudes %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">{{ solicitud.consecutivo }}</h4>
+    <small class="text-muted">{{ solicitud.nombre }}</small>
+  </div>
+  <a href="{% url 'solicitud_list' %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">Datos de la solicitud</div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Cliente</dt>
+          <dd class="col-sm-8">{{ solicitud.cliente.razon_social }}</dd>
+          <dt class="col-sm-4">Contacto</dt>
+          <dd class="col-sm-8">{{ solicitud.contacto.nombre|default:"—" }}</dd>
+          <dt class="col-sm-4">Estado</dt>
+          <dd class="col-sm-8">
+            <span class="badge bg-secondary">{{ solicitud.get_estado_display }}</span>
+          </dd>
+          <dt class="col-sm-4">Entrega requerida</dt>
+          <dd class="col-sm-8">{{ solicitud.fecha_entrega|date:"d/m/Y"|default:"No definida" }}</dd>
+          <dt class="col-sm-4">Descripción</dt>
+          <dd class="col-sm-8">{{ solicitud.descripcion|default:"—" }}</dd>
+          <dt class="col-sm-4">Observaciones</dt>
+          <dd class="col-sm-8">{{ solicitud.observaciones|default:"—" }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold d-flex justify-content-between">
+        Proyectos vinculados
+        <a href="{% url 'proyecto_crear' solicitud.pk %}" class="btn btn-primary btn-sm">
+          + Crear proyecto
+        </a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>Consecutivo</th><th>Tipo</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for p in proyectos %}
+            <tr>
+              <td class="font-monospace small">{{ p.consecutivo }}</td>
+              <td>{{ p.tipo_proyecto.nombre|default:"—" }}</td>
+              <td><span class="badge bg-secondary small">{{ p.get_estado_display }}</span></td>
+              <td><a href="{% url 'proyecto_detalle' p.pk %}" class="btn btn-link btn-sm p-0">Ver</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-2 small">Sin proyectos aún.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

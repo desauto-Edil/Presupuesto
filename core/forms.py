@@ -6,6 +6,11 @@ Formularios:
   2. IniciarDespieceForm          — para seleccionar sistema/subsistema e ingresar TP
   3. APUCostosForm                — costos de mano de obra, herramientas, transporte
   4. AjusteLineaForm              — ajuste manual de cantidad en DespieceLinea
+  5. ClienteForm                  — crear/editar cliente
+  6. SolicitudForm                — crear/editar solicitud
+  7. ProyectoCrearForm            — crear proyecto desde solicitud (con variables financieras)
+  8. AdminRevisionForm            — variables del proyecto + aprobación/rechazo por Admin
+  9. ProductoProveedorForm        — crear/actualizar precio de producto por proveedor (Compras)
 """
 
 import json
@@ -17,6 +22,14 @@ from .models import (
     Sistema,
     Subsistema,
     DespieceLinea,
+    Cliente,
+    ContactoCliente,
+    Solicitud,
+    Proyecto,
+    TipoProyecto,
+    Proveedor,
+    Producto,
+    ProductoProveedor,
 )
 
 
@@ -352,3 +365,301 @@ class AjusteLineaForm(forms.ModelForm):
                 {"motivo_ajuste": "Debe ingresar un motivo al ajustar la cantidad."}
             )
         return cleaned
+
+
+# ---------------------------------------------------------------------------
+# 5. Formulario de Cliente
+# ---------------------------------------------------------------------------
+
+class ClienteForm(forms.ModelForm):
+    """Crear o editar un cliente. Usado por el Asesor Comercial."""
+
+    class Meta:
+        model  = Cliente
+        fields = ["nit", "razon_social", "ciudad", "direccion",
+                  "telefono_principal", "email_principal"]
+        widgets = {
+            "nit": forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: 900123456-1"}),
+            "razon_social": forms.TextInput(attrs={"class": "form-control"}),
+            "ciudad": forms.TextInput(attrs={"class": "form-control"}),
+            "direccion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "telefono_principal": forms.TextInput(attrs={"class": "form-control"}),
+            "email_principal": forms.EmailInput(attrs={"class": "form-control"}),
+        }
+        labels = {
+            "nit": "NIT",
+            "razon_social": "Razón social",
+            "ciudad": "Ciudad",
+            "direccion": "Dirección",
+            "telefono_principal": "Teléfono principal",
+            "email_principal": "Correo electrónico",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Los campos del modelo son blank/null=True, pero en el formulario
+        # todos son obligatorios por política del negocio.
+        for field in self.fields.values():
+            field.required = True
+
+
+class ContactoPrincipalForm(forms.ModelForm):
+    """
+    Formulario del contacto principal del cliente.
+    Se usa inline junto con ClienteForm en la misma pantalla.
+    Los campos 'cliente' y 'es_principal' se asignan en la vista, no aquí.
+    Usar siempre con prefix='contacto' para evitar colisiones de nombres.
+    """
+
+    class Meta:
+        model  = ContactoCliente
+        fields = ["nombre", "cargo", "email", "telefono"]
+        widgets = {
+            "nombre": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nombre completo del contacto",
+            }),
+            "cargo": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ej: Gerente de proyectos",
+            }),
+            "email": forms.EmailInput(attrs={
+                "class": "form-control",
+                "placeholder": "correo@empresa.com",
+            }),
+            "telefono": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ej: 310 123 4567",
+            }),
+        }
+        labels = {
+            "nombre":   "Nombre completo",
+            "cargo":    "Cargo",
+            "email":    "Correo electrónico",
+            "telefono": "Teléfono / celular",
+        }
+
+    def tiene_datos(self):
+        """Siempre True: todos los campos son obligatorios."""
+        return True
+
+
+# Alias de compatibilidad
+ContactoClienteForm = ContactoPrincipalForm
+
+
+# ---------------------------------------------------------------------------
+# 6. Formulario de Solicitud
+# ---------------------------------------------------------------------------
+
+class SolicitudForm(forms.ModelForm):
+    """Crear o editar una solicitud. Usado por el Asesor Comercial."""
+
+    class Meta:
+        model  = Solicitud
+        fields = ["cliente", "contacto", "nombre", "descripcion",
+                  "fecha_entrega", "observaciones"]
+        widgets = {
+            "cliente": forms.Select(attrs={"class": "form-select"}),
+            "contacto": forms.Select(attrs={"class": "form-select"}),
+            "nombre": forms.TextInput(attrs={"class": "form-control",
+                                             "placeholder": "Nombre del proyecto solicitado"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "fecha_entrega": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
+        labels = {
+            "cliente": "Cliente",
+            "contacto": "Contacto del cliente",
+            "nombre": "Nombre / descripción del requerimiento",
+            "descripcion": "Descripción detallada",
+            "fecha_entrega": "Fecha de entrega requerida",
+            "observaciones": "Observaciones",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # El consecutivo se asigna automáticamente
+        # Filtrar contactos activos solo si hay cliente
+        if self.instance and self.instance.cliente_id:
+            self.fields["contacto"].queryset = ContactoCliente.objects.filter(
+                cliente=self.instance.cliente, activo=True
+            )
+        else:
+            self.fields["contacto"].queryset = ContactoCliente.objects.none()
+        self.fields["contacto"].required = False
+
+
+# ---------------------------------------------------------------------------
+# 7. Formulario de creación de Proyecto desde Solicitud
+# ---------------------------------------------------------------------------
+
+class ProyectoCrearForm(forms.Form):
+    """
+    Usado por Presupuestos para crear un proyecto desde una solicitud.
+    Captura el tipo de proyecto y las variables financieras del proyecto.
+    """
+
+    tipo_proyecto = forms.ModelChoiceField(
+        queryset=TipoProyecto.objects.filter(activo=True),
+        empty_label="── Seleccione tipo de proyecto ──",
+        widget=forms.Select(attrs={"class": "form-select"}),
+        label="Tipo de proyecto",
+    )
+
+    area_total_m2 = forms.DecimalField(
+        required=False, min_value=0, max_digits=14, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01",
+                                        "placeholder": "Ej: 500.00"}),
+        label="Área total (m²)",
+        help_text="Se puede ingresar después.",
+    )
+
+    perimetro_ml = forms.DecimalField(
+        required=False, min_value=0, max_digits=14, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+        label="Perímetro (ml)",
+    )
+
+    trm = forms.DecimalField(
+        initial=4200, min_value=1, max_digits=14, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
+        label="TRM (COP/USD)",
+    )
+
+    margen_comercial_pct = forms.DecimalField(
+        initial=20, min_value=0, max_digits=8, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
+        label="Margen comercial (%)",
+    )
+
+    iva_pct = forms.DecimalField(
+        initial=19, min_value=0, max_digits=8, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
+        label="IVA (%)",
+    )
+
+    aiu_pct = forms.DecimalField(
+        initial=0, min_value=0, max_digits=8, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
+        label="AIU (%)",
+    )
+
+    aplica_exencion_iva = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        label="Aplica exención de IVA",
+    )
+
+    observaciones = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        label="Observaciones",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 8. Formulario de Revisión Administrativa (Admin aprueba o rechaza APU)
+# ---------------------------------------------------------------------------
+
+class AdminRevisionForm(forms.Form):
+    """
+    Usado por el Administrador para ingresar datos variables del proyecto
+    y aprobar o rechazar el APU generado.
+    """
+
+    trm = forms.DecimalField(
+        min_value=1, max_digits=14, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
+        label="TRM vigente (COP/USD)",
+    )
+
+    margen_comercial_pct = forms.DecimalField(
+        min_value=0, max_digits=8, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
+        label="Margen comercial (%)",
+    )
+
+    iva_pct = forms.DecimalField(
+        min_value=0, max_digits=8, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
+        label="IVA (%)",
+    )
+
+    aiu_pct = forms.DecimalField(
+        min_value=0, max_digits=8, decimal_places=2,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
+        label="AIU (%)",
+    )
+
+    DECISION_CHOICES = [
+        ("aprobar", "Aprobar — La cotización está lista para enviar al cliente"),
+        ("rechazar", "Rechazar — Devolver a Presupuestos para ajuste"),
+    ]
+
+    decision = forms.ChoiceField(
+        choices=DECISION_CHOICES,
+        widget=forms.RadioSelect(attrs={"class": "form-check-input"}),
+        label="Decisión",
+    )
+
+    motivo_devolucion = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 3,
+                                     "placeholder": "Indique el motivo del rechazo..."}),
+        label="Motivo de devolución",
+        help_text="Requerido si la decisión es Rechazar.",
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        decision = cleaned.get("decision")
+        motivo   = cleaned.get("motivo_devolucion", "").strip()
+        if decision == "rechazar" and not motivo:
+            raise ValidationError(
+                {"motivo_devolucion": "Debe indicar el motivo al rechazar el APU."}
+            )
+        return cleaned
+
+
+# ---------------------------------------------------------------------------
+# 9. Formulario para que Compras actualice precios de productos
+# ---------------------------------------------------------------------------
+
+class ProductoProveedorForm(forms.ModelForm):
+    """
+    Usado por Compras para crear o actualizar el precio de un producto
+    asociado a un proveedor.
+    """
+
+    class Meta:
+        model  = ProductoProveedor
+        fields = ["proveedor", "precio_unitario", "moneda", "activo"]
+        widgets = {
+            "proveedor": forms.Select(attrs={"class": "form-select"}),
+            "precio_unitario": forms.NumberInput(attrs={
+                "class": "form-control", "step": "0.01", "min": "0"
+            }),
+            "moneda": forms.Select(attrs={"class": "form-select"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "proveedor": "Proveedor",
+            "precio_unitario": "Precio unitario",
+            "moneda": "Moneda",
+            "activo": "Activo",
+        }
+
+
+# ---------------------------------------------------------------------------
+# 10. Formulario para que Compras registre motivo de rechazo de precios
+# ---------------------------------------------------------------------------
+
+class ComprasRechazarForm(forms.Form):
+    """Compras notifica a Presupuestos por qué no puede actualizar un precio."""
+
+    motivo = forms.CharField(
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 3,
+                                     "placeholder": "Explique por qué no se puede actualizar el precio..."}),
+        label="Motivo",
+    )

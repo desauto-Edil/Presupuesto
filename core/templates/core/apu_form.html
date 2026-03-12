@@ -10,7 +10,7 @@
   </ol>
 </nav>
 
-<h3 class="mb-1">💰 Generar APU — {{ proyecto.nombre }}</h3>
+<h3 class="mb-1"> Generar APU — {{ proyecto.nombre }}</h3>
 <p class="text-muted mb-4">
   Sistema: <strong>{{ ps.sistema.nombre }} / {{ ps.subsistema.nombre }}</strong>
   · Total PowerGrip: <strong>{{ ps.total_powergip }}</strong>
@@ -32,7 +32,7 @@
     <!-- Mano de obra -->
     <div class="col-md-6">
       <div class="card mb-4">
-        <div class="card-header fw-bold text-warning bg-dark">👷 Mano de obra</div>
+        <div class="card-header fw-bold text-warning bg-dark"> Mano de obra</div>
         <div class="card-body">
           <div class="mb-3">
             <label class="form-label">{{ form.hya_dia.label }}</label>
@@ -59,7 +59,7 @@
     <!-- Herramientas, transporte, admin -->
     <div class="col-md-6">
       <div class="card mb-4">
-        <div class="card-header fw-bold text-info bg-dark">🔧 Herramientas específicas</div>
+        <div class="card-header fw-bold text-info bg-dark"> Herramientas específicas</div>
         <div class="card-body">
           <div class="mb-3">
             <label class="form-label">{{ form.herramientas_raw.label }}</label>
@@ -73,7 +73,7 @@
       </div>
 
       <div class="card mb-4">
-        <div class="card-header fw-bold text-success bg-dark">🚛 Transporte y administración</div>
+        <div class="card-header fw-bold text-success bg-dark"> Transporte y administración</div>
         <div class="card-body">
           <div class="mb-3">
             <label class="form-label">{{ form.costo_transporte.label }}</label>
@@ -93,7 +93,7 @@
 
   <!-- Fórmulas de referencia -->
   <div class="card mb-4">
-    <div class="card-header fw-bold">📐 Referencia de fórmulas APU</div>
+    <div class="card-header fw-bold"> Referencia de fórmulas APU</div>
     <div class="card-body">
       <pre class="json-view">MANO DE OBRA:
   dias          = Total_PowerGrip / (personas × 40)
@@ -117,7 +117,7 @@ Margen comercial = {{ ps.proyecto.margen_comercial_pct }}%</pre>
 
   <div class="d-flex gap-2">
     <button type="submit" class="btn btn-primary btn-lg">
-      📊 Generar APU completo
+       Generar APU completo
     </button>
     <a href="/proyectos/{{ proyecto.pk }}/" class="btn btn-outline-secondary btn-lg">Cancelar</a>
   </div>

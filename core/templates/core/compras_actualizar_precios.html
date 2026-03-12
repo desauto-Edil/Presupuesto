@@ -1,0 +1,124 @@
+{% extends "core/base.html" %}
+{% block title %}Actualizar precios — {{ proyecto.consecutivo }}{% endblock %}
+{% block nav_compras %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">Actualizar precios</h4>
+    <small class="text-muted">{{ proyecto.consecutivo }} — {{ proyecto.nombre }}</small>
+  </div>
+  <a href="{% url 'compras_dashboard' %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold">Materiales del despiece</div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Código</th>
+          <th>Material</th>
+          <th>Cantidad</th>
+          <th>Precio actual</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linea in lineas %}
+        <tr class="{% if not linea.precio_snapshot %}table-warning{% endif %}">
+          <td class="font-monospace small">{{ linea.producto.codigo }}</td>
+          <td>{{ linea.producto.nombre }}</td>
+          <td>{{ linea.cantidad_final|floatformat:2 }} {{ linea.producto.unidad.abreviatura }}</td>
+          <td>
+            {% if linea.precio_snapshot %}
+              ${{ linea.precio_snapshot|floatformat:2 }}
+            {% else %}
+              <span class="text-danger fw-bold">Sin precio</span>
+            {% endif %}
+          </td>
+          <td>
+            <button type="button" class="btn btn-sm btn-outline-primary"
+                    data-bs-toggle="modal" data-bs-target="#modal-precio"
+                    data-producto-id="{{ linea.producto.pk }}"
+                    data-producto-nombre="{{ linea.producto.nombre }}"
+                    data-precio-actual="{{ linea.precio_snapshot|default:'' }}">
+              Ingresar precio
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Confirmar -->
+<form method="post" action="{% url 'compras_confirmar' proyecto.pk %}">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-success">
+    Confirmar precios actualizados — devolver a Presupuestos
+  </button>
+</form>
+
+<!-- Modal para ingresar precio -->
+<div class="modal fade" id="modal-precio" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{% url 'compras_actualizar_precios' proyecto.pk %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">Ingresar precio</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="producto_id" id="modal-producto-id">
+          <p class="fw-semibold" id="modal-producto-nombre"></p>
+
+          <div class="mb-3">
+            <label class="form-label">Proveedor</label>
+            <select name="proveedor_id" class="form-select" required>
+              <option value="">— Seleccione —</option>
+              {% for prov in proveedores %}
+              <option value="{{ prov.pk }}">{{ prov.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Precio unitario</label>
+            <input type="number" name="precio_unitario" id="modal-precio" step="0.01" min="0"
+                   class="form-control" required placeholder="Ej: 1250.00">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Moneda</label>
+            <select name="moneda" class="form-select">
+              <option value="COP" selected>COP</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar precio</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const modal = document.getElementById('modal-precio');
+  modal.addEventListener('show.bs.modal', function(event) {
+    const btn = event.relatedTarget;
+    document.getElementById('modal-producto-id').value = btn.dataset.productoId;
+    document.getElementById('modal-producto-nombre').textContent = btn.dataset.productoNombre;
+    const precioActual = btn.dataset.precioActual;
+    if (precioActual) document.getElementById('modal-precio').value = precioActual;
+  });
+</script>
+{% endblock %}

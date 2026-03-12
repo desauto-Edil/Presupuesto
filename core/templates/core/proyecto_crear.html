@@ -1,0 +1,81 @@
+{% extends "core/base.html" %}
+{% block title %}Crear proyecto{% endblock %}
+{% block nav_proyectos %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">Crear proyecto</h4>
+    <small class="text-muted">Desde solicitud: <strong>{{ solicitud.consecutivo }}</strong> — {{ solicitud.nombre }}</small>
+  </div>
+  <a href="{% url 'solicitud_detalle' solicitud.pk %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+
+<div class="alert alert-info small">
+  <strong>Cliente:</strong> {{ solicitud.cliente.razon_social }} &nbsp;|&nbsp;
+  <strong>Contacto:</strong> {{ solicitud.contacto.nombre|default:"sin contacto" }}
+</div>
+
+<div class="card shadow-sm" style="max-width: 700px;">
+  <div class="card-header fw-semibold">Variables del proyecto</div>
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+
+      <h6 class="text-muted text-uppercase small mb-3">Tipo de proyecto</h6>
+      <div class="mb-3">
+        <label class="form-label fw-semibold">{{ form.tipo_proyecto.label }}</label>
+        {{ form.tipo_proyecto }}
+        {% if form.tipo_proyecto.errors %}<div class="text-danger small">{{ form.tipo_proyecto.errors }}</div>{% endif %}
+      </div>
+
+      <h6 class="text-muted text-uppercase small mb-3 mt-4">Métricas físicas (opcionales)</h6>
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.area_total_m2.label }}</label>
+          {{ form.area_total_m2 }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.perimetro_ml.label }}</label>
+          {{ form.perimetro_ml }}
+        </div>
+      </div>
+
+      <h6 class="text-muted text-uppercase small mb-3 mt-4">Variables financieras</h6>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.trm.label }}</label>
+          {{ form.trm }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.margen_comercial_pct.label }}</label>
+          {{ form.margen_comercial_pct }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.iva_pct.label }}</label>
+          {{ form.iva_pct }}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">{{ form.aiu_pct.label }}</label>
+          {{ form.aiu_pct }}
+        </div>
+        <div class="col-md-12">
+          <div class="form-check">
+            {{ form.aplica_exencion_iva }}
+            <label class="form-check-label fw-semibold">{{ form.aplica_exencion_iva.label }}</label>
+          </div>
+        </div>
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger mt-3">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="d-flex gap-2 mt-4">
+        <button type="submit" class="btn btn-primary">Crear proyecto</button>
+        <a href="{% url 'solicitud_detalle' solicitud.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

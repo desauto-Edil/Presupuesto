@@ -1,0 +1,91 @@
+{% extends "core/base.html" %}
+{% block title %}Validar precios — {{ proyecto.consecutivo }}{% endblock %}
+{% block nav_proyectos %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">Validar precios del despiece</h4>
+    <small class="text-muted">{{ proyecto.consecutivo }} — {{ proyecto.nombre }}</small>
+  </div>
+  <a href="{% url 'proyecto_detalle' proyecto.pk %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+
+{% if sin_precio %}
+<div class="alert alert-warning">
+  <strong>{{ sin_precio|length }} material(es) sin precio actualizado.</strong>
+  Puede enviar el proyecto a Compras para que actualicen los precios, o cargarlos manualmente desde el catálogo.
+</div>
+{% else %}
+<div class="alert alert-success">
+  Todos los materiales tienen precio actualizado. Puede validar el despiece y continuar con el APU.
+</div>
+{% endif %}
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold">Materiales del despiece</div>
+  <div class="card-body p-0">
+    <table class="table table-hover table-sm mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Código</th>
+          <th>Material</th>
+          <th>Unidad</th>
+          <th class="text-end">Cantidad</th>
+          <th class="text-end">Precio snapshot</th>
+          <th class="text-center">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for linea in lineas %}
+        <tr class="{% if not linea.precio_snapshot %}table-warning{% endif %}">
+          <td class="font-monospace small">{{ linea.producto.codigo }}</td>
+          <td>{{ linea.producto.nombre }}</td>
+          <td>{{ linea.producto.unidad.abreviatura }}</td>
+          <td class="text-end">{{ linea.cantidad_final|floatformat:2 }}</td>
+          <td class="text-end">
+            {% if linea.precio_snapshot %}
+              ${{ linea.precio_snapshot|floatformat:2 }}
+            {% else %}
+              <span class="text-danger fw-bold">Sin precio</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if linea.precio_snapshot %}
+              <span class="badge bg-success">OK</span>
+            {% else %}
+              <span class="badge bg-danger">Falta</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-3">No hay líneas de despiece.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Acciones -->
+<div class="d-flex gap-3 flex-wrap">
+  {% if sin_precio %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="enviar_compras">
+    <button type="submit" class="btn btn-warning">
+      Enviar a Compras para actualizar precios
+    </button>
+  </form>
+  {% endif %}
+
+  {% if puede_validar %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="validar">
+    <button type="submit" class="btn btn-success">
+      Validar precios y continuar con APU
+    </button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

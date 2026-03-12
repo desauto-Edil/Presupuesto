@@ -1,13 +1,26 @@
 """
 core/views.py — Vistas Django para el sistema de presupuestos Imperandina.
 
-Vistas HTML:
-  - ProyectoListView      : lista de proyectos
-  - ProyectoDetailView    : detalle de proyecto con despiece y APU
-  - VariablesUpdateView   : captura/edición de variables dinámicas del ProyectoSistema
-  - IniciarDespieceView   : formulario para ejecutar el despiece paramétrico
-  - APUFormView           : formulario de costos para generar el APU
-  - APUDetailView         : resultado detallado del APU
+Flujo de negocio implementado:
+  ASESOR:
+    ClienteListView / ClienteCreateView / ClienteEditView
+    SolicitudListView / SolicitudCreateView / SolicitudDetailView
+    EnviarCotizacionView
+  PRESUPUESTOS:
+    ProyectoCrearView
+    ProyectoListView / ProyectoDetailView
+    VariablesUpdateView  (despiece)
+    ValidarPreciosView   (validar precios → enviar a Compras o avanzar)
+    APUFormView          (diligenciar APU)
+    EnviarRevisionAdminView (enviar APU al Administrador)
+    APUDetailView
+    AjusteLineaView
+  COMPRAS:
+    ComprasDashboardView
+    ComprasActualizarPreciosView
+    ComprasConfirmarView
+  ADMINISTRADOR:
+    AdminRevisionView (ingresar variables + aprobar/rechazar)
 
 Endpoints JSON (API interna):
   - api_ejecutar_despiece : POST → ejecuta DespieceService, devuelve JSON
@@ -30,12 +43,26 @@ from .forms import (
     APUCostosForm,
     IniciarDespieceForm,
     ProyectoSistemaVariablesForm,
+    ClienteForm,
+    ContactoPrincipalForm,
+    SolicitudForm,
+    ProyectoCrearForm,
+    AdminRevisionForm,
+    ProductoProveedorForm,
+    ComprasRechazarForm,
 )
 from .models import (
     APUProyecto,
     DespieceLinea,
+    EstadoProyecto,
     Proyecto,
     ProyectoSistema,
+    Cliente,
+    ContactoCliente,
+    Solicitud,
+    Producto,
+    ProductoProveedor,
+    Proveedor,
 )
 from .services import APUService, DespieceService, ProyectoService
 
@@ -240,6 +267,19 @@ class APUFormView(View):
             messages.error(request, "Primero debe ejecutar el despiece del proyecto.")
             return redirect("proyecto_variables", pk=proyecto.pk)
 
+        # Validar que el despiece haya sido validado antes de iniciar APU
+        if proyecto.estado not in (
+            EstadoProyecto.DESPIECE_VALIDADO,
+            EstadoProyecto.APU,
+            EstadoProyecto.APU_GENERADO,
+        ):
+            messages.error(
+                request,
+                "El despiece debe estar validado antes de iniciar el APU. "
+                "Valide los precios primero."
+            )
+            return redirect("validar_precios", pk=proyecto.pk)
+
         apu = APUProyecto.objects.filter(proyecto_sistema=ps).first()
         form = APUCostosForm()
 
@@ -248,6 +288,7 @@ class APUFormView(View):
             "ps":       ps,
             "apu":      apu,
             "form":     form,
+            "motivo_devolucion": proyecto.motivo_devolucion,
         })
 
     def post(self, request, pk):
@@ -359,6 +400,598 @@ class AjusteLineaView(View):
                     messages.error(request, f"{field}: {error}")
 
         return redirect("proyecto_detalle", pk=proyecto.pk)
+
+
+# ===========================================================================
+# ASESOR — Gestión de Clientes
+# ===========================================================================
+
+class ClienteListView(View):
+    """GET /clientes/ — Lista de clientes."""
+
+    def get(self, request):
+        clientes = Cliente.objects.filter(activo=True).order_by("razon_social")
+        q = request.GET.get("q", "")
+        if q:
+            clientes = clientes.filter(razon_social__icontains=q)
+        return render(request, "core/cliente_list.html", {
+            "clientes": clientes,
+            "q": q,
+        })
+
+
+class ClienteCreateView(View):
+    """
+    GET/POST /clientes/nuevo/
+    Crea el cliente y su contacto principal en un solo formulario.
+    """
+
+    def _forms(self, data=None):
+        return (
+            ClienteForm(data, prefix="cliente"),
+            ContactoPrincipalForm(data, prefix="contacto"),
+        )
+
+    def get(self, request):
+        form_cliente, form_contacto = self._forms()
+        return render(request, "core/cliente_form.html", {
+            "form_cliente":  form_cliente,
+            "form_contacto": form_contacto,
+            "titulo":        "Nuevo cliente",
+        })
+
+    def post(self, request):
+        from django.db import transaction
+        form_cliente, form_contacto = self._forms(request.POST)
+
+        clientes_ok  = form_cliente.is_valid()
+        contacto_ok  = form_contacto.is_valid()
+
+        if clientes_ok and contacto_ok:
+            with transaction.atomic():
+                cliente = form_cliente.save()
+                if form_contacto.tiene_datos():
+                    contacto = form_contacto.save(commit=False)
+                    contacto.cliente     = cliente
+                    contacto.es_principal = True
+                    contacto.save()
+            messages.success(
+                request,
+                f"Cliente '{cliente.razon_social}' creado"
+                + (" con su contacto principal." if form_contacto.tiene_datos() else "."),
+            )
+            return redirect("cliente_list")
+
+        return render(request, "core/cliente_form.html", {
+            "form_cliente":  form_cliente,
+            "form_contacto": form_contacto,
+            "titulo":        "Nuevo cliente",
+        })
+
+
+class ClienteEditView(View):
+    """
+    GET/POST /clientes/<pk>/editar/
+    Edita el cliente y su contacto principal en un solo formulario.
+    Si aún no tiene contacto principal, lo crea al guardar.
+    """
+
+    def _forms(self, cliente, data=None):
+        contacto = cliente.contactos.filter(es_principal=True, activo=True).first()
+        return (
+            ClienteForm(data, instance=cliente, prefix="cliente"),
+            ContactoPrincipalForm(data, instance=contacto, prefix="contacto"),
+        )
+
+    def get(self, request, pk):
+        cliente = get_object_or_404(Cliente, pk=pk)
+        form_cliente, form_contacto = self._forms(cliente)
+        return render(request, "core/cliente_form.html", {
+            "form_cliente":  form_cliente,
+            "form_contacto": form_contacto,
+            "titulo":        f"Editar: {cliente.razon_social}",
+            "cliente":       cliente,
+        })
+
+    def post(self, request, pk):
+        from django.db import transaction
+        cliente = get_object_or_404(Cliente, pk=pk)
+        form_cliente, form_contacto = self._forms(cliente, request.POST)
+
+        clientes_ok = form_cliente.is_valid()
+        contacto_ok = form_contacto.is_valid()
+
+        if clientes_ok and contacto_ok:
+            with transaction.atomic():
+                form_cliente.save()
+                if form_contacto.tiene_datos():
+                    contacto = form_contacto.save(commit=False)
+                    contacto.cliente      = cliente
+                    contacto.es_principal = True
+                    contacto.activo       = True
+                    contacto.save()
+            messages.success(request, "Cliente actualizado correctamente.")
+            return redirect("cliente_list")
+
+        return render(request, "core/cliente_form.html", {
+            "form_cliente":  form_cliente,
+            "form_contacto": form_contacto,
+            "titulo":        f"Editar: {cliente.razon_social}",
+            "cliente":       cliente,
+        })
+
+
+# ===========================================================================
+# ASESOR — Gestión de Solicitudes
+# ===========================================================================
+
+class SolicitudListView(View):
+    """GET /solicitudes/ — Lista de solicitudes."""
+
+    def get(self, request):
+        solicitudes = Solicitud.objects.select_related("cliente").order_by("-created_at")
+        q = request.GET.get("q", "")
+        if q:
+            solicitudes = solicitudes.filter(nombre__icontains=q)
+        return render(request, "core/solicitud_list.html", {
+            "solicitudes": solicitudes,
+            "q": q,
+        })
+
+
+class SolicitudCreateView(View):
+    """GET/POST /solicitudes/nueva/ — Crear solicitud."""
+
+    def get(self, request):
+        form = SolicitudForm()
+        return render(request, "core/solicitud_form.html", {
+            "form": form,
+            "titulo": "Nueva solicitud",
+        })
+
+    def post(self, request):
+        form = SolicitudForm(request.POST)
+        if form.is_valid():
+            solicitud = form.save(commit=False)
+            solicitud.consecutivo = Solicitud.siguiente_consecutivo()
+            solicitud.save()
+            messages.success(
+                request,
+                f"Solicitud {solicitud.consecutivo} creada. "
+                "Presupuestos puede crear el proyecto cuando esté lista."
+            )
+            return redirect("solicitud_list")
+        return render(request, "core/solicitud_form.html", {
+            "form": form,
+            "titulo": "Nueva solicitud",
+        })
+
+
+class SolicitudDetailView(View):
+    """GET /solicitudes/<pk>/ — Detalle de solicitud + opción de crear proyecto."""
+
+    def get(self, request, pk):
+        solicitud = get_object_or_404(
+            Solicitud.objects.select_related("cliente", "contacto"),
+            pk=pk
+        )
+        proyectos = solicitud.proyectos.select_related("tipo_proyecto").all()
+        return render(request, "core/solicitud_detalle.html", {
+            "solicitud": solicitud,
+            "proyectos": proyectos,
+        })
+
+
+# ===========================================================================
+# PRESUPUESTOS — Crear proyecto desde solicitud
+# ===========================================================================
+
+class ProyectoCrearView(View):
+    """
+    GET/POST /solicitudes/<pk>/crear-proyecto/
+    Presupuestos crea el proyecto vinculado a la solicitud con las variables financieras.
+    """
+
+    def get(self, request, pk):
+        solicitud = get_object_or_404(Solicitud, pk=pk)
+        form = ProyectoCrearForm(initial={
+            "trm": 4200,
+            "margen_comercial_pct": 20,
+            "iva_pct": 19,
+            "aiu_pct": 0,
+        })
+        return render(request, "core/proyecto_crear.html", {
+            "solicitud": solicitud,
+            "form": form,
+        })
+
+    def post(self, request, pk):
+        solicitud = get_object_or_404(Solicitud, pk=pk)
+        form = ProyectoCrearForm(request.POST)
+        if form.is_valid():
+            d = form.cleaned_data
+            try:
+                proyecto = ProyectoService.crear_desde_solicitud(
+                    solicitud_id          = solicitud.pk,
+                    tipo_proyecto_id      = d["tipo_proyecto"].pk,
+                    creado_por            = None,
+                    area_total_m2         = d.get("area_total_m2"),
+                    perimetro_ml          = d.get("perimetro_ml"),
+                    trm                   = float(d["trm"]),
+                    margen_comercial_pct  = float(d["margen_comercial_pct"]),
+                    iva_pct               = float(d["iva_pct"]),
+                    aiu_pct               = float(d["aiu_pct"]),
+                    aplica_exencion_iva   = d.get("aplica_exencion_iva", False),
+                    observaciones         = d.get("observaciones"),
+                )
+                messages.success(
+                    request,
+                    f"Proyecto {proyecto.consecutivo} creado. Proceda a seleccionar el sistema y crear el despiece."
+                )
+                return redirect("proyecto_detalle", pk=proyecto.pk)
+            except Exception as e:
+                logger.error("Error creando proyecto desde solicitud %s: %s", pk, e)
+                messages.error(request, f"Error creando proyecto: {e}")
+
+        return render(request, "core/proyecto_crear.html", {
+            "solicitud": solicitud,
+            "form": form,
+        })
+
+
+# ===========================================================================
+# PRESUPUESTOS — Validar precios del despiece
+# ===========================================================================
+
+class ValidarPreciosView(View):
+    """
+    GET  /proyectos/<pk>/validar-precios/
+    POST /proyectos/<pk>/validar-precios/
+
+    Presupuestos revisa si todos los materiales tienen precio actualizado.
+    Opciones:
+      - 'enviar_compras': avanzar a EN_REVISION_COMPRAS
+      - 'validar':        avanzar a DESPIECE_VALIDADO si todos tienen precio
+    """
+
+    def _get_context(self, proyecto):
+        ps = ProyectoSistema.objects.filter(proyecto=proyecto).first()
+        lineas = []
+        if ps:
+            lineas = DespieceLinea.objects.filter(
+                proyecto_sistema=ps
+            ).select_related("producto__unidad", "producto__categoria")
+        sin_precio = [l for l in lineas if not l.precio_snapshot]
+        return ps, lineas, sin_precio
+
+    def get(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        if proyecto.estado not in (EstadoProyecto.DESPIECE,
+                                   EstadoProyecto.EN_REVISION_COMPRAS):
+            messages.warning(request, "El proyecto no está en estado de validación de precios.")
+            return redirect("proyecto_detalle", pk=pk)
+
+        ps, lineas, sin_precio = self._get_context(proyecto)
+        return render(request, "core/validar_precios.html", {
+            "proyecto": proyecto,
+            "ps": ps,
+            "lineas": lineas,
+            "sin_precio": sin_precio,
+            "puede_validar": len(sin_precio) == 0,
+        })
+
+    def post(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        accion = request.POST.get("accion")
+        ps, lineas, sin_precio = self._get_context(proyecto)
+
+        if accion == "enviar_compras":
+            proyecto.avanzar_a_revision_compras()
+            messages.info(
+                request,
+                "Proyecto enviado a Compras para actualización de precios."
+            )
+            return redirect("proyecto_detalle", pk=pk)
+
+        elif accion == "validar":
+            if sin_precio:
+                messages.error(
+                    request,
+                    f"No se puede validar: {len(sin_precio)} material(es) sin precio. "
+                    "Envíe a Compras para actualizarlos."
+                )
+                return render(request, "core/validar_precios.html", {
+                    "proyecto": proyecto, "ps": ps, "lineas": lineas,
+                    "sin_precio": sin_precio, "puede_validar": False,
+                })
+            proyecto.avanzar_a_despiece_validado()
+            messages.success(
+                request,
+                "Precios validados. El proyecto avanza a Despiece Validado. "
+                "Ya puede iniciar el APU."
+            )
+            return redirect("proyecto_detalle", pk=pk)
+
+        messages.error(request, "Acción no reconocida.")
+        return redirect("validar_precios", pk=pk)
+
+
+# ===========================================================================
+# PRESUPUESTOS — Enviar APU completo a revisión del Administrador
+# ===========================================================================
+
+class EnviarRevisionAdminView(View):
+    """
+    POST /proyectos/<pk>/enviar-revision/
+    Presupuestos marca el APU como completo y lo envía al Administrador.
+    El proyecto avanza de APU → APU_GENERADO.
+    """
+
+    def post(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        if proyecto.estado != EstadoProyecto.APU:
+            messages.error(
+                request,
+                "Solo se puede enviar a revisión un proyecto en estado APU en proceso."
+            )
+            return redirect("proyecto_detalle", pk=pk)
+
+        proyecto.avanzar_a_apu_generado()
+        messages.success(
+            request,
+            "APU enviado al Administrador para revisión y aprobación del cálculo económico."
+        )
+        return redirect("proyecto_detalle", pk=pk)
+
+
+# ===========================================================================
+# COMPRAS — Dashboard y actualización de precios
+# ===========================================================================
+
+class ComprasDashboardView(View):
+    """
+    GET /compras/
+    Lista los proyectos en estado EN_REVISION_COMPRAS que requieren
+    actualización de precios.
+    """
+
+    def get(self, request):
+        proyectos = Proyecto.objects.filter(
+            estado=EstadoProyecto.EN_REVISION_COMPRAS
+        ).select_related("cliente").order_by("-updated_at")
+
+        return render(request, "core/compras_dashboard.html", {
+            "proyectos": proyectos,
+        })
+
+
+class ComprasActualizarPreciosView(View):
+    """
+    GET/POST /compras/proyectos/<pk>/precios/
+    Compras ve los materiales sin precio del proyecto y puede actualizarlos.
+    """
+
+    def _get_lineas_sin_precio(self, proyecto):
+        ps = ProyectoSistema.objects.filter(proyecto=proyecto).first()
+        if not ps:
+            return ps, []
+        lineas = DespieceLinea.objects.filter(
+            proyecto_sistema=ps
+        ).select_related("producto__unidad", "producto__proveedores_producto")
+        return ps, lineas
+
+    def get(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        ps, lineas = self._get_lineas_sin_precio(proyecto)
+        proveedores = Proveedor.objects.filter(activo=True)
+        return render(request, "core/compras_actualizar_precios.html", {
+            "proyecto": proyecto,
+            "ps": ps,
+            "lineas": lineas,
+            "proveedores": proveedores,
+            "form": ProductoProveedorForm(),
+        })
+
+    def post(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        producto_id  = request.POST.get("producto_id")
+        proveedor_id = request.POST.get("proveedor_id")
+        precio       = request.POST.get("precio_unitario")
+        moneda       = request.POST.get("moneda", "COP")
+
+        if producto_id and proveedor_id and precio:
+            try:
+                producto  = Producto.objects.get(pk=producto_id)
+                proveedor = Proveedor.objects.get(pk=proveedor_id)
+                pp, creado = ProductoProveedor.objects.update_or_create(
+                    producto=producto,
+                    proveedor=proveedor,
+                    defaults={
+                        "precio_unitario": float(precio),
+                        "moneda": moneda,
+                        "activo": True,
+                    }
+                )
+                # Actualizar snapshot en líneas del proyecto
+                DespieceLinea.objects.filter(
+                    proyecto_sistema__proyecto=proyecto,
+                    producto=producto,
+                ).update(precio_snapshot=float(precio))
+
+                accion = "actualizado" if not creado else "creado"
+                messages.success(
+                    request,
+                    f"Precio {accion} para '{producto.nombre}': "
+                    f"${float(precio):,.2f} {moneda}"
+                )
+            except Exception as e:
+                logger.error("Error actualizando precio en compras: %s", e)
+                messages.error(request, f"Error actualizando precio: {e}")
+        else:
+            messages.error(request, "Complete todos los campos para actualizar el precio.")
+
+        return redirect("compras_actualizar_precios", pk=pk)
+
+
+class ComprasConfirmarView(View):
+    """
+    POST /compras/proyectos/<pk>/confirmar/
+    Compras confirma que los precios están actualizados.
+    El proyecto regresa a estado DESPIECE para que Presupuestos re-valide.
+    """
+
+    def post(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        if proyecto.estado != EstadoProyecto.EN_REVISION_COMPRAS:
+            messages.error(request, "El proyecto no está en revisión de Compras.")
+            return redirect("compras_dashboard")
+
+        # Actualizar snapshots de precio para todas las líneas del proyecto
+        ps = ProyectoSistema.objects.filter(proyecto=proyecto).first()
+        if ps:
+            lineas = DespieceLinea.objects.filter(proyecto_sistema=ps)
+            for linea in lineas:
+                linea.capturar_precio()
+
+        proyecto.volver_de_compras()
+        messages.success(
+            request,
+            f"Confirmación enviada para {proyecto.consecutivo}. "
+            "El proyecto regresa a Presupuestos para validación final de precios."
+        )
+        return redirect("compras_dashboard")
+
+
+# ===========================================================================
+# ADMINISTRADOR — Revisión y aprobación del APU
+# ===========================================================================
+
+class AdminRevisionView(View):
+    """
+    GET/POST /admin-revision/proyectos/<pk>/
+    El Administrador ingresa las variables económicas del proyecto y
+    aprueba o rechaza el APU generado.
+    """
+
+    def _get_proyecto_y_apu(self, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        ps  = ProyectoSistema.objects.filter(proyecto=proyecto).first()
+        apu = APUProyecto.objects.filter(proyecto_sistema=ps).first() if ps else None
+        return proyecto, ps, apu
+
+    def get(self, request, pk):
+        proyecto, ps, apu = self._get_proyecto_y_apu(pk)
+        if proyecto.estado != EstadoProyecto.APU_GENERADO:
+            messages.warning(
+                request,
+                "Solo se puede revisar un proyecto en estado 'APU enviado a revisión'."
+            )
+            return redirect("admin_revision_list")
+
+        form = AdminRevisionForm(initial={
+            "trm": proyecto.trm,
+            "margen_comercial_pct": proyecto.margen_comercial_pct,
+            "iva_pct": proyecto.iva_pct,
+            "aiu_pct": proyecto.aiu_pct,
+        })
+        return render(request, "core/admin_revision.html", {
+            "proyecto": proyecto,
+            "ps": ps,
+            "apu": apu,
+            "form": form,
+        })
+
+    def post(self, request, pk):
+        proyecto, ps, apu = self._get_proyecto_y_apu(pk)
+        form = AdminRevisionForm(request.POST)
+
+        if form.is_valid():
+            d = form.cleaned_data
+            # Actualizar variables financieras del proyecto
+            proyecto.trm                  = d["trm"]
+            proyecto.margen_comercial_pct = d["margen_comercial_pct"]
+            proyecto.iva_pct              = d["iva_pct"]
+            proyecto.aiu_pct              = d["aiu_pct"]
+            proyecto.save(update_fields=[
+                "trm", "margen_comercial_pct", "iva_pct", "aiu_pct", "updated_at"
+            ])
+
+            if d["decision"] == "aprobar":
+                proyecto.aprobar_cotizacion()
+                messages.success(
+                    request,
+                    f"Proyecto {proyecto.consecutivo} aprobado. "
+                    "La cotización está lista para ser remitida al cliente por el Asesor."
+                )
+            else:
+                proyecto.rechazar_apu(motivo=d["motivo_devolucion"])
+                messages.warning(
+                    request,
+                    f"Proyecto {proyecto.consecutivo} devuelto a Presupuestos para ajuste. "
+                    f"Motivo: {d['motivo_devolucion']}"
+                )
+
+            return redirect("admin_revision_list")
+
+        return render(request, "core/admin_revision.html", {
+            "proyecto": proyecto,
+            "ps": ps,
+            "apu": apu,
+            "form": form,
+        })
+
+
+class AdminRevisionListView(View):
+    """GET /admin-revision/ — Lista de proyectos pendientes de aprobación."""
+
+    def get(self, request):
+        proyectos = Proyecto.objects.filter(
+            estado=EstadoProyecto.APU_GENERADO
+        ).select_related("cliente").order_by("-updated_at")
+        return render(request, "core/admin_revision_list.html", {
+            "proyectos": proyectos,
+        })
+
+
+# ===========================================================================
+# ASESOR — Enviar cotización al cliente
+# ===========================================================================
+
+class EnviarCotizacionView(View):
+    """
+    GET/POST /proyectos/<pk>/enviar-cotizacion/
+    El Asesor confirma que la cotización fue remitida al cliente.
+    El proyecto avanza de COTIZADO → APROBADO.
+    """
+
+    def get(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        if proyecto.estado != EstadoProyecto.COTIZADO:
+            messages.warning(
+                request,
+                "Solo se puede enviar la cotización de un proyecto en estado 'Cotizado'."
+            )
+            return redirect("proyecto_detalle", pk=pk)
+        ps  = ProyectoSistema.objects.filter(proyecto=proyecto).first()
+        apu = APUProyecto.objects.filter(proyecto_sistema=ps).first() if ps else None
+        return render(request, "core/cotizacion_enviar.html", {
+            "proyecto": proyecto,
+            "apu": apu,
+        })
+
+    def post(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        if proyecto.estado != EstadoProyecto.COTIZADO:
+            messages.error(request, "El proyecto no está listo para enviar cotización.")
+            return redirect("proyecto_detalle", pk=pk)
+
+        proyecto.avanzar_a_cotizado()
+        messages.success(
+            request,
+            f"Cotización de {proyecto.consecutivo} registrada como enviada al cliente. "
+            "El proyecto queda en estado Aprobado."
+        )
+        return redirect("proyecto_detalle", pk=pk)
 
 
 # ===========================================================================

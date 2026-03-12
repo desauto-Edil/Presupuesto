@@ -35,9 +35,10 @@ class EstadoProyecto(models.TextChoices):
     BORRADOR = "BORRADOR", "Borrador"
     SOLICITUD = "SOLICITUD", "Solicitud"
     DESPIECE = "DESPIECE", "Despiece"
+    EN_REVISION_COMPRAS = "EN_REVISION_COMPRAS", "En revisión de precios (Compras)"
     DESPIECE_VALIDADO = "DESPIECE_VALIDADO", "Despiece validado"
-    APU = "APU", "APU"
-    APU_GENERADO = "APU_GENERADO", "APU generado"
+    APU = "APU", "APU en proceso"
+    APU_GENERADO = "APU_GENERADO", "APU enviado a revisión"
     COTIZADO = "COTIZADO", "Cotizado"
     APROBADO = "APROBADO", "Aprobado"
     CERRADO = "CERRADO", "Cerrado"
@@ -127,8 +128,11 @@ class Cliente(models.Model):
 
 
 class ContactoCliente(models.Model):
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, 
-                                related_name="contactos")
+    cliente = models.ForeignKey(
+        Cliente, 
+        on_delete=models.CASCADE, 
+        related_name="contactos"
+    )
     nombre = models.CharField(max_length=200)
     cargo = models.CharField(max_length=120, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
@@ -262,9 +266,13 @@ class Proyecto(models.Model):
                               default=Moneda.COP)
     aplica_exencion_iva = models.BooleanField(default=False)
     observaciones = models.TextField(blank=True, null=True)
-    estado = models.CharField(max_length=25, 
-                              choices=EstadoProyecto.choices, 
+    estado = models.CharField(max_length=25,
+                              choices=EstadoProyecto.choices,
                               default=EstadoProyecto.SOLICITUD)
+    motivo_devolucion = models.TextField(
+        blank=True, null=True,
+        help_text="Motivo de rechazo o devolución por parte del Administrador o Compras"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -290,16 +298,55 @@ class Proyecto(models.Model):
             self.estado = EstadoProyecto.DESPIECE
             self.save(update_fields=["estado", "updated_at"])
 
+    def avanzar_a_revision_compras(self):
+        """Presupuestos envía a Compras porque los precios requieren actualización."""
+        if self.estado == EstadoProyecto.DESPIECE:
+            self.estado = EstadoProyecto.EN_REVISION_COMPRAS
+            self.save(update_fields=["estado", "updated_at"])
+
+    def volver_de_compras(self):
+        """Compras confirma precios actualizados; regresa a Despiece para re-validar."""
+        if self.estado == EstadoProyecto.EN_REVISION_COMPRAS:
+            self.estado = EstadoProyecto.DESPIECE
+            self.motivo_devolucion = None
+            self.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
+
+    def avanzar_a_despiece_validado(self):
+        """Presupuestos valida que todos los precios estén actualizados."""
+        if self.estado in (EstadoProyecto.DESPIECE, EstadoProyecto.EN_REVISION_COMPRAS):
+            self.estado = EstadoProyecto.DESPIECE_VALIDADO
+            self.save(update_fields=["estado", "updated_at"])
+
     def avanzar_a_apu(self):
-        if self.estado in (EstadoProyecto.DESPIECE, 
-                           EstadoProyecto.DESPIECE_VALIDADO):
+        """Solo desde DESPIECE_VALIDADO se puede iniciar el APU."""
+        if self.estado == EstadoProyecto.DESPIECE_VALIDADO:
             self.estado = EstadoProyecto.APU
             self.save(update_fields=["estado", "updated_at"])
 
-    def avanzar_a_cotizado(self):
-        if self.estado in (EstadoProyecto.APU, 
-                           EstadoProyecto.APU_GENERADO):
+    def avanzar_a_apu_generado(self):
+        """Presupuestos envía el APU completo a revisión del Administrador."""
+        if self.estado == EstadoProyecto.APU:
+            self.estado = EstadoProyecto.APU_GENERADO
+            self.save(update_fields=["estado", "updated_at"])
+
+    def aprobar_cotizacion(self):
+        """Administrador aprueba el cálculo final y habilita la cotización."""
+        if self.estado == EstadoProyecto.APU_GENERADO:
             self.estado = EstadoProyecto.COTIZADO
+            self.motivo_devolucion = None
+            self.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
+
+    def rechazar_apu(self, motivo: str = ""):
+        """Administrador devuelve el APU para ajuste; regresa al estado APU."""
+        if self.estado == EstadoProyecto.APU_GENERADO:
+            self.estado = EstadoProyecto.APU
+            self.motivo_devolucion = motivo
+            self.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
+
+    def avanzar_a_cotizado(self):
+        """Asesor confirma que la cotización fue enviada al cliente."""
+        if self.estado == EstadoProyecto.COTIZADO:
+            self.estado = EstadoProyecto.APROBADO
             self.save(update_fields=["estado", "updated_at"])
 
 

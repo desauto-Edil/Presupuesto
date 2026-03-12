@@ -12,14 +12,14 @@
 
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
-    <h3 class="mb-1">📊 APU — {{ proyecto.nombre }}</h3>
+    <h3 class="mb-1"> APU — {{ proyecto.nombre }}</h3>
     <p class="text-muted">
       {{ ps.sistema.nombre }} / {{ ps.subsistema.nombre }}
       · Total PowerGrip: <strong>{{ ps.total_powergip }}</strong>
     </p>
   </div>
   <a href="/proyectos/{{ proyecto.pk }}/apu/" class="btn btn-outline-warning">
-    🔁 Recalcular APU
+     Recalcular APU
   </a>
 </div>
 
@@ -105,11 +105,11 @@
 {% if grupo.lineas %}
 <div class="card mb-3">
   <div class="card-header fw-bold">
-    {% if tipo_code == 'MATERIALES' %}🔩
-    {% elif tipo_code == 'MANO_DE_OBRA' %}👷
-    {% elif tipo_code == 'HERRAMIENTAS_EQUIPOS' %}🔧
-    {% elif tipo_code == 'TRANSPORTE' %}🚛
-    {% else %}📋{% endif %}
+    {% if tipo_code == 'MATERIALES' %}
+    {% elif tipo_code == 'MANO_DE_OBRA' %}
+    {% elif tipo_code == 'HERRAMIENTAS_EQUIPOS' %}
+    {% elif tipo_code == 'TRANSPORTE' %}
+    {% else %}{% endif %}
     {{ grupo.label }}
     <span class="badge bg-secondary ms-2">{{ grupo.lineas|length }} líneas</span>
   </div>
@@ -149,7 +149,7 @@
 
 <!-- Resumen JSON -->
 <div class="card mt-4">
-  <div class="card-header fw-bold">🔌 API — Resumen del APU</div>
+  <div class="card-header fw-bold"> API — Resumen del APU</div>
   <div class="card-body">
     <pre class="json-view">GET /api/proyectos/{{ proyecto.pk }}/resumen/</pre>
   </div>

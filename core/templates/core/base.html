@@ -24,7 +24,7 @@
 
 <nav class="navbar navbar-dark bg-dark">
   <div class="container-fluid">
-    <a class="navbar-brand" href="/proyectos/">&#9632; IMPERANDINA</a>
+    <a class="navbar-brand" href="/proyectos/">IMPERANDINA</a>
     <div class="d-flex">
       <a href="/admin/" class="btn btn-outline-light btn-sm me-2">Admin</a>
       <span class="navbar-text text-white-50 small">Presupuestos Paramétricos</span>
@@ -38,32 +38,57 @@
     <!-- Sidebar -->
     <nav class="col-md-2 d-none d-md-block sidebar py-3">
       <ul class="nav flex-column">
+
         <li class="nav-item">
-          <a class="nav-link {% block nav_proyectos %}{% endblock %}" href="/proyectos/">
-            📋 Proyectos
-          </a>
+          <small class="nav-link text-white-50" 
+          style="cursor:default; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;">Asesor</small>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="/admin/core/cliente/">
-            🏢 Clientes
-          </a>
+          <a class="nav-link {% block nav_clientes %}{% endblock %}" href="/clientes/">Clientes</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="/admin/core/solicitud/">
-            📝 Solicitudes
-          </a>
+          <a class="nav-link {% block nav_solicitudes %}{% endblock %}" href="/solicitudes/">Solicitudes</a>
         </li>
-        <li class="nav-item mt-3">
-          <small class="nav-link text-white-50" style="cursor:default;">CATÁLOGOS</small>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="/admin/core/producto/">🔩 Productos</a>
+
+        <li class="nav-item mt-2">
+          <small class="nav-link text-white-50" 
+          style="cursor:default; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;">Presupuestos</small>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="/admin/core/proveedor/">🏭 Proveedores</a>
+          <a class="nav-link {% block nav_proyectos %}{% endblock %}" href="/proyectos/">Proyectos</a>
+        </li>
+
+        <li class="nav-item mt-2">
+          <small class="nav-link text-white-50" 
+          style="cursor:default; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;">Compras</small>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="/admin/core/reglacalculo/">📐 Reglas APU</a>
+          <a class="nav-link {% block nav_compras %}{% endblock %}" href="/compras/">Pendientes de precio</a>
+        </li>
+
+        <li class="nav-item mt-2">
+          <small class="nav-link text-white-50" 
+          style="cursor:default; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;">Administrador</small>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% block nav_admin_rev %}{% endblock %}" href="/admin-revision/">Revisión y aprobación</a>
+        </li>
+
+        <li class="nav-item mt-2">
+          <small class="nav-link text-white-50" 
+          style="cursor:default; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em;">Catálogos</small>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/admin/core/producto/">Productos</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/admin/core/proveedor/">Proveedores</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/admin/core/reglacalculo/">Reglas APU</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/admin/">Admin Django</a>
         </li>
       </ul>
     </nav>

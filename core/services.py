@@ -415,10 +415,12 @@ class APUService:
         return {"descripcion": "Administración", "costo_unitario": float(apu_linea.costo_unitario)}
 
     def finalizar(self):
-        """Recalcula totales del APU y avanza estado del proyecto."""
+        """Recalcula totales del APU y avanza estado del proyecto a APU en proceso."""
         self.apu.recalcular()
         proyecto = self.ps.proyecto
-        proyecto.avanzar_a_apu()
+        # Solo avanzar si viene desde DESPIECE_VALIDADO; si ya está en APU, mantener
+        if proyecto.estado not in ("APU", "APU_GENERADO"):
+            proyecto.avanzar_a_apu()
         return {
             "total_costo":       float(self.apu.total_costo),
             "total_valor_venta": float(self.apu.total_valor_venta),
@@ -536,13 +538,27 @@ class ProyectoService:
     @transaction.atomic
     def iniciar_apu(proyecto_sistema_id: int, **kwargs_apu):
         """
-        Genera el APU completo para un ProyectoSistema y avanza estado a APU.
+        Genera el APU completo para un ProyectoSistema.
+        Solo se puede iniciar si el proyecto está en DESPIECE_VALIDADO o APU.
         kwargs_apu puede incluir: hya_dia, cuadrilla_dia, dotacion_dia,
           proteccion_dia, costo_transporte, costo_admin, herramientas_items
         """
-        from .models import ProyectoSistema
+        from .models import ProyectoSistema, EstadoProyecto
 
         ps      = ProyectoSistema.objects.get(pk=proyecto_sistema_id)
+        proyecto = ps.proyecto
+
+        estados_validos = (
+            EstadoProyecto.DESPIECE_VALIDADO,
+            EstadoProyecto.APU,
+            EstadoProyecto.APU_GENERADO,
+        )
+        if proyecto.estado not in estados_validos:
+            raise ValueError(
+                f"El proyecto está en estado '{proyecto.get_estado_display()}'. "
+                "Valide el despiece antes de generar el APU."
+            )
+
         service = APUService(ps)
 
         materiales  = service.generar_materiales()

@@ -1,0 +1,90 @@
+{% extends "core/base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block nav_clientes %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">{{ titulo }}</h4>
+  <a href="{% url 'cliente_list' %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+
+<form method="post" autocomplete="off">
+  {% csrf_token %}
+
+  <div class="row g-4" style="max-width: 900px;">
+
+    <!-- ── Sección 1: Datos de la empresa ─────────────────────────────── -->
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header fw-semibold bg-light">
+          Datos de la empresa
+        </div>
+        <div class="card-body">
+
+          {% for field in form_cliente %}
+            <div class="mb-3">
+              <label class="form-label fw-semibold small" for="{{ field.id_for_label }}">
+                {{ field.label }}
+                {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
+              </label>
+              {{ field }}
+              {% if field.help_text %}
+                <div class="form-text">{{ field.help_text }}</div>
+              {% endif %}
+              {% if field.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in field.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+
+          {% if form_cliente.non_field_errors %}
+            <div class="alert alert-danger small">{{ form_cliente.non_field_errors }}</div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Sección 2: Contacto principal ──────────────────────────────── -->
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header fw-semibold bg-light">
+          Contacto principal
+        </div>
+        <div class="card-body">
+
+          {% for field in form_contacto %}
+            <div class="mb-3">
+              <label class="form-label fw-semibold small" for="{{ field.id_for_label }}">
+                {{ field.label }}
+                {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
+              </label>
+              {{ field }}
+              {% if field.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in field.errors %}{{ error }}{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+
+          {% if form_contacto.non_field_errors %}
+            <div class="alert alert-danger small">{{ form_contacto.non_field_errors }}</div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+
+  <!-- ── Acciones ───────────────────────────────────────────────────────── -->
+  <div class="d-flex gap-2 mt-4" style="max-width: 900px;">
+    <button type="submit" class="btn btn-primary px-4">Guardar</button>
+    <a href="{% url 'cliente_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+  </div>
+
+</form>
+{% endblock %}
