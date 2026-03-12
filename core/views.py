@@ -44,12 +44,14 @@ from .forms import (
     IniciarDespieceForm,
     ProyectoSistemaVariablesForm,
     ClienteForm,
-    ContactoPrincipalForm,
+    ContactoClienteFormSet,
     SolicitudForm,
     ProyectoCrearForm,
     AdminRevisionForm,
     ProductoProveedorForm,
     ComprasRechazarForm,
+    ProveedorForm,
+    ProductoForm,
 )
 from .models import (
     APUProyecto,
@@ -423,101 +425,274 @@ class ClienteListView(View):
 class ClienteCreateView(View):
     """
     GET/POST /clientes/nuevo/
-    Crea el cliente y su contacto principal en un solo formulario.
+    Crea el cliente y sus contactos usando un inline formset (estilo Django admin).
     """
 
-    def _forms(self, data=None):
-        return (
-            ClienteForm(data, prefix="cliente"),
-            ContactoPrincipalForm(data, prefix="contacto"),
-        )
-
     def get(self, request):
-        form_cliente, form_contacto = self._forms()
+        form_cliente = ClienteForm(prefix="cliente")
+        formset      = ContactoClienteFormSet(prefix="contactos")
         return render(request, "core/cliente_form.html", {
-            "form_cliente":  form_cliente,
-            "form_contacto": form_contacto,
-            "titulo":        "Nuevo cliente",
+            "form_cliente": form_cliente,
+            "formset":      formset,
+            "titulo":       "Nuevo cliente",
         })
 
     def post(self, request):
         from django.db import transaction
-        form_cliente, form_contacto = self._forms(request.POST)
+        form_cliente = ClienteForm(request.POST, prefix="cliente")
+        # Para crear: validamos el formset sin instancia todavía
+        formset = ContactoClienteFormSet(request.POST, prefix="contactos")
 
-        clientes_ok  = form_cliente.is_valid()
-        contacto_ok  = form_contacto.is_valid()
+        cliente_ok  = form_cliente.is_valid()
+        formset_ok  = formset.is_valid()
 
-        if clientes_ok and contacto_ok:
+        if cliente_ok and formset_ok:
             with transaction.atomic():
                 cliente = form_cliente.save()
-                if form_contacto.tiene_datos():
-                    contacto = form_contacto.save(commit=False)
-                    contacto.cliente     = cliente
-                    contacto.es_principal = True
+                # Asignar cliente a cada contacto del formset y guardar
+                instancias = formset.save(commit=False)
+                for contacto in instancias:
+                    contacto.cliente = cliente
                     contacto.save()
-            messages.success(
-                request,
-                f"Cliente '{cliente.razon_social}' creado"
-                + (" con su contacto principal." if form_contacto.tiene_datos() else "."),
-            )
+                for obj in formset.deleted_objects:
+                    obj.delete()
+            messages.success(request, f"Cliente '{cliente.razon_social}' creado correctamente.")
             return redirect("cliente_list")
 
         return render(request, "core/cliente_form.html", {
-            "form_cliente":  form_cliente,
-            "form_contacto": form_contacto,
-            "titulo":        "Nuevo cliente",
+            "form_cliente": form_cliente,
+            "formset":      formset,
+            "titulo":       "Nuevo cliente",
         })
 
 
 class ClienteEditView(View):
     """
     GET/POST /clientes/<pk>/editar/
-    Edita el cliente y su contacto principal en un solo formulario.
-    Si aún no tiene contacto principal, lo crea al guardar.
+    Edita el cliente y todos sus contactos vía inline formset.
     """
-
-    def _forms(self, cliente, data=None):
-        contacto = cliente.contactos.filter(es_principal=True, activo=True).first()
-        return (
-            ClienteForm(data, instance=cliente, prefix="cliente"),
-            ContactoPrincipalForm(data, instance=contacto, prefix="contacto"),
-        )
 
     def get(self, request, pk):
         cliente = get_object_or_404(Cliente, pk=pk)
-        form_cliente, form_contacto = self._forms(cliente)
+        form_cliente = ClienteForm(instance=cliente, prefix="cliente")
+        formset      = ContactoClienteFormSet(instance=cliente, prefix="contactos")
         return render(request, "core/cliente_form.html", {
-            "form_cliente":  form_cliente,
-            "form_contacto": form_contacto,
-            "titulo":        f"Editar: {cliente.razon_social}",
-            "cliente":       cliente,
+            "form_cliente": form_cliente,
+            "formset":      formset,
+            "titulo":       f"Editar: {cliente.razon_social}",
+            "cliente":      cliente,
         })
 
     def post(self, request, pk):
         from django.db import transaction
-        cliente = get_object_or_404(Cliente, pk=pk)
-        form_cliente, form_contacto = self._forms(cliente, request.POST)
+        cliente      = get_object_or_404(Cliente, pk=pk)
+        form_cliente = ClienteForm(request.POST, instance=cliente, prefix="cliente")
+        formset      = ContactoClienteFormSet(request.POST, instance=cliente, prefix="contactos")
 
-        clientes_ok = form_cliente.is_valid()
-        contacto_ok = form_contacto.is_valid()
+        cliente_ok = form_cliente.is_valid()
+        formset_ok = formset.is_valid()
 
-        if clientes_ok and contacto_ok:
+        if cliente_ok and formset_ok:
             with transaction.atomic():
                 form_cliente.save()
-                if form_contacto.tiene_datos():
-                    contacto = form_contacto.save(commit=False)
-                    contacto.cliente      = cliente
-                    contacto.es_principal = True
-                    contacto.activo       = True
-                    contacto.save()
+                formset.save()
             messages.success(request, "Cliente actualizado correctamente.")
             return redirect("cliente_list")
 
         return render(request, "core/cliente_form.html", {
-            "form_cliente":  form_cliente,
-            "form_contacto": form_contacto,
-            "titulo":        f"Editar: {cliente.razon_social}",
-            "cliente":       cliente,
+            "form_cliente": form_cliente,
+            "formset":      formset,
+            "titulo":       f"Editar: {cliente.razon_social}",
+            "cliente":      cliente,
+        })
+
+
+# ===========================================================================
+# CATÁLOGO — Proveedores
+# ===========================================================================
+
+class ProveedorListView(View):
+    """GET /proveedores/ — Lista de proveedores."""
+
+    def get(self, request):
+        proveedores = Proveedor.objects.filter(activo=True).order_by("nombre")
+        q = request.GET.get("q", "")
+        if q:
+            proveedores = proveedores.filter(nombre__icontains=q)
+        return render(request, "core/proveedor_list.html", {
+            "proveedores": proveedores,
+            "q":           q,
+        })
+
+
+class ProveedorCreateView(View):
+    """GET/POST /proveedores/nuevo/ — Crear proveedor."""
+
+    def get(self, request):
+        return render(request, "core/proveedor_form.html", {
+            "form":   ProveedorForm(),
+            "titulo": "Nuevo proveedor",
+        })
+
+    def post(self, request):
+        form = ProveedorForm(request.POST)
+        if form.is_valid():
+            proveedor = form.save()
+            messages.success(request, f"Proveedor '{proveedor.nombre}' creado correctamente.")
+            return redirect("proveedor_list")
+        return render(request, "core/proveedor_form.html", {
+            "form":   form,
+            "titulo": "Nuevo proveedor",
+        })
+
+
+class ProveedorEditView(View):
+    """GET/POST /proveedores/<pk>/editar/ — Editar proveedor."""
+
+    def get(self, request, pk):
+        proveedor = get_object_or_404(Proveedor, pk=pk)
+        return render(request, "core/proveedor_form.html", {
+            "form":      ProveedorForm(instance=proveedor),
+            "titulo":    f"Editar: {proveedor.nombre}",
+            "proveedor": proveedor,
+        })
+
+    def post(self, request, pk):
+        proveedor = get_object_or_404(Proveedor, pk=pk)
+        form = ProveedorForm(request.POST, instance=proveedor)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Proveedor actualizado correctamente.")
+            return redirect("proveedor_list")
+        return render(request, "core/proveedor_form.html", {
+            "form":      form,
+            "titulo":    f"Editar: {proveedor.nombre}",
+            "proveedor": proveedor,
+        })
+
+
+# ===========================================================================
+# CATÁLOGO — Productos
+# ===========================================================================
+
+class ProductoListView(View):
+    """GET /productos/ — Lista de productos con búsqueda."""
+
+    def get(self, request):
+        from .models import CategoriaProducto
+        productos = (
+            Producto.objects
+            .select_related("categoria", "unidad")
+            .order_by("categoria__nombre", "codigo")
+        )
+        q = request.GET.get("q", "")
+        if q:
+            from django.db.models import Q
+            productos = productos.filter(
+                Q(nombre__icontains=q) | Q(codigo__icontains=q)
+            )
+
+        # Anotar el precio y proveedor de referencia (el más económico activo)
+        productos_con_precio = []
+        for p in productos:
+            pp = p.proveedores_producto.filter(activo=True).order_by("precio_unitario").first()
+            productos_con_precio.append({
+                "producto":         p,
+                "precio_unitario":  pp.precio_unitario if pp else None,
+                "moneda":           pp.moneda if pp else "—",
+                "proveedor_nombre": pp.proveedor.nombre if pp else "—",
+            })
+
+        return render(request, "core/producto_list.html", {
+            "productos": productos_con_precio,
+            "q":         q,
+        })
+
+
+class ProductoCreateView(View):
+    """GET/POST /productos/nuevo/ — Crear producto con código auto y proveedor."""
+
+    def get(self, request):
+        return render(request, "core/producto_form.html", {
+            "form":   ProductoForm(),
+            "titulo": "Nuevo producto",
+        })
+
+    def post(self, request):
+        from django.db import transaction
+        form = ProductoForm(request.POST)
+        if form.is_valid():
+            with transaction.atomic():
+                producto = form.save(commit=False)
+                # Generar código automático basado en la categoría
+                producto.codigo = Producto.generar_codigo(producto.categoria)
+                producto.save()
+
+                # Crear relación ProductoProveedor
+                proveedor = form.get_proveedor()
+                ProductoProveedor.objects.create(
+                    producto        = producto,
+                    proveedor       = proveedor,
+                    precio_unitario = form.cleaned_data["precio_unitario"],
+                    moneda          = form.cleaned_data["moneda_proveedor"],
+                    activo          = True,
+                )
+
+            messages.success(
+                request,
+                f"Producto '{producto.nombre}' creado con código {producto.codigo}."
+            )
+            return redirect("producto_list")
+
+        return render(request, "core/producto_form.html", {
+            "form":   form,
+            "titulo": "Nuevo producto",
+        })
+
+
+class ProductoEditView(View):
+    """GET/POST /productos/<pk>/editar/ — Editar producto y precio del proveedor."""
+
+    def get(self, request, pk):
+        producto = get_object_or_404(Producto, pk=pk)
+        return render(request, "core/producto_form.html", {
+            "form":     ProductoForm(instance=producto),
+            "titulo":   f"Editar: {producto.codigo} — {producto.nombre}",
+            "producto": producto,
+        })
+
+    def post(self, request, pk):
+        from django.db import transaction
+        producto = get_object_or_404(Producto, pk=pk)
+        form = ProductoForm(request.POST, instance=producto)
+        if form.is_valid():
+            with transaction.atomic():
+                producto = form.save()  # código ya existe, no se re-genera
+
+                # Actualizar o crear relación ProductoProveedor
+                proveedor = form.get_proveedor()
+                pp, created = ProductoProveedor.objects.get_or_create(
+                    producto  = producto,
+                    proveedor = proveedor,
+                    defaults  = {
+                        "precio_unitario": form.cleaned_data["precio_unitario"],
+                        "moneda":          form.cleaned_data["moneda_proveedor"],
+                        "activo":          True,
+                    },
+                )
+                if not created:
+                    pp.precio_unitario = form.cleaned_data["precio_unitario"]
+                    pp.moneda          = form.cleaned_data["moneda_proveedor"]
+                    pp.activo          = True
+                    pp.save(update_fields=["precio_unitario", "moneda", "activo", "updated_at"])
+
+            messages.success(request, "Producto actualizado correctamente.")
+            return redirect("producto_list")
+
+        return render(request, "core/producto_form.html", {
+            "form":     form,
+            "titulo":   f"Editar: {producto.codigo} — {producto.nombre}",
+            "producto": producto,
         })
 
 

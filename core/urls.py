@@ -132,6 +132,40 @@ urlpatterns = [
         name="enviar_cotizacion",
     ),
 
+    # ── CATÁLOGO: Productos ───────────────────────────────────────────────────
+    path(
+        "productos/",
+        views.ProductoListView.as_view(),
+        name="producto_list",
+    ),
+    path(
+        "productos/nuevo/",
+        views.ProductoCreateView.as_view(),
+        name="producto_create",
+    ),
+    path(
+        "productos/<int:pk>/editar/",
+        views.ProductoEditView.as_view(),
+        name="producto_edit",
+    ),
+
+    # ── CATÁLOGO: Proveedores ─────────────────────────────────────────────────
+    path(
+        "proveedores/",
+        views.ProveedorListView.as_view(),
+        name="proveedor_list",
+    ),
+    path(
+        "proveedores/nuevo/",
+        views.ProveedorCreateView.as_view(),
+        name="proveedor_create",
+    ),
+    path(
+        "proveedores/<int:pk>/editar/",
+        views.ProveedorEditView.as_view(),
+        name="proveedor_edit",
+    ),
+
     # ── COMPRAS ───────────────────────────────────────────────────────────────
     path(
         "compras/",

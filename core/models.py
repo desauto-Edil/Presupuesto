@@ -443,6 +443,25 @@ class Producto(models.Model):
     def __str__(self):
         return f"{self.codigo} — {self.nombre}"
 
+    @classmethod
+    def generar_codigo(cls, categoria) -> str:
+        """
+        Genera el siguiente código único para un producto según su categoría.
+        Formato: {CATEGORIA_CODIGO}-{NNNN}  →  Ej: FIJ-0001, CUB-0023
+        """
+        prefix = f"{categoria.codigo.upper()}-"
+        existing = cls.objects.filter(codigo__startswith=prefix).values_list("codigo", flat=True)
+        max_num = 0
+        for codigo in existing:
+            suffix = codigo[len(prefix):]
+            try:
+                num = int(suffix)
+                if num > max_num:
+                    max_num = num
+            except (ValueError, TypeError):
+                pass
+        return f"{prefix}{max_num + 1:04d}"
+
 
 class Proveedor(models.Model):
     nit = models.CharField(max_length=50, unique=True)

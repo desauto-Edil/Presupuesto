@@ -2,20 +2,24 @@
 core/forms.py — Formularios Django para captura de variables de proyecto.
 
 Formularios:
-  1. ProyectoSistemaVariablesForm — total_powergip, cuadrilla_personas, variables_extra
-  2. IniciarDespieceForm          — para seleccionar sistema/subsistema e ingresar TP
-  3. APUCostosForm                — costos de mano de obra, herramientas, transporte
-  4. AjusteLineaForm              — ajuste manual de cantidad en DespieceLinea
-  5. ClienteForm                  — crear/editar cliente
-  6. SolicitudForm                — crear/editar solicitud
-  7. ProyectoCrearForm            — crear proyecto desde solicitud (con variables financieras)
-  8. AdminRevisionForm            — variables del proyecto + aprobación/rechazo por Admin
-  9. ProductoProveedorForm        — crear/actualizar precio de producto por proveedor (Compras)
+  1.  ProyectoSistemaVariablesForm — total_powergip, cuadrilla_personas, variables_extra
+  2.  IniciarDespieceForm          — para seleccionar sistema/subsistema e ingresar TP
+  3.  APUCostosForm                — costos de mano de obra, herramientas, transporte
+  4.  AjusteLineaForm              — ajuste manual de cantidad en DespieceLinea
+  5.  ClienteForm                  — crear/editar cliente
+  6.  ContactoClienteFormSet       — inline formset de contactos (tipo Django admin)
+  7.  SolicitudForm                — crear/editar solicitud
+  8.  ProyectoCrearForm            — crear proyecto desde solicitud (con variables financieras)
+  9.  AdminRevisionForm            — variables del proyecto + aprobación/rechazo por Admin
+  10. ProductoProveedorForm        — crear/actualizar precio de producto por proveedor (Compras)
+  11. ProveedorForm                — crear/editar proveedor
+  12. ProductoForm                 — crear/editar producto con código auto y vínculo proveedor
 """
 
 import json
 from django import forms
 from django.core.exceptions import ValidationError
+from django.forms import inlineformset_factory
 
 from .models import (
     ProyectoSistema,
@@ -30,6 +34,9 @@ from .models import (
     Proveedor,
     Producto,
     ProductoProveedor,
+    CategoriaProducto,
+    UnidadMedida,
+    Moneda,
 )
 
 
@@ -403,53 +410,93 @@ class ClienteForm(forms.ModelForm):
             field.required = True
 
 
-class ContactoPrincipalForm(forms.ModelForm):
+# ---------------------------------------------------------------------------
+# 6. Inline formset de ContactoCliente (estilo Django admin)
+# ---------------------------------------------------------------------------
+
+class _ContactoBaseForm(forms.ModelForm):
     """
-    Formulario del contacto principal del cliente.
-    Se usa inline junto con ClienteForm en la misma pantalla.
-    Los campos 'cliente' y 'es_principal' se asignan en la vista, no aquí.
-    Usar siempre con prefix='contacto' para evitar colisiones de nombres.
+    Formulario base para cada fila del inline formset de contactos.
+    Aplica clases Bootstrap a todos los widgets y
+    hace obligatorios nombre, cargo, email y teléfono en filas no vacías.
     """
 
     class Meta:
         model  = ContactoCliente
-        fields = ["nombre", "cargo", "email", "telefono"]
+        fields = ["nombre", "cargo", "email", "telefono", "es_principal", "activo"]
         widgets = {
             "nombre": forms.TextInput(attrs={
-                "class": "form-control",
-                "placeholder": "Nombre completo del contacto",
+                "class": "form-control form-control-sm",
+                "placeholder": "Nombre completo",
             }),
             "cargo": forms.TextInput(attrs={
-                "class": "form-control",
-                "placeholder": "Ej: Gerente de proyectos",
+                "class": "form-control form-control-sm",
+                "placeholder": "Cargo",
             }),
             "email": forms.EmailInput(attrs={
-                "class": "form-control",
+                "class": "form-control form-control-sm",
                 "placeholder": "correo@empresa.com",
             }),
             "telefono": forms.TextInput(attrs={
-                "class": "form-control",
-                "placeholder": "Ej: 310 123 4567",
+                "class": "form-control form-control-sm",
+                "placeholder": "310 123 4567",
             }),
+            "es_principal": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "activo":       forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
         labels = {
-            "nombre":   "Nombre completo",
-            "cargo":    "Cargo",
-            "email":    "Correo electrónico",
-            "telefono": "Teléfono / celular",
+            "nombre":      "Nombre",
+            "cargo":       "Cargo",
+            "email":       "Email",
+            "telefono":    "Teléfono",
+            "es_principal": "Es principal",
+            "activo":      "Activo",
         }
 
-    def tiene_datos(self):
-        """Siempre True: todos los campos son obligatorios."""
-        return True
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # cargo, email y teléfono son opcionales en el modelo
+        # pero obligatorios según política de negocio cuando la fila tiene datos
+        self.fields["cargo"].required    = False
+        self.fields["email"].required    = False
+        self.fields["telefono"].required = False
+
+    def _fila_tiene_datos(self):
+        """True si el usuario escribió algo en la fila (detecta filas extra vacías)."""
+        for fname in ["nombre", "cargo", "email", "telefono"]:
+            if self.cleaned_data.get(fname, "").strip():
+                return True
+        return False
+
+    def clean(self):
+        cleaned = super().clean()
+        if self._fila_tiene_datos():
+            # Si la fila tiene datos, todos los campos son obligatorios
+            for fname, label in [
+                ("nombre",   "Nombre"),
+                ("cargo",    "Cargo"),
+                ("email",    "Email"),
+                ("telefono", "Teléfono"),
+            ]:
+                if not cleaned.get(fname, "").strip():
+                    self.add_error(fname, f"{label} es obligatorio.")
+        return cleaned
 
 
-# Alias de compatibilidad
-ContactoClienteForm = ContactoPrincipalForm
+# Formset inline listo para usar en las vistas
+ContactoClienteFormSet = inlineformset_factory(
+    Cliente,
+    ContactoCliente,
+    form=_ContactoBaseForm,
+    extra=1,          # Una fila vacía adicional para agregar
+    can_delete=True,  # Muestra la columna ¿Eliminar?
+    min_num=1,        # Al menos un contacto requerido
+    validate_min=True,
+)
 
 
 # ---------------------------------------------------------------------------
-# 6. Formulario de Solicitud
+# 7. Formulario de Solicitud
 # ---------------------------------------------------------------------------
 
 class SolicitudForm(forms.ModelForm):
@@ -663,3 +710,170 @@ class ComprasRechazarForm(forms.Form):
                                      "placeholder": "Explique por qué no se puede actualizar el precio..."}),
         label="Motivo",
     )
+
+
+# ---------------------------------------------------------------------------
+# 11. Formulario de Proveedor
+# ---------------------------------------------------------------------------
+
+class ProveedorForm(forms.ModelForm):
+    """Crear o editar un proveedor. Todos los campos son obligatorios."""
+
+    class Meta:
+        model  = Proveedor
+        fields = ["nit", "nombre", "ciudad", "direccion", "telefono", "email"]
+        widgets = {
+            "nit": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ej: 900123456-1",
+            }),
+            "nombre": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Razón social del proveedor",
+            }),
+            "ciudad": forms.TextInput(attrs={"class": "form-control"}),
+            "direccion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "telefono": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
+        }
+        labels = {
+            "nit":       "NIT",
+            "nombre":    "Nombre / Razón social",
+            "ciudad":    "Ciudad",
+            "direccion": "Dirección",
+            "telefono":  "Teléfono",
+            "email":     "Correo electrónico",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Los campos del modelo permiten blank/null, pero son obligatorios en el negocio
+        for field in self.fields.values():
+            field.required = True
+
+
+# ---------------------------------------------------------------------------
+# 12. Formulario de Producto con código auto-generado y vínculo a proveedor
+# ---------------------------------------------------------------------------
+
+class ProductoForm(forms.ModelForm):
+    """
+    Crear o editar un producto del catálogo.
+
+    - El código (Producto.codigo) se genera automáticamente en la vista
+      según la categoría seleccionada; no se muestra en el formulario.
+    - proveedor_nit    : NIT del proveedor para buscar/crear ProductoProveedor.
+    - precio_unitario  : Precio con el que se registra la relación.
+    - moneda_proveedor : Moneda del precio (COP, USD, EUR).
+    """
+
+    # ── Campos extra (relación ProductoProveedor) ──────────────────────────
+    proveedor_nit = forms.CharField(
+        required=True,
+        max_length=50,
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Ej: 900123456-1",
+            "autocomplete": "off",
+        }),
+        label="NIT del proveedor",
+        help_text="El proveedor debe estar registrado en el sistema.",
+    )
+
+    precio_unitario = forms.DecimalField(
+        required=True,
+        min_value=0,
+        max_digits=18,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            "class": "form-control",
+            "step": "0.01",
+            "min": "0",
+            "placeholder": "Ej: 15000.00",
+        }),
+        label="Precio unitario",
+    )
+
+    moneda_proveedor = forms.ChoiceField(
+        choices=Moneda.choices,
+        initial=Moneda.COP,
+        widget=forms.Select(attrs={"class": "form-select"}),
+        label="Moneda del precio",
+    )
+
+    # ── Campos del modelo Producto ─────────────────────────────────────────
+    class Meta:
+        model  = Producto
+        fields = ["nombre", "categoria", "unidad", "origen",
+                  "marca", "linea", "rendimiento", "activo"]
+        widgets = {
+            "nombre": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nombre completo del producto",
+            }),
+            "categoria": forms.Select(attrs={"class": "form-select"}),
+            "unidad": forms.Select(attrs={"class": "form-select"}),
+            "origen": forms.Select(attrs={"class": "form-select"}),
+            "marca": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Marca (opcional)",
+            }),
+            "linea": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Línea de producto (opcional)",
+            }),
+            "rendimiento": forms.NumberInput(attrs={
+                "class": "form-control",
+                "step": "0.000001",
+                "placeholder": "Ej: 1.000000",
+            }),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "nombre":      "Nombre del producto",
+            "categoria":   "Categoría",
+            "unidad":      "Unidad de medida",
+            "origen":      "Origen",
+            "marca":       "Marca",
+            "linea":       "Línea",
+            "rendimiento": "Rendimiento",
+            "activo":      "Activo",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["marca"].required      = False
+        self.fields["linea"].required      = False
+        self.fields["rendimiento"].required = False
+
+        # Al editar, pre-rellenar datos del proveedor activo principal
+        if self.instance and self.instance.pk:
+            pp = (
+                self.instance.proveedores_producto
+                .filter(activo=True)
+                .order_by("precio_unitario")
+                .first()
+            )
+            if pp:
+                self.fields["proveedor_nit"].initial    = pp.proveedor.nit
+                self.fields["precio_unitario"].initial  = pp.precio_unitario
+                self.fields["moneda_proveedor"].initial = pp.moneda
+
+    def clean_proveedor_nit(self):
+        nit = self.cleaned_data.get("proveedor_nit", "").strip()
+        if not nit:
+            raise ValidationError("El NIT del proveedor es obligatorio.")
+        try:
+            proveedor = Proveedor.objects.get(nit=nit, activo=True)
+        except Proveedor.DoesNotExist:
+            raise ValidationError(
+                f"No existe ningún proveedor activo con NIT '{nit}'. "
+                "Regístrelo primero en el catálogo de Proveedores."
+            )
+        # Guardar referencia para uso en la vista
+        self._proveedor_obj = proveedor
+        return nit
+
+    def get_proveedor(self):
+        """Retorna la instancia de Proveedor validada (llamar después de is_valid())."""
+        return getattr(self, "_proveedor_obj", None)

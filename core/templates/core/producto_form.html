@@ -1,0 +1,195 @@
+{% extends "core/base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block nav_productos %}active{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">{{ titulo }}</h4>
+  <a href="{% url 'producto_list' %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+
+<form method="post" autocomplete="off">
+  {% csrf_token %}
+
+  <!-- ── Identificación del producto ──────────────────────────────────────── -->
+  <div class="card shadow-sm mb-4" style="max-width: 860px;">
+    <div class="card-header fw-semibold bg-light d-flex justify-content-between align-items-center">
+      <span>Datos del producto</span>
+      {% if producto %}
+        <span class="badge bg-primary font-monospace fs-6">{{ producto.codigo }}</span>
+      {% else %}
+        <span class="badge bg-secondary small">Código: se genera automáticamente</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+
+        <!-- Nombre -->
+        <div class="col-12">
+          <label class="form-label fw-semibold small">
+            {{ form.nombre.label }} <span class="text-danger">*</span>
+          </label>
+          {{ form.nombre }}
+          {% if form.nombre.errors %}
+            <div class="text-danger small">{{ form.nombre.errors }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Categoría -->
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">
+            {{ form.categoria.label }} <span class="text-danger">*</span>
+          </label>
+          {{ form.categoria }}
+          {% if form.categoria.errors %}
+            <div class="text-danger small">{{ form.categoria.errors }}</div>
+          {% endif %}
+          {% if not producto %}
+            <div class="form-text">El código se generará según la categoría elegida.</div>
+          {% endif %}
+        </div>
+
+        <!-- Unidad de medida -->
+        <div class="col-md-3">
+          <label class="form-label fw-semibold small">
+            {{ form.unidad.label }} <span class="text-danger">*</span>
+          </label>
+          {{ form.unidad }}
+          {% if form.unidad.errors %}
+            <div class="text-danger small">{{ form.unidad.errors }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Origen -->
+        <div class="col-md-3">
+          <label class="form-label fw-semibold small">
+            {{ form.origen.label }} <span class="text-danger">*</span>
+          </label>
+          {{ form.origen }}
+          {% if form.origen.errors %}
+            <div class="text-danger small">{{ form.origen.errors }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Marca -->
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">{{ form.marca.label }}</label>
+          {{ form.marca }}
+          {% if form.marca.errors %}
+            <div class="text-danger small">{{ form.marca.errors }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Línea -->
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">{{ form.linea.label }}</label>
+          {{ form.linea }}
+          {% if form.linea.errors %}
+            <div class="text-danger small">{{ form.linea.errors }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Rendimiento -->
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">{{ form.rendimiento.label }}</label>
+          {{ form.rendimiento }}
+          {% if form.rendimiento.errors %}
+            <div class="text-danger small">{{ form.rendimiento.errors }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Activo -->
+        <div class="col-12">
+          <div class="form-check">
+            {{ form.activo }}
+            <label class="form-check-label fw-semibold small" for="{{ form.activo.id_for_label }}">
+              Producto activo
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Proveedor y precio ────────────────────────────────────────────────── -->
+  <div class="card shadow-sm mb-4" style="max-width: 860px;">
+    <div class="card-header fw-semibold bg-light">Proveedor y precio de referencia</div>
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+
+        <!-- NIT del proveedor -->
+        <div class="col-md-5">
+          <label class="form-label fw-semibold small">
+            {{ form.proveedor_nit.label }} <span class="text-danger">*</span>
+          </label>
+          {{ form.proveedor_nit }}
+          {% if form.proveedor_nit.errors %}
+            <div class="text-danger small">{{ form.proveedor_nit.errors }}</div>
+          {% endif %}
+          <div class="form-text">{{ form.proveedor_nit.help_text }}</div>
+        </div>
+
+        <!-- Precio unitario -->
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small">
+            {{ form.precio_unitario.label }} <span class="text-danger">*</span>
+          </label>
+          {{ form.precio_unitario }}
+          {% if form.precio_unitario.errors %}
+            <div class="text-danger small">{{ form.precio_unitario.errors }}</div>
+          {% endif %}
+        </div>
+
+        <!-- Moneda -->
+        <div class="col-md-3">
+          <label class="form-label fw-semibold small">{{ form.moneda_proveedor.label }}</label>
+          {{ form.moneda_proveedor }}
+          {% if form.moneda_proveedor.errors %}
+            <div class="text-danger small">{{ form.moneda_proveedor.errors }}</div>
+          {% endif %}
+        </div>
+
+      </div>
+
+      {% if producto %}
+        <!-- Otros proveedores del producto (solo lectura) -->
+        {% with otros=producto.proveedores_producto.all %}
+          {% if otros.count > 1 %}
+            <hr class="my-3">
+            <p class="small text-muted mb-2">Otros precios registrados para este producto:</p>
+            <table class="table table-sm table-bordered small mb-0">
+              <thead class="table-light">
+                <tr><th>Proveedor</th><th>NIT</th><th class="text-end">Precio</th><th>Moneda</th><th>Activo</th></tr>
+              </thead>
+              <tbody>
+                {% for pp in otros %}
+                <tr {% if not pp.activo %}class="text-muted"{% endif %}>
+                  <td>{{ pp.proveedor.nombre }}</td>
+                  <td class="font-monospace">{{ pp.proveedor.nit }}</td>
+                  <td class="text-end">${{ pp.precio_unitario|floatformat:2 }}</td>
+                  <td>{{ pp.moneda }}</td>
+                  <td>{% if pp.activo %}<span class="badge bg-success">Sí</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        {% endwith %}
+      {% endif %}
+
+    </div>
+  </div>
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger small" style="max-width: 860px;">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <!-- ── Acciones ──────────────────────────────────────────────────────────── -->
+  <div class="d-flex gap-2 mb-4" style="max-width: 860px;">
+    <button type="submit" class="btn btn-primary px-4">Guardar</button>
+    <a href="{% url 'producto_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+  </div>
+
+</form>
+{% endblock %}
