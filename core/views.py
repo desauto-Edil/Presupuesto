@@ -52,6 +52,8 @@ from .forms import (
     ComprasRechazarForm,
     ProveedorForm,
     ProductoForm,
+    SistemaForm,
+    SubsistemaFormSet,
 )
 from .models import (
     APUProyecto,
@@ -568,6 +570,90 @@ class ProveedorEditView(View):
             "form":      form,
             "titulo":    f"Editar: {proveedor.nombre}",
             "proveedor": proveedor,
+        })
+
+
+# ===========================================================================
+# CATÁLOGO — Sistemas y Subsistemas
+# ===========================================================================
+
+class SistemaListView(View):
+    """GET /sistemas/ — Lista de sistemas con conteo de subsistemas."""
+
+    def get(self, request):
+        from .models import Sistema
+        sistemas = Sistema.objects.prefetch_related("subsistemas").order_by("linea_negocio", "nombre")
+        q = request.GET.get("q", "")
+        if q:
+            from django.db.models import Q
+            sistemas = sistemas.filter(Q(nombre__icontains=q) | Q(codigo__icontains=q))
+        return render(request, "core/sistema_list.html", {
+            "sistemas": sistemas,
+            "q":        q,
+        })
+
+
+class SistemaCreateView(View):
+    """GET/POST /sistemas/nuevo/ — Crear sistema."""
+
+    def get(self, request):
+        return render(request, "core/sistema_form.html", {
+            "form":    SistemaForm(),
+            "formset": SubsistemaFormSet(prefix="subsistemas"),
+            "titulo":  "Nuevo sistema",
+        })
+
+    def post(self, request):
+        from django.db import transaction
+        form    = SistemaForm(request.POST)
+        formset = SubsistemaFormSet(request.POST, prefix="subsistemas")
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                sistema = form.save()
+                for sub_form in formset:
+                    if sub_form.cleaned_data and not sub_form.cleaned_data.get("DELETE"):
+                        sub = sub_form.save(commit=False)
+                        sub.sistema = sistema
+                        sub.save()
+            messages.success(request, f"Sistema '{sistema.nombre}' creado correctamente.")
+            return redirect("sistema_list")
+        return render(request, "core/sistema_form.html", {
+            "form":    form,
+            "formset": formset,
+            "titulo":  "Nuevo sistema",
+        })
+
+
+class SistemaEditView(View):
+    """GET/POST /sistemas/<pk>/editar/ — Editar sistema y sus subsistemas."""
+
+    def get(self, request, pk):
+        from .models import Sistema
+        sistema = get_object_or_404(Sistema, pk=pk)
+        return render(request, "core/sistema_form.html", {
+            "form":    SistemaForm(instance=sistema),
+            "formset": SubsistemaFormSet(instance=sistema, prefix="subsistemas"),
+            "titulo":  f"Editar: {sistema.nombre}",
+            "sistema": sistema,
+        })
+
+    def post(self, request, pk):
+        from django.db import transaction
+        from .models import Sistema
+        sistema = get_object_or_404(Sistema, pk=pk)
+        form    = SistemaForm(request.POST, instance=sistema)
+        formset = SubsistemaFormSet(request.POST, instance=sistema, prefix="subsistemas")
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                form.save()
+                formset.save()
+            messages.success(request, "Sistema actualizado correctamente.")
+            return redirect("sistema_list")
+        return render(request, "core/sistema_form.html", {
+            "form":    form,
+            "formset": formset,
+            "titulo":  f"Editar: {sistema.nombre}",
+            "sistema": sistema,
         })
 
 

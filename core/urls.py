@@ -132,6 +132,23 @@ urlpatterns = [
         name="enviar_cotizacion",
     ),
 
+    # ── CATÁLOGO: Sistemas ────────────────────────────────────────────────────
+    path(
+        "sistemas/",
+        views.SistemaListView.as_view(),
+        name="sistema_list",
+    ),
+    path(
+        "sistemas/nuevo/",
+        views.SistemaCreateView.as_view(),
+        name="sistema_create",
+    ),
+    path(
+        "sistemas/<int:pk>/editar/",
+        views.SistemaEditView.as_view(),
+        name="sistema_edit",
+    ),
+
     # ── CATÁLOGO: Productos ───────────────────────────────────────────────────
     path(
         "productos/",

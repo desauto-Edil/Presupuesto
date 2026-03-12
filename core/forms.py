@@ -37,6 +37,7 @@ from .models import (
     CategoriaProducto,
     UnidadMedida,
     Moneda,
+    LineaNegocio,
 )
 
 
@@ -877,3 +878,108 @@ class ProductoForm(forms.ModelForm):
     def get_proveedor(self):
         """Retorna la instancia de Proveedor validada (llamar después de is_valid())."""
         return getattr(self, "_proveedor_obj", None)
+
+
+# ---------------------------------------------------------------------------
+# 13. Formulario de Sistema
+# ---------------------------------------------------------------------------
+
+class SistemaForm(forms.ModelForm):
+    """Crear o editar un sistema. Todos los campos obligatorios excepto descripción."""
+
+    class Meta:
+        model  = Sistema
+        fields = ["codigo", "nombre", "linea_negocio", "descripcion", "activo"]
+        widgets = {
+            "codigo": forms.TextInput(attrs={
+                "class": "form-control text-uppercase",
+                "placeholder": "Ej: CUB-SINUSOIDAL",
+            }),
+            "nombre": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nombre completo del sistema",
+            }),
+            "linea_negocio": forms.Select(attrs={"class": "form-select"}),
+            "descripcion": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 2,
+                "placeholder": "Descripción técnica del sistema (opcional)",
+            }),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "codigo":       "Código",
+            "nombre":       "Nombre del sistema",
+            "linea_negocio": "Línea de negocio",
+            "descripcion":  "Descripción",
+            "activo":       "Activo",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["descripcion"].required = False
+
+
+# ---------------------------------------------------------------------------
+# 14. Inline formset de Subsistemas (estilo Django admin)
+# ---------------------------------------------------------------------------
+
+class _SubsistemaBaseForm(forms.ModelForm):
+    """
+    Formulario base para cada fila del inline formset de subsistemas.
+    Hace obligatorios codigo y nombre en filas que tengan datos.
+    """
+
+    class Meta:
+        model  = Subsistema
+        fields = ["codigo", "nombre", "descripcion", "activo"]
+        widgets = {
+            "codigo": forms.TextInput(attrs={
+                "class": "form-control form-control-sm text-uppercase",
+                "placeholder": "Ej: CUB-SIN-STD",
+            }),
+            "nombre": forms.TextInput(attrs={
+                "class": "form-control form-control-sm",
+                "placeholder": "Nombre del subsistema",
+            }),
+            "descripcion": forms.TextInput(attrs={
+                "class": "form-control form-control-sm",
+                "placeholder": "Descripción (opcional)",
+            }),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "codigo":      "Código",
+            "nombre":      "Nombre",
+            "descripcion": "Descripción",
+            "activo":      "Activo",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["descripcion"].required = False
+
+    def _fila_tiene_datos(self):
+        for fname in ["codigo", "nombre"]:
+            if self.cleaned_data.get(fname, "").strip():
+                return True
+        return False
+
+    def clean(self):
+        cleaned = super().clean()
+        if self._fila_tiene_datos():
+            for fname, label in [("codigo", "Código"), ("nombre", "Nombre")]:
+                if not cleaned.get(fname, "").strip():
+                    self.add_error(fname, f"{label} es obligatorio.")
+        return cleaned
+
+
+SubsistemaFormSet = inlineformset_factory(
+    Sistema,
+    Subsistema,
+    form=_SubsistemaBaseForm,
+    extra=1,
+    can_delete=True,
+    min_num=0,
+    validate_min=False,
+)
