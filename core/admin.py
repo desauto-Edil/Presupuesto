@@ -36,22 +36,32 @@ class ProductoProveedorInline(admin.TabularInline):
 class DependenciaTecnicaInline(admin.TabularInline):
     model = DependenciaTecnica
     extra = 0
-    fields = ("producto_origen", "producto_dependiente", "obligatoria", "tipo_regla", "orden")
+    fields = (
+        "nombre", "categoria_producto", "producto_dependiente",
+        "producto_origen", "obligatoria", "tipo_regla", "orden",
+    )
 
 
 class ReglaCalculoInline(admin.TabularInline):
     model = ReglaCalculo
     extra = 0
-    fields = ("codigo", "nombre", "producto", "variable_entrada", "coeficiente", "divisor",
-              "factor_desperdicio", "formula_texto", "tipo_regla", "orden_ejecucion", "activa")
+    fields = (
+        "codigo", "nombre", "categoria_producto", "producto",
+        "variable_entrada", "coeficiente", "divisor",
+        "factor_desperdicio", "formula_texto", "tipo_regla", "orden_ejecucion",
+        "activa", "obligatoria", "variable_salida",
+    )
 
 
 class DespieceLineaInline(admin.TabularInline):
     model = DespieceLinea
     extra = 0
     readonly_fields = ("cantidad_calculada", "precio_snapshot", "es_dependencia_automatica")
-    fields = ("proyecto_sistema", "producto", "cantidad_calculada", "cantidad_ajustada",
-              "precio_snapshot", "es_dependencia_automatica", "motivo_ajuste")
+    fields = (
+        "proyecto_sistema", "producto", "categoria_producto",
+        "cantidad_calculada", "cantidad_ajustada",
+        "precio_snapshot", "es_dependencia_automatica", "motivo_ajuste",
+    )
 
 
 class APULineaInline(admin.TabularInline):
@@ -222,19 +232,24 @@ class ProductoProveedorAdmin(admin.ModelAdmin):
 
 @admin.register(ReglaCalculo)
 class ReglaCalculoAdmin(admin.ModelAdmin):
-    list_display = ("codigo", "nombre", "subsistema", 
-                      "producto", "tipo_regla",
-                      "orden_ejecucion", "activa", "version")
-    list_filter = ("tipo_regla", "activa", "subsistema")
-    search_fields = ("codigo", "nombre", "producto__nombre")
+    list_display = ("codigo", "nombre", "subsistema",
+                    "categoria_producto", "producto", "variable_salida",
+                    "tipo_regla", "orden_ejecucion", "activa", "obligatoria", "version")
+    list_filter = ("tipo_regla", "activa", "obligatoria", "subsistema")
+    search_fields = ("codigo", "nombre", "producto__nombre", "categoria_producto__nombre",
+                     "variable_salida")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
         ("Identificación", {
-            "fields": ("subsistema", "producto", "codigo", "nombre", "version", "activa")
+            "fields": (
+                "subsistema", "codigo", "nombre", "version", "activa", "obligatoria",
+                "categoria_producto", "producto",
+            )
         }),
         ("Parámetros de cálculo", {
-            "fields": ("variable_entrada", "coeficiente", "divisor", "factor_desperdicio",
-                       "formula_texto", "formula_python", "tipo_regla", "orden_ejecucion")
+            "fields": ("variable_entrada", "variable_salida", "coeficiente", "divisor",
+                       "factor_desperdicio", "formula_texto", "formula_python",
+                       "tipo_regla", "orden_ejecucion")
         }),
         ("Configuración", {
             "fields": ("editable_por_proyecto", "caso_prueba", "creada_por")
@@ -244,9 +259,14 @@ class ReglaCalculoAdmin(admin.ModelAdmin):
 
 @admin.register(DependenciaTecnica)
 class DependenciaTecnicaAdmin(admin.ModelAdmin):
-    list_display = ("subsistema", "producto_origen", "producto_dependiente", "obligatoria", "tipo_regla")
+    list_display = (
+        "subsistema", "nombre", "categoria_producto",
+        "producto_origen", "producto_dependiente", "obligatoria", "tipo_regla",
+    )
     list_filter = ("obligatoria", "tipo_regla", "subsistema")
-    search_fields = ("producto_dependiente__nombre",)
+    search_fields = (
+        "nombre", "producto_dependiente__nombre", "categoria_producto__nombre",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -255,10 +275,15 @@ class DependenciaTecnicaAdmin(admin.ModelAdmin):
 
 @admin.register(DespieceLinea)
 class DespieceLineaAdmin(admin.ModelAdmin):
-    list_display = ("proyecto", "producto", "cantidad_calculada", "cantidad_ajustada",
-                      "precio_snapshot", "es_dependencia_automatica")
+    list_display = (
+        "proyecto", "producto", "categoria_producto",
+        "cantidad_calculada", "cantidad_ajustada",
+        "precio_snapshot", "es_dependencia_automatica",
+    )
     list_filter = ("es_dependencia_automatica",)
-    search_fields = ("proyecto__consecutivo", "producto__nombre")
+    search_fields = (
+        "proyecto__consecutivo", "producto__nombre", "categoria_producto__nombre",
+    )
     readonly_fields = ("cantidad_calculada", "precio_snapshot", "created_at")
 
 

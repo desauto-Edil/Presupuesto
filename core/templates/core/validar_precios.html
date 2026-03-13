@@ -11,14 +11,23 @@
   <a href="{% url 'proyecto_detalle' proyecto.pk %}" class="btn btn-outline-secondary btn-sm">Volver</a>
 </div>
 
+{% if pendientes %}
+<div class="alert alert-danger">
+  <strong>{{ pendientes|length }} línea(s) sin producto asignado.</strong>
+  Debe seleccionar un producto concreto para las líneas de categoría antes de continuar.
+</div>
+{% endif %}
+
 {% if sin_precio %}
 <div class="alert alert-warning">
   <strong>{{ sin_precio|length }} material(es) sin precio actualizado.</strong>
   Puede enviar el proyecto a Compras para que actualicen los precios, o cargarlos manualmente desde el catálogo.
 </div>
-{% else %}
+{% endif %}
+
+{% if not pendientes and not sin_precio %}
 <div class="alert alert-success">
-  Todos los materiales tienen precio actualizado. Puede validar el despiece y continuar con el APU.
+  Todos los materiales tienen producto y precio actualizados. Puede validar el despiece y continuar con el APU.
 </div>
 {% endif %}
 
@@ -34,32 +43,54 @@
           <th class="text-end">Cantidad</th>
           <th class="text-end">Precio snapshot</th>
           <th class="text-center">Estado</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for linea in lineas %}
-        <tr class="{% if not linea.precio_snapshot %}table-warning{% endif %}">
-          <td class="font-monospace small">{{ linea.producto.codigo }}</td>
-          <td>{{ linea.producto.nombre }}</td>
-          <td>{{ linea.producto.unidad.abreviatura }}</td>
+        <tr class="{% if linea.pendiente_seleccion %}table-danger{% elif not linea.precio_snapshot %}table-warning{% endif %}">
+          <td class="font-monospace small">
+            {% if linea.producto %}{{ linea.producto.codigo }}{% else %}&mdash;{% endif %}
+          </td>
+          <td>
+            {% if linea.pendiente_seleccion %}
+              <span class="badge bg-danger me-1">Pendiente</span>
+              {{ linea.categoria_producto }}
+            {% else %}
+              {{ linea.producto.nombre }}
+            {% endif %}
+          </td>
+          <td>
+            {% if linea.producto %}{{ linea.producto.unidad.abreviatura }}{% else %}&mdash;{% endif %}
+          </td>
           <td class="text-end">{{ linea.cantidad_final|floatformat:2 }}</td>
           <td class="text-end">
-            {% if linea.precio_snapshot %}
+            {% if linea.pendiente_seleccion %}
+              <span class="text-muted">—</span>
+            {% elif linea.precio_snapshot %}
               ${{ linea.precio_snapshot|floatformat:2 }}
             {% else %}
               <span class="text-danger fw-bold">Sin precio</span>
             {% endif %}
           </td>
           <td class="text-center">
-            {% if linea.precio_snapshot %}
+            {% if linea.pendiente_seleccion %}
+              <span class="badge bg-danger">Sin producto</span>
+            {% elif linea.precio_snapshot %}
               <span class="badge bg-success">OK</span>
             {% else %}
-              <span class="badge bg-danger">Falta</span>
+              <span class="badge bg-warning text-dark">Sin precio</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if linea.pendiente_seleccion %}
+              <a href="{% url 'seleccionar_producto_linea' proyecto.pk linea.pk %}"
+                 class="btn btn-danger btn-sm">Seleccionar producto</a>
             {% endif %}
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center text-muted py-3">No hay líneas de despiece.</td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-3">No hay líneas de despiece.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -68,7 +99,7 @@
 
 <!-- Acciones -->
 <div class="d-flex gap-3 flex-wrap">
-  {% if sin_precio %}
+  {% if sin_precio and not pendientes %}
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="accion" value="enviar_compras">

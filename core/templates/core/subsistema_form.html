@@ -1,0 +1,212 @@
+{% extends "core/base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block nav_sistemas %}active{% endblock %}
+
+{% block extra_css %}
+<style>
+  .formset-table th { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; color:#6c757d; }
+  .formset-table td { vertical-align:middle; }
+  .delete-row-btn { cursor:pointer; color:#dc3545; font-size:1.1rem; line-height:1; }
+  .section-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; color:#6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0">{{ titulo }}</h4>
+    <small class="text-muted">
+      Sistema: <a href="{% url 'sistema_edit' sistema.pk %}">{{ sistema.nombre }}</a>
+    </small>
+  </div>
+  <a href="{% url 'sistema_edit' sistema.pk %}" class="btn btn-outline-secondary btn-sm">Volver al sistema</a>
+</div>
+
+<form method="post" autocomplete="off">
+  {% csrf_token %}
+
+  <!-- ── Reglas de cálculo (componentes) ─────────────────────────────────── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header fw-semibold bg-light d-flex justify-content-between align-items-center">
+      <span>Reglas de cálculo (componentes)</span>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="btn-add-comp">+ Agregar regla</button>
+    </div>
+    <div class="card-body p-0">
+      {{ comp_fs.management_form }}
+
+      {% if comp_fs.non_form_errors %}
+        <div class="alert alert-danger m-2 small">{{ comp_fs.non_form_errors }}</div>
+      {% endif %}
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm mb-0 formset-table" id="comp-table">
+          <thead class="table-light">
+            <tr>
+              <th style="width:7%">Código</th>
+              <th style="width:12%">Nombre</th>
+              <th style="width:10%">Categoría</th>
+              <th style="width:10%">Producto</th>
+              <th style="width:8%">Var. entrada</th>
+              <th style="width:5%">Coef.</th>
+              <th style="width:5%">Div.</th>
+              <th style="width:5%">Desp.</th>
+              <th style="width:9%">Fórmula texto</th>
+              <th style="width:8%">Fórmula Python</th>
+              <th style="width:5%">Tipo</th>
+              <th style="width:3%">Ord.</th>
+              <th style="width:7%">Var. salida</th>
+              <th style="width:3%" class="text-center">Act.</th>
+              <th style="width:3%" class="text-center">Oblig.</th>
+              <th style="width:3%" class="text-center">Del</th>
+            </tr>
+          </thead>
+          <tbody id="comp-tbody">
+            {% for f in comp_fs %}
+              <tr class="comp-row">
+                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ f.codigo }}{% if f.codigo.errors %}<div class="text-danger" style="font-size:.72rem">{{ f.codigo.errors }}</div>{% endif %}</td>
+                <td>{{ f.nombre }}{% if f.nombre.errors %}<div class="text-danger" style="font-size:.72rem">{{ f.nombre.errors }}</div>{% endif %}</td>
+                <td>{{ f.categoria_producto }}</td>
+                <td>{{ f.producto }}</td>
+                <td>{{ f.variable_entrada }}</td>
+                <td>{{ f.coeficiente }}</td>
+                <td>{{ f.divisor }}</td>
+                <td>{{ f.factor_desperdicio }}</td>
+                <td>{{ f.formula_texto }}</td>
+                <td>{{ f.formula_python }}</td>
+                <td>{{ f.tipo_regla }}</td>
+                <td>{{ f.orden_ejecucion }}</td>
+                <td>{{ f.variable_salida }}</td>
+                <td class="text-center align-middle">{{ f.activa }}</td>
+                <td class="text-center align-middle">{{ f.obligatoria }}</td>
+                <td class="text-center align-middle">
+                  {% if f.instance.pk %}
+                    {{ f.DELETE }}
+                  {% else %}
+                    <span class="delete-row-btn" title="Quitar fila">&times;</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% if f.non_field_errors %}
+                <tr><td colspan="16"><div class="text-danger small ps-2">{{ f.non_field_errors }}</div></td></tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Dependencias técnicas ─────────────────────────────────────────────── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header fw-semibold bg-light d-flex justify-content-between align-items-center">
+      <span>Dependencias técnicas</span>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="btn-add-dep">+ Agregar dependencia</button>
+    </div>
+    <div class="card-body p-0">
+      {{ dep_fs.management_form }}
+
+      {% if dep_fs.non_form_errors %}
+        <div class="alert alert-danger m-2 small">{{ dep_fs.non_form_errors }}</div>
+      {% endif %}
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm mb-0 formset-table" id="dep-table">
+          <thead class="table-light">
+            <tr>
+              <th style="width:14%">Nombre / descripción</th>
+              <th style="width:14%">Categoría</th>
+              <th style="width:14%">Producto dependiente</th>
+              <th style="width:14%">Producto origen</th>
+              <th style="width:10%">Variable</th>
+              <th style="width:6%">Tipo</th>
+              <th style="width:4%">Ord.</th>
+              <th style="width:4%" class="text-center">Oblig.</th>
+              <th style="width:3%" class="text-center">Del</th>
+            </tr>
+          </thead>
+          <tbody id="dep-tbody">
+            {% for f in dep_fs %}
+              <tr class="dep-row">
+                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{{ f.nombre }}</td>
+                <td>{{ f.categoria_producto }}</td>
+                <td>{{ f.producto_dependiente }}</td>
+                <td>{{ f.producto_origen }}</td>
+                <td>{{ f.variable_entrada }}</td>
+                <td>{{ f.tipo_regla }}</td>
+                <td>{{ f.orden }}</td>
+                <td class="text-center align-middle">{{ f.obligatoria }}</td>
+                <td class="text-center align-middle">
+                  {% if f.instance.pk %}
+                    {{ f.DELETE }}
+                  {% else %}
+                    <span class="delete-row-btn" title="Quitar fila">&times;</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% if f.non_field_errors %}
+                <tr><td colspan="9"><div class="text-danger small ps-2">{{ f.non_field_errors }}</div></td></tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2 mb-4">
+    <button type="submit" class="btn btn-primary px-4">Guardar</button>
+    <a href="{% url 'sistema_edit' sistema.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  /* ── Generic formset row adder ── */
+  function adder(btnId, tbodyId, totalFormsName, rowClass, cloneFromTbody) {
+    const btn        = document.getElementById(btnId);
+    const tbody      = document.getElementById(tbodyId);
+    const totalInput = document.querySelector(`[name="${totalFormsName}"]`);
+
+    btn.addEventListener('click', function () {
+      const rows = tbody.querySelectorAll('.' + rowClass);
+      const idx  = parseInt(totalInput.value, 10);
+
+      /* Clone last row and reset its values */
+      if (rows.length === 0) return;
+      const newRow = rows[rows.length - 1].cloneNode(true);
+
+      newRow.querySelectorAll('input, select, textarea').forEach(function (el) {
+        el.name  = el.name.replace(/-\d+-/, '-' + idx + '-');
+        el.id    = el.id.replace(/-\d+-/, '-' + idx + '-');
+        if (el.type === 'checkbox') { el.checked = false; }
+        else { el.value = (el.tagName === 'SELECT') ? '' : ''; }
+      });
+      newRow.querySelectorAll('label').forEach(function (lbl) {
+        if (lbl.htmlFor) lbl.htmlFor = lbl.htmlFor.replace(/-\d+-/, '-' + idx + '-');
+      });
+      /* Remove delete checkbox (new row — just remove from DOM) */
+      newRow.querySelectorAll('.delete-row-btn').forEach(function (span) {
+        span.addEventListener('click', function () { newRow.remove(); totalInput.value = parseInt(totalInput.value, 10) - 1; });
+      });
+
+      tbody.appendChild(newRow);
+      totalInput.value = idx + 1;
+    });
+  }
+
+  adder('btn-add-comp', 'comp-tbody', 'comp-TOTAL_FORMS', 'comp-row');
+  adder('btn-add-dep',  'dep-tbody',  'dep-TOTAL_FORMS',  'dep-row');
+
+  /* Remove-row handler for existing spans */
+  document.querySelectorAll('.delete-row-btn').forEach(function (span) {
+    span.addEventListener('click', function () {
+      span.closest('tr').remove();
+    });
+  });
+})();
+</script>
+{% endblock %}

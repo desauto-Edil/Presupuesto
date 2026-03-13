@@ -2,233 +2,29 @@
 {% block title %}{{ titulo }}{% endblock %}
 {% block nav_clientes %}active{% endblock %}
 
-{% block extra_css %}
-<style>
-  .contactos-table th { font-size: .75rem; text-transform: uppercase;
-                        letter-spacing: .06em; color: #6c757d; white-space: nowrap; }
-  .contactos-table td { vertical-align: middle; }
-  .contactos-table .form-control-sm { font-size: .85rem; }
-  .fila-contacto td { background: #1c2a38; }
-  .fila-contacto:hover td { background: #223040; }
-  .header-seccion { background: #1a2332; color: #fff;
-                    padding: .5rem 1rem; font-size: .8rem;
-                    text-transform: uppercase; letter-spacing: .08em; }
-</style>
-{% endblock %}
-
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0">{{ titulo }}</h4>
   <a href="{% url 'cliente_list' %}" class="btn btn-outline-secondary btn-sm">Volver</a>
 </div>
 
-<form method="post" autocomplete="off" id="form-cliente">
-  {% csrf_token %}
-
-  <!-- ── Datos de la empresa ────────────────────────────────────────────── -->
-  <div class="card shadow-sm mb-4" style="max-width: 900px;">
-    <div class="card-header fw-semibold bg-light">Datos de la empresa</div>
-    <div class="card-body">
-      <div class="row g-3">
-
-        <div class="col-md-4">
-          <label class="form-label fw-semibold small" for="{{ form_cliente.nit.id_for_label }}">
-            {{ form_cliente.nit.label }} <span class="text-danger">*</span>
-          </label>
-          {{ form_cliente.nit }}
-          {% if form_cliente.nit.errors %}
-            <div class="text-danger small">{{ form_cliente.nit.errors }}</div>
-          {% endif %}
+<div class="card shadow-sm" style="max-width: 640px;">
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="mb-3">
+          <label class="form-label fw-semibold">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+          {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors }}</div>{% endif %}
         </div>
-
-        <div class="col-md-8">
-          <label class="form-label fw-semibold small" for="{{ form_cliente.razon_social.id_for_label }}">
-            {{ form_cliente.razon_social.label }} <span class="text-danger">*</span>
-          </label>
-          {{ form_cliente.razon_social }}
-          {% if form_cliente.razon_social.errors %}
-            <div class="text-danger small">{{ form_cliente.razon_social.errors }}</div>
-          {% endif %}
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label fw-semibold small" for="{{ form_cliente.ciudad.id_for_label }}">
-            {{ form_cliente.ciudad.label }} <span class="text-danger">*</span>
-          </label>
-          {{ form_cliente.ciudad }}
-          {% if form_cliente.ciudad.errors %}
-            <div class="text-danger small">{{ form_cliente.ciudad.errors }}</div>
-          {% endif %}
-        </div>
-
-        <div class="col-md-8">
-          <label class="form-label fw-semibold small" for="{{ form_cliente.direccion.id_for_label }}">
-            {{ form_cliente.direccion.label }} <span class="text-danger">*</span>
-          </label>
-          {{ form_cliente.direccion }}
-          {% if form_cliente.direccion.errors %}
-            <div class="text-danger small">{{ form_cliente.direccion.errors }}</div>
-          {% endif %}
-        </div>
-
-        <div class="col-md-6">
-          <label class="form-label fw-semibold small" for="{{ form_cliente.telefono_principal.id_for_label }}">
-            {{ form_cliente.telefono_principal.label }} <span class="text-danger">*</span>
-          </label>
-          {{ form_cliente.telefono_principal }}
-          {% if form_cliente.telefono_principal.errors %}
-            <div class="text-danger small">{{ form_cliente.telefono_principal.errors }}</div>
-          {% endif %}
-        </div>
-
-        <div class="col-md-6">
-          <label class="form-label fw-semibold small" for="{{ form_cliente.email_principal.id_for_label }}">
-            {{ form_cliente.email_principal.label }} <span class="text-danger">*</span>
-          </label>
-          {{ form_cliente.email_principal }}
-          {% if form_cliente.email_principal.errors %}
-            <div class="text-danger small">{{ form_cliente.email_principal.errors }}</div>
-          {% endif %}
-        </div>
-
+      {% endfor %}
+      <div class="d-flex gap-2 mt-4">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <a href="{% url 'cliente_list' %}" class="btn btn-outline-secondary">Cancelar</a>
       </div>
-      {% if form_cliente.non_field_errors %}
-        <div class="alert alert-danger small mt-2">{{ form_cliente.non_field_errors }}</div>
-      {% endif %}
-    </div>
+    </form>
   </div>
-
-  <!-- ── Contacto clientes (inline formset) ─────────────────────────────── -->
-  <div class="card shadow-sm mb-4">
-
-    <div class="card-header fw-semibold bg-light">Contacto Clientes</div>
-
-    {{ formset.management_form }}
-
-    <div class="table-responsive">
-      <table class="table table-sm contactos-table mb-0" id="contactos-tabla">
-        <thead>
-          <tr class="table-dark">
-            {# La primera columna muestra el label del cliente (instancia existente) #}
-            <th style="min-width:180px;">Nombre</th>
-            <th style="min-width:160px;">Cargo</th>
-            <th style="min-width:190px;">Email</th>
-            <th style="min-width:140px;">Teléfono</th>
-            <th class="text-center" style="width:90px;">Es principal</th>
-            <th class="text-center" style="width:70px;">Activo</th>
-            <th class="text-center" style="width:90px;">¿Eliminar?</th>
-          </tr>
-        </thead>
-        <tbody id="contactos-tbody">
-          {% for form in formset %}
-            {% if form.instance.pk %}
-              {# Fila de encabezado con el nombre del contacto existente (igual que admin) #}
-              <tr class="table-secondary">
-                <td colspan="7" class="small fw-semibold ps-2 py-1">
-                  {{ form.instance }} — {{ form.instance.cliente.razon_social }}
-                </td>
-              </tr>
-            {% endif %}
-            <tr class="fila-contacto">
-              {# Campos ocultos del formulario (id, etc.) #}
-              {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
-
-              <td>
-                {{ form.nombre }}
-                {% if form.nombre.errors %}<div class="text-danger" style="font-size:.75rem;">{{ form.nombre.errors }}</div>{% endif %}
-              </td>
-              <td>
-                {{ form.cargo }}
-                {% if form.cargo.errors %}<div class="text-danger" style="font-size:.75rem;">{{ form.cargo.errors }}</div>{% endif %}
-              </td>
-              <td>
-                {{ form.email }}
-                {% if form.email.errors %}<div class="text-danger" style="font-size:.75rem;">{{ form.email.errors }}</div>{% endif %}
-              </td>
-              <td>
-                {{ form.telefono }}
-                {% if form.telefono.errors %}<div class="text-danger" style="font-size:.75rem;">{{ form.telefono.errors }}</div>{% endif %}
-              </td>
-              <td class="text-center">{{ form.es_principal }}</td>
-              <td class="text-center">{{ form.activo }}</td>
-              <td class="text-center">
-                {% if form.instance.pk %}
-                  {{ form.DELETE }}
-                {% else %}
-                  {# Fila extra vacía: no mostramos eliminar, el usuario puede ignorarla #}
-                  <span class="text-muted small">—</span>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card-footer bg-transparent border-0">
-      <button type="button" id="btn-agregar-contacto"
-              class="btn btn-link btn-sm text-success p-0 fw-semibold">
-        + Agregar Contacto cliente adicional.
-      </button>
-    </div>
-
-    {% if formset.non_form_errors %}
-      <div class="alert alert-danger small mx-3 mb-3">{{ formset.non_form_errors }}</div>
-    {% endif %}
-
-  </div><!-- /card contactos -->
-
-  <!-- ── Acciones ───────────────────────────────────────────────────────── -->
-  <div class="d-flex gap-2 mb-4" style="max-width: 900px;">
-    <button type="submit" class="btn btn-primary px-4">Guardar</button>
-    <a href="{% url 'cliente_list' %}" class="btn btn-outline-secondary">Cancelar</a>
-  </div>
-
-</form>
-
-{# Plantilla oculta para clonar nuevas filas con JS #}
-<template id="contacto-row-template">
-  <tr class="fila-contacto">
-    <td>
-      <input type="text"   name="contactos-__prefix__-nombre"   class="form-control form-control-sm" placeholder="Nombre completo">
-    </td>
-    <td>
-      <input type="text"   name="contactos-__prefix__-cargo"    class="form-control form-control-sm" placeholder="Cargo">
-    </td>
-    <td>
-      <input type="email"  name="contactos-__prefix__-email"    class="form-control form-control-sm" placeholder="correo@empresa.com">
-    </td>
-    <td>
-      <input type="text"   name="contactos-__prefix__-telefono" class="form-control form-control-sm" placeholder="310 123 4567">
-    </td>
-    <td class="text-center">
-      <input type="checkbox" name="contactos-__prefix__-es_principal" class="form-check-input">
-    </td>
-    <td class="text-center">
-      <input type="checkbox" name="contactos-__prefix__-activo" class="form-check-input" checked>
-    </td>
-    <td class="text-center"><span class="text-muted small">—</span></td>
-  </tr>
-</template>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-  const totalFormsInput = document.getElementById('id_contactos-TOTAL_FORMS');
-  const tbody = document.getElementById('contactos-tbody');
-  const template = document.getElementById('contacto-row-template');
-  const btnAgregar = document.getElementById('btn-agregar-contacto');
-
-  btnAgregar.addEventListener('click', function () {
-    const idx = parseInt(totalFormsInput.value, 10);
-    // Clonar la fila plantilla y reemplazar __prefix__ por el índice real
-    const html = template.innerHTML.replaceAll('__prefix__', idx);
-    const tmp = document.createElement('tbody');
-    tmp.innerHTML = html;
-    tbody.appendChild(tmp.firstElementChild);
-    totalFormsInput.value = idx + 1;
-  });
-})();
-</script>
+</div>
 {% endblock %}

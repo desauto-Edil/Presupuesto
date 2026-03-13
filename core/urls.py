@@ -149,6 +149,18 @@ urlpatterns = [
         name="sistema_edit",
     ),
 
+    # ── FALKE 8: Subsistema — Componentes & Dependencias ─────────────────────
+    path(
+        "subsistemas/<int:pk>/editar/",
+        views.SubsistemaEditView.as_view(),
+        name="subsistema_edit",
+    ),
+    path(
+        "proyectos/<int:pk>/despiece/<int:lid>/seleccionar-producto/",
+        views.SeleccionarProductoLineaView.as_view(),
+        name="seleccionar_producto_linea",
+    ),
+
     # ── CATÁLOGO: Productos ───────────────────────────────────────────────────
     path(
         "productos/",
@@ -213,6 +225,13 @@ urlpatterns = [
     ),
 
     # ── API JSON ──────────────────────────────────────────────────────────────
+    # ── FALKE 8: API subsistema preview ──────────────────────────────────────
+    path(
+        "api/subsistemas/<int:pk>/componentes/",
+        views.APIPreviewSubsistema.as_view(),
+        name="api_preview_subsistema",
+    ),
+
     path(
         "api/proyectos/<int:pk>/despiece/",
         views.APIEjecutarDespiece.as_view(),

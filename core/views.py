@@ -49,12 +49,15 @@ from .forms import (
     ProyectoCrearForm,
     AdminRevisionForm,
     ProductoProveedorForm,
-    ComprasRechazarForm,
     ProveedorForm,
     ProductoForm,
     SistemaForm,
     SubsistemaFormSet,
+    ComponenteSubsistemaFormSet,
+    DependenciaSubsistemaFormSet,
+    SeleccionarProductoForm,
 )
+
 from .models import (
     APUProyecto,
     DespieceLinea,
@@ -67,7 +70,13 @@ from .models import (
     Producto,
     ProductoProveedor,
     Proveedor,
+    Sistema,
+    Subsistema,
+    CategoriaProducto,
+    ReglaCalculo,
+    DependenciaTecnica,
 )
+
 from .services import APUService, DespieceService, ProyectoService
 
 logger = logging.getLogger(__name__)
@@ -394,9 +403,10 @@ class AjusteLineaView(View):
         form = AjusteLineaForm(request.POST, instance=linea)
         if form.is_valid():
             form.save()
+            nombre_linea = linea.producto.codigo if linea.producto else str(linea.categoria_producto or "—")
             messages.success(
                 request,
-                f"Línea {linea.producto.codigo} ajustada a {linea.cantidad_final}."
+                f"Línea {nombre_linea} ajustada a {linea.cantidad_final}."
             )
         else:
             for field, errors in form.errors.items():
@@ -427,7 +437,6 @@ class ClienteListView(View):
 class ClienteCreateView(View):
     """
     GET/POST /clientes/nuevo/
-    Crea el cliente y sus contactos usando un inline formset (estilo Django admin).
     """
 
     def get(self, request):
@@ -442,23 +451,17 @@ class ClienteCreateView(View):
     def post(self, request):
         from django.db import transaction
         form_cliente = ClienteForm(request.POST, prefix="cliente")
-        # Para crear: validamos el formset sin instancia todavía
-        formset = ContactoClienteFormSet(request.POST, prefix="contactos")
+        formset      = ContactoClienteFormSet(request.POST, prefix="contactos")
 
-        cliente_ok  = form_cliente.is_valid()
-        formset_ok  = formset.is_valid()
-
-        if cliente_ok and formset_ok:
+        if form_cliente.is_valid() and formset.is_valid():
             with transaction.atomic():
                 cliente = form_cliente.save()
-                # Asignar cliente a cada contacto del formset y guardar
-                instancias = formset.save(commit=False)
-                for contacto in instancias:
-                    contacto.cliente = cliente
-                    contacto.save()
-                for obj in formset.deleted_objects:
-                    obj.delete()
-            messages.success(request, f"Cliente '{cliente.razon_social}' creado correctamente.")
+                for form in formset:
+                    if form.cleaned_data and not form.cleaned_data.get("DELETE"):
+                        contacto = form.save(commit=False)
+                        contacto.cliente = cliente
+                        contacto.save()
+            messages.success(request, f"Cliente '{cliente.razon_social}' creado.")
             return redirect("cliente_list")
 
         return render(request, "core/cliente_form.html", {
@@ -471,11 +474,10 @@ class ClienteCreateView(View):
 class ClienteEditView(View):
     """
     GET/POST /clientes/<pk>/editar/
-    Edita el cliente y todos sus contactos vía inline formset.
     """
 
     def get(self, request, pk):
-        cliente = get_object_or_404(Cliente, pk=pk)
+        cliente  = get_object_or_404(Cliente, pk=pk)
         form_cliente = ClienteForm(instance=cliente, prefix="cliente")
         formset      = ContactoClienteFormSet(instance=cliente, prefix="contactos")
         return render(request, "core/cliente_form.html", {
@@ -491,10 +493,7 @@ class ClienteEditView(View):
         form_cliente = ClienteForm(request.POST, instance=cliente, prefix="cliente")
         formset      = ContactoClienteFormSet(request.POST, instance=cliente, prefix="contactos")
 
-        cliente_ok = form_cliente.is_valid()
-        formset_ok = formset.is_valid()
-
-        if cliente_ok and formset_ok:
+        if form_cliente.is_valid() and formset.is_valid():
             with transaction.atomic():
                 form_cliente.save()
                 formset.save()
@@ -506,279 +505,6 @@ class ClienteEditView(View):
             "formset":      formset,
             "titulo":       f"Editar: {cliente.razon_social}",
             "cliente":      cliente,
-        })
-
-
-# ===========================================================================
-# CATÁLOGO — Proveedores
-# ===========================================================================
-
-class ProveedorListView(View):
-    """GET /proveedores/ — Lista de proveedores."""
-
-    def get(self, request):
-        proveedores = Proveedor.objects.filter(activo=True).order_by("nombre")
-        q = request.GET.get("q", "")
-        if q:
-            proveedores = proveedores.filter(nombre__icontains=q)
-        return render(request, "core/proveedor_list.html", {
-            "proveedores": proveedores,
-            "q":           q,
-        })
-
-
-class ProveedorCreateView(View):
-    """GET/POST /proveedores/nuevo/ — Crear proveedor."""
-
-    def get(self, request):
-        return render(request, "core/proveedor_form.html", {
-            "form":   ProveedorForm(),
-            "titulo": "Nuevo proveedor",
-        })
-
-    def post(self, request):
-        form = ProveedorForm(request.POST)
-        if form.is_valid():
-            proveedor = form.save()
-            messages.success(request, f"Proveedor '{proveedor.nombre}' creado correctamente.")
-            return redirect("proveedor_list")
-        return render(request, "core/proveedor_form.html", {
-            "form":   form,
-            "titulo": "Nuevo proveedor",
-        })
-
-
-class ProveedorEditView(View):
-    """GET/POST /proveedores/<pk>/editar/ — Editar proveedor."""
-
-    def get(self, request, pk):
-        proveedor = get_object_or_404(Proveedor, pk=pk)
-        return render(request, "core/proveedor_form.html", {
-            "form":      ProveedorForm(instance=proveedor),
-            "titulo":    f"Editar: {proveedor.nombre}",
-            "proveedor": proveedor,
-        })
-
-    def post(self, request, pk):
-        proveedor = get_object_or_404(Proveedor, pk=pk)
-        form = ProveedorForm(request.POST, instance=proveedor)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Proveedor actualizado correctamente.")
-            return redirect("proveedor_list")
-        return render(request, "core/proveedor_form.html", {
-            "form":      form,
-            "titulo":    f"Editar: {proveedor.nombre}",
-            "proveedor": proveedor,
-        })
-
-
-# ===========================================================================
-# CATÁLOGO — Sistemas y Subsistemas
-# ===========================================================================
-
-class SistemaListView(View):
-    """GET /sistemas/ — Lista de sistemas con conteo de subsistemas."""
-
-    def get(self, request):
-        from .models import Sistema
-        sistemas = Sistema.objects.prefetch_related("subsistemas").order_by("linea_negocio", "nombre")
-        q = request.GET.get("q", "")
-        if q:
-            from django.db.models import Q
-            sistemas = sistemas.filter(Q(nombre__icontains=q) | Q(codigo__icontains=q))
-        return render(request, "core/sistema_list.html", {
-            "sistemas": sistemas,
-            "q":        q,
-        })
-
-
-class SistemaCreateView(View):
-    """GET/POST /sistemas/nuevo/ — Crear sistema."""
-
-    def get(self, request):
-        return render(request, "core/sistema_form.html", {
-            "form":    SistemaForm(),
-            "formset": SubsistemaFormSet(prefix="subsistemas"),
-            "titulo":  "Nuevo sistema",
-        })
-
-    def post(self, request):
-        from django.db import transaction
-        form    = SistemaForm(request.POST)
-        formset = SubsistemaFormSet(request.POST, prefix="subsistemas")
-        if form.is_valid() and formset.is_valid():
-            with transaction.atomic():
-                sistema = form.save()
-                for sub_form in formset:
-                    if sub_form.cleaned_data and not sub_form.cleaned_data.get("DELETE"):
-                        sub = sub_form.save(commit=False)
-                        sub.sistema = sistema
-                        sub.save()
-            messages.success(request, f"Sistema '{sistema.nombre}' creado correctamente.")
-            return redirect("sistema_list")
-        return render(request, "core/sistema_form.html", {
-            "form":    form,
-            "formset": formset,
-            "titulo":  "Nuevo sistema",
-        })
-
-
-class SistemaEditView(View):
-    """GET/POST /sistemas/<pk>/editar/ — Editar sistema y sus subsistemas."""
-
-    def get(self, request, pk):
-        from .models import Sistema
-        sistema = get_object_or_404(Sistema, pk=pk)
-        return render(request, "core/sistema_form.html", {
-            "form":    SistemaForm(instance=sistema),
-            "formset": SubsistemaFormSet(instance=sistema, prefix="subsistemas"),
-            "titulo":  f"Editar: {sistema.nombre}",
-            "sistema": sistema,
-        })
-
-    def post(self, request, pk):
-        from django.db import transaction
-        from .models import Sistema
-        sistema = get_object_or_404(Sistema, pk=pk)
-        form    = SistemaForm(request.POST, instance=sistema)
-        formset = SubsistemaFormSet(request.POST, instance=sistema, prefix="subsistemas")
-        if form.is_valid() and formset.is_valid():
-            with transaction.atomic():
-                form.save()
-                formset.save()
-            messages.success(request, "Sistema actualizado correctamente.")
-            return redirect("sistema_list")
-        return render(request, "core/sistema_form.html", {
-            "form":    form,
-            "formset": formset,
-            "titulo":  f"Editar: {sistema.nombre}",
-            "sistema": sistema,
-        })
-
-
-# ===========================================================================
-# CATÁLOGO — Productos
-# ===========================================================================
-
-class ProductoListView(View):
-    """GET /productos/ — Lista de productos con búsqueda."""
-
-    def get(self, request):
-        from .models import CategoriaProducto
-        productos = (
-            Producto.objects
-            .select_related("categoria", "unidad")
-            .order_by("categoria__nombre", "codigo")
-        )
-        q = request.GET.get("q", "")
-        if q:
-            from django.db.models import Q
-            productos = productos.filter(
-                Q(nombre__icontains=q) | Q(codigo__icontains=q)
-            )
-
-        # Anotar el precio y proveedor de referencia (el más económico activo)
-        productos_con_precio = []
-        for p in productos:
-            pp = p.proveedores_producto.filter(activo=True).order_by("precio_unitario").first()
-            productos_con_precio.append({
-                "producto":         p,
-                "precio_unitario":  pp.precio_unitario if pp else None,
-                "moneda":           pp.moneda if pp else "—",
-                "proveedor_nombre": pp.proveedor.nombre if pp else "—",
-            })
-
-        return render(request, "core/producto_list.html", {
-            "productos": productos_con_precio,
-            "q":         q,
-        })
-
-
-class ProductoCreateView(View):
-    """GET/POST /productos/nuevo/ — Crear producto con código auto y proveedor."""
-
-    def get(self, request):
-        return render(request, "core/producto_form.html", {
-            "form":   ProductoForm(),
-            "titulo": "Nuevo producto",
-        })
-
-    def post(self, request):
-        from django.db import transaction
-        form = ProductoForm(request.POST)
-        if form.is_valid():
-            with transaction.atomic():
-                producto = form.save(commit=False)
-                # Generar código automático basado en la categoría
-                producto.codigo = Producto.generar_codigo(producto.categoria)
-                producto.save()
-
-                # Crear relación ProductoProveedor
-                proveedor = form.get_proveedor()
-                ProductoProveedor.objects.create(
-                    producto        = producto,
-                    proveedor       = proveedor,
-                    precio_unitario = form.cleaned_data["precio_unitario"],
-                    moneda          = form.cleaned_data["moneda_proveedor"],
-                    activo          = True,
-                )
-
-            messages.success(
-                request,
-                f"Producto '{producto.nombre}' creado con código {producto.codigo}."
-            )
-            return redirect("producto_list")
-
-        return render(request, "core/producto_form.html", {
-            "form":   form,
-            "titulo": "Nuevo producto",
-        })
-
-
-class ProductoEditView(View):
-    """GET/POST /productos/<pk>/editar/ — Editar producto y precio del proveedor."""
-
-    def get(self, request, pk):
-        producto = get_object_or_404(Producto, pk=pk)
-        return render(request, "core/producto_form.html", {
-            "form":     ProductoForm(instance=producto),
-            "titulo":   f"Editar: {producto.codigo} — {producto.nombre}",
-            "producto": producto,
-        })
-
-    def post(self, request, pk):
-        from django.db import transaction
-        producto = get_object_or_404(Producto, pk=pk)
-        form = ProductoForm(request.POST, instance=producto)
-        if form.is_valid():
-            with transaction.atomic():
-                producto = form.save()  # código ya existe, no se re-genera
-
-                # Actualizar o crear relación ProductoProveedor
-                proveedor = form.get_proveedor()
-                pp, created = ProductoProveedor.objects.get_or_create(
-                    producto  = producto,
-                    proveedor = proveedor,
-                    defaults  = {
-                        "precio_unitario": form.cleaned_data["precio_unitario"],
-                        "moneda":          form.cleaned_data["moneda_proveedor"],
-                        "activo":          True,
-                    },
-                )
-                if not created:
-                    pp.precio_unitario = form.cleaned_data["precio_unitario"]
-                    pp.moneda          = form.cleaned_data["moneda_proveedor"]
-                    pp.activo          = True
-                    pp.save(update_fields=["precio_unitario", "moneda", "activo", "updated_at"])
-
-            messages.success(request, "Producto actualizado correctamente.")
-            return redirect("producto_list")
-
-        return render(request, "core/producto_form.html", {
-            "form":     form,
-            "titulo":   f"Editar: {producto.codigo} — {producto.nombre}",
-            "producto": producto,
         })
 
 
@@ -919,11 +645,12 @@ class ValidarPreciosView(View):
         ps = ProyectoSistema.objects.filter(proyecto=proyecto).first()
         lineas = []
         if ps:
-            lineas = DespieceLinea.objects.filter(
+            lineas = list(DespieceLinea.objects.filter(
                 proyecto_sistema=ps
-            ).select_related("producto__unidad", "producto__categoria")
-        sin_precio = [l for l in lineas if not l.precio_snapshot]
-        return ps, lineas, sin_precio
+            ).select_related("producto__unidad", "producto__categoria", "categoria_producto"))
+        pendientes = [l for l in lineas if l.pendiente_seleccion]
+        sin_precio = [l for l in lineas if not l.pendiente_seleccion and not l.precio_snapshot]
+        return ps, lineas, pendientes, sin_precio
 
     def get(self, request, pk):
         proyecto = get_object_or_404(Proyecto, pk=pk)
@@ -932,19 +659,20 @@ class ValidarPreciosView(View):
             messages.warning(request, "El proyecto no está en estado de validación de precios.")
             return redirect("proyecto_detalle", pk=pk)
 
-        ps, lineas, sin_precio = self._get_context(proyecto)
+        ps, lineas, pendientes, sin_precio = self._get_context(proyecto)
         return render(request, "core/validar_precios.html", {
-            "proyecto": proyecto,
-            "ps": ps,
-            "lineas": lineas,
-            "sin_precio": sin_precio,
-            "puede_validar": len(sin_precio) == 0,
+            "proyecto":     proyecto,
+            "ps":           ps,
+            "lineas":       lineas,
+            "pendientes":   pendientes,
+            "sin_precio":   sin_precio,
+            "puede_validar": len(sin_precio) == 0 and len(pendientes) == 0,
         })
 
     def post(self, request, pk):
         proyecto = get_object_or_404(Proyecto, pk=pk)
         accion = request.POST.get("accion")
-        ps, lineas, sin_precio = self._get_context(proyecto)
+        ps, lineas, pendientes, sin_precio = self._get_context(proyecto)
 
         if accion == "enviar_compras":
             proyecto.avanzar_a_revision_compras()
@@ -955,6 +683,16 @@ class ValidarPreciosView(View):
             return redirect("proyecto_detalle", pk=pk)
 
         elif accion == "validar":
+            if pendientes:
+                messages.error(
+                    request,
+                    f"No se puede validar: {len(pendientes)} línea(s) con producto pendiente de selección."
+                )
+                return render(request, "core/validar_precios.html", {
+                    "proyecto": proyecto, "ps": ps, "lineas": lineas,
+                    "pendientes": pendientes, "sin_precio": sin_precio,
+                    "puede_validar": False,
+                })
             if sin_precio:
                 messages.error(
                     request,
@@ -963,7 +701,8 @@ class ValidarPreciosView(View):
                 )
                 return render(request, "core/validar_precios.html", {
                     "proyecto": proyecto, "ps": ps, "lineas": lineas,
-                    "sin_precio": sin_precio, "puede_validar": False,
+                    "pendientes": pendientes, "sin_precio": sin_precio,
+                    "puede_validar": False,
                 })
             proyecto.avanzar_a_despiece_validado()
             messages.success(
@@ -1379,15 +1118,17 @@ class APIResumenProyecto(View):
 
         lineas_despiece = []
         if ps:
-            for l in DespieceLinea.objects.filter(proyecto_sistema=ps).select_related("producto__unidad"):
+            for l in DespieceLinea.objects.filter(proyecto_sistema=ps).select_related(
+                    "producto__unidad", "categoria_producto"):
                 lineas_despiece.append({
-                    "producto":   l.producto.codigo,
-                    "nombre":     l.producto.nombre,
+                    "producto":   l.producto.codigo if l.producto else None,
+                    "nombre":     l.producto.nombre if l.producto else f"[{l.categoria_producto}]",
                     "cantidad":   float(l.cantidad_final),
-                    "unidad":     l.producto.unidad.abreviatura,
+                    "unidad":     l.producto.unidad.abreviatura if l.producto else "—",
                     "precio":     float(l.precio_snapshot or 0),
                     "total":      float(l.cantidad_final) * float(l.precio_snapshot or 0),
                     "automatica": l.es_dependencia_automatica,
+                    "pendiente":  l.pendiente_seleccion,
                 })
 
         return _json_ok({
@@ -1427,4 +1168,369 @@ class APIResumenProyecto(View):
                 "dias_trabajo":          float(apu.dias_trabajo or 0) if apu else 0,
                 "tiempo_meses":          float(apu.tiempo_estimado_meses or 0) if apu else 0,
             } if apu else None,
+        })
+
+
+# ===========================================================================
+# CATÁLOGO — Proveedores
+# ===========================================================================
+
+class ProveedorListView(View):
+    """GET /proveedores/"""
+
+    def get(self, request):
+        qs = Proveedor.objects.filter(activo=True).order_by("nombre")
+        q  = request.GET.get("q", "")
+        if q:
+            qs = qs.filter(nombre__icontains=q) | qs.filter(nit__icontains=q)
+        return render(request, "core/proveedor_list.html", {"proveedores": qs, "q": q})
+
+
+class ProveedorCreateView(View):
+    """GET/POST /proveedores/nuevo/"""
+
+    def get(self, request):
+        return render(request, "core/proveedor_form.html", {
+            "form": ProveedorForm(), "titulo": "Nuevo proveedor",
+        })
+
+    def post(self, request):
+        form = ProveedorForm(request.POST)
+        if form.is_valid():
+            proveedor = form.save()
+            messages.success(request, f"Proveedor '{proveedor.nombre}' creado.")
+            return redirect("proveedor_list")
+        return render(request, "core/proveedor_form.html", {"form": form, "titulo": "Nuevo proveedor"})
+
+
+class ProveedorEditView(View):
+    """GET/POST /proveedores/<pk>/editar/"""
+
+    def get(self, request, pk):
+        proveedor = get_object_or_404(Proveedor, pk=pk)
+        return render(request, "core/proveedor_form.html", {
+            "form": ProveedorForm(instance=proveedor),
+            "titulo": f"Editar: {proveedor.nombre}",
+            "proveedor": proveedor,
+        })
+
+    def post(self, request, pk):
+        proveedor = get_object_or_404(Proveedor, pk=pk)
+        form = ProveedorForm(request.POST, instance=proveedor)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Proveedor actualizado.")
+            return redirect("proveedor_list")
+        return render(request, "core/proveedor_form.html", {
+            "form": form,
+            "titulo": f"Editar: {proveedor.nombre}",
+            "proveedor": proveedor,
+        })
+
+
+# ===========================================================================
+# CATÁLOGO — Productos
+# ===========================================================================
+
+class ProductoListView(View):
+    """GET /productos/"""
+
+    def get(self, request):
+        qs  = Producto.objects.select_related("categoria", "unidad").order_by("codigo")
+        q   = request.GET.get("q", "")
+        if q:
+            qs = qs.filter(nombre__icontains=q) | qs.filter(codigo__icontains=q)
+        return render(request, "core/producto_list.html", {"productos": qs, "q": q})
+
+
+class ProductoCreateView(View):
+    """GET/POST /productos/nuevo/"""
+
+    def get(self, request):
+        return render(request, "core/producto_form.html", {
+            "form": ProductoForm(), "titulo": "Nuevo producto",
+        })
+
+    def post(self, request):
+        from django.db import transaction
+        form = ProductoForm(request.POST)
+        if form.is_valid():
+            with transaction.atomic():
+                producto = form.save(commit=False)
+                producto.codigo = Producto.generar_codigo(form.cleaned_data["categoria"])
+                producto.save()
+                proveedor = form.get_proveedor()
+                if proveedor:
+                    ProductoProveedor.objects.update_or_create(
+                        producto=producto,
+                        proveedor=proveedor,
+                        defaults={
+                            "precio_unitario": form.cleaned_data["precio_unitario"],
+                            "moneda":          form.cleaned_data["moneda_proveedor"],
+                            "activo":          True,
+                        }
+                    )
+            messages.success(request, f"Producto '{producto.codigo} — {producto.nombre}' creado.")
+            return redirect("producto_list")
+        return render(request, "core/producto_form.html", {"form": form, "titulo": "Nuevo producto"})
+
+
+class ProductoEditView(View):
+    """GET/POST /productos/<pk>/editar/"""
+
+    def get(self, request, pk):
+        producto = get_object_or_404(Producto, pk=pk)
+        return render(request, "core/producto_form.html", {
+            "form":     ProductoForm(instance=producto),
+            "titulo":   f"Editar: {producto.nombre}",
+            "producto": producto,
+        })
+
+    def post(self, request, pk):
+        from django.db import transaction
+        producto = get_object_or_404(Producto, pk=pk)
+        form     = ProductoForm(request.POST, instance=producto)
+        if form.is_valid():
+            with transaction.atomic():
+                form.save()
+                proveedor = form.get_proveedor()
+                if proveedor:
+                    ProductoProveedor.objects.update_or_create(
+                        producto=producto,
+                        proveedor=proveedor,
+                        defaults={
+                            "precio_unitario": form.cleaned_data["precio_unitario"],
+                            "moneda":          form.cleaned_data["moneda_proveedor"],
+                            "activo":          True,
+                        }
+                    )
+            messages.success(request, "Producto actualizado.")
+            return redirect("producto_list")
+        return render(request, "core/producto_form.html", {
+            "form": form, "titulo": f"Editar: {producto.nombre}", "producto": producto,
+        })
+
+
+# ===========================================================================
+# CATÁLOGO — Sistemas (con subsistemas inline)
+# ===========================================================================
+
+class SistemaListView(View):
+    """GET /sistemas/"""
+
+    def get(self, request):
+        qs = Sistema.objects.prefetch_related("subsistemas").order_by("codigo")
+        q  = request.GET.get("q", "")
+        if q:
+            qs = qs.filter(nombre__icontains=q) | qs.filter(codigo__icontains=q)
+        return render(request, "core/sistema_list.html", {"sistemas": qs, "q": q})
+
+
+class SistemaCreateView(View):
+    """GET/POST /sistemas/nuevo/"""
+
+    def get(self, request):
+        return render(request, "core/sistema_form.html", {
+            "form":    SistemaForm(),
+            "formset": SubsistemaFormSet(prefix="subsistemas"),
+            "titulo":  "Nuevo sistema",
+        })
+
+    def post(self, request):
+        from django.db import transaction
+        form    = SistemaForm(request.POST)
+        formset = SubsistemaFormSet(request.POST, prefix="subsistemas")
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                sistema = form.save()
+                for sub_form in formset:
+                    if sub_form.cleaned_data and not sub_form.cleaned_data.get("DELETE"):
+                        sub = sub_form.save(commit=False)
+                        sub.sistema = sistema
+                        sub.save()
+            messages.success(request, f"Sistema '{sistema.nombre}' creado.")
+            return redirect("sistema_list")
+        return render(request, "core/sistema_form.html", {
+            "form": form, "formset": formset, "titulo": "Nuevo sistema",
+        })
+
+
+class SistemaEditView(View):
+    """GET/POST /sistemas/<pk>/editar/"""
+
+    def get(self, request, pk):
+        sistema = get_object_or_404(Sistema, pk=pk)
+        return render(request, "core/sistema_form.html", {
+            "form":    SistemaForm(instance=sistema),
+            "formset": SubsistemaFormSet(instance=sistema, prefix="subsistemas"),
+            "titulo":  f"Editar: {sistema.nombre}",
+            "sistema": sistema,
+        })
+
+    def post(self, request, pk):
+        from django.db import transaction
+        sistema = get_object_or_404(Sistema, pk=pk)
+        form    = SistemaForm(request.POST, instance=sistema)
+        formset = SubsistemaFormSet(request.POST, instance=sistema, prefix="subsistemas")
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                form.save()
+                formset.save()
+            messages.success(request, "Sistema actualizado.")
+            return redirect("sistema_list")
+        return render(request, "core/sistema_form.html", {
+            "form": form, "formset": formset,
+            "titulo": f"Editar: {sistema.nombre}", "sistema": sistema,
+        })
+
+
+# ===========================================================================
+# FALKE 8 — Subsistema: editar componentes (reglas) y dependencias inline
+# ===========================================================================
+
+class SubsistemaEditView(View):
+    """
+    GET/POST /subsistemas/<pk>/editar/
+    Edita un subsistema con sus reglas de cálculo (ComponenteSubsistemaFormSet)
+    y sus dependencias técnicas (DependenciaSubsistemaFormSet) inline.
+    """
+
+    def _ctx(self, subsistema, comp_fs, dep_fs):
+        return {
+            "subsistema":  subsistema,
+            "sistema":     subsistema.sistema,
+            "comp_fs":     comp_fs,
+            "dep_fs":      dep_fs,
+            "titulo":      f"Componentes: {subsistema.nombre}",
+        }
+
+    def get(self, request, pk):
+        subsistema = get_object_or_404(Subsistema.objects.select_related("sistema"), pk=pk)
+        comp_fs = ComponenteSubsistemaFormSet(instance=subsistema, prefix="comp")
+        dep_fs  = DependenciaSubsistemaFormSet(instance=subsistema, prefix="dep")
+        return render(request, "core/subsistema_form.html",
+                      self._ctx(subsistema, comp_fs, dep_fs))
+
+    def post(self, request, pk):
+        from django.db import transaction
+        subsistema = get_object_or_404(Subsistema.objects.select_related("sistema"), pk=pk)
+        comp_fs = ComponenteSubsistemaFormSet(request.POST, instance=subsistema, prefix="comp")
+        dep_fs  = DependenciaSubsistemaFormSet(request.POST, instance=subsistema, prefix="dep")
+
+        comp_ok = comp_fs.is_valid()
+        dep_ok  = dep_fs.is_valid()
+
+        if comp_ok and dep_ok:
+            with transaction.atomic():
+                comp_fs.save()
+                dep_fs.save()
+            messages.success(
+                request,
+                f"Componentes y dependencias de '{subsistema.nombre}' guardados."
+            )
+            return redirect("sistema_edit", pk=subsistema.sistema_id)
+
+        return render(request, "core/subsistema_form.html",
+                      self._ctx(subsistema, comp_fs, dep_fs))
+
+
+# ===========================================================================
+# FALKE 8 — Seleccionar producto concreto para una línea pendiente
+# ===========================================================================
+
+class SeleccionarProductoLineaView(View):
+    """
+    GET/POST /proyectos/<pk>/despiece/<lid>/seleccionar-producto/
+    Presupuestos elige el producto concreto para una DespieceLinea pendiente.
+    """
+
+    def _get_linea(self, pk, lid):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        linea    = get_object_or_404(DespieceLinea, pk=lid, proyecto=proyecto)
+        return proyecto, linea
+
+    def get(self, request, pk, lid):
+        proyecto, linea = self._get_linea(pk, lid)
+        if not linea.pendiente_seleccion:
+            messages.info(request, "Esta línea ya tiene producto asignado.")
+            return redirect("proyecto_detalle", pk=pk)
+        form = SeleccionarProductoForm(categoria=linea.categoria_producto)
+        return render(request, "core/seleccionar_producto_linea.html", {
+            "proyecto": proyecto,
+            "linea":    linea,
+            "form":     form,
+        })
+
+    def post(self, request, pk, lid):
+        proyecto, linea = self._get_linea(pk, lid)
+        form = SeleccionarProductoForm(request.POST, categoria=linea.categoria_producto)
+        if form.is_valid():
+            producto = form.cleaned_data["producto"]
+            linea.producto             = producto
+            linea.categoria_producto   = None
+            linea.save(update_fields=["producto", "categoria_producto", "updated_at"])
+            linea.capturar_precio()
+            messages.success(
+                request,
+                f"Producto '{producto.nombre}' asignado a la línea."
+            )
+            return redirect("proyecto_detalle", pk=pk)
+        return render(request, "core/seleccionar_producto_linea.html", {
+            "proyecto": proyecto,
+            "linea":    linea,
+            "form":     form,
+        })
+
+
+# ===========================================================================
+# FALKE 8 — API: preview de componentes de un subsistema
+# ===========================================================================
+
+class APIPreviewSubsistema(View):
+    """
+    GET /api/subsistemas/<pk>/componentes/
+    Devuelve las reglas de cálculo y dependencias del subsistema en JSON.
+    Útil para mostrar un preview antes de seleccionarlo en un proyecto.
+    """
+
+    def get(self, request, pk):
+        subsistema = get_object_or_404(
+            Subsistema.objects.select_related("sistema"), pk=pk
+        )
+        reglas = ReglaCalculo.objects.filter(
+            subsistema=subsistema, activa=True
+        ).select_related("producto", "categoria_producto").order_by("orden_ejecucion")
+
+        dependencias = DependenciaTecnica.objects.filter(
+            subsistema=subsistema, obligatoria=True
+        ).select_related("producto_dependiente", "categoria_producto")
+
+        return JsonResponse({
+            "subsistema": {
+                "id":     subsistema.pk,
+                "codigo": subsistema.codigo,
+                "nombre": subsistema.nombre,
+            },
+            "reglas": [
+                {
+                    "codigo":            r.codigo,
+                    "nombre":            r.nombre,
+                    "producto":          r.producto.nombre if r.producto else None,
+                    "categoria":         str(r.categoria_producto) if r.categoria_producto else None,
+                    "formula":           r.formula_texto,
+                    "variable_entrada":  r.variable_entrada,
+                    "orden":             r.orden_ejecucion,
+                }
+                for r in reglas
+            ],
+            "dependencias": [
+                {
+                    "nombre":            d.nombre or (d.producto_dependiente.nombre if d.producto_dependiente else "—"),
+                    "producto":          d.producto_dependiente.nombre if d.producto_dependiente else None,
+                    "categoria":         str(d.categoria_producto) if d.categoria_producto else None,
+                    "obligatoria":       d.obligatoria,
+                    "tipo_regla":        d.tipo_regla,
+                }
+                for d in dependencias
+            ],
         })

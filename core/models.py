@@ -519,10 +519,18 @@ class ReglaCalculo(models.Model):
     Variables de contexto disponibles en la evaluación:
       Total_PowerGrip, area_m2, perimetro_ml, <nombre_producto_dependiente>
     """
-    subsistema           = models.ForeignKey(Subsistema, on_delete=models.CASCADE, 
+    subsistema           = models.ForeignKey(Subsistema, on_delete=models.CASCADE,
                                              related_name="reglas")
-    producto             = models.ForeignKey(Producto, on_delete=models.CASCADE, 
-                                             related_name="reglas_calculo")
+    producto             = models.ForeignKey(
+                               Producto, on_delete=models.SET_NULL,
+                               null=True, blank=True,
+                               related_name="reglas_calculo",
+                               help_text="Producto específico (opcional; use categoría si el producto se elige por proyecto)")
+    categoria_producto   = models.ForeignKey(
+                               CategoriaProducto, on_delete=models.SET_NULL,
+                               null=True, blank=True,
+                               related_name="reglas_calculo",
+                               help_text="Categoría del producto cuando no hay producto específico asignado")
     codigo               = models.CharField(max_length=60)
     nombre               = models.CharField(max_length=200)
     variable_entrada     = models.CharField(max_length=80, blank=True, null=True,
@@ -544,6 +552,14 @@ class ReglaCalculo(models.Model):
     editable_por_proyecto = models.BooleanField(default=False)
     version              = models.IntegerField(default=1)
     activa               = models.BooleanField(default=True)
+    obligatoria          = models.BooleanField(
+                               default=True,
+                               help_text="Si es False, el componente puede omitirse en el despiece de un proyecto")
+    variable_salida      = models.CharField(
+                               max_length=80, blank=True,
+                               help_text="Nombre con el que el resultado de esta regla queda disponible en el "
+                                         "contexto para reglas derivadas. "
+                                         "Ej: 'Limpiador' → permite que Estopa use formula_python='Limpiador / 2'")
     caso_prueba          = models.TextField(blank=True, null=True)
     creada_por           = models.ForeignKey(
         UsuarioSistema, on_delete=models.SET_NULL,
@@ -606,7 +622,18 @@ class DependenciaTecnica(models.Model):
         help_text="Si es NULL la dependencia aplica a todo el subsistema"
     )
     producto_dependiente = models.ForeignKey(
-        Producto, on_delete=models.CASCADE, related_name="dependencias_dependiente"
+        Producto, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="dependencias_dependiente",
+        help_text="Producto concreto (opcional; use categoría para dependencias genéricas)"
+    )
+    categoria_producto = models.ForeignKey(
+        CategoriaProducto, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="dependencias_tecnicas",
+        help_text="Categoría cuando el producto se elegirá por proyecto"
+    )
+    nombre = models.CharField(
+        max_length=200, blank=True,
+        help_text="Nombre descriptivo (obligatorio para dependencias basadas en categoría)"
     )
     variable_entrada = models.CharField(max_length=80, blank=True, null=True)
     condicion_texto = models.TextField(blank=True, null=True)
@@ -624,7 +651,12 @@ class DependenciaTecnica(models.Model):
 
     def __str__(self):
         origen = self.producto_origen.nombre if self.producto_origen else "(subsistema)"
-        return f"{origen} → {self.producto_dependiente.nombre}"
+        destino = (
+            self.nombre
+            or (self.producto_dependiente.nombre if self.producto_dependiente else None)
+            or (str(self.categoria_producto) if self.categoria_producto else "—")
+        )
+        return f"{origen} → {destino}"
 
 
 # ---------------------------------------------------------------------------
@@ -687,6 +719,11 @@ class ProyectoSistema(models.Model):
         """
         Crea DespieceLinea para todas las dependencias obligatorias
         del subsistema seleccionado (si no existen ya).
+
+        Soporta dos modos:
+          - Dependencia con producto_dependiente → línea con producto resuelto.
+          - Dependencia con categoria_producto   → línea pendiente de selección.
+
         Retorna lista de líneas creadas.
         """
         if not self.subsistema:
@@ -695,19 +732,37 @@ class ProyectoSistema(models.Model):
         deps = DependenciaTecnica.objects.filter(
             subsistema=self.subsistema,
             obligatoria=True
-        ).select_related("producto_dependiente")
+        ).select_related("producto_dependiente", "categoria_producto")
 
         creadas = []
         for dep in deps:
-            linea, nueva = DespieceLinea.objects.get_or_create(
-                proyecto=self.proyecto,
-                proyecto_sistema=self,
-                producto=dep.producto_dependiente,
-                defaults={
-                    "cantidad_calculada": 0,
-                    "es_dependencia_automatica": True,
-                }
-            )
+            if dep.producto_dependiente_id:
+                # Dependencia con producto específico
+                linea, nueva = DespieceLinea.objects.get_or_create(
+                    proyecto=self.proyecto,
+                    proyecto_sistema=self,
+                    producto=dep.producto_dependiente,
+                    defaults={
+                        "cantidad_calculada": 0,
+                        "es_dependencia_automatica": True,
+                        "dependencia_tecnica": dep,
+                    }
+                )
+            elif dep.categoria_producto_id:
+                # Dependencia genérica: línea pendiente de selección
+                linea, nueva = DespieceLinea.objects.get_or_create(
+                    proyecto=self.proyecto,
+                    proyecto_sistema=self,
+                    dependencia_tecnica=dep,
+                    defaults={
+                        "cantidad_calculada": 0,
+                        "es_dependencia_automatica": True,
+                        "categoria_producto": dep.categoria_producto,
+                    }
+                )
+            else:
+                continue
+
             if nueva:
                 creadas.append(linea)
         return creadas
@@ -722,14 +777,27 @@ class DespieceLinea(models.Model):
     Línea de despiece: un producto con su cantidad calculada/ajustada
     para un proyecto y un proyecto_sistema específico.
     """
-    proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE, 
+    proyecto = models.ForeignKey(Proyecto, on_delete=models.CASCADE,
                                  related_name="despiece_lineas")
     proyecto_sistema = models.ForeignKey(
         ProyectoSistema, on_delete=models.CASCADE,
         blank=True, null=True, related_name="despiece_lineas"
     )
-    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, 
-                                 related_name="despiece_lineas")
+    producto = models.ForeignKey(
+        Producto, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="despiece_lineas",
+        help_text="Producto resuelto; NULL si aún está pendiente de selección"
+    )
+    categoria_producto = models.ForeignKey(
+        CategoriaProducto, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="despiece_lineas",
+        help_text="Categoría cuando el producto aún no ha sido seleccionado"
+    )
+    dependencia_tecnica = models.ForeignKey(
+        DependenciaTecnica, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="despiece_lineas",
+        help_text="Dependencia que originó esta línea (para líneas automáticas de categoría)"
+    )
     regla = models.ForeignKey(
         ReglaCalculo, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="despiece_lineas"
@@ -753,14 +821,26 @@ class DespieceLinea(models.Model):
         db_table = "despiece_lineas"
 
     def __str__(self):
-        return f"{self.proyecto.consecutivo} / {self.producto.nombre}"
+        nombre = (
+            self.producto.nombre if self.producto
+            else f"[{self.categoria_producto}]" if self.categoria_producto
+            else "—"
+        )
+        return f"{self.proyecto.consecutivo} / {nombre}"
 
     @property
     def cantidad_final(self):
         return self.cantidad_ajustada if self.cantidad_ajustada is not None else self.cantidad_calculada
 
+    @property
+    def pendiente_seleccion(self):
+        """True si esta línea tiene categoría pero aún no tiene producto concreto asignado."""
+        return self.producto_id is None and self.categoria_producto_id is not None
+
     def capturar_precio(self):
-        """Toma snapshot del mejor precio activo del producto."""
+        """Toma snapshot del mejor precio activo del producto (solo si el producto está resuelto)."""
+        if not self.producto_id:
+            return
         pp = self.producto.proveedores_producto.filter(activo=True).order_by("precio_unitario").first()
         if pp:
             self.precio_snapshot = pp.precio_unitario

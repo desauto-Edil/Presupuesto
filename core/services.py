@@ -74,28 +74,51 @@ class DespieceService:
                 continue
 
             # Actualizar contexto con resultado para reglas derivadas
-            contexto[regla.producto.codigo] = cantidad
-            contexto[regla.producto.nombre.replace(" ", "_")] = cantidad
+            # Usamos el código de la regla como clave primaria del contexto;
+            # si hay producto concreto, también exponemos sus identificadores;
+            # si la regla tiene variable_salida, la exponemos como alias semántico
+            # (ej. Limpiador → Estopa puede usar "Limpiador / 2" directamente).
+            contexto[regla.codigo] = cantidad
+            if regla.variable_salida:
+                contexto[regla.variable_salida] = cantidad
+            if regla.producto_id:
+                contexto[regla.producto.codigo] = cantidad
+                contexto[regla.producto.nombre.replace(" ", "_")] = cantidad
+
+            # update_or_create usando la regla como clave principal
+            defaults = {
+                "regla":                   regla,
+                "cantidad_calculada":      Decimal(str(round(cantidad, 6))),
+                "es_dependencia_automatica": False,
+            }
+            if regla.producto_id:
+                defaults["producto"]           = regla.producto
+                defaults["categoria_producto"] = None
+            elif regla.categoria_producto_id:
+                defaults["categoria_producto"] = regla.categoria_producto
 
             linea, _ = DespieceLinea.objects.update_or_create(
                 proyecto=self.ps.proyecto,
                 proyecto_sistema=self.ps,
-                producto=regla.producto,
-                defaults={
-                    "regla": regla,
-                    "cantidad_calculada": Decimal(str(round(cantidad, 6))),
-                    "es_dependencia_automatica": False,
-                }
+                regla=regla,
+                defaults=defaults,
             )
             linea.capturar_precio()
 
             resultados.append({
-                "producto_codigo": regla.producto.codigo,
-                "producto_nombre": regla.producto.nombre,
+                "producto_codigo": regla.producto.codigo if regla.producto_id else None,
+                "producto_nombre": (
+                    regla.producto.nombre if regla.producto_id
+                    else f"[{regla.categoria_producto}]" if regla.categoria_producto_id
+                    else "—"
+                ),
                 "regla_codigo":    regla.codigo,
                 "cantidad":        round(cantidad, 4),
-                "unidad":          regla.producto.unidad.abreviatura,
+                "unidad": (
+                    regla.producto.unidad.abreviatura if regla.producto_id else "—"
+                ),
                 "precio_snapshot": float(linea.precio_snapshot or 0),
+                "pendiente":       linea.pendiente_seleccion,
             })
 
         return resultados
@@ -173,15 +196,25 @@ class DependenciaService:
         una lista descriptiva de lo que se creó.
         """
         lineas = self.ps.inyectar_dependencias()
-        return [
-            {
-                "producto_codigo": l.producto.codigo,
-                "producto_nombre": l.producto.nombre,
-                "unidad":          l.producto.unidad.abreviatura,
-                "automatica":      True,
-            }
-            for l in lineas
-        ]
+        resultado = []
+        for l in lineas:
+            if l.producto_id:
+                resultado.append({
+                    "producto_codigo": l.producto.codigo,
+                    "producto_nombre": l.producto.nombre,
+                    "unidad":          l.producto.unidad.abreviatura,
+                    "automatica":      True,
+                    "pendiente":       False,
+                })
+            else:
+                resultado.append({
+                    "producto_codigo": None,
+                    "producto_nombre": f"[{l.categoria_producto}]" if l.categoria_producto_id else "—",
+                    "unidad":          "—",
+                    "automatica":      True,
+                    "pendiente":       l.pendiente_seleccion,
+                })
+        return resultado
 
     def dependencias_del_subsistema(self) -> List[dict]:
         """
@@ -193,17 +226,28 @@ class DependenciaService:
             return []
         deps = DependenciaTecnica.objects.filter(
             subsistema=self.ps.subsistema, obligatoria=True
-        ).select_related("producto_dependiente__unidad")
-        return [
-            {
-                "producto_codigo": d.producto_dependiente.codigo,
-                "producto_nombre": d.producto_dependiente.nombre,
-                "unidad":          d.producto_dependiente.unidad.abreviatura,
-                "tipo_regla":      d.tipo_regla,
-                "obligatoria":     d.obligatoria,
-            }
-            for d in deps
-        ]
+        ).select_related("producto_dependiente__unidad", "categoria_producto")
+        resultado = []
+        for d in deps:
+            if d.producto_dependiente_id:
+                resultado.append({
+                    "producto_codigo": d.producto_dependiente.codigo,
+                    "producto_nombre": d.producto_dependiente.nombre,
+                    "unidad":          d.producto_dependiente.unidad.abreviatura,
+                    "tipo_regla":      d.tipo_regla,
+                    "obligatoria":     d.obligatoria,
+                    "pendiente":       False,
+                })
+            else:
+                resultado.append({
+                    "producto_codigo": None,
+                    "producto_nombre": d.nombre or f"[{d.categoria_producto}]",
+                    "unidad":          "—",
+                    "tipo_regla":      d.tipo_regla,
+                    "obligatoria":     d.obligatoria,
+                    "pendiente":       True,
+                })
+        return resultado
 
 
 # ---------------------------------------------------------------------------
@@ -250,10 +294,21 @@ class APUService:
         """
         from .models import APULinea, TipoAPU
 
-        lineas_despiece = self.ps.despiece_lineas.select_related("producto__unidad")
+        lineas_despiece = self.ps.despiece_lineas.select_related(
+            "producto__unidad", "categoria_producto"
+        )
         creadas = []
 
         for dl in lineas_despiece:
+            # Líneas pendientes de selección no pueden incluirse en el APU
+            if dl.pendiente_seleccion:
+                logger.warning(
+                    "Línea %s omitida del APU: aún no tiene producto asignado (categoría: %s).",
+                    dl.pk, dl.categoria_producto,
+                )
+                continue
+
+            nombre = dl.producto.nombre if dl.producto_id else "—"
             precio = float(dl.precio_snapshot or 0)
             cantidad = float(dl.cantidad_final)
             tp = float(self.ps.total_powergip or 1) or 1
@@ -265,7 +320,7 @@ class APUService:
                 tipo=TipoAPU.MATERIALES,
                 despiece_linea=dl,
                 defaults={
-                    "descripcion":       dl.producto.nombre,
+                    "descripcion":       nombre,
                     "rendimiento":       Decimal(str(round(rendimiento, 6))),
                     "precio_referencia": Decimal(str(precio)),
                     "iva_aplicado":      self.apu.aplica_iva,
@@ -274,7 +329,7 @@ class APUService:
             )
             apu_linea.calcular()
             creadas.append({
-                "descripcion":     dl.producto.nombre,
+                "descripcion":     nombre,
                 "rendimiento":     round(rendimiento, 4),
                 "precio":          precio,
                 "costo_unitario":  float(apu_linea.costo_unitario),

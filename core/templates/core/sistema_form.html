@@ -82,11 +82,12 @@
       <table class="table table-bordered table-sm mb-0" id="tabla-subsistemas">
         <thead class="table-light">
           <tr>
-            <th style="width:22%">Código <span class="text-danger">*</span></th>
-            <th style="width:28%">Nombre <span class="text-danger">*</span></th>
+            <th style="width:20%">Código <span class="text-danger">*</span></th>
+            <th style="width:26%">Nombre <span class="text-danger">*</span></th>
             <th>Descripción</th>
-            <th style="width:6%" class="text-center">Activo</th>
-            <th style="width:8%" class="text-center">Eliminar</th>
+            <th style="width:5%" class="text-center">Activo</th>
+            <th style="width:10%" class="text-center">Componentes</th>
+            <th style="width:7%" class="text-center">Eliminar</th>
           </tr>
         </thead>
         <tbody id="subsistema-tbody">
@@ -107,6 +108,14 @@
               </td>
               <td>{{ sub_form.descripcion }}</td>
               <td class="text-center align-middle">{{ sub_form.activo }}</td>
+              <td class="text-center align-middle">
+                {% if sub_form.instance.pk %}
+                  <a href="{% url 'subsistema_edit' sub_form.instance.pk %}"
+                     class="btn btn-outline-primary btn-sm">Reglas</a>
+                {% else %}
+                  <span class="text-muted small">Guardar primero</span>
+                {% endif %}
+              </td>
               <td class="text-center align-middle">
                 {% if sub_form.instance.pk %}
                   {{ sub_form.DELETE }}
@@ -152,6 +161,9 @@
     <td class="text-center align-middle">
       <input type="checkbox" name="subsistemas-__prefix__-activo"
              class="form-check-input" checked>
+    </td>
+    <td class="text-center align-middle">
+      <span class="text-muted small">Guardar primero</span>
     </td>
     <td></td>
   </tr>
