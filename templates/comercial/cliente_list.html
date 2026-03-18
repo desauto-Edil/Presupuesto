@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Clientes</h2>
+    <a href="{% url 'comercial:cliente_create' %}" class="btn btn-primary">Crear</a>
+</div>
+<table class="table table-bordered bg-white">
+    <thead class="table-dark"><tr><th>Razon social</th><th>NIT</th><th>Ciudad</th><th>Email</th><th>Activo</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for c in clientes %}
+    <tr>
+        <td>{{ c.razon_social }}</td><td>{{ c.nit }}</td><td>{{ c.ciudad|default:"-" }}</td><td>{{ c.email_principal|default:"-" }}</td>
+        <td>{% if c.activo %}Si{% else %}No{% endif %}</td>
+        <td>
+            <a href="{% url 'comercial:cliente_detail' c.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
+            <a href="{% url 'comercial:cliente_update' c.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
+            <a href="{% url 'comercial:cliente_delete' c.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+        </td>
+    </tr>
+    {% empty %}<tr><td colspan="6" class="text-center text-muted">Sin clientes.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% endblock %}

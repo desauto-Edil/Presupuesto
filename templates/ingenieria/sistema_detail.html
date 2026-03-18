@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Sistema: {{ sistema.nombre }}{% endblock %}
+{% block content %}
+<h2>{{ sistema.nombre }}</h2>
+<div class="card mt-3"><div class="card-body">
+<dl class="row">
+    <dt class="col-sm-3">Codigo</dt><dd class="col-sm-9">{{ sistema.codigo }}</dd>
+    <dt class="col-sm-3">Linea de negocio</dt><dd class="col-sm-9">{{ sistema.get_linea_negocio_display }}</dd>
+    <dt class="col-sm-3">Descripcion</dt><dd class="col-sm-9">{{ sistema.descripcion|default:"-" }}</dd>
+    <dt class="col-sm-3">Activo</dt><dd class="col-sm-9">{% if sistema.activo %}Si{% else %}No{% endif %}</dd>
+</dl>
+<h5>Subsistemas</h5>
+<table class="table table-sm table-bordered">
+    <thead class="table-secondary"><tr><th>Codigo</th><th>Nombre</th><th>Activo</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for sub in sistema.subsistemas.all %}
+    <tr>
+        <td>{{ sub.codigo }}</td><td>{{ sub.nombre }}</td><td>{% if sub.activo %}Si{% else %}No{% endif %}</td>
+        <td><a href="{% url 'ingenieria:subsistema_detail' sub.pk %}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+    </tr>
+    {% empty %}<tr><td colspan="4" class="text-muted">Sin subsistemas.</td></tr>{% endfor %}
+    </tbody>
+</table>
+<a href="{% url 'ingenieria:sistema_update' sistema.pk %}" class="btn btn-secondary">Editar</a>
+<a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-outline-secondary">Volver</a>
+</div></div>
+{% endblock %}

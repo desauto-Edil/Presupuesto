@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}APU: {{ apu.proyecto_sistema }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>APU — {{ apu.proyecto_sistema }}</h2>
+    <a href="{% url 'presupuestos:apu_update' apu.pk %}" class="btn btn-secondary">Editar parametros</a>
+</div>
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card"><div class="card-body">
+        <h5>Parametros</h5>
+        <dl class="row">
+            <dt class="col-sm-6">Factor venta %</dt><dd class="col-sm-6">{{ apu.factor_venta_pct }}</dd>
+            <dt class="col-sm-6">IVA %</dt><dd class="col-sm-6">{{ apu.iva_pct }}</dd>
+            <dt class="col-sm-6">Aplica IVA</dt><dd class="col-sm-6">{% if apu.aplica_iva %}Si{% else %}No{% endif %}</dd>
+            <dt class="col-sm-6">AIU contratista %</dt><dd class="col-sm-6">{{ apu.aiu_contratista_pct }}</dd>
+            <dt class="col-sm-6">Margen contratista %</dt><dd class="col-sm-6">{{ apu.margen_contratista_pct }}</dd>
+            <dt class="col-sm-6">Dias trabajo</dt><dd class="col-sm-6">{{ apu.dias_trabajo|default:"-" }}</dd>
+        </dl>
+        </div></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card"><div class="card-body">
+        <h5>Totales</h5>
+        <dl class="row">
+            <dt class="col-sm-6">Materiales</dt><dd class="col-sm-6">{{ apu.subtotal_materiales }}</dd>
+            <dt class="col-sm-6">Herramientas</dt><dd class="col-sm-6">{{ apu.subtotal_herramientas }}</dd>
+            <dt class="col-sm-6">Transporte</dt><dd class="col-sm-6">{{ apu.subtotal_transporte }}</dd>
+            <dt class="col-sm-6">Mano de obra</dt><dd class="col-sm-6">{{ apu.subtotal_mano_obra }}</dd>
+            <dt class="col-sm-6">Administracion</dt><dd class="col-sm-6">{{ apu.subtotal_administracion }}</dd>
+            <dt class="col-sm-6"><strong>Total costo</strong></dt><dd class="col-sm-6"><strong>{{ apu.total_costo }}</strong></dd>
+            <dt class="col-sm-6"><strong>Total venta</strong></dt><dd class="col-sm-6"><strong>{{ apu.total_valor_venta }}</strong></dd>
+        </dl>
+        </div></div>
+    </div>
+</div>
+
+<h5>Lineas APU</h5>
+<table class="table table-bordered bg-white table-sm">
+    <thead class="table-secondary"><tr><th>Tipo</th><th>Descripcion</th><th>Rendimiento</th><th>Precio ref.</th><th>Costo unit.</th><th>Costo total</th><th>Valor total</th></tr></thead>
+    <tbody>
+    {% for linea in lineas %}
+    <tr>
+        <td><span class="badge bg-info text-dark">{{ linea.tipo }}</span></td>
+        <td>{{ linea.descripcion }}</td>
+        <td>{{ linea.rendimiento }}</td>
+        <td>{{ linea.precio_referencia }}</td>
+        <td>{{ linea.costo_unitario }}</td>
+        <td>{{ linea.costo_total }}</td>
+        <td>{{ linea.valor_total }}</td>
+    </tr>
+    {% empty %}<tr><td colspan="7" class="text-muted">Sin lineas APU.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% endblock %}

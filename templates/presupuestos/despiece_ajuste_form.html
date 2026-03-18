@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Ajustar linea de despiece{% endblock %}
+{% block content %}
+<h2>Ajustar linea de despiece</h2>
+<div class="card mt-3"><div class="card-body">
+<dl class="row mb-3">
+    <dt class="col-sm-3">Proyecto</dt><dd class="col-sm-9">{{ object.proyecto }}</dd>
+    <dt class="col-sm-3">Producto</dt><dd class="col-sm-9">{{ object.producto|default:"—" }}</dd>
+    <dt class="col-sm-3">Categoria</dt><dd class="col-sm-9">{{ object.categoria_producto|default:"—" }}</dd>
+    <dt class="col-sm-3">Cantidad calculada</dt><dd class="col-sm-9">{{ object.cantidad_calculada }}</dd>
+</dl>
+<form method="post">{% csrf_token %}
+{% for f in form %}<div class="mb-3"><label class="form-label">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors }}</div>{% endif %}</div>{% endfor %}
+<button type="submit" class="btn btn-primary">Guardar ajuste</button>
+<a href="javascript:history.back()" class="btn btn-secondary">Volver</a>
+</form>
+</div></div>
+{% endblock %}

@@ -67,7 +67,13 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "core",
+    # ── Apps por dominio de negocio ──────────────────────────────────────────
+    "apps.common",
+    "apps.usuarios",
+    "apps.catalogos",
+    "apps.ingenieria",
+    "apps.comercial",
+    "apps.presupuestos",
 ]
 
 MIDDLEWARE = [
@@ -107,11 +113,11 @@ WSGI_APPLICATION = "imperandina.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME":     config("DB_NAME",     default="presupuestos"),
-        "USER":     config("DB_USER",     default="postgres"),
+        "NAME": config("DB_NAME", default="presupuestos"),
+        "USER": config("DB_USER", default="postgres"),
         "PASSWORD": config("DB_PASSWORD", default="Edil"),
-        "HOST":     config("DB_HOST",     default="localhost"),
-        "PORT":     config("DB_PORT",     default="5432"),
+        "HOST": config("DB_HOST", default="localhost"),
+        "PORT": config("DB_PORT", default="5432"),
     }
 }
 
@@ -196,13 +202,19 @@ LOGGING = {
     },
 
     "loggers": {
-        # Logger de la aplicación principal
+        # Logger raíz de apps por dominio
+        "apps": {
+            "handlers": ["console", "file"],
+            "level": _LOG_LEVEL,
+            "propagate": False,
+        },
+        # Logger de la app legada core (se mantiene durante la transición)
         "core": {
             "handlers": ["console", "file"],
             "level": _LOG_LEVEL,
             "propagate": False,
         },
-        # Logger del motor de servicios
+        # Logger del motor de servicios (legado)
         "core.services": {
             "handlers": ["console", "file"],
             "level": _LOG_LEVEL,

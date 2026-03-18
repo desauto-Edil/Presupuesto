@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Imperandina — Presupuestos{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .navbar-brand { font-weight: bold; }
+        .nav-section { font-size: 0.75rem; text-transform: uppercase; color: #6c757d; padding: 0.5rem 1rem 0; }
+        .main-content { padding: 2rem 0; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">Imperandina</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navMenu">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Comercial</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'comercial:proyecto_list' %}">Proyectos</a></li>
+                        <li><a class="dropdown-item" href="{% url 'comercial:solicitud_list' %}">Solicitudes</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'comercial:cliente_list' %}">Clientes</a></li>
+                        <li><a class="dropdown-item" href="{% url 'comercial:contacto_list' %}">Contactos</a></li>
+                        <li><a class="dropdown-item" href="{% url 'comercial:tipoproyecto_list' %}">Tipos de proyecto</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Ingeniería</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'ingenieria:sistema_list' %}">Sistemas</a></li>
+                        <li><a class="dropdown-item" href="{% url 'ingenieria:subsistema_list' %}">Subsistemas</a></li>
+                        <li><a class="dropdown-item" href="{% url 'ingenieria:regla_list' %}">Reglas de cálculo</a></li>
+                        <li><a class="dropdown-item" href="{% url 'ingenieria:dependencia_list' %}">Dependencias técnicas</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Presupuestos</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'presupuestos:proyectosistema_list' %}">Sistemas por proyecto</a></li>
+                        <li><a class="dropdown-item" href="{% url 'presupuestos:configapu_list' %}">Configuración APU</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Catálogos</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'catalogos:producto_list' %}">Productos</a></li>
+                        <li><a class="dropdown-item" href="{% url 'catalogos:categoria_list' %}">Categorías</a></li>
+                        <li><a class="dropdown-item" href="{% url 'catalogos:proveedor_list' %}">Proveedores</a></li>
+                        <li><a class="dropdown-item" href="{% url 'catalogos:precio_list' %}">Precios</a></li>
+                        <li><a class="dropdown-item" href="{% url 'catalogos:unidad_list' %}">Unidades de medida</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Usuarios</a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'usuarios:usuario_list' %}">Usuarios</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container main-content">
+    {% if messages %}
+        {% for msg in messages %}
+            <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
+                {{ msg }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    {% block content %}{% endblock %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

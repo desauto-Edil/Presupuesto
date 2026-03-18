@@ -1,0 +1,92 @@
+"""
+Migración inicial de la app catalogos.
+Crea las tablas del catálogo maestro directamente.
+"""
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = []
+
+    operations = [
+                migrations.CreateModel(
+                    name="UnidadMedida",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("codigo", models.CharField(max_length=20, unique=True)),
+                        ("nombre", models.CharField(max_length=50)),
+                        ("abreviatura", models.CharField(max_length=15)),
+                    ],
+                    options={"db_table": "unidades_medida"},
+                ),
+                migrations.CreateModel(
+                    name="CategoriaProducto",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("codigo", models.CharField(max_length=40, unique=True)),
+                        ("nombre", models.CharField(max_length=120, unique=True)),
+                        ("descripcion", models.TextField(blank=True, null=True)),
+                        ("activa", models.BooleanField(default=True)),
+                    ],
+                    options={"db_table": "categorias_producto"},
+                ),
+                migrations.CreateModel(
+                    name="Producto",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("codigo", models.CharField(max_length=50, unique=True)),
+                        ("nombre", models.CharField(max_length=300)),
+                        ("categoria", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="productos", to="catalogos.categoriaproducto")),
+                        ("unidad", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="productos", to="catalogos.unidadmedida")),
+                        ("origen", models.CharField(
+                            choices=[("NACIONAL", "Nacional"), ("IMPORTADO", "Importado")],
+                            default="NACIONAL", max_length=15,
+                        )),
+                        ("marca", models.CharField(blank=True, max_length=150, null=True)),
+                        ("linea", models.CharField(blank=True, max_length=150, null=True)),
+                        ("rendimiento", models.DecimalField(blank=True, decimal_places=6, max_digits=14, null=True)),
+                        ("activo", models.BooleanField(default=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                    ],
+                    options={"db_table": "productos"},
+                ),
+                migrations.CreateModel(
+                    name="Proveedor",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("nit", models.CharField(max_length=50, unique=True)),
+                        ("nombre", models.CharField(max_length=300)),
+                        ("ciudad", models.CharField(blank=True, max_length=100, null=True)),
+                        ("direccion", models.TextField(blank=True, null=True)),
+                        ("telefono", models.CharField(blank=True, max_length=30, null=True)),
+                        ("email", models.EmailField(blank=True, null=True)),
+                        ("activo", models.BooleanField(default=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                    ],
+                    options={"db_table": "proveedores"},
+                ),
+                migrations.CreateModel(
+                    name="ProductoProveedor",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("producto", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="proveedores_producto", to="catalogos.producto")),
+                        ("proveedor", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="productos_proveedor", to="catalogos.proveedor")),
+                        ("precio_unitario", models.DecimalField(decimal_places=6, max_digits=18)),
+                        ("moneda", models.CharField(
+                            choices=[("COP", "COP"), ("USD", "USD"), ("EUR", "EUR")],
+                            default="COP", max_length=3,
+                        )),
+                        ("activo", models.BooleanField(default=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                    ],
+                    options={"db_table": "productos_proveedor", "unique_together": {("producto", "proveedor")}},
+                ),
+    ]

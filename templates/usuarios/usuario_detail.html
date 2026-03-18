@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Usuario: {{ usuario.nombre_completo }}{% endblock %}
+{% block content %}
+<h2>{{ usuario.nombre_completo }}</h2>
+<div class="card mt-3">
+    <div class="card-body">
+        <dl class="row">
+            <dt class="col-sm-3">Email</dt><dd class="col-sm-9">{{ usuario.email }}</dd>
+            <dt class="col-sm-3">Rol</dt><dd class="col-sm-9">{{ usuario.get_rol_display }}</dd>
+            <dt class="col-sm-3">Activo</dt><dd class="col-sm-9">{% if usuario.activo %}Si{% else %}No{% endif %}</dd>
+            <dt class="col-sm-3">Creado</dt><dd class="col-sm-9">{{ usuario.created_at|date:"d/m/Y H:i" }}</dd>
+        </dl>
+        <a href="{% url 'usuarios:usuario_update' usuario.pk %}" class="btn btn-secondary">Editar</a>
+        <a href="{% url 'usuarios:usuario_list' %}" class="btn btn-outline-secondary">Volver</a>
+    </div>
+</div>
+{% endblock %}

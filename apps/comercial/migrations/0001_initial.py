@@ -1,0 +1,127 @@
+"""
+Migración inicial de la app comercial.
+Crea las tablas del dominio comercial.
+"""
+
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        ("usuarios", "0001_initial"),
+    ]
+
+    operations = [
+                migrations.CreateModel(
+                    name="Cliente",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("nit", models.CharField(max_length=50, unique=True)),
+                        ("razon_social", models.CharField(max_length=300)),
+                        ("ciudad", models.CharField(blank=True, max_length=100, null=True)),
+                        ("direccion", models.TextField(blank=True, null=True)),
+                        ("telefono_principal", models.CharField(blank=True, max_length=30, null=True)),
+                        ("email_principal", models.EmailField(blank=True, null=True)),
+                        ("activo", models.BooleanField(default=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                    ],
+                    options={"db_table": "clientes"},
+                ),
+                migrations.CreateModel(
+                    name="ContactoCliente",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("cliente", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="contactos", to="comercial.cliente")),
+                        ("nombre", models.CharField(max_length=200)),
+                        ("cargo", models.CharField(blank=True, max_length=120, null=True)),
+                        ("email", models.EmailField(blank=True, null=True)),
+                        ("telefono", models.CharField(blank=True, max_length=30, null=True)),
+                        ("es_principal", models.BooleanField(default=False)),
+                        ("activo", models.BooleanField(default=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                    ],
+                    options={"db_table": "contactos_cliente"},
+                ),
+                migrations.CreateModel(
+                    name="TipoProyecto",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("codigo", models.CharField(max_length=40, unique=True)),
+                        ("nombre", models.CharField(max_length=120, unique=True)),
+                        ("activo", models.BooleanField(default=True)),
+                    ],
+                    options={"db_table": "tipos_proyecto"},
+                ),
+                migrations.CreateModel(
+                    name="Solicitud",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("consecutivo", models.CharField(max_length=30, unique=True)),
+                        ("cliente", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="solicitudes", to="comercial.cliente")),
+                        ("contacto", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="solicitudes", to="comercial.contactocliente")),
+                        ("creado_por", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="solicitudes_creadas", to="usuarios.usuariosistema")),
+                        ("nombre", models.CharField(max_length=300)),
+                        ("descripcion", models.TextField(blank=True, null=True)),
+                        ("fecha_entrega", models.DateField(blank=True, null=True)),
+                        ("estado", models.CharField(
+                            choices=[
+                                ("BORRADOR", "Borrador"), ("EN_GESTION", "En gestión"),
+                                ("APROBADA", "Aprobada"), ("RECHAZADA", "Rechazada"), ("CERRADA", "Cerrada"),
+                            ],
+                            default="EN_GESTION", max_length=20,
+                        )),
+                        ("observaciones", models.TextField(blank=True, null=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                    ],
+                    options={"db_table": "solicitudes"},
+                ),
+                migrations.CreateModel(
+                    name="Proyecto",
+                    fields=[
+                        ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                        ("consecutivo", models.CharField(max_length=30, unique=True)),
+                        ("solicitud", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="proyectos", to="comercial.solicitud")),
+                        ("cliente", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="proyectos", to="comercial.cliente")),
+                        ("creado_por", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="proyectos_creados", to="usuarios.usuariosistema")),
+                        ("tipo_proyecto", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="proyectos", to="comercial.tipoproyecto")),
+                        ("nombre", models.CharField(max_length=300)),
+                        ("descripcion", models.TextField(blank=True, null=True)),
+                        ("fecha_proyecto", models.DateField(auto_now_add=True)),
+                        ("area_total_m2", models.DecimalField(blank=True, decimal_places=4, max_digits=14, null=True)),
+                        ("perimetro_ml", models.DecimalField(blank=True, decimal_places=4, max_digits=14, null=True)),
+                        ("trm", models.DecimalField(decimal_places=4, default=4200, max_digits=14)),
+                        ("margen_comercial_pct", models.DecimalField(decimal_places=4, default=20, max_digits=8)),
+                        ("iva_pct", models.DecimalField(decimal_places=4, default=19, max_digits=8)),
+                        ("aiu_pct", models.DecimalField(decimal_places=4, default=0, max_digits=8)),
+                        ("moneda", models.CharField(
+                            choices=[("COP", "COP"), ("USD", "USD"), ("EUR", "EUR")],
+                            default="COP", max_length=3,
+                        )),
+                        ("aplica_exencion_iva", models.BooleanField(default=False)),
+                        ("observaciones", models.TextField(blank=True, null=True)),
+                        ("estado", models.CharField(
+                            choices=[
+                                ("BORRADOR", "Borrador"), ("SOLICITUD", "Solicitud"),
+                                ("DESPIECE", "Despiece"),
+                                ("EN_REVISION_COMPRAS", "En revisión de precios (Compras)"),
+                                ("DESPIECE_VALIDADO", "Despiece validado"),
+                                ("APU", "APU en proceso"), ("APU_GENERADO", "APU enviado a revisión"),
+                                ("COTIZADO", "Cotizado"), ("APROBADO", "Aprobado"),
+                                ("CERRADO", "Cerrado"), ("ANULADO", "Anulado"),
+                            ],
+                            default="SOLICITUD", max_length=25,
+                        )),
+                        ("motivo_devolucion", models.TextField(blank=True, null=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                    ],
+                    options={"db_table": "proyectos"},
+                ),
+    ]

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Despiece: {{ proyecto.consecutivo }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Despiece — {{ proyecto.consecutivo }}: {{ proyecto.nombre }}</h2>
+    <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-outline-secondary">Volver al proyecto</a>
+</div>
+{% for ps in sistemas %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between">
+        <strong>{{ ps.sistema }} / {{ ps.subsistema|default:"sin subsistema" }}</strong>
+        <div>
+            <form method="post" action="{% url 'presupuestos:despiece_ejecutar' ps.pk %}" style="display:inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-success">Calcular</button>
+            </form>
+            <a href="{% url 'presupuestos:proyectosistema_update' ps.pk %}" class="btn btn-sm btn-outline-secondary">Editar variables</a>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-sm table-bordered mb-0">
+            <thead class="table-secondary"><tr><th>Producto</th><th>Categoria</th><th>Cant. calculada</th><th>Cant. ajustada</th><th>Precio</th><th>Auto</th><th>Acciones</th></tr></thead>
+            <tbody>
+            {% for linea in ps.despiece_lineas.all %}
+            <tr class="{% if linea.pendiente_seleccion %}table-warning{% endif %}">
+                <td>{{ linea.producto|default:"—" }}</td>
+                <td>{{ linea.categoria_producto|default:"—" }}</td>
+                <td>{{ linea.cantidad_calculada }}</td>
+                <td>{{ linea.cantidad_ajustada|default:"-" }}</td>
+                <td>{{ linea.precio_snapshot|default:"-" }}</td>
+                <td>{% if linea.es_dependencia_automatica %}Si{% else %}No{% endif %}</td>
+                <td><a href="{% url 'presupuestos:despiece_ajuste' linea.pk %}" class="btn btn-sm btn-outline-secondary">Ajustar</a></td>
+            </tr>
+            {% empty %}<tr><td colspan="7" class="text-muted p-2">Sin lineas. Use Calcular.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% empty %}
+<div class="alert alert-info">Este proyecto no tiene sistemas asignados. <a href="{% url 'presupuestos:proyectosistema_create' %}">Agregar sistema</a>.</div>
+{% endfor %}
+{% endblock %}

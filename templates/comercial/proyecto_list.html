@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Proyectos{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Proyectos</h2>
+    <a href="{% url 'comercial:proyecto_create' %}" class="btn btn-primary">Crear</a>
+</div>
+<table class="table table-bordered bg-white table-sm">
+    <thead class="table-dark"><tr><th>Consecutivo</th><th>Nombre</th><th>Cliente</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for p in proyectos %}
+    <tr>
+        <td>{{ p.consecutivo }}</td><td>{{ p.nombre }}</td><td>{{ p.cliente.razon_social }}</td>
+        <td><span class="badge bg-secondary">{{ p.estado }}</span></td>
+        <td>{{ p.fecha_proyecto }}</td>
+        <td>
+            <a href="{% url 'comercial:proyecto_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
+            <a href="{% url 'presupuestos:despiece_proyecto' p.pk %}" class="btn btn-sm btn-outline-info">Despiece</a>
+            <a href="{% url 'comercial:proyecto_update' p.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
+            <a href="{% url 'comercial:proyecto_delete' p.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+        </td>
+    </tr>
+    {% empty %}<tr><td colspan="6" class="text-center text-muted">Sin proyectos.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% endblock %}

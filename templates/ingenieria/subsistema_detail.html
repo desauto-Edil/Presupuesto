@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Subsistema: {{ subsistema.nombre }}{% endblock %}
+{% block content %}
+<h2>{{ subsistema }}</h2>
+<div class="card mt-3"><div class="card-body">
+<dl class="row">
+    <dt class="col-sm-3">Codigo</dt><dd class="col-sm-9">{{ subsistema.codigo }}</dd>
+    <dt class="col-sm-3">Sistema</dt><dd class="col-sm-9">{{ subsistema.sistema }}</dd>
+    <dt class="col-sm-3">Descripcion</dt><dd class="col-sm-9">{{ subsistema.descripcion|default:"-" }}</dd>
+</dl>
+<h5>Reglas de calculo</h5>
+<table class="table table-sm table-bordered">
+    <thead class="table-secondary"><tr><th>Orden</th><th>Codigo</th><th>Nombre</th><th>Tipo</th><th>Activa</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for r in subsistema.reglas.all %}
+    <tr>
+        <td>{{ r.orden_ejecucion }}</td><td>{{ r.codigo }}</td><td>{{ r.nombre }}</td>
+        <td>{{ r.tipo_regla }}</td><td>{% if r.activa %}Si{% else %}No{% endif %}</td>
+        <td><a href="{% url 'ingenieria:regla_detail' r.pk %}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+    </tr>
+    {% empty %}<tr><td colspan="6" class="text-muted">Sin reglas.</td></tr>{% endfor %}
+    </tbody>
+</table>
+<a href="{% url 'ingenieria:subsistema_update' subsistema.pk %}" class="btn btn-secondary">Editar</a>
+<a href="{% url 'ingenieria:subsistema_list' %}" class="btn btn-outline-secondary">Volver</a>
+</div></div>
+{% endblock %}

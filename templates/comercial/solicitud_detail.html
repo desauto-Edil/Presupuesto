@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Solicitud: {{ solicitud.consecutivo }}{% endblock %}
+{% block content %}
+<h2>{{ solicitud.consecutivo }} — {{ solicitud.nombre }}</h2>
+<div class="card mt-3"><div class="card-body">
+<dl class="row">
+    <dt class="col-sm-3">Cliente</dt><dd class="col-sm-9">{{ solicitud.cliente }}</dd>
+    <dt class="col-sm-3">Contacto</dt><dd class="col-sm-9">{{ solicitud.contacto|default:"-" }}</dd>
+    <dt class="col-sm-3">Estado</dt><dd class="col-sm-9"><span class="badge bg-secondary">{{ solicitud.estado }}</span></dd>
+    <dt class="col-sm-3">Fecha entrega</dt><dd class="col-sm-9">{{ solicitud.fecha_entrega|default:"-" }}</dd>
+    <dt class="col-sm-3">Descripcion</dt><dd class="col-sm-9">{{ solicitud.descripcion|default:"-" }}</dd>
+    <dt class="col-sm-3">Observaciones</dt><dd class="col-sm-9">{{ solicitud.observaciones|default:"-" }}</dd>
+</dl>
+<a href="{% url 'comercial:solicitud_update' solicitud.pk %}" class="btn btn-secondary">Editar</a>
+<a href="{% url 'comercial:solicitud_list' %}" class="btn btn-outline-secondary">Volver</a>
+</div></div>
+{% endblock %}

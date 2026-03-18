@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Producto: {{ producto.nombre }}{% endblock %}
+{% block content %}
+<h2>{{ producto.nombre }}</h2>
+<div class="card mt-3"><div class="card-body">
+<dl class="row">
+    <dt class="col-sm-3">Codigo</dt><dd class="col-sm-9">{{ producto.codigo }}</dd>
+    <dt class="col-sm-3">Categoria</dt><dd class="col-sm-9">{{ producto.categoria }}</dd>
+    <dt class="col-sm-3">Unidad</dt><dd class="col-sm-9">{{ producto.unidad }}</dd>
+    <dt class="col-sm-3">Origen</dt><dd class="col-sm-9">{{ producto.get_origen_display }}</dd>
+    <dt class="col-sm-3">Marca</dt><dd class="col-sm-9">{{ producto.marca|default:"-" }}</dd>
+    <dt class="col-sm-3">Linea</dt><dd class="col-sm-9">{{ producto.linea|default:"-" }}</dd>
+    <dt class="col-sm-3">Rendimiento</dt><dd class="col-sm-9">{{ producto.rendimiento|default:"-" }}</dd>
+    <dt class="col-sm-3">Activo</dt><dd class="col-sm-9">{% if producto.activo %}Si{% else %}No{% endif %}</dd>
+</dl>
+<h5 class="mt-4">Precios por proveedor</h5>
+<table class="table table-sm table-bordered">
+    <thead class="table-secondary"><tr><th>Proveedor</th><th>Precio</th><th>Moneda</th><th>Activo</th></tr></thead>
+    <tbody>
+    {% for pp in producto.proveedores_producto.all %}
+    <tr><td>{{ pp.proveedor }}</td><td>{{ pp.precio_unitario }}</td><td>{{ pp.moneda }}</td><td>{% if pp.activo %}Si{% else %}No{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="4" class="text-muted">Sin precios.</td></tr>{% endfor %}
+    </tbody>
+</table>
+<a href="{% url 'catalogos:producto_update' producto.pk %}" class="btn btn-secondary">Editar</a>
+<a href="{% url 'catalogos:producto_list' %}" class="btn btn-outline-secondary">Volver</a>
+</div></div>
+{% endblock %}

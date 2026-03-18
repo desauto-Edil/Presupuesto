@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Proveedor: {{ proveedor.nombre }}{% endblock %}
+{% block content %}
+<h2>{{ proveedor.nombre }}</h2>
+<div class="card mt-3"><div class="card-body">
+<dl class="row">
+    <dt class="col-sm-3">NIT</dt><dd class="col-sm-9">{{ proveedor.nit }}</dd>
+    <dt class="col-sm-3">Ciudad</dt><dd class="col-sm-9">{{ proveedor.ciudad|default:"-" }}</dd>
+    <dt class="col-sm-3">Direccion</dt><dd class="col-sm-9">{{ proveedor.direccion|default:"-" }}</dd>
+    <dt class="col-sm-3">Telefono</dt><dd class="col-sm-9">{{ proveedor.telefono|default:"-" }}</dd>
+    <dt class="col-sm-3">Email</dt><dd class="col-sm-9">{{ proveedor.email|default:"-" }}</dd>
+</dl>
+<a href="{% url 'catalogos:proveedor_update' proveedor.pk %}" class="btn btn-secondary">Editar</a>
+<a href="{% url 'catalogos:proveedor_list' %}" class="btn btn-outline-secondary">Volver</a>
+</div></div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Solicitudes{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Solicitudes</h2>
+    <a href="{% url 'comercial:solicitud_create' %}" class="btn btn-primary">Crear</a>
+</div>
+<table class="table table-bordered bg-white table-sm">
+    <thead class="table-dark"><tr><th>Consecutivo</th><th>Nombre</th><th>Cliente</th><th>Estado</th><th>Fecha entrega</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for s in solicitudes %}
+    <tr>
+        <td>{{ s.consecutivo }}</td><td>{{ s.nombre }}</td><td>{{ s.cliente.razon_social }}</td>
+        <td><span class="badge bg-secondary">{{ s.estado }}</span></td>
+        <td>{{ s.fecha_entrega|default:"-" }}</td>
+        <td>
+            <a href="{% url 'comercial:solicitud_detail' s.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
+            <a href="{% url 'comercial:solicitud_update' s.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
+            <a href="{% url 'comercial:solicitud_delete' s.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+        </td>
+    </tr>
+    {% empty %}<tr><td colspan="6" class="text-center text-muted">Sin solicitudes.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% endblock %}

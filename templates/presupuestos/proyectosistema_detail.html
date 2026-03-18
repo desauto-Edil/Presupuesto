@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Despiece sistema{% endblock %}
+{% block content %}
+<h2>{{ ps.proyecto.consecutivo }} / {{ ps.sistema }} / {{ ps.subsistema|default:"—" }}</h2>
+<div class="mb-3">
+    <form method="post" action="{% url 'presupuestos:despiece_ejecutar' ps.pk %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success">Recalcular despiece</button>
+    </form>
+    <a href="{% url 'presupuestos:proyectosistema_update' ps.pk %}" class="btn btn-secondary">Editar</a>
+    <a href="{% url 'presupuestos:proyectosistema_list' %}" class="btn btn-outline-secondary">Volver</a>
+</div>
+<h5>Lineas de despiece</h5>
+<table class="table table-bordered bg-white table-sm">
+    <thead class="table-secondary"><tr><th>Producto</th><th>Categoria</th><th>Cant. calculada</th><th>Cant. ajustada</th><th>Precio snap.</th><th>Dependencia auto.</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for linea in despiece_lineas %}
+    <tr>
+        <td>{{ linea.producto|default:"—" }}</td>
+        <td>{{ linea.categoria_producto|default:"—" }}</td>
+        <td>{{ linea.cantidad_calculada }}</td>
+        <td>{{ linea.cantidad_ajustada|default:"-" }}</td>
+        <td>{{ linea.precio_snapshot|default:"-" }}</td>
+        <td>{% if linea.es_dependencia_automatica %}Si{% else %}No{% endif %}</td>
+        <td><a href="{% url 'presupuestos:despiece_ajuste' linea.pk %}" class="btn btn-sm btn-outline-secondary">Ajustar</a></td>
+    </tr>
+    {% empty %}<tr><td colspan="7" class="text-muted">Sin lineas. Use Recalcular.</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% endblock %}
