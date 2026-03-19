@@ -8,17 +8,13 @@ class ProyectoSistemaForm(forms.ModelForm):
     class Meta:
         model = ProyectoSistema
         fields = [
-            "proyecto", "sistema", "subsistema", "orden",
-            "total_powergip", "cuadrilla_personas", "observaciones",
+            "proyecto", "sistema", "subsistema", "parametros_entrada",
         ]
         widgets = {
-            "proyecto":           forms.Select(attrs={"class": "form-select"}),
-            "sistema":            forms.Select(attrs={"class": "form-select"}),
-            "subsistema":         forms.Select(attrs={"class": "form-select"}),
-            "orden":              forms.NumberInput(attrs={"class": "form-control"}),
-            "total_powergip":     forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
-            "cuadrilla_personas": forms.NumberInput(attrs={"class": "form-control"}),
-            "observaciones":      forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "proyecto":          forms.Select(attrs={"class": "form-select"}),
+            "sistema":           forms.Select(attrs={"class": "form-select"}),
+            "subsistema":        forms.Select(attrs={"class": "form-select"}),
+            "parametros_entrada": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
         }
 
 
@@ -57,6 +53,7 @@ class APUProyectoForm(forms.ModelForm):
         fields = [
             "factor_venta_pct", "iva_pct", "aplica_iva",
             "aiu_contratista_pct", "margen_contratista_pct",
+            "cuadrilla_personas",
             "dias_trabajo", "tiempo_estimado_meses", "rendimiento_und_dia",
         ]
         widgets = {
@@ -65,6 +62,7 @@ class APUProyectoForm(forms.ModelForm):
             "aplica_iva":             forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "aiu_contratista_pct":    forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "margen_contratista_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "cuadrilla_personas":     forms.NumberInput(attrs={"class": "form-control"}),
             "dias_trabajo":           forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "tiempo_estimado_meses":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "rendimiento_und_dia":    forms.NumberInput(attrs={"class": "form-control", "step": "0.000001"}),

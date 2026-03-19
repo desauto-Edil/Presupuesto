@@ -1,25 +1,136 @@
 {% extends "base.html" %}
 {% block title %}Solicitudes{% endblock %}
+{% block nav_solicitudes %}active{% endblock %}
+{% block page_title %}Solicitudes{% endblock %}
+{% block breadcrumb %}Comercial → Solicitudes{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm"
+          data-bs-toggle="modal" data-bs-target="#createSolicitudModal">
+    + Nueva solicitud
+  </button>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Solicitudes</h2>
-    <a href="{% url 'comercial:solicitud_create' %}" class="btn btn-primary">Crear</a>
-</div>
-<table class="table table-bordered bg-white table-sm">
-    <thead class="table-dark"><tr><th>Consecutivo</th><th>Nombre</th><th>Cliente</th><th>Estado</th><th>Fecha entrega</th><th>Acciones</th></tr></thead>
+<div class="panel fade-up">
+  <div class="panel-header">
+    <span class="panel-title">Solicitudes</span>
+    <span class="text-muted" style="font-size:12px;">{{ solicitudes|length }} registros</span>
+  </div>
+
+  {% if solicitudes %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>Consecutivo</th>
+        <th>Cliente</th>
+        <th>Nombre</th>
+        <th>F. entrega</th>
+        <th>Estado</th>
+        <th>Creada</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
-    {% for s in solicitudes %}
-    <tr>
-        <td>{{ s.consecutivo }}</td><td>{{ s.nombre }}</td><td>{{ s.cliente.razon_social }}</td>
-        <td><span class="badge bg-secondary">{{ s.estado }}</span></td>
-        <td>{{ s.fecha_entrega|default:"-" }}</td>
+      {% for s in solicitudes %}
+      <tr>
+        <td class="td-mono">{{ s.consecutivo }}</td>
+        <td>{{ s.cliente.razon_social }}</td>
+        <td>{{ s.nombre }}</td>
+        <td>{{ s.fecha_entrega|date:"d/m/Y"|default:"—" }}</td>
         <td>
-            <a href="{% url 'comercial:solicitud_detail' s.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
-            <a href="{% url 'comercial:solicitud_update' s.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <a href="{% url 'comercial:solicitud_delete' s.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+          <span class="badge-status
+            {% if s.estado == 'NUEVA' %}bs-pendiente
+            {% elif s.estado == 'EN_PROCESO' %}bs-despiece
+            {% elif s.estado == 'COTIZADA' %}bs-apu
+            {% elif s.estado == 'CERRADA' %}bs-cerrado
+            {% else %}bs-inactivo{% endif %}">
+            {{ s.get_estado_display }}
+          </span>
         </td>
-    </tr>
-    {% empty %}<tr><td colspan="6" class="text-center text-muted">Sin solicitudes.</td></tr>{% endfor %}
+        <td style="font-size:12px;color:var(--ink-soft)">{{ s.created_at|date:"d/m/Y" }}</td>
+        <td class="td-actions">
+          <a href="{% url 'comercial:solicitud_update' s.pk %}" class="btn btn-ghost btn-xs">Editar</a>
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'comercial:solicitud_delete' s.pk %}"
+                  data-delete-name="{{ s.consecutivo }}">
+            Eliminar
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◷</div>
+    <div class="empty-state-text">Sin solicitudes registradas.</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── MODAL CREAR SOLICITUD ── -->
+<div class="modal fade" id="createSolicitudModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Nueva solicitud</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'comercial:solicitud_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Consecutivo</label>
+              {{ create_form.consecutivo }}
+            </div>
+            <div class="form-group">
+              <label>Estado</label>
+              {{ create_form.estado }}
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Cliente</label>
+              {{ create_form.cliente }}
+            </div>
+            <div class="form-group">
+              <label>Contacto</label>
+              {{ create_form.contacto }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Nombre del proyecto</label>
+            {{ create_form.nombre }}
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Creado por</label>
+              {{ create_form.creado_por }}
+            </div>
+            <div class="form-group">
+              <label>Fecha entrega esperada</label>
+              {{ create_form.fecha_entrega }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            {{ create_form.descripcion }}
+          </div>
+          <div class="form-group">
+            <label>Observaciones</label>
+            {{ create_form.observaciones }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar solicitud</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 {% endblock %}

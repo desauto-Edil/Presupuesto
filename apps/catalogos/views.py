@@ -7,6 +7,7 @@ from .forms import (
     UnidadMedidaForm, CategoriaProductoForm, ProductoForm,
     ProveedorForm, ProductoProveedorForm,
 )
+from apps.common.mixins import WithCreateFormMixin
 
 
 # ── Unidades de medida ──────────────────────────────────────────────────────
@@ -69,8 +70,9 @@ class CategoriaDeleteView(DeleteView):
 
 # ── Productos ───────────────────────────────────────────────────────────────
 
-class ProductoListView(ListView):
+class ProductoListView(WithCreateFormMixin, ListView):
     model = Producto
+    form_class = ProductoForm
     template_name = "catalogos/producto_list.html"
     context_object_name = "productos"
     ordering = ["codigo"]
@@ -104,8 +106,9 @@ class ProductoDeleteView(DeleteView):
 
 # ── Proveedores ─────────────────────────────────────────────────────────────
 
-class ProveedorListView(ListView):
+class ProveedorListView(WithCreateFormMixin, ListView):
     model = Proveedor
+    form_class = ProveedorForm
     template_name = "catalogos/proveedor_list.html"
     context_object_name = "proveedores"
     ordering = ["nombre"]

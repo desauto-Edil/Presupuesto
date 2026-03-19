@@ -1,24 +1,176 @@
 {% extends "base.html" %}
 {% block title %}Proveedores{% endblock %}
+{% block nav_proveedores %}active{% endblock %}
+{% block page_title %}Proveedores{% endblock %}
+{% block breadcrumb %}Catálogos → Proveedores{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm"
+          data-bs-toggle="modal" data-bs-target="#createProvModal">
+    + Nuevo proveedor
+  </button>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Proveedores</h2>
-    <a href="{% url 'catalogos:proveedor_create' %}" class="btn btn-primary">Crear</a>
-</div>
-<table class="table table-bordered bg-white">
-    <thead class="table-dark"><tr><th>Nombre</th><th>NIT</th><th>Ciudad</th><th>Email</th><th>Activo</th><th>Acciones</th></tr></thead>
+<div class="panel fade-up">
+  <div class="panel-header">
+    <span class="panel-title">Proveedores</span>
+    <span class="text-muted" style="font-size:12px;">{{ proveedores|length }} registros</span>
+  </div>
+
+  {% if proveedores %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>NIT</th>
+        <th>Nombre</th>
+        <th>Ciudad</th>
+        <th>Teléfono</th>
+        <th>Email</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
-    {% for p in proveedores %}
-    <tr>
-        <td>{{ p.nombre }}</td><td>{{ p.nit }}</td><td>{{ p.ciudad|default:"-" }}</td><td>{{ p.email|default:"-" }}</td>
-        <td>{% if p.activo %}Si{% else %}No{% endif %}</td>
+      {% for p in proveedores %}
+      <tr>
+        <td class="td-mono">{{ p.nit }}</td>
+        <td>{{ p.nombre }}</td>
+        <td>{{ p.ciudad|default:"—" }}</td>
+        <td>{{ p.telefono|default:"—" }}</td>
+        <td>{{ p.email|default:"—" }}</td>
         <td>
-            <a href="{% url 'catalogos:proveedor_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
-            <a href="{% url 'catalogos:proveedor_update' p.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <a href="{% url 'catalogos:proveedor_delete' p.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+          <span class="badge-status {% if p.activo %}bs-activo{% else %}bs-inactivo{% endif %}">
+            {% if p.activo %}Activo{% else %}Inactivo{% endif %}
+          </span>
         </td>
-    </tr>
-    {% empty %}<tr><td colspan="6" class="text-center text-muted">Sin registros.</td></tr>{% endfor %}
+        <td class="td-actions">
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#editProvModal"
+                  data-edit-url="{% url 'catalogos:proveedor_update' p.pk %}"
+                  data-field-nit="{{ p.nit }}"
+                  data-field-nombre="{{ p.nombre }}"
+                  data-field-ciudad="{{ p.ciudad|default:'' }}"
+                  data-field-direccion="{{ p.direccion|default:'' }}"
+                  data-field-telefono="{{ p.telefono|default:'' }}"
+                  data-field-email="{{ p.email|default:'' }}"
+                  data-field-activo="{{ p.activo }}">
+            Editar
+          </button>
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'catalogos:proveedor_delete' p.pk %}"
+                  data-delete-name="{{ p.nombre }}">
+            ✕
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◉</div>
+    <div class="empty-state-text">Sin proveedores registrados.</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── MODAL CREAR ── -->
+{% if create_form %}
+<div class="modal fade" id="createProvModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo proveedor</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'catalogos:proveedor_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group"><label>NIT</label>{{ create_form.nit }}</div>
+            <div class="form-group"><label>Ciudad</label>{{ create_form.ciudad }}</div>
+          </div>
+          <div class="form-group"><label>Nombre / Razón social</label>{{ create_form.nombre }}</div>
+          <div class="form-group"><label>Dirección</label>{{ create_form.direccion }}</div>
+          <div class="form-grid-2">
+            <div class="form-group"><label>Teléfono</label>{{ create_form.telefono }}</div>
+            <div class="form-group"><label>Email</label>{{ create_form.email }}</div>
+          </div>
+          <div class="form-check" style="margin-top:4px;">
+            {{ create_form.activo }}
+            <label class="form-check-label">Activo</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar proveedor</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── MODAL EDITAR ── -->
+<div class="modal fade" id="editProvModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar proveedor</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="editProvForm" action="#">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group"><label>NIT</label>
+              <input type="text" name="nit" class="form-control form-control-sm"></div>
+            <div class="form-group"><label>Ciudad</label>
+              <input type="text" name="ciudad" class="form-control form-control-sm"></div>
+          </div>
+          <div class="form-group"><label>Nombre / Razón social</label>
+            <input type="text" name="nombre" class="form-control form-control-sm"></div>
+          <div class="form-group"><label>Dirección</label>
+            <input type="text" name="direccion" class="form-control form-control-sm"></div>
+          <div class="form-grid-2">
+            <div class="form-group"><label>Teléfono</label>
+              <input type="text" name="telefono" class="form-control form-control-sm"></div>
+            <div class="form-group"><label>Email</label>
+              <input type="email" name="email" class="form-control form-control-sm"></div>
+          </div>
+          <div class="form-check" style="margin-top:4px;">
+            <input class="form-check-input" type="checkbox" name="activo" id="editProvActivo">
+            <label class="form-check-label" for="editProvActivo">Activo</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('editProvModal').addEventListener('show.bs.modal', function(e) {
+  const btn = e.relatedTarget;
+  if (!btn) return;
+  this.querySelector('form').action = btn.dataset.editUrl;
+  ['nit','nombre','ciudad','direccion','telefono','email'].forEach(f => {
+    const el = this.querySelector('[name=' + f + ']');
+    if (el) {
+      const key = 'field' + f.charAt(0).toUpperCase() + f.slice(1);
+      el.value = btn.dataset[key] || '';
+    }
+  });
+  const chk = this.querySelector('[name=activo]');
+  if (chk) chk.checked = btn.dataset.fieldActivo === 'True';
+});
+</script>
 {% endblock %}

@@ -2,27 +2,39 @@
 apps/presupuestos/models/despiece.py — Ejecución del despiece por proyecto.
 
 ProyectoSistema: vincula un proyecto con el sistema/subsistema elegido
-                  y almacena las variables de entrada del cálculo.
-DespieceLinea:   resultado de aplicar las reglas del subsistema al proyecto.
-                  Puede tener producto ya resuelto o estar pendiente de
-                  selección
+                  y almacena las variables de entrada del cálculo via JSONField.
+DespieceLinea:   resultado de evaluar los componentes del sistema sobre el proyecto.
+
+Arquitectura basada en system_defs:
+  - Los sistemas tienen sus recetas definidas en apps/ingenieria/system_defs/
+  - parametros_entrada guarda las variables que el presupuestador ingresa.
+  - get_contexto() combina datos del proyecto con esos parámetros.
+  - get_variables_requeridas() lee la definición backend del subsistema.
+  - DespieceService lee system_defs en lugar de ReglaCalculo de la DB.
 
 Dependencias cruzadas:
   - comercial.Proyecto
-  - ingenieria.Sistema, Subsistema, ReglaCalculo, DependenciaTecnica
+  - ingenieria.Sistema, Subsistema
   - catalogos.Producto, CategoriaProducto
 """
 
+from __future__ import annotations
+
 from django.db import models
+from django.core.exceptions import ValidationError
 
 
 class ProyectoSistema(models.Model):
     """
-    Instancia de ejecución de un subsistema para un proyecto concreto.
-    Almacena las variables de entrada dinámicas (Total_PowerGrip, cuadrilla, etc.)
+    Instancia de ejecución de un sistema/subsistema para un proyecto concreto.
+    Almacena las variables de entrada dinámicas en parametros_entrada (JSONField).
     """
     proyecto = models.ForeignKey(
         "comercial.Proyecto", on_delete=models.CASCADE, related_name="proyecto_sistemas"
+    )
+    solicitud = models.ForeignKey(
+        "comercial.Solicitud", on_delete=models.CASCADE, related_name="proyecto_sistemas",
+        null=True, blank=True,
     )
     sistema = models.ForeignKey(
         "ingenieria.Sistema", on_delete=models.PROTECT, related_name="proyecto_sistemas"
@@ -31,93 +43,86 @@ class ProyectoSistema(models.Model):
         "ingenieria.Subsistema", on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyecto_sistemas",
     )
-    orden = models.IntegerField(default=1)
-    total_powergip = models.DecimalField(
-        max_digits=14, decimal_places=4, blank=True, null=True,
-        help_text="Cantidad base de PowerGrip ingresada por el usuario",
+    parametros_entrada = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Variables de entrada específicas de este sistema. "
+            "Ej: {'total_powergrip': 2883, 'tornilleria_u7': 8, 'desperdicio': 1.01}"
+        ),
     )
-    cuadrilla_personas = models.IntegerField(
-        blank=True, null=True,
-        help_text="Número de personas en la cuadrilla de instalación",
-    )
-    variables_extra = models.JSONField(
-        default=dict, blank=True,
-        help_text="Variables adicionales editables por proyecto en formato JSON",
-    )
-    observaciones = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         app_label = "presupuestos"
         db_table = "proyecto_sistemas"
         unique_together = ("proyecto", "sistema", "subsistema")
+        verbose_name = "Ejecución de Sistema"
+        verbose_name_plural = "Ejecuciones de Sistemas"
 
     def __str__(self):
-        sub = self.subsistema.nombre if self.subsistema else "—"
-        return f"{self.proyecto.consecutivo} / {self.sistema.nombre} / {sub}"
+        sub = f" / {self.subsistema.nombre}" if self.subsistema else ""
+        return f"{self.proyecto.consecutivo} — {self.sistema.nombre}{sub}"
+
+    # ── Contexto ──────────────────────────────────────────────────────────────
 
     def get_contexto(self) -> dict:
-        """Construye el diccionario de variables para evaluar reglas."""
-        ctx = {
-            "Total_PowerGrip": float(self.total_powergip or 0),
-            "area_m2": float(self.proyecto.area_total_m2 or 0),
+        """
+        Construye el diccionario de contexto para evaluar las fórmulas.
+
+        Incluye:
+          1. Variables base del proyecto (area_m2, perimetro_ml).
+          2. Todos los campos de parametros_entrada convertidos a float.
+             Los strings no numéricos pasan sin convertir.
+        """
+        ctx: dict = {
+            "area_m2":      float(self.proyecto.area_total_m2 or 0),
             "perimetro_ml": float(self.proyecto.perimetro_ml or 0),
-            "cuadrilla": float(self.cuadrilla_personas or 0),
         }
-        ctx.update({k: float(v) for k, v in (self.variables_extra or {}).items()})
+        for k, v in (self.parametros_entrada or {}).items():
+            if v is None or v == "":
+                continue
+            try:
+                ctx[k] = float(v)
+            except (ValueError, TypeError):
+                ctx[k] = v
         return ctx
 
-    def inyectar_dependencias(self):
+    def get_variables_requeridas(self) -> list[dict]:
         """
-        Crea DespieceLinea para todas las dependencias obligatorias
-        del subsistema seleccionado (si no existen ya).
+        Devuelve las variables de entrada que este subsistema necesita,
+        leyendo la definición backend desde system_defs/registry.py.
 
-        Soporta dos modos:
-          - Dependencia con producto_dependiente → línea con producto resuelto.
-          - Dependencia con categoria_producto   → línea pendiente de selección.
+        Retorna: [{variable, label, valor, unidad, default}]
+        para que la UI las renderice como formulario dinámico.
 
-        Retorna lista de líneas creadas.
+        Excluye las variables del proyecto (area_m2, perimetro_ml).
         """
-        from apps.ingenieria.models import DependenciaTecnica
-
-        if not self.subsistema:
+        if not self.sistema_id or not self.subsistema_id:
             return []
 
-        deps = DependenciaTecnica.objects.filter(
-            subsistema=self.subsistema, obligatoria=True
-        ).select_related("producto_dependiente", "categoria_producto")
+        from apps.ingenieria.system_defs.registry import get_subsistema_def
 
-        creadas = []
-        for dep in deps:
-            if dep.producto_dependiente_id:
-                linea, nueva = DespieceLinea.objects.get_or_create(
-                    proyecto=self.proyecto,
-                    proyecto_sistema=self,
-                    producto=dep.producto_dependiente,
-                    defaults={
-                        "cantidad_calculada":      0,
-                        "es_dependencia_automatica": True,
-                        "dependencia_tecnica":     dep,
-                    },
-                )
-            elif dep.categoria_producto_id:
-                linea, nueva = DespieceLinea.objects.get_or_create(
-                    proyecto=self.proyecto,
-                    proyecto_sistema=self,
-                    dependencia_tecnica=dep,
-                    defaults={
-                        "cantidad_calculada":      0,
-                        "es_dependencia_automatica": True,
-                        "categoria_producto":      dep.categoria_producto,
-                    },
-                )
-            else:
-                continue
+        sub_def = get_subsistema_def(
+            self.sistema.codigo,
+            self.subsistema.codigo,
+        )
+        if not sub_def:
+            return []
 
-            if nueva:
-                creadas.append(linea)
-        return creadas
+        VARS_PROYECTO = {"area_m2", "perimetro_ml"}
+        params = self.parametros_entrada or {}
+
+        return [
+            {
+                "variable": v.variable,
+                "label":    v.label,
+                "unidad":   v.unidad,
+                "default":  v.default,
+                "valor":    params.get(v.variable, v.default if v.default is not None else ""),
+            }
+            for v in sub_def.variables
+            if v.variable not in VARS_PROYECTO
+        ]
 
 
 class DespieceLinea(models.Model):
@@ -125,9 +130,13 @@ class DespieceLinea(models.Model):
     Línea de despiece: un componente con su cantidad calculada/ajustada
     para un proyecto y sistema específico.
 
+    componente_codigo: identifica el componente del sistema (de la system_def).
+    Reemplaza a 'regla' como clave de update_or_create para cálculos reanudables.
+
     Estado del producto:
-      - producto resuelto:  producto_id is not None  → tiene precio, listo para APU
-      - pendiente selección: producto_id is None AND categoria_producto_id is not None
+      - Resuelto:          producto_id IS NOT NULL → tiene precio, listo para APU.
+      - Pendiente selección: producto_id IS NULL & categoria_producto_id IS NOT NULL
+      - Error config:      ambos NULL.
     """
     proyecto = models.ForeignKey(
         "comercial.Proyecto", on_delete=models.CASCADE, related_name="despiece_lineas"
@@ -136,31 +145,45 @@ class DespieceLinea(models.Model):
         ProyectoSistema, on_delete=models.CASCADE,
         blank=True, null=True, related_name="despiece_lineas",
     )
+    componente_codigo = models.CharField(
+        max_length=80, blank=True, db_index=True,
+        help_text=(
+            "Código del componente según la definición backend del sistema "
+            "(system_defs). Ej: 'fijaciones_u7', 'limpiador_plus'."
+        ),
+    )
     producto = models.ForeignKey(
         "catalogos.Producto", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="despiece_lineas",
-        help_text="Producto resuelto; NULL si aún está pendiente de selección",
+        help_text="Producto resuelto; NULL si aún está pendiente de selección.",
     )
     categoria_producto = models.ForeignKey(
         "catalogos.CategoriaProducto", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="despiece_lineas",
-        help_text="Categoría cuando el producto aún no ha sido seleccionado",
+        help_text="Categoría cuando el producto aún no ha sido seleccionado.",
+    )
+    # ── Legacy FKs (conservados para compatibilidad de datos históricos) ──────
+    # No se usan en el flujo nuevo. Quedan como referencia si la BD los tiene.
+    regla = models.ForeignKey(
+        "ingenieria.ReglaCalculo", on_delete=models.SET_NULL,
+        blank=True, null=True, related_name="despiece_lineas",
+        help_text="[LEGADO] Regla que generó esta línea en el flujo anterior.",
     )
     dependencia_tecnica = models.ForeignKey(
         "ingenieria.DependenciaTecnica", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="despiece_lineas",
-        help_text="Dependencia que originó esta línea (para líneas automáticas de categoría)",
+        help_text="[LEGADO] Dependencia automática en el flujo anterior.",
     )
-    regla = models.ForeignKey(
-        "ingenieria.ReglaCalculo", on_delete=models.SET_NULL,
-        blank=True, null=True, related_name="despiece_lineas",
-    )
+    # ─────────────────────────────────────────────────────────────────────────
     cantidad_calculada = models.DecimalField(max_digits=18, decimal_places=6)
-    cantidad_ajustada = models.DecimalField(max_digits=18, decimal_places=6, blank=True, null=True)
-    motivo_ajuste = models.TextField(blank=True, null=True)
-    precio_snapshot = models.DecimalField(
+    cantidad_ajustada  = models.DecimalField(
         max_digits=18, decimal_places=6, blank=True, null=True,
-        help_text="Precio unitario al momento de calcular el despiece",
+        help_text="Valor manual que reemplaza al calculado si el usuario lo ajusta.",
+    )
+    motivo_ajuste      = models.TextField(blank=True, null=True)
+    precio_snapshot    = models.DecimalField(
+        max_digits=18, decimal_places=6, blank=True, null=True,
+        help_text="Precio unitario capturado al momento de calcular el despiece.",
     )
     es_dependencia_automatica = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -169,29 +192,60 @@ class DespieceLinea(models.Model):
     class Meta:
         app_label = "presupuestos"
         db_table = "despiece_lineas"
+        verbose_name = "Línea de Despiece"
+        verbose_name_plural = "Líneas de Despiece"
+        ordering = ["proyecto_sistema", "id"]
 
     def __str__(self):
         nombre = (
             self.producto.nombre if self.producto
             else f"[{self.categoria_producto}]" if self.categoria_producto
-            else "—"
+            else self.componente_codigo or "—"
         )
         return f"{self.proyecto.consecutivo} / {nombre}"
 
+    # ── Propiedades calculadas ────────────────────────────────────────────────
+
     @property
     def cantidad_final(self):
+        """Cantidad definitiva: ajustada si existe, calculada si no."""
         return self.cantidad_ajustada if self.cantidad_ajustada is not None else self.cantidad_calculada
 
     @property
     def pendiente_seleccion(self):
-        """True si esta línea tiene categoría pero aún no tiene producto concreto asignado."""
+        """True si la línea tiene categoría pero aún no tiene producto concreto."""
         return self.producto_id is None and self.categoria_producto_id is not None
 
+    @property
+    def estado_tecnico(self):
+        """Estado de resolución del componente."""
+        if self.producto:
+            return "RESUELTO"
+        if self.categoria_producto:
+            return "PENDIENTE_SELECCION"
+        return "ERROR_CONFIGURACION"
+
+    # ── Operaciones ───────────────────────────────────────────────────────────
+
     def capturar_precio(self):
-        """Toma snapshot del mejor precio activo del producto (solo si el producto está resuelto)."""
+        """Toma snapshot del mejor precio activo del producto (solo si está resuelto)."""
         if not self.producto_id:
             return
-        pp = self.producto.proveedores_producto.filter(activo=True).order_by("precio_unitario").first()
+        pp = (
+            self.producto.proveedores_producto
+            .filter(activo=True)
+            .order_by("precio_unitario")
+            .first()
+        )
         if pp:
             self.precio_snapshot = pp.precio_unitario
             self.save(update_fields=["precio_snapshot", "updated_at"])
+
+    def resolver_producto(self, producto_seleccionado):
+        """Asigna un producto real a una línea que era solo categoría."""
+        if self.categoria_producto and producto_seleccionado.categoria == self.categoria_producto:
+            self.producto = producto_seleccionado
+            self.capturar_precio()
+            self.save()
+        else:
+            raise ValidationError("El producto no pertenece a la categoría requerida.")

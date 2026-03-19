@@ -65,6 +65,10 @@ class APUProyecto(models.Model):
     margen_contratista_pct = models.DecimalField(max_digits=8, decimal_places=4, default=30)
 
     # Parámetros de mano de obra
+    cuadrilla_personas = models.IntegerField(
+        default=1,
+        help_text="Número de personas en la cuadrilla de instalación",
+    )
     dias_trabajo = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     tiempo_estimado_meses = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     rendimiento_und_dia = models.DecimalField(max_digits=14, decimal_places=6, blank=True, null=True)
@@ -119,15 +123,40 @@ class APUProyecto(models.Model):
         ])
 
     def calcular_tiempo(self):
-        """Calcula días y tiempo estimado desde Total_PowerGrip y cuadrilla."""
-        ps = self.proyecto_sistema
-        total_pg = float(ps.total_powergip or 0)
-        personas = float(ps.cuadrilla_personas or 1)
-        if total_pg > 0 and personas > 0:
-            self.dias_trabajo = total_pg / (personas * 40)
+        """
+        Calcula días y tiempo estimado desde el total de unidades del sistema.
+        Usa la misma lógica genérica que APUService._get_total_unidades():
+        busca en parametros_entrada con lista de claves por prioridad,
+        con fallback a area_total_m2 del proyecto.
+        """
+        from apps.presupuestos.services.apu_service import _CLAVES_UNIDAD_REFERENCIA
+
+        ps     = self.proyecto_sistema
+        params = ps.parametros_entrada or {}
+
+        total_unidades = 0.0
+        for clave in _CLAVES_UNIDAD_REFERENCIA:
+            val = params.get(clave)
+            if val:
+                try:
+                    total_unidades = float(val)
+                    if total_unidades > 0:
+                        break
+                except (ValueError, TypeError):
+                    pass
+        if total_unidades <= 0:
+            total_unidades = float(ps.proyecto.area_total_m2 or 0)
+
+        personas = float(self.cuadrilla_personas or 1)
+        if total_unidades > 0 and personas > 0:
+            self.dias_trabajo = total_unidades / (personas * 40)
             self.tiempo_estimado_meses = 0.0333 * float(self.dias_trabajo)
-            self.rendimiento_und_dia = total_pg / float(self.dias_trabajo) if self.dias_trabajo else 0
-            self.save(update_fields=["dias_trabajo", "tiempo_estimado_meses", "rendimiento_und_dia", "updated_at"])
+            self.rendimiento_und_dia = (
+                total_unidades / float(self.dias_trabajo) if self.dias_trabajo else 0
+            )
+            self.save(update_fields=[
+                "dias_trabajo", "tiempo_estimado_meses", "rendimiento_und_dia", "updated_at"
+            ])
 
 
 class APULinea(models.Model):

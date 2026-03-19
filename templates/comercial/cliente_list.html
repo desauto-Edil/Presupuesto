@@ -1,24 +1,194 @@
 {% extends "base.html" %}
 {% block title %}Clientes{% endblock %}
+{% block nav_clientes %}active{% endblock %}
+{% block page_title %}Clientes{% endblock %}
+{% block breadcrumb %}Comercial → Clientes{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm"
+          data-bs-toggle="modal" data-bs-target="#createClienteModal">
+    + Nuevo cliente
+  </button>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Clientes</h2>
-    <a href="{% url 'comercial:cliente_create' %}" class="btn btn-primary">Crear</a>
-</div>
-<table class="table table-bordered bg-white">
-    <thead class="table-dark"><tr><th>Razon social</th><th>NIT</th><th>Ciudad</th><th>Email</th><th>Activo</th><th>Acciones</th></tr></thead>
+<div class="panel fade-up">
+  <div class="panel-header">
+    <span class="panel-title">Clientes registrados</span>
+    <span class="text-muted" style="font-size:12px;">{{ clientes|length }} registros</span>
+  </div>
+
+  {% if clientes %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>NIT</th>
+        <th>Razón social</th>
+        <th>Ciudad</th>
+        <th>Teléfono</th>
+        <th>Email</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
-    {% for c in clientes %}
-    <tr>
-        <td>{{ c.razon_social }}</td><td>{{ c.nit }}</td><td>{{ c.ciudad|default:"-" }}</td><td>{{ c.email_principal|default:"-" }}</td>
-        <td>{% if c.activo %}Si{% else %}No{% endif %}</td>
+      {% for c in clientes %}
+      <tr>
+        <td class="td-mono">{{ c.nit }}</td>
+        <td>{{ c.razon_social }}</td>
+        <td>{{ c.ciudad|default:"—" }}</td>
+        <td>{{ c.telefono_principal|default:"—" }}</td>
+        <td>{{ c.email_principal|default:"—" }}</td>
         <td>
-            <a href="{% url 'comercial:cliente_detail' c.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
-            <a href="{% url 'comercial:cliente_update' c.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <a href="{% url 'comercial:cliente_delete' c.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+          <span class="badge-status {% if c.activo %}bs-activo{% else %}bs-inactivo{% endif %}">
+            {% if c.activo %}Activo{% else %}Inactivo{% endif %}
+          </span>
         </td>
-    </tr>
-    {% empty %}<tr><td colspan="6" class="text-center text-muted">Sin clientes.</td></tr>{% endfor %}
+        <td class="td-actions">
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#editClienteModal"
+                  data-edit-url="{% url 'comercial:cliente_update' c.pk %}"
+                  data-field-nit="{{ c.nit }}"
+                  data-field-razon-social="{{ c.razon_social }}"
+                  data-field-ciudad="{{ c.ciudad|default:'' }}"
+                  data-field-direccion="{{ c.direccion|default:'' }}"
+                  data-field-telefono-principal="{{ c.telefono_principal|default:'' }}"
+                  data-field-email-principal="{{ c.email_principal|default:'' }}"
+                  data-field-activo="{{ c.activo }}">
+            Editar
+          </button>
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'comercial:cliente_delete' c.pk %}"
+                  data-delete-name="{{ c.razon_social }}">
+            Eliminar
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◎</div>
+    <div class="empty-state-text">Sin clientes registrados.<br>
+      <button class="btn btn-primary btn-sm" style="margin-top:12px"
+              data-bs-toggle="modal" data-bs-target="#createClienteModal">
+        Crear primer cliente
+      </button>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── MODAL CREAR ── -->
+<div class="modal fade" id="createClienteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'comercial:cliente_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>NIT / ID</label>
+              {{ create_form.nit }}
+            </div>
+            <div class="form-group">
+              <label>Ciudad</label>
+              {{ create_form.ciudad }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Razón social</label>
+            {{ create_form.razon_social }}
+          </div>
+          <div class="form-group">
+            <label>Dirección</label>
+            {{ create_form.direccion }}
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Teléfono</label>
+              {{ create_form.telefono_principal }}
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              {{ create_form.email_principal }}
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="form-check">
+              {{ create_form.activo }}
+              <label class="form-check-label">Activo</label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar cliente</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL EDITAR ── -->
+<div class="modal fade" id="editClienteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="editClienteForm" action="#">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>NIT / ID</label>
+              <input type="text" name="nit" class="form-control form-control-sm">
+            </div>
+            <div class="form-group">
+              <label>Ciudad</label>
+              <input type="text" name="ciudad" class="form-control form-control-sm">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Razón social</label>
+            <input type="text" name="razon_social" class="form-control form-control-sm">
+          </div>
+          <div class="form-group">
+            <label>Dirección</label>
+            <input type="text" name="direccion" class="form-control form-control-sm">
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Teléfono</label>
+              <input type="text" name="telefono_principal" class="form-control form-control-sm">
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" name="email_principal" class="form-control form-control-sm">
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="activo" id="editClienteActivo">
+              <label class="form-check-label" for="editClienteActivo">Activo</label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 {% endblock %}

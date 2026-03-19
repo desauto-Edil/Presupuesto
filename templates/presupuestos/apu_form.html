@@ -1,11 +1,60 @@
 {% extends "base.html" %}
-{% block title %}Editar parametros APU{% endblock %}
+{% block title %}Parámetros APU{% endblock %}
+{% block nav_proyectos %}active{% endblock %}
+{% block page_title %}Parámetros APU{% endblock %}
+{% block breadcrumb %}Proyectos → APU → Parámetros{% endblock %}
+
 {% block content %}
-<h2>Editar parametros APU</h2>
-<div class="card mt-3"><div class="card-body">
-<form method="post">{% csrf_token %}
-{% for f in form %}<div class="mb-3"><label class="form-label">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors }}</div>{% endif %}</div>{% endfor %}
-<button type="submit" class="btn btn-primary">Guardar</button>
-<a href="{% url 'presupuestos:apu_detail' object.pk %}" class="btn btn-secondary">Volver</a>
-</form></div></div>
+<div class="panel" style="max-width:560px;">
+  <div class="panel-header">
+    <span>Editar parámetros del APU</span>
+    <a href="{% url 'presupuestos:apu_detail' object.pk %}" class="btn btn-ghost btn-sm">← Volver</a>
+  </div>
+  <div style="padding:20px;">
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="section-label" style="margin-bottom:12px;">Márgenes y factores</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        {% for field in form %}
+        {% if field.name != 'cuadrilla_personas' and field.name != 'dias_trabajo' and field.name != 'tiempo_estimado_meses' and field.name != 'rendimiento_und_dia' %}
+        <div class="form-group">
+          <label>{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}<div style="color:var(--danger);font-size:11px;margin-top:4px;">{{ field.errors }}</div>{% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="section-label" style="margin:20px 0 12px;">Mano de obra</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>{{ form.cuadrilla_personas.label }}</label>
+          {{ form.cuadrilla_personas }}
+          {% if form.cuadrilla_personas.errors %}<div style="color:var(--danger);font-size:11px;">{{ form.cuadrilla_personas.errors }}</div>{% endif %}
+          <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">Personas en la cuadrilla de instalación</div>
+        </div>
+        <div class="form-group">
+          <label>{{ form.dias_trabajo.label }}</label>
+          {{ form.dias_trabajo }}
+          <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">Se calcula automáticamente al generar APU</div>
+        </div>
+        <div class="form-group">
+          <label>{{ form.tiempo_estimado_meses.label }}</label>
+          {{ form.tiempo_estimado_meses }}
+        </div>
+        <div class="form-group">
+          <label>{{ form.rendimiento_und_dia.label }}</label>
+          {{ form.rendimiento_und_dia }}
+        </div>
+      </div>
+
+      <div style="margin-top:24px;display:flex;gap:8px;">
+        <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
+        <a href="{% url 'presupuestos:apu_detail' object.pk %}" class="btn btn-ghost btn-sm">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}

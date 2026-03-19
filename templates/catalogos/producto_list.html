@@ -1,24 +1,143 @@
 {% extends "base.html" %}
 {% block title %}Productos{% endblock %}
+{% block nav_productos %}active{% endblock %}
+{% block page_title %}Productos{% endblock %}
+{% block breadcrumb %}Catálogos → Productos{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm"
+          data-bs-toggle="modal" data-bs-target="#createProductoModal">
+    + Nuevo producto
+  </button>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Productos</h2>
-    <a href="{% url 'catalogos:producto_create' %}" class="btn btn-primary">Crear</a>
-</div>
-<table class="table table-bordered bg-white table-sm">
-    <thead class="table-dark"><tr><th>Codigo</th><th>Nombre</th><th>Categoria</th><th>Unidad</th><th>Origen</th><th>Activo</th><th>Acciones</th></tr></thead>
+<div class="panel fade-up">
+  <div class="panel-header">
+    <span class="panel-title">Catálogo de productos</span>
+    <span class="text-muted" style="font-size:12px;">{{ productos|length }} productos</span>
+  </div>
+
+  {% if productos %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nombre</th>
+        <th>Categoría</th>
+        <th>Unidad</th>
+        <th>Origen</th>
+        <th>Marca</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
-    {% for p in productos %}
-    <tr>
-        <td>{{ p.codigo }}</td><td>{{ p.nombre }}</td><td>{{ p.categoria }}</td><td>{{ p.unidad }}</td>
-        <td>{{ p.get_origen_display }}</td><td>{% if p.activo %}Si{% else %}No{% endif %}</td>
+      {% for p in productos %}
+      <tr>
+        <td class="td-mono">{{ p.codigo }}</td>
+        <td>{{ p.nombre }}</td>
+        <td style="font-size:12px;">{{ p.categoria.nombre|default:"—" }}</td>
+        <td style="font-size:12px;">{{ p.unidad.abreviatura|default:"—" }}</td>
         <td>
-            <a href="{% url 'catalogos:producto_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
-            <a href="{% url 'catalogos:producto_update' p.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <a href="{% url 'catalogos:producto_delete' p.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+          <span class="badge-status bs-inactivo" style="font-size:10px;">
+            {{ p.get_origen_display|default:p.origen }}
+          </span>
         </td>
-    </tr>
-    {% empty %}<tr><td colspan="7" class="text-center text-muted">Sin registros.</td></tr>{% endfor %}
+        <td style="font-size:12px;">{{ p.marca|default:"—" }}</td>
+        <td>
+          <span class="badge-status {% if p.activo %}bs-activo{% else %}bs-inactivo{% endif %}">
+            {% if p.activo %}Activo{% else %}Inactivo{% endif %}
+          </span>
+        </td>
+        <td class="td-actions">
+          <a href="{% url 'catalogos:producto_update' p.pk %}" class="btn btn-ghost btn-xs">Editar</a>
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'catalogos:producto_delete' p.pk %}"
+                  data-delete-name="{{ p.nombre }}">
+            ✕
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◈</div>
+    <div class="empty-state-text">Sin productos registrados.</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── MODAL CREAR PRODUCTO ── -->
+{% if create_form %}
+<div class="modal fade" id="createProductoModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'catalogos:producto_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código</label>
+              {{ create_form.codigo }}
+            </div>
+            <div class="form-group">
+              <label>Unidad de medida</label>
+              {{ create_form.unidad }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Nombre</label>
+            {{ create_form.nombre }}
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Categoría</label>
+              {{ create_form.categoria }}
+            </div>
+            <div class="form-group">
+              <label>Origen</label>
+              {{ create_form.origen }}
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Marca</label>
+              {{ create_form.marca }}
+            </div>
+            <div class="form-group">
+              <label>Línea</label>
+              {{ create_form.linea }}
+            </div>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Rendimiento</label>
+              {{ create_form.rendimiento }}
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px;">
+              <div class="form-check">
+                {{ create_form.activo }}
+                <label class="form-check-label">Activo</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar producto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}

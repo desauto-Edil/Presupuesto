@@ -5,6 +5,7 @@ from apps.presupuestos.views import (
     ProyectoSistemaListView, ProyectoSistemaDetailView,
     ProyectoSistemaCreateView, ProyectoSistemaUpdateView, ProyectoSistemaDeleteView,
     DespieceProyectoView, DespieceEjecutarView, DespieceLineaAjusteView,
+    SubsistemaVariablesView, DespieceLineaAjusteAPIView, CalcularDespiecePSView,
     ConfiguracionAPUListView, ConfiguracionAPUCreateView, ConfiguracionAPUUpdateView,
     APUProyectoDetailView, APUProyectoUpdateView, APUGenerarView,
 )
@@ -19,10 +20,19 @@ urlpatterns = [
     path("sistemas/<int:pk>/editar/", ProyectoSistemaUpdateView.as_view(), name="proyectosistema_update"),
     path("sistemas/<int:pk>/eliminar/", ProyectoSistemaDeleteView.as_view(), name="proyectosistema_delete"),
 
-    # Despiece por proyecto
+    # Despiece — workbench
     path("despiece/proyecto/<int:pk>/", DespieceProyectoView.as_view(), name="despiece_proyecto"),
+
+    # Despiece — acciones de cálculo
+    path("despiece/calcular/<int:pk>/", CalcularDespiecePSView.as_view(), name="despiece_calcular"),
     path("despiece/ejecutar/<int:pk>/", DespieceEjecutarView.as_view(), name="despiece_ejecutar"),
+
+    # Despiece — ajuste de línea (formulario clásico)
     path("despiece/ajuste/<int:pk>/", DespieceLineaAjusteView.as_view(), name="despiece_ajuste"),
+
+    # Despiece — API AJAX
+    path("despiece/api/variables/<int:pk>/", SubsistemaVariablesView.as_view(), name="despiece_api_variables"),
+    path("despiece/api/ajuste/<int:pk>/", DespieceLineaAjusteAPIView.as_view(), name="despiece_api_ajuste"),
 
     # Configuración APU
     path("config-apu/", ConfiguracionAPUListView.as_view(), name="configapu_list"),

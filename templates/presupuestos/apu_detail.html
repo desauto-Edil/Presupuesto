@@ -1,55 +1,197 @@
 {% extends "base.html" %}
-{% block title %}APU: {{ apu.proyecto_sistema }}{% endblock %}
+{% block title %}APU — {{ apu.proyecto_sistema }}{% endblock %}
+{% block nav_proyectos %}active{% endblock %}
+{% block page_title %}APU{% endblock %}
+{% block breadcrumb %}Proyectos → {{ apu.proyecto_sistema.proyecto.consecutivo }} → APU{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'presupuestos:despiece_proyecto' apu.proyecto_sistema.proyecto_id %}" class="btn btn-ghost btn-sm">← Despiece</a>
+  <a href="{% url 'presupuestos:apu_update' apu.pk %}" class="btn btn-ghost btn-sm">Editar parámetros</a>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>APU — {{ apu.proyecto_sistema }}</h2>
-    <a href="{% url 'presupuestos:apu_update' apu.pk %}" class="btn btn-secondary">Editar parametros</a>
-</div>
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card"><div class="card-body">
-        <h5>Parametros</h5>
-        <dl class="row">
-            <dt class="col-sm-6">Factor venta %</dt><dd class="col-sm-6">{{ apu.factor_venta_pct }}</dd>
-            <dt class="col-sm-6">IVA %</dt><dd class="col-sm-6">{{ apu.iva_pct }}</dd>
-            <dt class="col-sm-6">Aplica IVA</dt><dd class="col-sm-6">{% if apu.aplica_iva %}Si{% else %}No{% endif %}</dd>
-            <dt class="col-sm-6">AIU contratista %</dt><dd class="col-sm-6">{{ apu.aiu_contratista_pct }}</dd>
-            <dt class="col-sm-6">Margen contratista %</dt><dd class="col-sm-6">{{ apu.margen_contratista_pct }}</dd>
-            <dt class="col-sm-6">Dias trabajo</dt><dd class="col-sm-6">{{ apu.dias_trabajo|default:"-" }}</dd>
-        </dl>
-        </div></div>
+
+{# ── Cabecera proyecto/sistema ──────────────────────────────────────────────── #}
+<div style="background:var(--ink);color:#fff;border-radius:10px;padding:16px 24px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;">
+  <div>
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;">
+      APU — {{ apu.proyecto_sistema.proyecto.consecutivo }}
     </div>
-    <div class="col-md-6">
-        <div class="card"><div class="card-body">
-        <h5>Totales</h5>
-        <dl class="row">
-            <dt class="col-sm-6">Materiales</dt><dd class="col-sm-6">{{ apu.subtotal_materiales }}</dd>
-            <dt class="col-sm-6">Herramientas</dt><dd class="col-sm-6">{{ apu.subtotal_herramientas }}</dd>
-            <dt class="col-sm-6">Transporte</dt><dd class="col-sm-6">{{ apu.subtotal_transporte }}</dd>
-            <dt class="col-sm-6">Mano de obra</dt><dd class="col-sm-6">{{ apu.subtotal_mano_obra }}</dd>
-            <dt class="col-sm-6">Administracion</dt><dd class="col-sm-6">{{ apu.subtotal_administracion }}</dd>
-            <dt class="col-sm-6"><strong>Total costo</strong></dt><dd class="col-sm-6"><strong>{{ apu.total_costo }}</strong></dd>
-            <dt class="col-sm-6"><strong>Total venta</strong></dt><dd class="col-sm-6"><strong>{{ apu.total_valor_venta }}</strong></dd>
-        </dl>
-        </div></div>
+    <div style="font-size:11.5px;opacity:0.5;margin-top:3px;">
+      {{ apu.proyecto_sistema.sistema.nombre }}
+      {% if apu.proyecto_sistema.subsistema %} / {{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
+      &nbsp;·&nbsp; {{ apu.proyecto_sistema.proyecto.cliente.razon_social }}
     </div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-size:11px;opacity:0.5;">Total venta</div>
+    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--accent);">
+      ${{ apu.total_valor_venta|floatformat:0 }}
+    </div>
+  </div>
 </div>
 
-<h5>Lineas APU</h5>
-<table class="table table-bordered bg-white table-sm">
-    <thead class="table-secondary"><tr><th>Tipo</th><th>Descripcion</th><th>Rendimiento</th><th>Precio ref.</th><th>Costo unit.</th><th>Costo total</th><th>Valor total</th></tr></thead>
-    <tbody>
-    {% for linea in lineas %}
-    <tr>
-        <td><span class="badge bg-info text-dark">{{ linea.tipo }}</span></td>
-        <td>{{ linea.descripcion }}</td>
-        <td>{{ linea.rendimiento }}</td>
-        <td>{{ linea.precio_referencia }}</td>
-        <td>{{ linea.costo_unitario }}</td>
-        <td>{{ linea.costo_total }}</td>
-        <td>{{ linea.valor_total }}</td>
-    </tr>
-    {% empty %}<tr><td colspan="7" class="text-muted">Sin lineas APU.</td></tr>{% endfor %}
-    </tbody>
-</table>
+{# ── Layout: resumen + líneas ─────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:start;">
+
+  {# Col izquierda: totales por categoría #}
+  <div class="panel" style="padding:16px;">
+    <div class="section-label" style="margin-bottom:12px;">Resumen de costos</div>
+    {% with grupos=lineas|dictsort:"tipo" %}
+    <div style="font-size:11.5px;line-height:2;">
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--muted);">Materiales</span>
+        <span style="font-variant-numeric:tabular-nums;">${{ apu.subtotal_materiales|floatformat:0 }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--muted);">Herramientas</span>
+        <span style="font-variant-numeric:tabular-nums;">${{ apu.subtotal_herramientas|floatformat:0 }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--muted);">Transporte</span>
+        <span style="font-variant-numeric:tabular-nums;">${{ apu.subtotal_transporte|floatformat:0 }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--muted);">Mano de obra</span>
+        <span style="font-variant-numeric:tabular-nums;">${{ apu.subtotal_mano_obra|floatformat:0 }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--muted);">Administración</span>
+        <span style="font-variant-numeric:tabular-nums;">${{ apu.subtotal_administracion|floatformat:0 }}</span>
+      </div>
+      <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700;">
+        <span>Total costo</span>
+        <span style="font-variant-numeric:tabular-nums;">${{ apu.total_costo|floatformat:0 }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-weight:700;color:var(--accent);">
+        <span>Venta</span>
+        <span style="font-variant-numeric:tabular-nums;">${{ apu.total_valor_venta|floatformat:0 }}</span>
+      </div>
+    </div>
+    {% endwith %}
+
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;">
+      <div class="section-label" style="margin-bottom:8px;">Parámetros</div>
+      <div style="font-size:10.5px;line-height:1.9;color:var(--muted);">
+        <div>Factor venta: <strong style="color:var(--ink);">{{ apu.factor_venta_pct }}%</strong></div>
+        <div>IVA: <strong style="color:var(--ink);">{% if apu.aplica_iva %}{{ apu.iva_pct }}%{% else %}—{% endif %}</strong></div>
+        <div>AIU: <strong style="color:var(--ink);">{{ apu.aiu_contratista_pct }}%</strong></div>
+        <div>Margen c.: <strong style="color:var(--ink);">{{ apu.margen_contratista_pct }}%</strong></div>
+        <div>Cuadrilla: <strong style="color:var(--ink);">{{ apu.cuadrilla_personas }} pers.</strong></div>
+        <div>Días: <strong style="color:var(--ink);">{{ apu.dias_trabajo|default:"—"|floatformat:1 }}</strong></div>
+      </div>
+    </div>
+  </div>
+
+  {# Col derecha: tabla de líneas agrupadas por tipo #}
+  <div class="panel">
+    <div class="panel-header">
+      <span>Líneas del APU</span>
+      <span style="font-size:11px;color:var(--muted);">{{ lineas|length }} línea(s)</span>
+    </div>
+
+    {% if lineas %}
+    {% regroup lineas by get_tipo_display as lineas_por_tipo %}
+    {% for grupo in lineas_por_tipo %}
+    <div style="padding:0 20px;">
+      <div class="section-label" style="margin:12px 0 6px;color:var(--accent);">{{ grupo.grouper }}</div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Descripción</th>
+            <th style="text-align:right;width:90px;">Rendimiento</th>
+            <th style="text-align:right;width:110px;">Precio ref.</th>
+            <th style="text-align:right;width:110px;">Costo unit.</th>
+            <th style="text-align:right;width:110px;">Costo total</th>
+            <th style="text-align:right;width:110px;color:var(--accent);">Valor total</th>
+            <th style="width:40px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linea in grupo.list %}
+          <tr id="apu-linea-{{ linea.pk }}">
+            <td>
+              {{ linea.descripcion }}
+              {% if linea.iva_aplicado %}<span class="badge-status bs-info" style="font-size:9px;">+IVA</span>{% endif %}
+            </td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums;">{{ linea.rendimiento|floatformat:4 }}</td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums;">${{ linea.precio_referencia|floatformat:2 }}</td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums;">${{ linea.costo_unitario|floatformat:2 }}</td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums;">${{ linea.costo_total|floatformat:2 }}</td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--accent);">${{ linea.valor_total|floatformat:2 }}</td>
+            <td style="text-align:right;">
+              {% if linea.editable %}
+              <button type="button" class="btn btn-ghost btn-sm"
+                      data-bs-toggle="modal" data-bs-target="#modalEditarLinea"
+                      data-linea-pk="{{ linea.pk }}"
+                      data-descripcion="{{ linea.descripcion }}"
+                      data-rendimiento="{{ linea.rendimiento }}"
+                      data-precio="{{ linea.precio_referencia }}">✎</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div style="text-align:center;padding:40px;color:var(--muted);">
+      Sin líneas APU. Genera el APU desde el despiece.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   Modal: Editar línea editable (MO, herramientas, transporte, admin)
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="modal fade" id="modalEditarLinea" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="" id="formEditarLinea">
+        {% csrf_token %}
+        <input type="hidden" name="_linea_pk" id="editLineaPk">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editLineaTitulo">Editar línea</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label style="font-size:11px;">Rendimiento</label>
+            <input type="number" step="0.000001" class="form-control form-control-sm" id="editRendimiento" name="rendimiento">
+          </div>
+          <div class="form-group" style="margin-top:10px;">
+            <label style="font-size:11px;">Precio referencia</label>
+            <input type="number" step="0.01" class="form-control form-control-sm" id="editPrecio" name="precio_referencia">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const modal = document.getElementById('modalEditarLinea');
+  if (!modal) return;
+  modal.addEventListener('show.bs.modal', function (e) {
+    const btn = e.relatedTarget;
+    document.getElementById('editLineaPk').value        = btn.dataset.lineaPk;
+    document.getElementById('editLineaTitulo').textContent = btn.dataset.descripcion;
+    document.getElementById('editRendimiento').value    = btn.dataset.rendimiento;
+    document.getElementById('editPrecio').value         = btn.dataset.precio;
+    document.getElementById('formEditarLinea').action   =
+      `/presupuestos/apu/linea/${btn.dataset.lineaPk}/editar/`;
+  });
+})();
+</script>
 {% endblock %}

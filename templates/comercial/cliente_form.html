@@ -1,11 +1,42 @@
 {% extends "base.html" %}
-{% block title %}{% if object %}Editar{% else %}Crear{% endif %} Cliente{% endblock %}
+{% block title %}{% if object %}Editar{% else %}Nuevo{% endif %} Cliente{% endblock %}
+{% block nav_clientes %}active{% endblock %}
+{% block page_title %}{% if object %}Editar Cliente{% else %}Nuevo Cliente{% endif %}{% endblock %}
+{% block breadcrumb %}Comercial → Clientes → {% if object %}{{ object.razon_social }}{% else %}Nuevo{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'comercial:cliente_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+{% endblock %}
+
 {% block content %}
-<h2>{% if object %}Editar cliente{% else %}Nuevo cliente{% endif %}</h2>
-<div class="card mt-3"><div class="card-body">
-<form method="post">{% csrf_token %}
-{% for f in form %}<div class="mb-3"><label class="form-label">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors }}</div>{% endif %}</div>{% endfor %}
-<button type="submit" class="btn btn-primary">Guardar</button>
-<a href="{% url 'comercial:cliente_list' %}" class="btn btn-secondary">Volver</a>
-</form></div></div>
+<div class="form-page-card fade-up">
+  <div class="form-page-header">
+    <span class="form-page-title">
+      {% if object %}{{ object.razon_social }}{% else %}Nuevo cliente{% endif %}
+    </span>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-page-body">
+      <div class="form-grid-2">
+        <div class="form-group"><label>NIT / ID</label>{{ form.nit }}</div>
+        <div class="form-group"><label>Ciudad</label>{{ form.ciudad }}</div>
+      </div>
+      <div class="form-group"><label>Razón social</label>{{ form.razon_social }}</div>
+      <div class="form-group"><label>Dirección</label>{{ form.direccion }}</div>
+      <div class="form-grid-2">
+        <div class="form-group"><label>Teléfono</label>{{ form.telefono_principal }}</div>
+        <div class="form-group"><label>Email</label>{{ form.email_principal }}</div>
+      </div>
+      <div class="form-check">{{ form.activo }}<label class="form-check-label">Activo</label></div>
+      {% if form.errors %}<div class="msg-bar msg-error">✕ Revisa los errores.</div>{% endif %}
+    </div>
+    <div class="form-page-footer">
+      <a href="{% url 'comercial:cliente_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+      <button type="submit" class="btn btn-primary btn-sm">
+        {% if object %}Guardar cambios{% else %}Crear cliente{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
 {% endblock %}

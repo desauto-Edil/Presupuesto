@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+{% block title %}Despiece — {{ proyecto.consecutivo }}{% endblock %}
+{% block nav_proyectos %}active{% endblock %}
+{% block page_title %}Despiece{% endblock %}
+{% block breadcrumb %}Proyectos → {{ proyecto.consecutivo }} → Despiece{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-ghost btn-sm">← Proyecto</a>
+{% endblock %}
+
+{% block content %}
+
+{# ── Cabecera del proyecto ──────────────────────────────────────────────────── #}
+<div style="background:var(--ink);color:#fff;border-radius:10px;padding:18px 24px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;">
+  <div>
+    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:700;letter-spacing:-0.02em;">
+      {{ proyecto.consecutivo }} — {{ proyecto.nombre }}
+    </div>
+    <div style="font-size:11.5px;opacity:0.55;margin-top:4px;">
+      {{ proyecto.cliente.razon_social }} &nbsp;·&nbsp;
+      {{ proyecto.area_total_m2|default:"—" }} m² &nbsp;·&nbsp;
+      {{ proyecto.perimetro_ml|default:"—" }} ml
+    </div>
+  </div>
+  <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAgregarSistema">
+    + Agregar sistema
+  </button>
+</div>
+
+{# ── Tabs de sistemas ──────────────────────────────────────────────────────── #}
+{% if sistemas %}
+<ul class="nav nav-tabs mb-0" id="tabSistemas" role="tablist" style="border-bottom:none;gap:4px;">
+  {% for ps in sistemas %}
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if forloop.first %}active{% endif %}"
+            id="tab-{{ ps.pk }}"
+            data-bs-toggle="tab"
+            data-bs-target="#panel-{{ ps.pk }}"
+            type="button" role="tab"
+            style="font-size:12px;font-weight:600;padding:7px 16px;border-radius:7px 7px 0 0;">
+      {{ ps.sistema.nombre }}{% if ps.subsistema %} / {{ ps.subsistema.nombre }}{% endif %}
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+
+<div class="tab-content" id="tabSistemasContent"
+     style="border:1px solid var(--border);border-radius:0 8px 8px 8px;background:var(--surface);">
+  {% for ps in sistemas %}
+  <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
+       id="panel-{{ ps.pk }}" role="tabpanel">
+
+    {# ── 3 columnas: parámetros | tabla | resumen APU ── #}
+    <div style="display:grid;grid-template-columns:240px 1fr 220px;gap:0;min-height:420px;">
+
+      {# Col 1 — Parámetros de entrada #}
+      <div style="border-right:1px solid var(--border);padding:18px 16px;">
+        <div class="section-label" style="margin-bottom:12px;">Parámetros</div>
+
+        <form method="post" action="{% url 'presupuestos:despiece_calcular' proyecto.pk %}"
+              id="form-params-{{ ps.pk }}">
+          {% csrf_token %}
+          <input type="hidden" name="sistema_id"    value="{{ ps.sistema_id }}">
+          <input type="hidden" name="subsistema_id" value="{{ ps.subsistema_id|default:'' }}">
+
+          {# Variables fijas del proyecto (solo lectura) #}
+          <div class="form-group" style="margin-bottom:10px;">
+            <label style="font-size:10.5px;">Área total (m²)</label>
+            <input type="text" class="form-control form-control-sm" value="{{ proyecto.area_total_m2|default:'—' }}" disabled>
+          </div>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="font-size:10.5px;">Perímetro (ml)</label>
+            <input type="text" class="form-control form-control-sm" value="{{ proyecto.perimetro_ml|default:'—' }}" disabled>
+          </div>
+
+          {# Variables dinámicas del subsistema #}
+          {% with vars=ps.get_variables_requeridas %}
+          {% if vars %}
+          <div class="section-label" style="margin-bottom:8px;font-size:9.5px;">Variables del sistema</div>
+          {% for v in vars %}
+          <div class="form-group" style="margin-bottom:10px;">
+            <label style="font-size:10.5px;">{{ v.label }}</label>
+            <input type="number" step="any" class="form-control form-control-sm"
+                   name="parametros[{{ v.variable }}]"
+                   value="{{ v.valor }}"
+                   placeholder="{{ v.variable }}">
+          </div>
+          {% endfor %}
+          {% else %}
+          <p style="font-size:11px;color:var(--muted);margin-top:8px;">
+            Sin variables adicionales.
+          </p>
+          {% endif %}
+          {% endwith %}
+
+          <button type="submit" class="btn btn-primary btn-sm w-100" style="margin-top:12px;">
+            ↺ Recalcular
+          </button>
+        </form>
+
+        {# Botón generar APU #}
+        <form method="post" action="{% url 'presupuestos:apu_generar' ps.pk %}" style="margin-top:8px;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-ghost btn-sm w-100">Generar APU</button>
+        </form>
+
+        {# Eliminar PS #}
+        <div style="margin-top:24px;text-align:center;">
+          <button type="button" class="btn-link-danger"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'presupuestos:proyectosistema_delete' ps.pk %}"
+                  data-delete-name="{{ ps.sistema.nombre }}{% if ps.subsistema %} / {{ ps.subsistema.nombre }}{% endif %}">
+            Eliminar sistema
+          </button>
+        </div>
+      </div>
+
+      {# Col 2 — Tabla de despiece #}
+      <div style="padding:18px 20px;overflow-x:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div class="section-label">Líneas de despiece</div>
+          <form method="post" action="{% url 'presupuestos:despiece_ejecutar' ps.pk %}" style="margin:0;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-ghost btn-sm">↺ Re-ejecutar</button>
+          </form>
+        </div>
+
+        {% with lineas=ps.despiece_lineas.all %}
+        {% if lineas %}
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Producto / Categoría</th>
+              <th style="text-align:right;">Calculado</th>
+              <th style="text-align:right;">Ajustado</th>
+              <th style="text-align:right;">Final</th>
+              <th style="text-align:right;">Precio unit.</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for dl in lineas %}
+            <tr id="linea-row-{{ dl.pk }}"
+                class="{% if dl.pendiente_seleccion %}row-warn{% elif dl.estado_tecnico == 'ERROR_CONFIGURACION' %}row-error{% endif %}">
+              <td>
+                {% if dl.producto %}
+                  {{ dl.producto.nombre }}
+                  {% if dl.es_dependencia_automatica %}
+                    <span class="badge-status bs-info" style="font-size:9px;">auto</span>
+                  {% endif %}
+                {% elif dl.categoria_producto %}
+                  <span style="color:var(--warning);">[{{ dl.categoria_producto }}]</span>
+                {% else %}
+                  <span style="color:var(--danger);">Sin producto</span>
+                {% endif %}
+              </td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                {{ dl.cantidad_calculada|floatformat:2 }}
+              </td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;" id="qty-ajustada-{{ dl.pk }}">
+                {% if dl.cantidad_ajustada is not None %}{{ dl.cantidad_ajustada|floatformat:2 }}{% else %}—{% endif %}
+              </td>
+              <td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums;" id="qty-final-{{ dl.pk }}">
+                {{ dl.cantidad_final|floatformat:2 }}
+              </td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                {% if dl.precio_snapshot %}{{ dl.precio_snapshot|floatformat:2 }}{% else %}—{% endif %}
+              </td>
+              <td style="text-align:right;white-space:nowrap;">
+                <button type="button" class="btn btn-ghost btn-sm"
+                        data-bs-toggle="modal" data-bs-target="#modalAjuste"
+                        data-linea-pk="{{ dl.pk }}"
+                        data-cantidad-actual="{{ dl.cantidad_final }}"
+                        data-motivo-actual="{{ dl.motivo_ajuste|default:'' }}">
+                  Ajustar
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12px;">
+          Sin líneas calculadas. Ingresa los parámetros y haz clic en <strong>Recalcular</strong>.
+        </div>
+        {% endif %}
+        {% endwith %}
+      </div>
+
+      {# Col 3 — Resumen APU #}
+      <div style="border-left:1px solid var(--border);padding:18px 16px;">
+        <div class="section-label" style="margin-bottom:12px;">Resumen APU</div>
+        {% with apu=ps.apu %}
+        {% if apu %}
+        <div style="font-size:11px;line-height:1.9;">
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:var(--muted);">Materiales</span>
+            <span>{{ apu.subtotal_materiales|floatformat:0 }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:var(--muted);">Herramientas</span>
+            <span>{{ apu.subtotal_herramientas|floatformat:0 }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:var(--muted);">Mano de obra</span>
+            <span>{{ apu.subtotal_mano_obra|floatformat:0 }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:var(--muted);">Transporte</span>
+            <span>{{ apu.subtotal_transporte|floatformat:0 }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:var(--muted);">Admón.</span>
+            <span>{{ apu.subtotal_administracion|floatformat:0 }}</span>
+          </div>
+          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700;">
+            <span>Total costo</span>
+            <span>{{ apu.total_costo|floatformat:0 }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-weight:700;color:var(--accent);">
+            <span>Venta</span>
+            <span>{{ apu.total_valor_venta|floatformat:0 }}</span>
+          </div>
+        </div>
+        <a href="{% url 'presupuestos:apu_detail' apu.pk %}" class="btn btn-ghost btn-sm w-100" style="margin-top:14px;">
+          Ver APU completo →
+        </a>
+        {% else %}
+        <p style="font-size:11px;color:var(--muted);margin-top:8px;">
+          APU no generado aún.
+        </p>
+        {% endif %}
+        {% endwith %}
+      </div>
+
+    </div>{# /3-cols #}
+  </div>{# /tab-pane #}
+  {% endfor %}
+</div>{# /tab-content #}
+
+{% else %}
+<div style="text-align:center;padding:60px 0;color:var(--muted);">
+  <p>Este proyecto no tiene sistemas asignados.</p>
+  <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAgregarSistema">
+    + Agregar primer sistema
+  </button>
+</div>
+{% endif %}
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   Modal: Agregar sistema
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="modal fade" id="modalAgregarSistema" tabindex="-1">
+  <div class="modal-dialog modal-md">
+    <div class="modal-content">
+      <form method="post" action="{% url 'presupuestos:despiece_calcular' proyecto.pk %}" id="formAgregarSistema">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">Agregar sistema al proyecto</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Sistema</label>
+            <select name="sistema_id" class="form-select form-select-sm" id="selectSistema" required>
+              <option value="">— Seleccionar —</option>
+              {% for s in all_sistemas %}
+              <option value="{{ s.pk }}">{{ s.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="margin-top:12px;">
+            <label>Subsistema <span style="color:var(--muted);font-weight:400;">(opcional)</span></label>
+            <select name="subsistema_id" class="form-select form-select-sm" id="selectSubsistema">
+              <option value="">— Ninguno —</option>
+              {% for sub in all_subsistemas %}
+              <option value="{{ sub.pk }}" data-sistema="{{ sub.sistema_id }}">
+                {{ sub.sistema.nombre }} / {{ sub.nombre }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div id="containerVariablesNuevo" style="margin-top:16px;display:none;">
+            <div class="section-label" style="margin-bottom:10px;">Parámetros de entrada</div>
+            <div id="camposVariablesNuevo"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Calcular despiece</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+{# ══════════════════════════════════════════════════════════════════════════════
+   Modal: Ajuste de cantidad (AJAX)
+══════════════════════════════════════════════════════════════════════════════ #}
+<div class="modal fade" id="modalAjuste" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Ajustar cantidad</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ajusteLineaPk">
+        <div class="form-group">
+          <label>Nueva cantidad</label>
+          <input type="number" step="any" class="form-control form-control-sm" id="ajusteCantidad">
+        </div>
+        <div class="form-group" style="margin-top:10px;">
+          <label>Motivo del ajuste <span style="color:var(--muted);font-size:10px;">(opcional)</span></label>
+          <input type="text" class="form-control form-control-sm" id="ajusteMotivo" placeholder="Ej: ajuste por plano rev. 3">
+        </div>
+        <div id="ajusteError" class="msg-bar msg-error" style="display:none;margin-top:10px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnGuardarAjuste">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ── Filtrar subsistemas según sistema seleccionado ──────────────────────── */
+(function () {
+  const selSistema    = document.getElementById('selectSistema');
+  const selSubsistema = document.getElementById('selectSubsistema');
+  if (!selSistema) return;
+
+  function filtrarSubsistemas() {
+    const sid = selSistema.value;
+    Array.from(selSubsistema.options).forEach(opt => {
+      if (!opt.value) return; // "— Ninguno —"
+      opt.hidden = opt.dataset.sistema !== sid;
+    });
+    selSubsistema.value = '';
+    cargarVariables();
+  }
+
+  selSistema.addEventListener('change', filtrarSubsistemas);
+  selSubsistema.addEventListener('change', cargarVariables);
+
+  /* ── Carga dinámica de variables del subsistema via AJAX ─────────────── */
+  // Para un subsistema ya existente (PS creado), pedimos sus variables al server.
+  // Para el modal de "nuevo", renderizamos campos si hay PS con ese subsistema.
+  function cargarVariables() {
+    const container = document.getElementById('containerVariablesNuevo');
+    const campos    = document.getElementById('camposVariablesNuevo');
+    // Por ahora muestra el contenedor vacío listo para escribir manualmente.
+    // Una mejora posterior puede hacer fetch al endpoint /api/variables/<ps_pk>/
+    container.style.display = 'none';
+    campos.innerHTML = '';
+  }
+})();
+
+/* ── Modal de ajuste de cantidad ─────────────────────────────────────────── */
+(function () {
+  const modalEl = document.getElementById('modalAjuste');
+  if (!modalEl) return;
+
+  modalEl.addEventListener('show.bs.modal', function (e) {
+    const btn = e.relatedTarget;
+    document.getElementById('ajusteLineaPk').value     = btn.dataset.lineaPk;
+    document.getElementById('ajusteCantidad').value    = btn.dataset.cantidadActual;
+    document.getElementById('ajusteMotivo').value      = btn.dataset.motivoActual || '';
+    document.getElementById('ajusteError').style.display = 'none';
+  });
+
+  document.getElementById('btnGuardarAjuste').addEventListener('click', function () {
+    const pk      = document.getElementById('ajusteLineaPk').value;
+    const qty     = document.getElementById('ajusteCantidad').value;
+    const motivo  = document.getElementById('ajusteMotivo').value;
+    const errDiv  = document.getElementById('ajusteError');
+
+    if (!pk || qty === '') {
+      errDiv.textContent = 'Ingresa una cantidad.';
+      errDiv.style.display = 'block';
+      return;
+    }
+
+    const url = `/presupuestos/despiece/api/ajuste/${pk}/`;
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+      },
+      body: JSON.stringify({ cantidad_ajustada: qty, motivo_ajuste: motivo }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        // Actualizar fila sin recargar
+        const ajEl    = document.getElementById(`qty-ajustada-${pk}`);
+        const finalEl = document.getElementById(`qty-final-${pk}`);
+        if (ajEl)    ajEl.textContent    = parseFloat(data.cantidad_ajustada).toFixed(2);
+        if (finalEl) finalEl.textContent = parseFloat(data.cantidad_final).toFixed(2);
+        bootstrap.Modal.getInstance(modalEl).hide();
+      } else {
+        errDiv.textContent = data.error || 'Error al guardar.';
+        errDiv.style.display = 'block';
+      }
+    })
+    .catch(() => {
+      errDiv.textContent = 'Error de red. Inténtalo de nuevo.';
+      errDiv.style.display = 'block';
+    });
+  });
+})();
+</script>
+{% endblock %}

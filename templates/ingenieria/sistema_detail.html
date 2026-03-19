@@ -1,27 +1,80 @@
 {% extends "base.html" %}
-{% block title %}Sistema: {{ sistema.nombre }}{% endblock %}
+{% block title %}Sistema — {{ sistema.nombre }}{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Sistema{% endblock %}
+{% block breadcrumb %}Ingeniería → Sistemas → {{ sistema.nombre }}{% endblock %}
+
 {% block content %}
-<h2>{{ sistema.nombre }}</h2>
-<div class="card mt-3"><div class="card-body">
-<dl class="row">
-    <dt class="col-sm-3">Codigo</dt><dd class="col-sm-9">{{ sistema.codigo }}</dd>
-    <dt class="col-sm-3">Linea de negocio</dt><dd class="col-sm-9">{{ sistema.get_linea_negocio_display }}</dd>
-    <dt class="col-sm-3">Descripcion</dt><dd class="col-sm-9">{{ sistema.descripcion|default:"-" }}</dd>
-    <dt class="col-sm-3">Activo</dt><dd class="col-sm-9">{% if sistema.activo %}Si{% else %}No{% endif %}</dd>
-</dl>
-<h5>Subsistemas</h5>
-<table class="table table-sm table-bordered">
-    <thead class="table-secondary"><tr><th>Codigo</th><th>Nombre</th><th>Activo</th><th>Acciones</th></tr></thead>
-    <tbody>
-    {% for sub in sistema.subsistemas.all %}
-    <tr>
-        <td>{{ sub.codigo }}</td><td>{{ sub.nombre }}</td><td>{% if sub.activo %}Si{% else %}No{% endif %}</td>
-        <td><a href="{% url 'ingenieria:subsistema_detail' sub.pk %}" class="btn btn-sm btn-outline-primary">Ver</a></td>
-    </tr>
-    {% empty %}<tr><td colspan="4" class="text-muted">Sin subsistemas.</td></tr>{% endfor %}
-    </tbody>
-</table>
-<a href="{% url 'ingenieria:sistema_update' sistema.pk %}" class="btn btn-secondary">Editar</a>
-<a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-outline-secondary">Volver</a>
-</div></div>
+<div class="panel">
+  <div class="panel-header">
+    <span>{{ sistema.nombre }}</span>
+    <div style="display:flex;gap:8px;">
+      <a href="{% url 'ingenieria:sistema_update' sistema.pk %}" class="btn btn-ghost btn-sm">Editar</a>
+      <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+    </div>
+  </div>
+
+  <div style="padding:16px 20px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div>
+        <div class="section-label">Datos del catálogo</div>
+        <table class="data-table" style="margin-top:8px;">
+          <tr><td style="color:var(--muted);width:130px;">Código</td><td><strong>{{ sistema.codigo }}</strong></td></tr>
+          <tr><td style="color:var(--muted);">Línea de negocio</td><td>{{ sistema.get_linea_negocio_display }}</td></tr>
+          <tr><td style="color:var(--muted);">Descripción</td><td>{{ sistema.descripcion|default:"—" }}</td></tr>
+          <tr><td style="color:var(--muted);">Estado</td>
+            <td>{% if sistema.activo %}<span class="badge-status bs-success">Activo</span>{% else %}<span class="badge-status bs-error">Inactivo</span>{% endif %}</td>
+          </tr>
+        </table>
+      </div>
+      <div>
+        <div class="section-label">Definición backend</div>
+        {% if tiene_def_backend %}
+        <div style="margin-top:8px;padding:12px;background:#e8f5e9;border-radius:6px;border-left:3px solid #4caf50;">
+          <div style="font-size:11.5px;font-weight:700;color:#2e7d32;">✓ Receta técnica registrada</div>
+          <div style="font-size:11px;color:#388e3c;margin-top:4px;">
+            {{ subsistemas_def|length }} subsistema(s) con recetas Python definidas
+          </div>
+        </div>
+        {% else %}
+        <div style="margin-top:8px;padding:12px;background:#fff8e1;border-radius:6px;border-left:3px solid #ff9800;">
+          <div style="font-size:11.5px;font-weight:700;color:#e65100;">⚠ Sin definición backend</div>
+          <div style="font-size:11px;color:#bf360c;margin-top:4px;">
+            Código <code>{{ sistema.codigo }}</code> no está en <code>system_defs/registry.py</code>.
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Tabla de subsistemas #}
+    <div class="section-label" style="margin:20px 0 10px;">Subsistemas</div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Código</th><th>Nombre</th><th>Estado</th><th>Receta backend</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sub in subsistemas %}
+        <tr>
+          <td><code style="font-size:11px;">{{ sub.codigo }}</code></td>
+          <td>{{ sub.nombre }}</td>
+          <td>{% if sub.activo %}<span class="badge-status bs-success">Activo</span>{% else %}<span class="badge-status bs-error">Inactivo</span>{% endif %}</td>
+          <td>
+            {% for sd in subsistemas_def %}{% if sd.codigo == sub.codigo %}
+              <span class="badge-status bs-success">✓ Definida</span>
+            {% endif %}{% endfor %}
+          </td>
+          <td style="text-align:right;">
+            <a href="{% url 'ingenieria:subsistema_detail' sub.pk %}" class="btn btn-ghost btn-sm">Ver</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px;">Sin subsistemas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

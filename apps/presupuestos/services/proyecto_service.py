@@ -1,32 +1,26 @@
 """
 apps/presupuestos/services/proyecto_service.py — Orquestador del flujo de proyecto.
 
-ProyectoService coordina la creacion de proyectos y las transiciones de estado,
-delegando la logica de calculo a DespieceService, DependenciaService y APUService.
 
-CORRECCIONES vs version original:
-  1. iniciar_despiece(): valida estado del proyecto antes de continuar
-     (evita ejecutar despiece sobre proyectos ya en APU o COTIZADO).
-  2. ps.save() usa update_fields para no sobrescribir campos no relacionados.
-  3. Logging mejorado con contexto de IDs y estados.
-  4. iniciar_apu(): logging mejorado, states check sin cambio de logica.
 """
 
 from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from django.db import transaction
 
-from .despiece_service    import DespieceService
-from .dependencia_service import DependenciaService
-from .apu_service         import APUService
+from apps.comercial.models import Proyecto
+from apps.presupuestos.models.despiece import ProyectoSistema
+
+from .despiece_service import DespieceService
+from .apu_service      import APUService
 
 logger = logging.getLogger(__name__)
 
-# Estados desde los que se puede (re)ejecutar el despiece
+
 _ESTADOS_DESPIECE_PERMITIDOS = frozenset({
     "SOLICITUD",
     "DESPIECE",
@@ -39,6 +33,7 @@ class ProyectoService:
 
     @staticmethod
     @transaction.atomic
+
     def crear_desde_solicitud(
         solicitud_id: int,
         tipo_proyecto_id: int,
@@ -59,15 +54,15 @@ class ProyectoService:
         tipo_pry  = TipoProyecto.objects.get(pk=tipo_proyecto_id)
 
         proyecto = Proyecto.objects.create(
-            consecutivo         = Proyecto.siguiente_consecutivo(),
-            solicitud           = solicitud,
-            cliente             = solicitud.cliente,
-            creado_por          = creado_por,
-            tipo_proyecto       = tipo_pry,
-            nombre              = solicitud.nombre,
-            descripcion         = solicitud.descripcion,
-            area_total_m2       = area_total_m2,
-            perimetro_ml        = perimetro_ml,
+            consecutivo= Proyecto.siguiente_consecutivo(),
+            solicitud= solicitud,
+            cliente= solicitud.cliente,
+            creado_por= creado_por,
+            tipo_proyecto= tipo_pry,
+            nombre= solicitud.nombre,
+            descripcion= solicitud.descripcion,
+            area_total_m2= area_total_m2,
+            perimetro_ml= perimetro_ml,
             trm                 = trm,
             margen_comercial_pct= margen_comercial_pct,
             iva_pct             = iva_pct,
@@ -85,77 +80,24 @@ class ProyectoService:
 
     @staticmethod
     @transaction.atomic
-    def iniciar_despiece(
-        proyecto_id: int,
-        sistema_id: int,
-        subsistema_id: int,
-        total_powergip: float,
-        cuadrilla: int = 1,
-    ):
-        """
-        Crea o actualiza ProyectoSistema, inyecta dependencias, ejecuta despiece
-        parametrico y avanza el proyecto a estado DESPIECE.
-
-        Permitido solo cuando el proyecto esta en: SOLICITUD, DESPIECE o
-        EN_REVISION_COMPRAS (permite recalcular sin perder el avance).
-        """
-        from apps.comercial.models import Proyecto
-        from apps.ingenieria.models import Sistema, Subsistema
-        from apps.presupuestos.models import ProyectoSistema
-
-        proyecto   = Proyecto.objects.get(pk=proyecto_id)
-        sistema    = Sistema.objects.get(pk=sistema_id)
-        subsistema = Subsistema.objects.get(pk=subsistema_id)
-
-        # BUG CORREGIDO: validacion de estado antes de cualquier operacion
-        if proyecto.estado not in _ESTADOS_DESPIECE_PERMITIDOS:
-            raise ValueError(
-                f"No se puede iniciar despiece: el proyecto '{proyecto.consecutivo}' "
-                f"esta en estado '{proyecto.get_estado_display()}'. "
-                f"Estado requerido: {sorted(_ESTADOS_DESPIECE_PERMITIDOS)}."
-            )
-
-        ps, created = ProyectoSistema.objects.get_or_create(
-            proyecto   = proyecto,
-            sistema    = sistema,
-            subsistema = subsistema,
-            defaults   = {
-                "total_powergip":    Decimal(str(total_powergip)),
-                "cuadrilla_personas": cuadrilla,
-            },
+    def iniciar_despiece(proyecto_id, sistema_id, subsistema_id, parametros: dict): 
+        proyecto = Proyecto.objects.select_related("solicitud").get(pk=proyecto_id)
+    
+        ps, _ = ProyectoSistema.objects.update_or_create(
+            proyecto=proyecto,
+            sistema_id=sistema_id,
+            defaults={
+                "solicitud": proyecto.solicitud,
+                "subsistema_id": subsistema_id,
+                "parametros_entrada": parametros 
+            }
         )
 
-        if not created:
-            # BUG CORREGIDO: update_fields evita pisar campos no relacionados
-            ps.total_powergip    = Decimal(str(total_powergip))
-            ps.cuadrilla_personas = cuadrilla
-            ps.save(update_fields=["total_powergip", "cuadrilla_personas", "updated_at"])
-
-        logger.info(
-            "[ProyectoService] PS %s (%s) — total_powergip=%.4f, cuadrilla=%d.",
-            ps.pk, "nuevo" if created else "actualizado", float(total_powergip), cuadrilla,
-        )
-
-        dep_service  = DependenciaService(ps)
-        deps         = dep_service.inyectar()
-
-        desp_service = DespieceService(ps)
-        lineas       = desp_service.ejecutar()
+        DespieceService(ps).ejecutar()
 
         proyecto.avanzar_a_despiece()
-
-        logger.info(
-            "[ProyectoService] Proyecto %s ahora en estado '%s'. "
-            "%d dependencias | %d lineas despiece.",
-            proyecto.consecutivo, proyecto.estado, len(deps), len(lineas),
-        )
-
-        return {
-            "proyecto_sistema_id":    ps.pk,
-            "dependencias_inyectadas": deps,
-            "lineas_despiece":         lineas,
-            "estado_proyecto":         proyecto.estado,
-        }
+        return ps
+    
 
     @staticmethod
     @transaction.atomic

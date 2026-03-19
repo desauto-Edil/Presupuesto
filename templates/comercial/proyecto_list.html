@@ -1,26 +1,81 @@
 {% extends "base.html" %}
 {% block title %}Proyectos{% endblock %}
+{% block nav_proyectos %}active{% endblock %}
+{% block page_title %}Proyectos{% endblock %}
+{% block breadcrumb %}Comercial → Proyectos{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'comercial:proyecto_create' %}" class="btn btn-primary btn-sm">+ Nuevo proyecto</a>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Proyectos</h2>
-    <a href="{% url 'comercial:proyecto_create' %}" class="btn btn-primary">Crear</a>
-</div>
-<table class="table table-bordered bg-white table-sm">
-    <thead class="table-dark"><tr><th>Consecutivo</th><th>Nombre</th><th>Cliente</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
+<div class="panel fade-up">
+  <div class="panel-header">
+    <span class="panel-title">Proyectos</span>
+    <span class="text-muted" style="font-size:12px;">{{ proyectos|length }} registros</span>
+  </div>
+
+  {% if proyectos %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>Consecutivo</th>
+        <th>Nombre</th>
+        <th>Cliente</th>
+        <th>Tipo</th>
+        <th>Área m²</th>
+        <th>Moneda</th>
+        <th>Estado</th>
+        <th>Creado</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
-    {% for p in proyectos %}
-    <tr>
-        <td>{{ p.consecutivo }}</td><td>{{ p.nombre }}</td><td>{{ p.cliente.razon_social }}</td>
-        <td><span class="badge bg-secondary">{{ p.estado }}</span></td>
-        <td>{{ p.fecha_proyecto }}</td>
+      {% for p in proyectos %}
+      <tr>
+        <td class="td-mono fw-syne" style="font-size:12.5px;">{{ p.consecutivo }}</td>
+        <td>{{ p.nombre }}</td>
+        <td>{{ p.cliente.razon_social }}</td>
+        <td style="font-size:12px;">{{ p.tipo_proyecto.nombre|default:"—" }}</td>
+        <td class="td-right">{{ p.area_total_m2|default:"—" }}</td>
+        <td style="font-size:12px;">{{ p.moneda }}</td>
         <td>
-            <a href="{% url 'comercial:proyecto_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
-            <a href="{% url 'presupuestos:despiece_proyecto' p.pk %}" class="btn btn-sm btn-outline-info">Despiece</a>
-            <a href="{% url 'comercial:proyecto_update' p.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <a href="{% url 'comercial:proyecto_delete' p.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+          <span class="badge-status
+            {% if p.estado == 'SOLICITUD' %}bs-pendiente
+            {% elif p.estado == 'DESPIECE' or p.estado == 'EN_REVISION_COMPRAS' %}bs-despiece
+            {% elif p.estado == 'DESPIECE_VALIDADO' or p.estado == 'APU' %}bs-apu
+            {% elif p.estado == 'APU_GENERADO' %}bs-validado
+            {% elif p.estado == 'CERRADO' %}bs-cerrado
+            {% else %}bs-inactivo{% endif %}">
+            {{ p.get_estado_display }}
+          </span>
         </td>
-    </tr>
-    {% empty %}<tr><td colspan="6" class="text-center text-muted">Sin proyectos.</td></tr>{% endfor %}
+        <td style="font-size:12px;color:var(--ink-soft)">{{ p.created_at|date:"d/m/Y" }}</td>
+        <td class="td-actions">
+          <a href="{% url 'presupuestos:despiece_proyecto' p.pk %}"
+             class="btn btn-ghost btn-xs text-accent">⊞ Despiece</a>
+          <a href="{% url 'comercial:proyecto_update' p.pk %}"
+             class="btn btn-ghost btn-xs">Editar</a>
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'comercial:proyecto_delete' p.pk %}"
+                  data-delete-name="{{ p.consecutivo }}">
+            ✕
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◫</div>
+    <div class="empty-state-text">Sin proyectos registrados.<br>
+      <a href="{% url 'comercial:proyecto_create' %}" class="btn btn-primary btn-sm" style="margin-top:12px">
+        Crear primer proyecto
+      </a>
+    </div>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

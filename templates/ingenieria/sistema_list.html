@@ -1,24 +1,362 @@
 {% extends "base.html" %}
-{% block title %}Sistemas{% endblock %}
+{% block title %}Sistemas constructivos{% endblock %}
+{% block nav_sistemas %}active{% endblock %}
+{% block page_title %}Sistemas constructivos{% endblock %}
+{% block breadcrumb %}Ingeniería → Sistemas{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm"
+          data-bs-toggle="modal" data-bs-target="#createSistemaModal">
+    + Nuevo sistema
+  </button>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Sistemas</h2>
-    <a href="{% url 'ingenieria:sistema_create' %}" class="btn btn-primary">Crear</a>
-</div>
-<table class="table table-bordered bg-white">
-    <thead class="table-dark"><tr><th>Codigo</th><th>Nombre</th><th>Linea negocio</th><th>Activo</th><th>Acciones</th></tr></thead>
+
+<!-- Sistemas -->
+<div class="panel fade-up" style="margin-bottom:16px;">
+  <div class="panel-header">
+    <span class="panel-title">Sistemas</span>
+    <span class="text-muted" style="font-size:12px;">{{ sistemas|length }} registros</span>
+  </div>
+  {% if sistemas %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nombre</th>
+        <th>Línea de negocio</th>
+        <th>Descripción</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
-    {% for s in sistemas %}
-    <tr>
-        <td>{{ s.codigo }}</td><td>{{ s.nombre }}</td><td>{{ s.get_linea_negocio_display }}</td>
-        <td>{% if s.activo %}Si{% else %}No{% endif %}</td>
+      {% for s in sistemas %}
+      <tr>
+        <td class="td-mono">{{ s.codigo }}</td>
+        <td>{{ s.nombre }}</td>
+        <td>{{ s.get_linea_negocio_display|default:"—" }}</td>
+        <td style="font-size:12px;color:var(--ink-soft)">{{ s.descripcion|truncatechars:60|default:"—" }}</td>
         <td>
-            <a href="{% url 'ingenieria:sistema_detail' s.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
-            <a href="{% url 'ingenieria:sistema_update' s.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <a href="{% url 'ingenieria:sistema_delete' s.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+          <span class="badge-status {% if s.activo %}bs-activo{% else %}bs-inactivo{% endif %}">
+            {% if s.activo %}Activo{% else %}Inactivo{% endif %}
+          </span>
         </td>
-    </tr>
-    {% empty %}<tr><td colspan="5" class="text-center text-muted">Sin sistemas.</td></tr>{% endfor %}
+        <td class="td-actions">
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#editSistemaModal"
+                  data-edit-url="{% url 'ingenieria:sistema_update' s.pk %}"
+                  data-field-codigo="{{ s.codigo }}"
+                  data-field-nombre="{{ s.nombre }}"
+                  data-field-linea-negocio="{{ s.linea_negocio }}"
+                  data-field-descripcion="{{ s.descripcion|default:'' }}"
+                  data-field-activo="{{ s.activo }}">
+            Editar
+          </button>
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'ingenieria:sistema_delete' s.pk %}"
+                  data-delete-name="{{ s.nombre }}">
+            ✕
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◉</div>
+    <div class="empty-state-text">Sin sistemas registrados.</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Subsistemas (desde app subsistema_list redirigido aquí visualmente) -->
+{% load static %}
+<div class="panel fade-up-1">
+  <div class="panel-header">
+    <span class="panel-title">Subsistemas</span>
+    <button class="btn btn-ghost btn-xs"
+            data-bs-toggle="modal" data-bs-target="#createSubsistemaModal">
+      + Nuevo subsistema
+    </button>
+  </div>
+
+  {% with all_subsistemas=subsistemas %}
+  {% if all_subsistemas %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>Sistema</th>
+        <th>Código</th>
+        <th>Nombre</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sub in all_subsistemas %}
+      <tr>
+        <td style="font-size:11.5px;color:var(--ink-soft)">{{ sub.sistema.nombre }}</td>
+        <td class="td-mono">{{ sub.codigo }}</td>
+        <td>{{ sub.nombre }}</td>
+        <td>
+          <span class="badge-status {% if sub.activo %}bs-activo{% else %}bs-inactivo{% endif %}">
+            {% if sub.activo %}Activo{% else %}Inactivo{% endif %}
+          </span>
+        </td>
+        <td class="td-actions">
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#editSubsistemaModal"
+                  data-edit-url="{% url 'ingenieria:subsistema_update' sub.pk %}"
+                  data-field-sistema="{{ sub.sistema_id }}"
+                  data-field-codigo="{{ sub.codigo }}"
+                  data-field-nombre="{{ sub.nombre }}"
+                  data-field-descripcion="{{ sub.descripcion|default:'' }}"
+                  data-field-activo="{{ sub.activo }}">
+            Editar
+          </button>
+          <button class="btn btn-ghost btn-xs"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'ingenieria:subsistema_delete' sub.pk %}"
+                  data-delete-name="{{ sub.nombre }}">
+            ✕
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◑</div>
+    <div class="empty-state-text">Sin subsistemas registrados.</div>
+  </div>
+  {% endif %}
+  {% endwith %}
+</div>
+
+<!-- ── MODAL CREAR SISTEMA ── -->
+<div class="modal fade" id="createSistemaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo sistema</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'ingenieria:sistema_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código</label>
+              {{ create_form.codigo }}
+            </div>
+            <div class="form-group">
+              <label>Línea de negocio</label>
+              {{ create_form.linea_negocio }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Nombre</label>
+            {{ create_form.nombre }}
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            {{ create_form.descripcion }}
+          </div>
+          <div class="form-check" style="margin-top:4px;">
+            {{ create_form.activo }}
+            <label class="form-check-label">Activo</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar sistema</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL EDITAR SISTEMA ── -->
+<div class="modal fade" id="editSistemaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar sistema</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="editSistemaForm" action="#">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código</label>
+              <input type="text" name="codigo" class="form-control form-control-sm">
+            </div>
+            <div class="form-group">
+              <label>Línea de negocio</label>
+              {{ create_form.linea_negocio }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" name="nombre" class="form-control form-control-sm">
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            <textarea name="descripcion" class="form-control form-control-sm" rows="2"></textarea>
+          </div>
+          <div class="form-check" style="margin-top:4px;">
+            <input class="form-check-input" type="checkbox" name="activo" id="editSistemaActivo">
+            <label class="form-check-label" for="editSistemaActivo">Activo</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL CREAR SUBSISTEMA ── -->
+{% with sub_form=create_subsistema_form %}
+{% if sub_form %}
+<div class="modal fade" id="createSubsistemaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo subsistema</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'ingenieria:subsistema_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Sistema</label>
+            {{ sub_form.sistema }}
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código</label>
+              {{ sub_form.codigo }}
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px;">
+              <div class="form-check">
+                {{ sub_form.activo }}
+                <label class="form-check-label">Activo</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Nombre</label>
+            {{ sub_form.nombre }}
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            {{ sub_form.descripcion }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar subsistema</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endwith %}
+
+<!-- ── MODAL EDITAR SUBSISTEMA ── -->
+<div class="modal fade" id="editSubsistemaModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar subsistema</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="editSubsistemaForm" action="#">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Sistema</label>
+            <select name="sistema" class="form-select form-select-sm">
+              {% for s in sistemas %}
+              <option value="{{ s.pk }}">{{ s.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código</label>
+              <input type="text" name="codigo" class="form-control form-control-sm">
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px;">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="activo" id="editSubActivo">
+                <label class="form-check-label" for="editSubActivo">Activo</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" name="nombre" class="form-control form-control-sm">
+          </div>
+          <div class="form-group">
+            <label>Descripción</label>
+            <textarea name="descripcion" class="form-control form-control-sm" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Edit Sistema modal: set select value for linea_negocio
+document.getElementById('editSistemaModal').addEventListener('show.bs.modal', function(e) {
+  const btn = e.relatedTarget;
+  if (!btn) return;
+  this.querySelector('form').action = btn.dataset.editUrl;
+  const fields = ['codigo', 'nombre', 'descripcion'];
+  fields.forEach(f => {
+    const el = this.querySelector('[name=' + f + ']');
+    const key = 'field' + f.charAt(0).toUpperCase() + f.slice(1).replace(/_([a-z])/g, (_,c)=>c.toUpperCase());
+    if (el && btn.dataset[key] !== undefined) el.value = btn.dataset[key];
+  });
+  const ln = this.querySelector('[name=linea_negocio]');
+  if (ln) ln.value = btn.dataset.fieldLineaNegocio || '';
+  const chk = this.querySelector('[name=activo]');
+  if (chk) chk.checked = btn.dataset.fieldActivo === 'True';
+});
+
+// Edit Subsistema modal
+document.getElementById('editSubsistemaModal').addEventListener('show.bs.modal', function(e) {
+  const btn = e.relatedTarget;
+  if (!btn) return;
+  this.querySelector('form').action = btn.dataset.editUrl;
+  ['codigo','nombre','descripcion'].forEach(f => {
+    const el = this.querySelector('[name=' + f + ']');
+    const key = 'field' + f.charAt(0).toUpperCase() + f.slice(1).replace(/_([a-z])/g, (_,c)=>c.toUpperCase());
+    if (el && btn.dataset[key] !== undefined) el.value = btn.dataset[key];
+  });
+  const sel = this.querySelector('[name=sistema]');
+  if (sel) sel.value = btn.dataset.fieldSistema || '';
+  const chk = this.querySelector('[name=activo]');
+  if (chk) chk.checked = btn.dataset.fieldActivo === 'True';
+});
+</script>
 {% endblock %}

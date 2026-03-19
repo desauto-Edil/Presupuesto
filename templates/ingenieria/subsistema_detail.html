@@ -1,27 +1,103 @@
 {% extends "base.html" %}
-{% block title %}Subsistema: {{ subsistema.nombre }}{% endblock %}
+{% block title %}Subsistema — {{ subsistema.nombre }}{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Subsistema{% endblock %}
+{% block breadcrumb %}Ingeniería → Sistemas → {{ subsistema.sistema.nombre }} → {{ subsistema.nombre }}{% endblock %}
+
 {% block content %}
-<h2>{{ subsistema }}</h2>
-<div class="card mt-3"><div class="card-body">
-<dl class="row">
-    <dt class="col-sm-3">Codigo</dt><dd class="col-sm-9">{{ subsistema.codigo }}</dd>
-    <dt class="col-sm-3">Sistema</dt><dd class="col-sm-9">{{ subsistema.sistema }}</dd>
-    <dt class="col-sm-3">Descripcion</dt><dd class="col-sm-9">{{ subsistema.descripcion|default:"-" }}</dd>
-</dl>
-<h5>Reglas de calculo</h5>
-<table class="table table-sm table-bordered">
-    <thead class="table-secondary"><tr><th>Orden</th><th>Codigo</th><th>Nombre</th><th>Tipo</th><th>Activa</th><th>Acciones</th></tr></thead>
-    <tbody>
-    {% for r in subsistema.reglas.all %}
-    <tr>
-        <td>{{ r.orden_ejecucion }}</td><td>{{ r.codigo }}</td><td>{{ r.nombre }}</td>
-        <td>{{ r.tipo_regla }}</td><td>{% if r.activa %}Si{% else %}No{% endif %}</td>
-        <td><a href="{% url 'ingenieria:regla_detail' r.pk %}" class="btn btn-sm btn-outline-primary">Ver</a></td>
-    </tr>
-    {% empty %}<tr><td colspan="6" class="text-muted">Sin reglas.</td></tr>{% endfor %}
-    </tbody>
-</table>
-<a href="{% url 'ingenieria:subsistema_update' subsistema.pk %}" class="btn btn-secondary">Editar</a>
-<a href="{% url 'ingenieria:subsistema_list' %}" class="btn btn-outline-secondary">Volver</a>
-</div></div>
+<div class="panel">
+  <div class="panel-header">
+    <span>{{ subsistema.nombre }}</span>
+    <div style="display:flex;gap:8px;">
+      <a href="{% url 'ingenieria:subsistema_update' subsistema.pk %}" class="btn btn-ghost btn-sm">Editar</a>
+      <a href="{% url 'ingenieria:subsistema_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+    </div>
+  </div>
+
+  {# Datos del subsistema #}
+  <div style="padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div>
+      <div class="section-label">Datos del catálogo</div>
+      <table class="data-table" style="margin-top:8px;">
+        <tr><td style="color:var(--muted);width:130px;">Código</td><td><strong>{{ subsistema.codigo }}</strong></td></tr>
+        <tr><td style="color:var(--muted);">Sistema</td><td>{{ subsistema.sistema.nombre }}</td></tr>
+        <tr><td style="color:var(--muted);">Descripción</td><td>{{ subsistema.descripcion|default:"—" }}</td></tr>
+        <tr><td style="color:var(--muted);">Estado</td>
+          <td>{% if subsistema.activo %}<span class="badge-status bs-success">Activo</span>{% else %}<span class="badge-status bs-error">Inactivo</span>{% endif %}</td>
+        </tr>
+      </table>
+    </div>
+
+    {# Estado de la definición backend #}
+    <div>
+      <div class="section-label">Definición backend</div>
+      {% if sub_def %}
+      <div style="margin-top:8px;padding:12px;background:#e8f5e9;border-radius:6px;border-left:3px solid #4caf50;">
+        <div style="font-size:11.5px;font-weight:700;color:#2e7d32;">✓ Receta técnica definida</div>
+        <div style="font-size:11px;color:#388e3c;margin-top:4px;">
+          {{ sub_def.componentes|length }} componentes · {{ sub_def.variables|length }} variables de entrada
+        </div>
+      </div>
+      {% else %}
+      <div style="margin-top:8px;padding:12px;background:#fff8e1;border-radius:6px;border-left:3px solid #ff9800;">
+        <div style="font-size:11.5px;font-weight:700;color:#e65100;">⚠ Sin definición backend</div>
+        <div style="font-size:11px;color:#bf360c;margin-top:4px;">
+          El código <code>{{ subsistema.codigo }}</code> no está registrado en
+          <code>system_defs/registry.py</code>.
+          El despiece no podrá calcularse hasta que se defina.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Componentes de la receta #}
+  {% if sub_def %}
+  <div style="padding:0 20px 20px;">
+    <div class="section-label" style="margin-bottom:10px;">Componentes del conjunto</div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Código</th>
+          <th>Nombre del componente</th>
+          <th>Categoría</th>
+          <th>Unidad</th>
+          <th>Variable cascada</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for comp in sub_def.componentes %}
+        <tr>
+          <td style="color:var(--muted);">{{ comp.orden }}</td>
+          <td><code style="font-size:11px;">{{ comp.codigo }}</code></td>
+          <td>{{ comp.nombre }}</td>
+          <td><span class="badge-status bs-info">{{ comp.categoria_slug }}</span></td>
+          <td style="color:var(--muted);">{{ comp.unidad }}</td>
+          <td>{% if comp.variable_salida %}<code style="font-size:11px;color:var(--accent);">→ {{ comp.variable_salida }}</code>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="section-label" style="margin:16px 0 10px;">Variables de entrada</div>
+    <table class="data-table">
+      <thead>
+        <tr><th>Variable</th><th>Etiqueta</th><th>Unidad</th><th>Default</th><th>Descripción</th></tr>
+      </thead>
+      <tbody>
+        {% for v in sub_def.variables %}
+        <tr>
+          <td><code style="font-size:11px;">{{ v.variable }}</code></td>
+          <td>{{ v.label }}</td>
+          <td style="color:var(--muted);">{{ v.unidad|default:"—" }}</td>
+          <td style="font-variant-numeric:tabular-nums;">{{ v.default|default:"—" }}</td>
+          <td style="font-size:11px;color:var(--muted);">{{ v.descripcion|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

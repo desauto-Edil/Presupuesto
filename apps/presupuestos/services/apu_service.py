@@ -6,12 +6,11 @@ Genera APUProyecto + APULineas a partir de:
   - Variables de entrada del proyecto (mano de obra, equipos, transporte)
   - ConfiguracionAPU activa como valores predeterminados
 
-CORRECCIONES vs version original:
-  1. generar_materiales(): logging con ID de linea y motivo de omision detallado.
-  2. generar_mano_obra(): calcular_tiempo() se llama y documenta antes de leer
-     dias_trabajo, previniendo uso de valor None en la formula.
-  3. Todos los metodos loggean PS id y APU id para trazabilidad.
-  4. finalizar(): logging de totales calculados.
+Arquitectura agnostica:
+  - No hay referencias a sistemas concretos (PowerGrip, Fachada, etc.)
+  - _get_total_unidades() busca la cantidad de referencia en parametros_entrada
+    usando una lista de claves por prioridad.
+  - cuadrilla_personas se lee desde APUProyecto (editable por el usuario).
 """
 
 from __future__ import annotations
@@ -24,9 +23,23 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
+# Claves buscadas en parametros_entrada para determinar la cantidad de referencia
+# del sistema (p. ej. total de unidades a instalar). Se usan en orden de prioridad.
+_CLAVES_UNIDAD_REFERENCIA = (
+    "total_powergrip",
+    "total_unidades",
+    "cantidad",
+    "n_apoyos",
+    "ml_fachada",
+    "m2",
+    "area_m2",
+)
+
 
 class APUService:
     """Motor de APU automatico (Nivel 4)."""
+
+    # ── Constructor ───────────────────────────────────────────────────────────
 
     def __init__(self, proyecto_sistema):
         from apps.presupuestos.models import APUProyecto, ConfiguracionAPU
@@ -50,13 +63,58 @@ class APUService:
             self.cfg.nombre,
         )
 
+    # ── Classmethod de entrada ────────────────────────────────────────────────
+
+    @classmethod
+    def generar(cls, proyecto_sistema) -> "APUProyecto":
+        """
+        Punto de entrada principal.
+        Genera materiales, finaliza y devuelve el APUProyecto actualizado.
+        """
+        svc = cls(proyecto_sistema)
+        svc.generar_materiales()
+        svc.finalizar()
+        return svc.apu
+
+    # ── Helper: cantidad de referencia ────────────────────────────────────────
+
+    def _get_total_unidades(self) -> float:
+        """
+        Determina la cantidad de referencia del sistema para calcular rendimientos.
+
+        Busca en parametros_entrada usando _CLAVES_UNIDAD_REFERENCIA en orden.
+        Si ninguna clave tiene valor positivo, cae back al area_total_m2 del proyecto.
+        Nunca devuelve 0 ni negativo (minimo 1.0).
+        """
+        params = self.ps.parametros_entrada or {}
+        for clave in _CLAVES_UNIDAD_REFERENCIA:
+            val = params.get(clave)
+            if val:
+                try:
+                    total = float(val)
+                    if total > 0:
+                        logger.debug(
+                            "[APUService] _get_total_unidades: clave='%s' valor=%.4f (PS %s)",
+                            clave, total, self.ps.pk,
+                        )
+                        return total
+                except (ValueError, TypeError):
+                    pass
+        fallback = float(self.ps.proyecto.area_total_m2 or 1) or 1.0
+        logger.debug(
+            "[APUService] _get_total_unidades: fallback area_m2=%.4f (PS %s)",
+            fallback, self.ps.pk,
+        )
+        return fallback
+
+    # ── Generadores de lineas ─────────────────────────────────────────────────
+
     @transaction.atomic
     def generar_materiales(self) -> List[dict]:
         """
         Genera APULineas tipo MATERIALES desde las DespieceLineas resueltas.
         Omite lineas pendientes_seleccion con advertencia.
-        rendimiento = Total_PowerGrip / cantidad_final
-        costo_unitario = precio_snapshot * IVA_factor
+        rendimiento = total_unidades / cantidad_final
         """
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
@@ -64,7 +122,7 @@ class APUService:
         lineas_despiece = self.ps.despiece_lineas.select_related(
             "producto", "producto__unidad", "categoria_producto",
         )
-        tp      = float(self.ps.total_powergip or 1) or 1
+        tp      = self._get_total_unidades()
         creadas = []
 
         for dl in lineas_despiece:
@@ -83,9 +141,9 @@ class APUService:
                 )
                 continue
 
-            nombre   = dl.producto.nombre
-            precio   = float(dl.precio_snapshot or 0)
-            cantidad = float(dl.cantidad_final)
+            nombre      = dl.producto.nombre
+            precio      = float(dl.precio_snapshot or 0)
+            cantidad    = float(dl.cantidad_final)
             rendimiento = (tp / cantidad) if cantidad > 0 else 1.0
 
             logger.debug(
@@ -98,22 +156,22 @@ class APUService:
                 tipo=TipoAPU.MATERIALES,
                 despiece_linea=dl,
                 defaults={
-                    "descripcion":      nombre,
-                    "rendimiento":      Decimal(str(round(rendimiento, 6))),
+                    "descripcion":       nombre,
+                    "rendimiento":       Decimal(str(round(rendimiento, 6))),
                     "precio_referencia": Decimal(str(precio)),
-                    "iva_aplicado":     self.apu.aplica_iva,
-                    "editable":         False,
+                    "iva_aplicado":      self.apu.aplica_iva,
+                    "editable":          False,
                 },
             )
             apu_linea.calcular()
             creadas.append({
-                "descripcion":   nombre,
-                "rendimiento":   round(rendimiento, 4),
-                "precio":        precio,
+                "descripcion":    nombre,
+                "rendimiento":    round(rendimiento, 4),
+                "precio":         precio,
                 "costo_unitario": float(apu_linea.costo_unitario),
                 "valor_unitario": float(apu_linea.valor_unitario),
-                "costo_total":   float(apu_linea.costo_total),
-                "valor_total":   float(apu_linea.valor_total),
+                "costo_total":    float(apu_linea.costo_total),
+                "valor_total":    float(apu_linea.valor_total),
             })
 
         logger.info(
@@ -132,19 +190,18 @@ class APUService:
     ) -> dict:
         """
         Genera APULineas de tipo MANO_DE_OBRA.
-        dias_trabajo = Total_PowerGrip / (personas * 40) — calculado y persistido
-        por calcular_tiempo() antes de usarse.
+        dias_trabajo = total_unidades / (personas * 40) — calculado por calcular_tiempo().
+        cuadrilla_personas se lee desde self.apu (campo editable en APUProyecto).
         """
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
-        # CORRECCION: calcular_tiempo() se llama primero y guarda dias_trabajo en DB.
-        # Luego self.apu.dias_trabajo tiene el valor correcto (no None).
+        # calcular_tiempo() guarda dias_trabajo en DB; luego refrescamos.
         self.apu.calcular_tiempo()
         self.apu.refresh_from_db(fields=["dias_trabajo", "tiempo_estimado_meses", "rendimiento_und_dia"])
 
-        tp      = float(self.ps.total_powergip or 1) or 1
-        personas = float(self.ps.cuadrilla_personas or 1) or 1
+        tp      = self._get_total_unidades()
+        personas = float(self.apu.cuadrilla_personas or 1) or 1
         dias    = float(self.apu.dias_trabajo or (tp / (personas * 40)))
         rend    = float(self.apu.rendimiento_und_dia or 0)
         aiu     = 1 + float(self.apu.aiu_contratista_pct) / 100
@@ -176,23 +233,23 @@ class APUService:
                 tipo=TipoAPU.MANO_DE_OBRA,
                 descripcion=desc,
                 defaults={
-                    "rendimiento":      Decimal("1"),
+                    "rendimiento":       Decimal("1"),
                     "precio_referencia": Decimal(str(round(cu, 6))),
-                    "iva_aplicado":     False,
-                    "editable":         True,
+                    "iva_aplicado":      False,
+                    "editable":          True,
                 },
             )
             apu_linea.calcular()
             creadas.append({
-                "descripcion":   desc,
+                "descripcion":    desc,
                 "costo_unitario": float(apu_linea.costo_unitario),
             })
             logger.debug("[APUService] MO '%s' | cu=%.6f", desc, cu)
 
         return {
-            "mano_obra":    creadas,
-            "dias":          dias,
-            "tiempo_meses":  float(self.apu.tiempo_estimado_meses or 0),
+            "mano_obra":   creadas,
+            "dias":         dias,
+            "tiempo_meses": float(self.apu.tiempo_estimado_meses or 0),
         }
 
     @transaction.atomic
@@ -201,7 +258,7 @@ class APUService:
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
-        tp      = float(self.ps.total_powergip or 1) or 1
+        tp      = self._get_total_unidades()
         creadas = []
         for item in items:
             precio = float(item.get("precio_total", 0))
@@ -211,15 +268,15 @@ class APUService:
                 tipo=TipoAPU.HERRAMIENTAS_EQUIPOS,
                 descripcion=item["descripcion"],
                 defaults={
-                    "rendimiento":      Decimal("1"),
+                    "rendimiento":       Decimal("1"),
                     "precio_referencia": Decimal(str(round(cu, 6))),
-                    "iva_aplicado":     False,
-                    "editable":         True,
+                    "iva_aplicado":      False,
+                    "editable":          True,
                 },
             )
             apu_linea.calcular()
             creadas.append({
-                "descripcion":   item["descripcion"],
+                "descripcion":    item["descripcion"],
                 "costo_unitario": float(apu_linea.costo_unitario),
             })
         logger.info(
@@ -230,21 +287,21 @@ class APUService:
 
     @transaction.atomic
     def generar_transporte(self, costo_total_transporte: float) -> dict:
-        """CU_transporte = costo_total / Total_PowerGrip"""
+        """CU_transporte = costo_total / total_unidades"""
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
-        tp  = float(self.ps.total_powergip or 1) or 1
+        tp  = self._get_total_unidades()
         cu  = costo_total_transporte / tp
         apu_linea, _ = APULinea.objects.update_or_create(
             apu=self.apu,
             tipo=TipoAPU.TRANSPORTE,
             descripcion="Transporte",
             defaults={
-                "rendimiento":      Decimal("1"),
+                "rendimiento":       Decimal("1"),
                 "precio_referencia": Decimal(str(round(cu, 6))),
-                "iva_aplicado":     False,
-                "editable":         True,
+                "iva_aplicado":      False,
+                "editable":          True,
             },
         )
         apu_linea.calcular()
@@ -256,21 +313,21 @@ class APUService:
 
     @transaction.atomic
     def generar_administracion(self, costo_total_admin: float) -> dict:
-        """CU_admin = costo_total / Total_PowerGrip"""
+        """CU_admin = costo_total / total_unidades"""
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
-        tp  = float(self.ps.total_powergip or 1) or 1
+        tp  = self._get_total_unidades()
         cu  = costo_total_admin / tp
         apu_linea, _ = APULinea.objects.update_or_create(
             apu=self.apu,
             tipo=TipoAPU.ADMINISTRACION,
             descripcion="Administracion",
             defaults={
-                "rendimiento":      Decimal("1"),
+                "rendimiento":       Decimal("1"),
                 "precio_referencia": Decimal(str(round(cu, 6))),
-                "iva_aplicado":     False,
-                "editable":         True,
+                "iva_aplicado":      False,
+                "editable":          True,
             },
         )
         apu_linea.calcular()
@@ -279,6 +336,8 @@ class APUService:
             self.apu.pk, costo_total_admin, cu,
         )
         return {"descripcion": "Administracion", "costo_unitario": float(apu_linea.costo_unitario)}
+
+    # ── Cierre ────────────────────────────────────────────────────────────────
 
     def finalizar(self) -> dict:
         """Recalcula totales del APU y avanza estado del proyecto a APU en proceso."""
@@ -303,10 +362,10 @@ class APUService:
             "total_costo":       float(self.apu.total_costo),
             "total_valor_venta": float(self.apu.total_valor_venta),
             "subtotales": {
-                "materiales":   float(self.apu.subtotal_materiales),
-                "herramientas": float(self.apu.subtotal_herramientas),
-                "transporte":   float(self.apu.subtotal_transporte),
-                "mano_obra":    float(self.apu.subtotal_mano_obra),
+                "materiales":     float(self.apu.subtotal_materiales),
+                "herramientas":   float(self.apu.subtotal_herramientas),
+                "transporte":     float(self.apu.subtotal_transporte),
+                "mano_obra":      float(self.apu.subtotal_mano_obra),
                 "administracion": float(self.apu.subtotal_administracion),
             },
         }

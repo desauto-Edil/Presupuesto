@@ -11,9 +11,8 @@ class DespieceLineaInline(admin.TabularInline):
 
 @admin.register(ProyectoSistema)
 class ProyectoSistemaAdmin(admin.ModelAdmin):
-    list_display = ("proyecto", "sistema", "subsistema", "total_powergip", "cuadrilla_personas")
+    list_display = ("proyecto", "sistema", "subsistema", "parametros_entrada")
     list_filter = ("sistema",)
-    readonly_fields = ("created_at", "updated_at")
     inlines = [DespieceLineaInline]
 
 

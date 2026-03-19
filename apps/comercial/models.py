@@ -193,18 +193,7 @@ class Proyecto(models.Model):
         if self.estado == EstadoProyecto.SOLICITUD:
             self.estado = EstadoProyecto.DESPIECE
             self.save(update_fields=["estado", "updated_at"])
-
-#    def avanzar_a_revision_compras(self):
-#        if self.estado == EstadoProyecto.DESPIECE:
-#            self.estado = EstadoProyecto.EN_REVISION_COMPRAS
-#            self.save(update_fields=["estado", "updated_at"])
-
-#    def volver_de_compras(self):
-#        if self.estado == EstadoProyecto.EN_REVISION_COMPRAS:
-#            self.estado = EstadoProyecto.DESPIECE
-#            self.motivo_devolucion = None
-#            self.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
-
+            
     def avanzar_a_despiece_validado(self):
         if self.estado in (EstadoProyecto.DESPIECE, EstadoProyecto.EN_REVISION_COMPRAS):
             self.estado = EstadoProyecto.DESPIECE_VALIDADO

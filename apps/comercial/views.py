@@ -4,12 +4,14 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto
 from .forms import ClienteForm, ContactoClienteForm, TipoProyectoForm, SolicitudForm, ProyectoForm
+from apps.common.mixins import WithCreateFormMixin
 
 
 # ── Clientes ────────────────────────────────────────────────────────────────
 
-class ClienteListView(ListView):
+class ClienteListView(WithCreateFormMixin, ListView):
     model = Cliente
+    form_class = ClienteForm
     template_name = "comercial/cliente_list.html"
     context_object_name = "clientes"
     ordering = ["razon_social"]
@@ -101,8 +103,9 @@ class TipoProyectoDeleteView(DeleteView):
 
 # ── Solicitudes ──────────────────────────────────────────────────────────────
 
-class SolicitudListView(ListView):
+class SolicitudListView(WithCreateFormMixin, ListView):
     model = Solicitud
+    form_class = SolicitudForm
     template_name = "comercial/solicitud_list.html"
     context_object_name = "solicitudes"
     ordering = ["-created_at"]
