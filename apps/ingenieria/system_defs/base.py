@@ -62,15 +62,15 @@ class ComponenteDef:
             orden=2,
         )
     """
-    codigo:              str
-    nombre:              str
-    categoria_slug:      str                      # Debe coincidir con CategoriaProducto.nombre
-    formula:             Callable[[dict], float]  # fn(contexto) → cantidad
-    unidad:              str   = "und"
-    orden:               int   = 0
-    variable_salida:     Optional[str] = None     # Inyecta el resultado al contexto
-    pendiente_seleccion: bool  = True             # True = usuario elige producto de la categoría
-    descripcion:         str   = ""
+    codigo: str
+    nombre: str
+    categoria_slug: str # Debe coincidir con CategoriaProducto.nombre
+    formula: Callable[[dict], float] # fn(contexto) → cantidad
+    unidad: str = "und"
+    orden: int = 0
+    variable_salida: Optional[str] = None # Inyecta el resultado al contexto
+    pendiente_seleccion: bool = True # True = usuario elige producto de la categoría
+    descripcion: str = ""
 
 
 @dataclass
@@ -84,10 +84,10 @@ class SubsistemaDef:
     Las variables se muestran como formulario al presupuestador.
     Los componentes se ejecutan en orden ascendente de `ComponenteDef.orden`.
     """
-    codigo:      str
-    nombre:      str
-    variables:   list[VariableRequerida]  = field(default_factory=list)
-    componentes: list[ComponenteDef]      = field(default_factory=list)
+    codigo: str
+    nombre: str
+    variables: list[VariableRequerida] = field(default_factory=list)
+    componentes: list[ComponenteDef] = field(default_factory=list)
 
 
 @dataclass
@@ -97,6 +97,6 @@ class SistemaDef:
 
     codigo debe coincidir con Sistema.codigo en la DB.
     """
-    codigo:      str
-    nombre:      str
+    codigo: str
+    nombre: str
     subsistemas: list[SubsistemaDef] = field(default_factory=list)

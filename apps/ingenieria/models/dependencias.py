@@ -1,7 +1,7 @@
 """
 apps/ingenieria/models/dependencias.py
 
-⚠️  LEGADO — NO USAR EN FLUJO OPERATIVO NUEVO  ⚠️
+
 
 DependenciaTecnica existía para inyectar componentes automáticos via DB.
 Ese flujo ha sido reemplazado por las definiciones Python en:

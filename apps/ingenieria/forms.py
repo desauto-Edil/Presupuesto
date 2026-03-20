@@ -15,11 +15,11 @@ class SistemaForm(forms.ModelForm):
         model = Sistema
         fields = ["codigo", "nombre", "linea_negocio", "descripcion", "activo"]
         widgets = {
-            "codigo":       forms.TextInput(attrs={"class": "form-control"}),
-            "nombre":       forms.TextInput(attrs={"class": "form-control"}),
+            "codigo": forms.TextInput(attrs={"class": "form-control"}),
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
             "linea_negocio": forms.Select(attrs={"class": "form-select"}),
-            "descripcion":  forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-            "activo":       forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
 
@@ -28,9 +28,9 @@ class SubsistemaForm(forms.ModelForm):
         model = Subsistema
         fields = ["sistema", "codigo", "nombre", "descripcion", "activo"]
         widgets = {
-            "sistema":     forms.Select(attrs={"class": "form-select"}),
-            "codigo":      forms.TextInput(attrs={"class": "form-control"}),
-            "nombre":      forms.TextInput(attrs={"class": "form-control"}),
+            "sistema": forms.Select(attrs={"class": "form-select"}),
+            "codigo": forms.TextInput(attrs={"class": "form-control"}),
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
             "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-            "activo":      forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
