@@ -34,22 +34,23 @@
     <tbody>
       {% for s in solicitudes %}
       <tr>
-        <td class="td-mono">{{ s.consecutivo }}</td>
+        <td class="td-mono" style="color:var(--brand-violet);font-weight:600;">{{ s.consecutivo }}</td>
         <td>{{ s.cliente.razon_social }}</td>
         <td>{{ s.nombre }}</td>
         <td>{{ s.fecha_entrega|date:"d/m/Y"|default:"—" }}</td>
         <td>
           <span class="badge-status
-            {% if s.estado == 'NUEVA' %}bs-pendiente
-            {% elif s.estado == 'EN_PROCESO' %}bs-despiece
+            {% if s.estado == 'EN_GESTION' %}bs-pendiente
             {% elif s.estado == 'COTIZADA' %}bs-apu
-            {% elif s.estado == 'CERRADA' %}bs-cerrado
+            {% elif s.estado == 'APROBADA' %}bs-validado
+            {% elif s.estado == 'RECHAZADA' or s.estado == 'CANCELADA' %}bs-cerrado
             {% else %}bs-inactivo{% endif %}">
             {{ s.get_estado_display }}
           </span>
         </td>
         <td style="font-size:12px;color:var(--ink-soft)">{{ s.created_at|date:"d/m/Y" }}</td>
         <td class="td-actions">
+          <a href="{% url 'comercial:solicitud_detail' s.pk %}" class="btn btn-ghost btn-xs">Ver</a>
           <a href="{% url 'comercial:solicitud_update' s.pk %}" class="btn btn-ghost btn-xs">Editar</a>
           <button class="btn btn-ghost btn-xs"
                   data-bs-toggle="modal" data-bs-target="#deleteModal"
@@ -74,26 +75,40 @@
 <div class="modal fade" id="createSolicitudModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Nueva solicitud</h5>
+      <div class="modal-header" style="border-left:4px solid var(--brand-violet);border-radius:var(--radius) 0 0 0;">
+        <h5 class="modal-title" style="color:var(--brand-violet);">Nueva solicitud</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
+
       <form method="post" action="{% url 'comercial:solicitud_create' %}">
         {% csrf_token %}
         <div class="modal-body">
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Consecutivo</label>
-              {{ create_form.consecutivo }}
+
+          <!-- ── Campos del sistema — solo informativo, no editables ── -->
+          <div style="background:rgba(86,83,148,0.06);border:1px solid rgba(86,83,148,0.15);
+                      border-radius:8px;padding:12px 16px;margin-bottom:18px;display:flex;gap:24px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+                          color:rgba(14,17,23,0.4);margin-bottom:3px;">Consecutivo</div>
+              <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;
+                          color:var(--brand-violet);">Pendiente</div>
             </div>
-            <div class="form-group">
-              <label>Estado</label>
-              {{ create_form.estado }}
+            <div>
+              <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+                          color:rgba(14,17,23,0.4);margin-bottom:3px;">Estado inicial</div>
+              <span class="badge-status bs-pendiente">En gestión</span>
+            </div>
+            <div>
+              <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+                          color:rgba(14,17,23,0.4);margin-bottom:3px;">Creado por</div>
+              <div style="font-size:12.5px;color:var(--ink-soft);">Usuario activo</div>
             </div>
           </div>
+
+          <!-- ── Campos editables ── -->
           <div class="form-grid-2">
             <div class="form-group">
-              <label>Cliente</label>
+              <label>Cliente <span style="color:var(--brand-red)">*</span></label>
               {{ create_form.cliente }}
             </div>
             <div class="form-group">
@@ -101,34 +116,34 @@
               {{ create_form.contacto }}
             </div>
           </div>
+
           <div class="form-group">
-            <label>Nombre del proyecto</label>
+            <label>Nombre del proyecto / requerimiento <span style="color:var(--brand-red)">*</span></label>
             {{ create_form.nombre }}
           </div>
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Creado por</label>
-              {{ create_form.creado_por }}
-            </div>
-            <div class="form-group">
-              <label>Fecha entrega esperada</label>
-              {{ create_form.fecha_entrega }}
-            </div>
+
+          <div class="form-group">
+            <label>Fecha de entrega esperada</label>
+            {{ create_form.fecha_entrega }}
           </div>
+
           <div class="form-group">
             <label>Descripción</label>
             {{ create_form.descripcion }}
           </div>
+
           <div class="form-group">
             <label>Observaciones</label>
             {{ create_form.observaciones }}
           </div>
+
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary btn-sm">Guardar solicitud</button>
+          <button type="submit" class="btn btn-primary btn-sm">Registrar solicitud</button>
         </div>
       </form>
+
     </div>
   </div>
 </div>

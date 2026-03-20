@@ -1,17 +1,178 @@
 {% extends "base.html" %}
-{% block title %}Solicitud: {{ solicitud.consecutivo }}{% endblock %}
+{% block title %}{{ solicitud.consecutivo }}{% endblock %}
+{% block nav_solicitudes %}active{% endblock %}
+{% block page_title %}Solicitud{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'comercial:solicitud_list' %}" style="color:inherit;text-decoration:none;">Solicitudes</a>
+  → {{ solicitud.consecutivo }}
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'comercial:solicitud_update' solicitud.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
+{% endblock %}
+
 {% block content %}
-<h2>{{ solicitud.consecutivo }} — {{ solicitud.nombre }}</h2>
-<div class="card mt-3"><div class="card-body">
-<dl class="row">
-    <dt class="col-sm-3">Cliente</dt><dd class="col-sm-9">{{ solicitud.cliente }}</dd>
-    <dt class="col-sm-3">Contacto</dt><dd class="col-sm-9">{{ solicitud.contacto|default:"-" }}</dd>
-    <dt class="col-sm-3">Estado</dt><dd class="col-sm-9"><span class="badge bg-secondary">{{ solicitud.estado }}</span></dd>
-    <dt class="col-sm-3">Fecha entrega</dt><dd class="col-sm-9">{{ solicitud.fecha_entrega|default:"-" }}</dd>
-    <dt class="col-sm-3">Descripcion</dt><dd class="col-sm-9">{{ solicitud.descripcion|default:"-" }}</dd>
-    <dt class="col-sm-3">Observaciones</dt><dd class="col-sm-9">{{ solicitud.observaciones|default:"-" }}</dd>
-</dl>
-<a href="{% url 'comercial:solicitud_update' solicitud.pk %}" class="btn btn-secondary">Editar</a>
-<a href="{% url 'comercial:solicitud_list' %}" class="btn btn-outline-secondary">Volver</a>
-</div></div>
+
+<!-- ── CABECERA ── -->
+<div class="project-header fade-up">
+  <div>
+    <div class="project-id">{{ solicitud.consecutivo }}</div>
+    <div class="project-name">{{ solicitud.nombre }}</div>
+    <div class="project-client">{{ solicitud.cliente.razon_social }}</div>
+  </div>
+
+  <div class="project-divider"></div>
+
+  <div>
+    <div class="project-meta-label">Estado</div>
+    <span class="badge-status
+      {% if solicitud.estado == 'EN_GESTION' %}bs-pendiente
+      {% elif solicitud.estado == 'COTIZADA' %}bs-apu
+      {% elif solicitud.estado == 'APROBADA' %}bs-validado
+      {% elif solicitud.estado == 'RECHAZADA' or solicitud.estado == 'CANCELADA' %}bs-cerrado
+      {% else %}bs-inactivo{% endif %}"
+      style="font-size:12px;padding:4px 12px;">
+      {{ solicitud.get_estado_display }}
+    </span>
+    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:4px;">Solo el sistema lo modifica</div>
+  </div>
+
+  {% if solicitud.fecha_entrega %}
+  <div class="project-divider"></div>
+  <div>
+    <div class="project-meta-label">Fecha entrega</div>
+    <div class="project-meta-value">{{ solicitud.fecha_entrega|date:"d/m/Y" }}</div>
+  </div>
+  {% endif %}
+
+  <div class="project-divider"></div>
+  <div>
+    <div class="project-meta-label">Registrada</div>
+    <div class="project-meta-value" style="font-size:13px;">{{ solicitud.created_at|date:"d/m/Y" }}</div>
+  </div>
+
+  <div class="project-status-chip">🔒 {{ solicitud.consecutivo }}</div>
+</div>
+
+<!-- ── CONTENIDO ── -->
+<div style="display:grid;grid-template-columns:1fr 300px;gap:14px;" class="fade-up-1">
+
+  <!-- Columna principal -->
+  <div style="display:flex;flex-direction:column;gap:14px;">
+
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Descripción</span></div>
+      <div style="padding:16px 20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;">
+        {{ solicitud.descripcion|default:"Sin descripción." }}
+      </div>
+    </div>
+
+    {% if solicitud.observaciones %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Observaciones</span></div>
+      <div style="padding:16px 20px;font-size:13px;color:var(--ink-soft);line-height:1.6;">
+        {{ solicitud.observaciones }}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if solicitud.proyectos.exists %}
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Proyectos vinculados</span>
+        <span class="text-muted" style="font-size:12px;">{{ solicitud.proyectos.count }}</span>
+      </div>
+      <table class="imp-table">
+        <thead>
+          <tr>
+            <th>Consecutivo</th><th>Nombre</th><th>Estado</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in solicitud.proyectos.all %}
+          <tr>
+            <td class="td-mono" style="color:var(--brand-violet);font-weight:600;">{{ p.consecutivo }}</td>
+            <td>{{ p.nombre }}</td>
+            <td><span class="badge-status bs-solicitud">{{ p.get_estado_display }}</span></td>
+            <td class="td-actions">
+              <a href="{% url 'comercial:proyecto_detail' p.pk %}" class="btn btn-ghost btn-xs">Ver</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Columna lateral: metadatos del sistema -->
+  <div style="display:flex;flex-direction:column;gap:14px;">
+
+    <!-- Panel datos del sistema -->
+    <div class="panel">
+      <div class="panel-header accent-top-violet" style="border-radius:var(--radius) var(--radius) 0 0;">
+        <span class="panel-title">Datos del sistema</span>
+        <span style="font-size:10px;color:rgba(14,17,23,0.35);">🔒 Solo lectura</span>
+      </div>
+
+      <div class="summary-line">
+        <span class="s-label">Consecutivo</span>
+        <span class="s-value" style="font-family:'Courier New',monospace;
+              font-size:12px;color:var(--brand-violet);">{{ solicitud.consecutivo }}</span>
+      </div>
+
+      <div class="summary-line">
+        <span class="s-label">Estado</span>
+        <span class="badge-status
+          {% if solicitud.estado == 'EN_GESTION' %}bs-pendiente
+          {% elif solicitud.estado == 'COTIZADA' %}bs-apu
+          {% elif solicitud.estado == 'APROBADA' %}bs-validado
+          {% else %}bs-cerrado{% endif %}">
+          {{ solicitud.get_estado_display }}
+        </span>
+      </div>
+
+      <div class="summary-line">
+        <span class="s-label">Creado por</span>
+        <span class="s-value" style="font-size:12px;">{{ solicitud.creado_por|default:"—" }}</span>
+      </div>
+
+      <div class="summary-line">
+        <span class="s-label">Fecha registro</span>
+        <span class="s-value" style="font-size:12px;">{{ solicitud.created_at|date:"d/m/Y" }}</span>
+      </div>
+
+      <div class="summary-line">
+        <span class="s-label">Actualizado</span>
+        <span class="s-value" style="font-size:12px;">{{ solicitud.updated_at|date:"d/m/Y H:i" }}</span>
+      </div>
+    </div>
+
+    <!-- Contacto -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Contacto</span></div>
+      {% if solicitud.contacto %}
+      <div style="padding:14px 18px;">
+        <div style="font-weight:500;font-size:13.5px;">{{ solicitud.contacto.nombre }}</div>
+        {% if solicitud.contacto.cargo %}
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">{{ solicitud.contacto.cargo }}</div>
+        {% endif %}
+        {% if solicitud.contacto.email %}
+        <div style="font-size:12px;color:var(--brand-violet);margin-top:4px;">{{ solicitud.contacto.email }}</div>
+        {% endif %}
+        {% if solicitud.contacto.telefono %}
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">{{ solicitud.contacto.telefono }}</div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="empty-state" style="padding:20px;">
+        <div class="empty-state-text">Sin contacto asignado.</div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
 {% endblock %}

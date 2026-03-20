@@ -113,7 +113,16 @@ class Solicitud(models.Model):
         return f"{self.consecutivo} — {self.nombre}"
 
     def save(self, *args, **kwargs):
-        """Auto-asigna el contacto principal si no fue especificado."""
+        """
+        Campos controlados por el sistema — no editables por el usuario:
+          · consecutivo : se genera automáticamente en creación (SLD-YYYY-NNNN).
+          · estado      : solo cambia vía transiciones explícitas del negocio.
+          · creado_por  : se asigna en la vista; nunca se expone en formularios.
+        """
+        # ── Consecutivo automático (solo en creación) ──────────────────────
+        if not self.pk and not self.consecutivo:
+            self.consecutivo = self.__class__.siguiente_consecutivo()
+        # ── Contacto por defecto ───────────────────────────────────────────
         if not self.contacto_id and self.cliente_id:
             self.contacto = self.cliente.contacto_principal
         super().save(*args, **kwargs)
@@ -178,6 +187,17 @@ class Proyecto(models.Model):
 
     def __str__(self):
         return f"{self.consecutivo} — {self.nombre}"
+
+    def save(self, *args, **kwargs):
+        """
+        Campos controlados por el sistema — no editables por el usuario:
+          · consecutivo : se genera automáticamente en creación (PRY-YYYY-NNNN).
+          · estado      : solo cambia vía métodos de transición del modelo.
+          · creado_por  : se asigna en la vista; nunca se expone en formularios.
+        """
+        if not self.pk and not self.consecutivo:
+            self.consecutivo = self.__class__.siguiente_consecutivo()
+        super().save(*args, **kwargs)
 
     @classmethod
     def siguiente_consecutivo(cls):

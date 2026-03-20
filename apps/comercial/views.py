@@ -1,10 +1,21 @@
 """apps/comercial/views.py — Vistas CRUD para el módulo comercial."""
 
+from django.http import HttpResponseRedirect
 from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto
 from .forms import ClienteForm, ContactoClienteForm, TipoProyectoForm, SolicitudForm, ProyectoForm
 from apps.common.mixins import WithCreateFormMixin
+
+
+def _usuario_sistema(request):
+    """Retorna el UsuarioSistema del request, o None si no hay sesión activa."""
+    from apps.usuarios.models import UsuarioSistema
+    if hasattr(request, "usuario_sistema"):
+        return request.usuario_sistema
+    if getattr(request, "user", None) and request.user.is_authenticated:
+        return UsuarioSistema.objects.filter(email=request.user.email).first()
+    return None
 
 
 # ── Clientes ────────────────────────────────────────────────────────────────
@@ -123,12 +134,36 @@ class SolicitudCreateView(CreateView):
     template_name = "comercial/solicitud_form.html"
     success_url = reverse_lazy("comercial:solicitud_list")
 
+    def form_valid(self, form):
+        """
+        Asigna campos del sistema antes de persistir:
+          · consecutivo  → model.save() lo genera automáticamente.
+          · estado       → default EN_GESTION (definido en el modelo).
+          · creado_por   → se resuelve aquí desde el request; nunca del form.
+        """
+        self.object = form.save(commit=False)
+        self.object.creado_por = _usuario_sistema(self.request)
+        self.object.save()
+        form.save_m2m()
+        return HttpResponseRedirect(self.get_success_url())
+
 
 class SolicitudUpdateView(UpdateView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_form.html"
     success_url = reverse_lazy("comercial:solicitud_list")
+
+    def form_valid(self, form):
+
+        self.object = form.save(commit=False)
+        original = Solicitud.objects.get(pk=self.object.pk)
+        self.object.consecutivo = original.consecutivo
+        self.object.estado = original.estado
+        self.object.creado_por_id = original.creado_por_id
+        self.object.save()
+        form.save_m2m()
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class SolicitudDeleteView(DeleteView):
@@ -158,12 +193,31 @@ class ProyectoCreateView(CreateView):
     template_name = "comercial/proyecto_form.html"
     success_url = reverse_lazy("comercial:proyecto_list")
 
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.creado_por = _usuario_sistema(self.request)
+        # consecutivo y estado: gestionados en model.save() y default del modelo
+        self.object.save()
+        form.save_m2m()
+        return HttpResponseRedirect(self.get_success_url())
+
 
 class ProyectoUpdateView(UpdateView):
     model = Proyecto
     form_class = ProyectoForm
     template_name = "comercial/proyecto_form.html"
     success_url = reverse_lazy("comercial:proyecto_list")
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        # Protección: restaurar campos del sistema desde la BD
+        original = Proyecto.objects.get(pk=self.object.pk)
+        self.object.consecutivo = original.consecutivo
+        self.object.estado = original.estado
+        self.object.creado_por_id = original.creado_por_id
+        self.object.save()
+        form.save_m2m()
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class ProyectoDeleteView(DeleteView):

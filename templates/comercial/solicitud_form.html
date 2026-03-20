@@ -1,11 +1,138 @@
 {% extends "base.html" %}
-{% block title %}{% if object %}Editar{% else %}Crear{% endif %} Solicitud{% endblock %}
+{% block title %}{% if object %}Editar solicitud{% else %}Nueva solicitud{% endif %}{% endblock %}
+{% block nav_solicitudes %}active{% endblock %}
+{% block page_title %}{% if object %}Editar solicitud{% else %}Nueva solicitud{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'comercial:solicitud_list' %}" style="color:inherit;text-decoration:none;">Solicitudes</a>
+  → {% if object %}{{ object.consecutivo }}{% else %}Nueva{% endif %}
+{% endblock %}
+
 {% block content %}
-<h2>{% if object %}Editar solicitud{% else %}Nueva solicitud{% endif %}</h2>
-<div class="card mt-3"><div class="card-body">
-<form method="post">{% csrf_token %}
-{% for f in form %}<div class="mb-3"><label class="form-label">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors }}</div>{% endif %}</div>{% endfor %}
-<button type="submit" class="btn btn-primary">Guardar</button>
-<a href="{% url 'comercial:solicitud_list' %}" class="btn btn-secondary">Volver</a>
-</form></div></div>
+<div class="form-page-card fade-up">
+
+  <!-- ── ENCABEZADO ── -->
+  <div class="form-page-header accent-top-violet">
+    <div>
+      <div class="form-page-title">
+        {% if object %}Editar solicitud{% else %}Nueva solicitud{% endif %}
+      </div>
+      {% if object %}
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
+        Consecutivo, estado y usuario creador son controlados por el sistema.
+      </div>
+      {% endif %}
+    </div>
+    <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+  </div>
+
+  <div class="form-page-body">
+
+    <!-- ── CAMPOS DEL SISTEMA (solo lectura) ── -->
+    {% if object %}
+    <div style="background:rgba(86,83,148,0.06);border:1px solid rgba(86,83,148,0.15);
+                border-radius:8px;padding:14px 18px;margin-bottom:22px;">
+      <div class="section-heading" style="margin-bottom:12px;">Campos del sistema</div>
+      <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start;">
+
+        <!-- Consecutivo -->
+        <div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+                      color:rgba(14,17,23,0.4);margin-bottom:5px;">Consecutivo</div>
+          <input type="text" class="form-control" value="{{ object.consecutivo }}" disabled
+                 style="max-width:150px;font-family:'Syne',sans-serif;font-weight:700;
+                        color:var(--brand-violet);background:rgba(86,83,148,0.05);">
+        </div>
+
+        <!-- Estado -->
+        <div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+                      color:rgba(14,17,23,0.4);margin-bottom:5px;">Estado</div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:8px;">
+            <span class="badge-status
+              {% if object.estado == 'EN_GESTION' %}bs-pendiente
+              {% elif object.estado == 'COTIZADA' %}bs-apu
+              {% elif object.estado == 'APROBADA' %}bs-validado
+              {% elif object.estado == 'RECHAZADA' or object.estado == 'CANCELADA' %}bs-cerrado
+              {% else %}bs-inactivo{% endif %}">
+              {{ object.get_estado_display }}
+            </span>
+          </div>
+          <div style="font-size:10px;color:rgba(14,17,23,0.35);margin-top:3px;">Solo el sistema lo cambia</div>
+        </div>
+
+        <!-- Creado por -->
+        <div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+                      color:rgba(14,17,23,0.4);margin-bottom:5px;">Creado por</div>
+          <input type="text" class="form-control"
+                 value="{{ object.creado_por|default:'Sin asignar' }}" disabled
+                 style="max-width:200px;background:rgba(86,83,148,0.05);">
+        </div>
+
+        <!-- Fecha creación -->
+        <div>
+          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
+                      color:rgba(14,17,23,0.4);margin-bottom:5px;">Registrada el</div>
+          <input type="text" class="form-control"
+                 value="{{ object.created_at|date:'d/m/Y H:i' }}" disabled
+                 style="max-width:160px;background:rgba(86,83,148,0.05);">
+        </div>
+
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ── FORMULARIO EDITABLE ── -->
+    <form method="post">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="msg-bar msg-error">✕ {{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="section-heading">Datos de la solicitud</div>
+
+      <div class="form-grid-2" style="margin-bottom:0;">
+        <div class="form-group">
+          <label>Cliente <span style="color:var(--brand-red)">*</span></label>
+          {{ form.cliente }}
+          {% if form.cliente.errors %}<div class="invalid-feedback d-block">{{ form.cliente.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>Contacto</label>
+          {{ form.contacto }}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Nombre del proyecto / requerimiento <span style="color:var(--brand-red)">*</span></label>
+        {{ form.nombre }}
+        {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group" style="max-width:240px;">
+        <label>Fecha de entrega esperada</label>
+        {{ form.fecha_entrega }}
+      </div>
+
+      <div class="form-group">
+        <label>Descripción</label>
+        {{ form.descripcion }}
+      </div>
+
+      <div class="form-group">
+        <label>Observaciones</label>
+        {{ form.observaciones }}
+      </div>
+
+      <div class="form-page-footer" style="margin:18px -24px -22px;border-radius:0 0 var(--radius) var(--radius);">
+        <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+        <button type="submit" class="btn btn-primary btn-sm">
+          {% if object %}Guardar cambios{% else %}Crear solicitud{% endif %}
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
 {% endblock %}

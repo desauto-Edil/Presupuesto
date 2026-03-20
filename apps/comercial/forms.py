@@ -47,61 +47,73 @@ class TipoProyectoForm(forms.ModelForm):
 
 
 class SolicitudForm(forms.ModelForm):
+
     class Meta:
         model = Solicitud
         fields = [
-            "consecutivo", "cliente", "contacto", "creado_por",
-            "nombre", "descripcion", "fecha_entrega", "estado", "observaciones",
+            "cliente", "contacto",
+            "nombre", "descripcion", "fecha_entrega", "observaciones",
         ]
         widgets = {
-            "consecutivo": forms.TextInput(attrs={"class": "form-control"}),
+
             "cliente": forms.Select(attrs={"class": "form-select"}),
             "contacto": forms.Select(attrs={"class": "form-select"}),
-            "creado_por": forms.Select(attrs={"class": "form-select"}),
-            "nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-            "fecha_entrega": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "estado": forms.Select(attrs={"class": "form-select"}),
-            "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "nombre": forms.TextInput(attrs={"class": "form-control", 
+                                             "placeholder": "Nombre del proyecto o requerimiento"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", 
+                                                 "rows": 3}),
+            "fecha_entrega": forms.DateInput(attrs={"class": "form-control", 
+                                                    "type": "date"}),
+            "observaciones": forms.Textarea(attrs={"class": "form-control", 
+                                                   "rows": 2}),
         }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Auto-rellenar consecutivo si es nuevo
-        if not self.instance.pk:
-            self.fields["consecutivo"].initial = Solicitud.siguiente_consecutivo()
 
 
 class ProyectoForm(forms.ModelForm):
+
     class Meta:
         model = Proyecto
         fields = [
-            "consecutivo", "solicitud", "cliente", "creado_por", "tipo_proyecto",
+            "solicitud", "cliente", "tipo_proyecto",
             "nombre", "descripcion", "area_total_m2", "perimetro_ml",
             "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
-            "moneda", "aplica_exencion_iva", "observaciones", "estado",
+            "moneda", "aplica_exencion_iva", "observaciones",
         ]
         widgets = {
-            "consecutivo": forms.TextInput(attrs={"class": "form-control"}),
-            "solicitud": forms.Select(attrs={"class": "form-select"}),
-            "cliente": forms.Select(attrs={"class": "form-select"}),
-            "creado_por": forms.Select(attrs={"class": "form-select"}),
-            "tipo_proyecto": forms.Select(attrs={"class": "form-select"}),
-            "nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-            "area_total_m2": forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
-            "perimetro_ml": forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
-            "trm": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "margen_comercial_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "iva_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "aiu_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "moneda": forms.Select(attrs={"class": "form-select"}),
-            "aplica_exencion_iva": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "estado": forms.Select(attrs={"class": "form-select"}),
-        }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.instance.pk:
-            self.fields["consecutivo"].initial = Proyecto.siguiente_consecutivo()
+            "solicitud": forms.Select(
+                attrs={"class": "form-select"}),
+            "cliente": forms.Select(
+                attrs={"class": "form-select"}),
+            "tipo_proyecto": forms.Select(
+                attrs={"class": "form-select"}),
+            "nombre": forms.TextInput(
+                attrs={"class": "form-control"}),
+            "descripcion": forms.Textarea(
+                attrs={"class": "form-control", 
+                       "rows": 3}),
+            "area_total_m2": forms.NumberInput(
+                attrs={"class": "form-control", 
+                       "step": "0.0001"}),
+            "perimetro_ml": forms.NumberInput(
+                attrs={"class": "form-control", 
+                       "step": "0.0001"}),
+            "trm": forms.NumberInput(
+                attrs={"class": "form-control", 
+                       "step": "0.01"}),
+            "margen_comercial_pct": forms.NumberInput(
+                attrs={"class": "form-control", 
+                       "step": "0.01"}),
+            "iva_pct": forms.NumberInput(
+                attrs={"class": "form-control", 
+                       "step": "0.01"}),
+            "aiu_pct": forms.NumberInput(
+                attrs={"class": "form-control", 
+                       "step": "0.01"}),
+            "moneda": forms.Select(
+                attrs={"class": "form-select"}),
+            "aplica_exencion_iva": forms.CheckboxInput(
+                attrs={"class": "form-check-input"}),
+            "observaciones": forms.Textarea(
+                attrs={"class": "form-control", "rows": 2}),
+        }

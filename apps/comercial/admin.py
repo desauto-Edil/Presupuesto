@@ -25,15 +25,48 @@ class TipoProyectoAdmin(admin.ModelAdmin):
 
 @admin.register(Solicitud)
 class SolicitudAdmin(admin.ModelAdmin):
-    list_display = ("consecutivo", "cliente", "nombre", "estado", "created_at")
-    list_filter = ("estado",)
+    list_display  = ("consecutivo", "cliente", "nombre", "estado", "creado_por", "created_at")
+    list_filter   = ("estado",)
     search_fields = ("consecutivo", "nombre", "cliente__razon_social")
-    readonly_fields = ("consecutivo", "created_at", "updated_at")
+
+    # Campos del sistema: visibles pero NO editables en el admin
+    readonly_fields = ("consecutivo", "estado", "creado_por", "created_at", "updated_at")
+
+    fieldsets = (
+        ("🔒 Datos del sistema (solo lectura)", {
+            "fields": ("consecutivo", "estado", "creado_por", "created_at", "updated_at"),
+            "description": "Estos campos son controlados exclusivamente por el sistema.",
+        }),
+        ("Datos de la solicitud", {
+            "fields": ("cliente", "contacto", "nombre", "descripcion", "fecha_entrega", "observaciones"),
+        }),
+    )
 
 
 @admin.register(Proyecto)
 class ProyectoAdmin(admin.ModelAdmin):
-    list_display = ("consecutivo", "cliente", "nombre", "estado", "created_at")
-    list_filter = ("estado", "tipo_proyecto")
+    list_display  = ("consecutivo", "cliente", "nombre", "estado", "creado_por", "created_at")
+    list_filter   = ("estado", "tipo_proyecto")
     search_fields = ("consecutivo", "nombre", "cliente__razon_social")
-    readonly_fields = ("consecutivo", "fecha_proyecto", "created_at", "updated_at")
+
+    # Campos del sistema: visibles pero NO editables en el admin
+    readonly_fields = ("consecutivo", "estado", "creado_por", "fecha_proyecto", "created_at", "updated_at")
+
+    fieldsets = (
+        ("🔒 Datos del sistema (solo lectura)", {
+            "fields": ("consecutivo", "estado", "creado_por", "fecha_proyecto", "created_at", "updated_at"),
+            "description": "Estos campos son controlados exclusivamente por el sistema.",
+        }),
+        ("Datos del proyecto", {
+            "fields": (
+                "solicitud", "cliente", "tipo_proyecto", "nombre", "descripcion",
+                "area_total_m2", "perimetro_ml",
+            ),
+        }),
+        ("Variables financieras", {
+            "fields": ("trm", "margen_comercial_pct", "iva_pct", "aiu_pct", "moneda", "aplica_exencion_iva"),
+        }),
+        ("Observaciones", {
+            "fields": ("observaciones", "motivo_devolucion"),
+        }),
+    )
