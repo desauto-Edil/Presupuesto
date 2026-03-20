@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Crear proyecto — {{ solicitud.consecutivo }}{% endblock %}
+{% block nav_solicitudes %}active{% endblock %}
+{% block page_title %}Nuevo proyecto{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'comercial:solicitud_list' %}" style="color:inherit;text-decoration:none;">Solicitudes</a>
+  → <a href="{% url 'comercial:solicitud_detail' solicitud.pk %}" style="color:inherit;text-decoration:none;">{{ solicitud.consecutivo }}</a>
+  → Crear proyecto
+{% endblock %}
+
+{% block content %}
+<div class="form-page-card fade-up">
+
+  <!-- ── ENCABEZADO ── -->
+  <div class="form-page-header" style="border-top:3px solid var(--brand-lime);">
+    <div>
+      <div class="form-page-title">Crear proyecto</div>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
+        Los datos marcados se heredan automáticamente de la solicitud.
+      </div>
+    </div>
+    <a href="{% url 'comercial:solicitud_detail' solicitud.pk %}" class="btn btn-ghost btn-sm">← Volver</a>
+  </div>
+
+  <div class="form-page-body">
+
+    <!-- ── BANNER: datos heredados de la solicitud (inmutables) ── -->
+    <div style="background:rgba(182,205,30,0.08);border:1px solid rgba(182,205,30,0.3);
+                border-radius:8px;padding:14px 18px;margin-bottom:22px;">
+      <div class="section-heading" style="margin-bottom:10px;color:#5a6e00;">
+        ↗ Datos heredados de la solicitud
+      </div>
+      <div style="display:flex;gap:32px;flex-wrap:wrap;">
+
+        <div>
+          <div class="sys-label">Solicitud origen</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;
+                      color:var(--brand-violet);">{{ solicitud.consecutivo }}</div>
+        </div>
+
+        <div>
+          <div class="sys-label">Cliente</div>
+          <div style="font-size:13px;font-weight:500;">{{ solicitud.cliente.razon_social }}</div>
+        </div>
+
+        <div>
+          <div class="sys-label">Consecutivo proyecto</div>
+          <div style="font-size:12.5px;color:var(--ink-soft);">Se genera automáticamente</div>
+        </div>
+
+        <div>
+          <div class="sys-label">Estado inicial</div>
+          <span class="badge-status bs-solicitud">Solicitud</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── FORMULARIO ── -->
+    <form method="post">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="msg-bar msg-error">✕ {{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="section-heading">Datos del proyecto</div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Tipo de proyecto</label>
+          {{ form.tipo_proyecto }}
+        </div>
+        <div></div>
+      </div>
+
+      <div class="form-group">
+        <label>Nombre del proyecto <span style="color:var(--brand-red)">*</span></label>
+        {{ form.nombre }}
+        {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label>Descripción</label>
+        {{ form.descripcion }}
+      </div>
+
+      <div class="section-heading" style="margin-top:18px;">Métricas técnicas</div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Área total (m²)</label>
+          {{ form.area_total_m2 }}
+        </div>
+        <div class="form-group">
+          <label>Perímetro (ml)</label>
+          {{ form.perimetro_ml }}
+        </div>
+      </div>
+
+      <div class="section-heading" style="margin-top:18px;">Variables financieras</div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>TRM (COP/USD)</label>
+          {{ form.trm }}
+        </div>
+        <div class="form-group">
+          <label>Moneda</label>
+          {{ form.moneda }}
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Margen comercial (%)</label>
+          {{ form.margen_comercial_pct }}
+        </div>
+        <div class="form-group">
+          <label>IVA (%)</label>
+          {{ form.iva_pct }}
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>AIU (%)</label>
+          {{ form.aiu_pct }}
+        </div>
+        <div class="form-group" style="padding-top:32px;">
+          <div class="form-check">
+            {{ form.aplica_exencion_iva }}
+            <label class="form-check-label" style="font-size:13px;">Aplica exención de IVA</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Observaciones</label>
+        {{ form.observaciones }}
+      </div>
+
+      <div class="form-page-footer" style="margin:18px -24px -22px;border-radius:0 0 var(--radius) var(--radius);">
+        <a href="{% url 'comercial:solicitud_detail' solicitud.pk %}" class="btn btn-ghost btn-sm">Cancelar</a>
+        <button type="submit" class="btn btn-primary btn-sm"
+                style="background:var(--brand-lime);border-color:var(--brand-lime);color:#1a1a1a;">
+          Crear proyecto
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+{% endblock %}

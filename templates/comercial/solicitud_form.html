@@ -34,45 +34,36 @@
       <div class="section-heading" style="margin-bottom:12px;">Campos del sistema</div>
       <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start;">
 
-        <!-- Consecutivo -->
         <div>
-          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
-                      color:rgba(14,17,23,0.4);margin-bottom:5px;">Consecutivo</div>
+          <div class="sys-label">Consecutivo</div>
           <input type="text" class="form-control" value="{{ object.consecutivo }}" disabled
                  style="max-width:150px;font-family:'Syne',sans-serif;font-weight:700;
                         color:var(--brand-violet);background:rgba(86,83,148,0.05);">
         </div>
 
-        <!-- Estado -->
         <div>
-          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
-                      color:rgba(14,17,23,0.4);margin-bottom:5px;">Estado</div>
+          <div class="sys-label">Estado</div>
           <div style="display:flex;align-items:center;gap:8px;padding-top:8px;">
             <span class="badge-status
               {% if object.estado == 'EN_GESTION' %}bs-pendiente
               {% elif object.estado == 'COTIZADA' %}bs-apu
               {% elif object.estado == 'APROBADA' %}bs-validado
-              {% elif object.estado == 'RECHAZADA' or object.estado == 'CANCELADA' %}bs-cerrado
-              {% else %}bs-inactivo{% endif %}">
+              {% else %}bs-cerrado{% endif %}">
               {{ object.get_estado_display }}
             </span>
           </div>
           <div style="font-size:10px;color:rgba(14,17,23,0.35);margin-top:3px;">Solo el sistema lo cambia</div>
         </div>
 
-        <!-- Creado por -->
         <div>
-          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
-                      color:rgba(14,17,23,0.4);margin-bottom:5px;">Creado por</div>
+          <div class="sys-label">Creado por</div>
           <input type="text" class="form-control"
                  value="{{ object.creado_por|default:'Sin asignar' }}" disabled
                  style="max-width:200px;background:rgba(86,83,148,0.05);">
         </div>
 
-        <!-- Fecha creación -->
         <div>
-          <div style="font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;
-                      color:rgba(14,17,23,0.4);margin-bottom:5px;">Registrada el</div>
+          <div class="sys-label">Registrada el</div>
           <input type="text" class="form-control"
                  value="{{ object.created_at|date:'d/m/Y H:i' }}" disabled
                  style="max-width:160px;background:rgba(86,83,148,0.05);">
@@ -83,7 +74,7 @@
     {% endif %}
 
     <!-- ── FORMULARIO EDITABLE ── -->
-    <form method="post">
+    <form method="post" id="formSolicitud">
       {% csrf_token %}
 
       {% if form.non_field_errors %}
@@ -92,15 +83,25 @@
 
       <div class="section-heading">Datos de la solicitud</div>
 
+      <!-- CLIENTE + CONTACTO (dependiente vía AJAX) -->
       <div class="form-grid-2" style="margin-bottom:0;">
         <div class="form-group">
-          <label>Cliente <span style="color:var(--brand-red)">*</span></label>
+          <label for="id_cliente">Cliente <span style="color:var(--brand-red)">*</span></label>
           {{ form.cliente }}
           {% if form.cliente.errors %}<div class="invalid-feedback d-block">{{ form.cliente.errors.0 }}</div>{% endif %}
         </div>
         <div class="form-group">
-          <label>Contacto</label>
+          <label for="id_contacto">
+            Contacto
+            <span id="contacto-loading" style="display:none;font-size:10px;color:var(--brand-violet);margin-left:6px;">
+              ⟳ Cargando...
+            </span>
+          </label>
           {{ form.contacto }}
+          <div id="contacto-hint" style="font-size:11px;color:var(--ink-soft);margin-top:3px;">
+            {% if not object %}Selecciona primero un cliente.{% endif %}
+          </div>
+          {% if form.contacto.errors %}<div class="invalid-feedback d-block">{{ form.contacto.errors.0 }}</div>{% endif %}
         </div>
       </div>
 
@@ -135,4 +136,69 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+(function () {
+  const clienteSelect  = document.getElementById('id_cliente');
+  const contactoSelect = document.getElementById('id_contacto');
+  const loadingBadge   = document.getElementById('contacto-loading');
+  const hint           = document.getElementById('contacto-hint');
+
+  // Contacto seleccionado actualmente (en edición)
+  const contactoActual = "{{ object.contacto_id|default:'' }}";
+
+  /**
+   * Carga los contactos del cliente vía AJAX y actualiza el <select>.
+   * @param {string|number} clienteId
+   * @param {string|number} preselect  – id del contacto a pre-seleccionar
+   */
+  function cargarContactos(clienteId, preselect) {
+    if (!clienteId) {
+      contactoSelect.innerHTML = '<option value="">— Sin cliente seleccionado —</option>';
+      hint.textContent = 'Selecciona primero un cliente.';
+      return;
+    }
+
+    loadingBadge.style.display = 'inline';
+    hint.textContent = '';
+
+    fetch(`/comercial/api/contactos-por-cliente/${clienteId}/`)
+      .then(r => r.json())
+      .then(data => {
+        contactoSelect.innerHTML = '<option value="">— Sin contacto —</option>';
+        if (data.contactos.length === 0) {
+          hint.textContent = 'Este cliente no tiene contactos registrados.';
+        } else {
+          data.contactos.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.nombre + (c.cargo ? ` — ${c.cargo}` : '') + (c.es_principal ? ' ★' : '');
+            if (String(c.id) === String(preselect)) opt.selected = true;
+            contactoSelect.appendChild(opt);
+          });
+          hint.textContent = `${data.contactos.length} contacto(s) disponible(s).`;
+        }
+      })
+      .catch(() => {
+        hint.textContent = 'Error al cargar contactos. Intenta de nuevo.';
+      })
+      .finally(() => {
+        loadingBadge.style.display = 'none';
+      });
+  }
+
+  // Al cambiar el cliente → recargar contactos (sin pre-selección)
+  clienteSelect.addEventListener('change', function () {
+    cargarContactos(this.value, null);
+  });
+
+  // Al cargar la página en modo edición → cargar contactos del cliente actual
+  if (clienteSelect.value) {
+    cargarContactos(clienteSelect.value, contactoActual);
+  }
+})();
+</script>
 {% endblock %}

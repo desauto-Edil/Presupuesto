@@ -22,11 +22,20 @@ from apps.common.choices import EstadoSolicitud, EstadoProyecto, Moneda
 # ---------------------------------------------------------------------------
 
 class Cliente(models.Model):
-    nit = models.CharField(max_length=50, unique=True)
+    nit = models.CharField(
+        max_length=50, 
+        unique=True
+        )
     razon_social = models.CharField(max_length=300)
-    ciudad = models.CharField(max_length=100, blank=True, null=True)
-    direccion = models.TextField(blank=True, null=True)
-    telefono_principal = models.CharField(max_length=30, blank=True, null=True)
+    ciudad = models.CharField(max_length=100, 
+                              blank=True, 
+                              null=True
+                              )
+    direccion = models.TextField(blank=True, 
+                                 null=True)
+    telefono_principal = models.CharField(max_length=30, 
+                                          blank=True, 
+                                          null=True)
     email_principal = models.EmailField(blank=True, null=True)
     activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -113,12 +122,7 @@ class Solicitud(models.Model):
         return f"{self.consecutivo} — {self.nombre}"
 
     def save(self, *args, **kwargs):
-        """
-        Campos controlados por el sistema — no editables por el usuario:
-          · consecutivo : se genera automáticamente en creación (SLD-YYYY-NNNN).
-          · estado      : solo cambia vía transiciones explícitas del negocio.
-          · creado_por  : se asigna en la vista; nunca se expone en formularios.
-        """
+  
         # ── Consecutivo automático (solo en creación) ──────────────────────
         if not self.pk and not self.consecutivo:
             self.consecutivo = self.__class__.siguiente_consecutivo()
@@ -143,9 +147,13 @@ class Solicitud(models.Model):
 
 class Proyecto(models.Model):
     consecutivo = models.CharField(max_length=30, unique=True)
-    solicitud = models.ForeignKey(
-        Solicitud, on_delete=models.SET_NULL,
-        blank=True, null=True, related_name="proyectos",
+    #solicitud = models.ForeignKey(
+    solicitud = models.OneToOneField(
+        Solicitud, 
+        on_delete=models.SET_NULL,
+        blank=True, 
+        null=True, 
+        related_name="proyecto",
     )
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos")
     creado_por = models.ForeignKey(
@@ -190,10 +198,7 @@ class Proyecto(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Campos controlados por el sistema — no editables por el usuario:
-          · consecutivo : se genera automáticamente en creación (PRY-YYYY-NNNN).
-          · estado      : solo cambia vía métodos de transición del modelo.
-          · creado_por  : se asigna en la vista; nunca se expone en formularios.
+        Campos controlados por el sistema 
         """
         if not self.pk and not self.consecutivo:
             self.consecutivo = self.__class__.siguiente_consecutivo()

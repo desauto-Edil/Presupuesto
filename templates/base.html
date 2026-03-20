@@ -26,25 +26,25 @@
     <div class="logo-unit">impercots</div>
   </div>
 
-  <div class="nav-section-label">Principal</div>
+  <!-- ── Comercial ── -->
+  <div class="nav-section-label">Comercial</div>
   <a href="{% url 'comercial:proyecto_list' %}" class="nav-item {% block nav_proyectos %}{% endblock %}">
     <span class="nav-icon">◫</span> Proyectos
-  </a>
-  <a href="{% url 'comercial:cliente_list' %}" class="nav-item {% block nav_clientes %}{% endblock %}">
-    <span class="nav-icon">◎</span> Clientes
   </a>
   <a href="{% url 'comercial:solicitud_list' %}" class="nav-item {% block nav_solicitudes %}{% endblock %}">
     <span class="nav-icon">◷</span> Solicitudes
   </a>
+  <a href="{% url 'comercial:cliente_list' %}" class="nav-item {% block nav_clientes %}{% endblock %}">
+    <span class="nav-icon">◎</span> Clientes
+  </a>
 
+  <!-- ── Presupuestación ── -->
   <div class="nav-section-label">Presupuestación</div>
   <a href="{% url 'presupuestos:proyectosistema_list' %}" class="nav-item {% block nav_presupuestos %}{% endblock %}">
     <span class="nav-icon">⊞</span> Despiece paramétrico
   </a>
-  <a href="{% url 'presupuestos:configapu_list' %}" class="nav-item {% block nav_apu %}{% endblock %}">
-    <span class="nav-icon">≡</span> Config. APU
-  </a>
 
+  <!-- ── Catálogos ── -->
   <div class="nav-section-label">Catálogos</div>
   <a href="{% url 'catalogos:producto_list' %}" class="nav-item {% block nav_productos %}{% endblock %}">
     <span class="nav-icon">◈</span> Productos
@@ -56,12 +56,14 @@
     <span class="nav-icon">◐</span> Precios
   </a>
 
-  <div class="nav-section-label">Ingeniería</div>
-  <a href="{% url 'ingenieria:sistema_list' %}" class="nav-item {% block nav_sistemas %}{% endblock %}">
-    <span class="nav-icon">◉</span> Sistemas constructivos
-  </a>
-
+  <!-- ── Configuración ── -->
   <div class="nav-section-label">Configuración</div>
+  <a href="{% url 'ingenieria:sistema_list' %}" class="nav-item {% block nav_sistemas %}{% endblock %}">
+    <span class="nav-icon">⬡</span> Sistemas constructivos
+  </a>
+  <a href="{% url 'presupuestos:configapu_list' %}" class="nav-item {% block nav_apu %}{% endblock %}">
+    <span class="nav-icon">≡</span> Config. APU
+  </a>
   <a href="{% url 'usuarios:usuario_list' %}" class="nav-item {% block nav_usuarios %}{% endblock %}">
     <span class="nav-icon">◒</span> Usuarios y roles
   </a>
