@@ -80,22 +80,104 @@ class ProyectoService:
 
     @staticmethod
     @transaction.atomic
-    def iniciar_despiece(proyecto_id, sistema_id, subsistema_id, parametros: dict): 
+    def iniciar_despiece(proyecto_id, sistema_id, subsistema_id, parametros: dict):
         proyecto = Proyecto.objects.select_related("solicitud").get(pk=proyecto_id)
-    
+
         ps, _ = ProyectoSistema.objects.update_or_create(
             proyecto=proyecto,
             sistema_id=sistema_id,
             defaults={
-                "solicitud": proyecto.solicitud,
-                "subsistema_id": subsistema_id,
-                "parametros_entrada": parametros 
+                "solicitud":         proyecto.solicitud,
+                "subsistema_id":     subsistema_id,
+                "parametros_entrada": parametros,
             }
         )
+        # Si el PS ya existía, asegurar que se actualicen subsistema y parámetros
+        if ps.subsistema_id != subsistema_id or ps.parametros_entrada != parametros:
+            ps.subsistema_id = subsistema_id
+            ps.parametros_entrada = parametros
+            ps.save(update_fields=["subsistema_id", "parametros_entrada"])
 
         DespieceService(ps).ejecutar()
+        proyecto.avanzar_a_despiece()
+        return ps
+
+    @staticmethod
+    @transaction.atomic
+    def calcular_powergrip(
+        proyecto_id: int,
+        subsistema_id: int,
+        parametros: dict,
+        productos_map: dict,
+    ):
+        """
+        Orquesta el flujo completo PowerGrip en un solo paso transaccional:
+          1. Obtiene o crea el ProyectoSistema con el subsistema seleccionado.
+          2. Ejecuta el cálculo de despiece (DespieceService).
+          3. Asigna los productos a las líneas generadas.
+          4. Valida que todos los productos estén resueltos.
+          5. Avanza estado del proyecto a DESPIECE.
+
+        productos_map: {categoria_slug: producto_pk}
+            Ej: {"PowerGrip": 5, "Fijaciones": 12, "Accesorios": 3, ...}
+
+        Raises:
+            ValueError — si faltan productos o el cálculo falla.
+        """
+        from apps.ingenieria.models import Sistema
+
+        proyecto = Proyecto.objects.select_related("solicitud").get(pk=proyecto_id)
+        sistema  = Sistema.objects.get(codigo="POWERGRIP")
+
+        # Validar que productos_map esté completo ANTES de calcular
+        if not productos_map:
+            raise ValueError(
+                "Debe seleccionar todos los productos antes de calcular el despiece."
+            )
+
+        ps, _ = ProyectoSistema.objects.update_or_create(
+            proyecto=proyecto,
+            sistema=sistema,
+            defaults={
+                "solicitud":         proyecto.solicitud,
+                "subsistema_id":     subsistema_id,
+                "parametros_entrada": parametros,
+            }
+        )
+        # Actualizar si ya existía con otro subsistema
+        if str(ps.subsistema_id) != str(subsistema_id) or ps.parametros_entrada != parametros:
+            ps.subsistema_id = subsistema_id
+            ps.parametros_entrada = parametros
+            ps.save(update_fields=["subsistema_id", "parametros_entrada"])
+
+        svc = DespieceService(ps)
+
+        # Paso 1: calcular cantidades
+        lineas_resultado = svc.ejecutar()
+        if not lineas_resultado:
+            raise ValueError(
+                "El cálculo de despiece no produjo líneas. "
+                "Verifica que el sistema/subsistema esté correctamente configurado."
+            )
+
+        # Paso 2: asignar productos a las líneas pendientes
+        errores = svc.asignar_productos(productos_map)
+        if errores:
+            raise ValueError(f"Errores al asignar productos: {'; '.join(errores)}")
+
+        # Paso 3: validar que todo quedó resuelto
+        pendientes = svc.validar_productos_completos()
+        if pendientes:
+            raise ValueError(
+                f"Faltan productos para las categorías: {', '.join(pendientes)}. "
+                "Seleccione un producto por cada categoría antes de calcular."
+            )
 
         proyecto.avanzar_a_despiece()
+        logger.info(
+            "[ProyectoService] PowerGrip PS %s calculado OK — %d líneas | proyecto=%s.",
+            ps.pk, len(lineas_resultado), proyecto.consecutivo,
+        )
         return ps
     
 

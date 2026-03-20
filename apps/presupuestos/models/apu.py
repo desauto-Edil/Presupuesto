@@ -66,8 +66,8 @@ class APUProyecto(models.Model):
 
     # Parámetros de mano de obra
     cuadrilla_personas = models.IntegerField(
-        default=1,
-        help_text="Número de personas en la cuadrilla de instalación",
+        default=7,
+        help_text="Número de personas en la cuadrilla de instalación (cuadrilla estándar = 7)",
     )
     dias_trabajo = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
     tiempo_estimado_meses = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)

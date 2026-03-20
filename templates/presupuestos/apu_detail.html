@@ -5,7 +5,7 @@
 {% block breadcrumb %}Proyectos → {{ apu.proyecto_sistema.proyecto.consecutivo }} → APU{% endblock %}
 
 {% block topbar_actions %}
-  <a href="{% url 'presupuestos:despiece_proyecto' apu.proyecto_sistema.proyecto_id %}" class="btn btn-ghost btn-sm">← Despiece</a>
+  <a href="{% url 'presupuestos:powergrip_wizard' apu.proyecto_sistema.proyecto_id %}" class="btn btn-ghost btn-sm">← PowerGrip</a>
   <a href="{% url 'presupuestos:apu_update' apu.pk %}" class="btn btn-ghost btn-sm">Editar parámetros</a>
 {% endblock %}
 

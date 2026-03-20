@@ -1,7 +1,9 @@
 """apps/presupuestos/views — Vistas del módulo de presupuestos."""
 
 import json
+import logging
 
+from django.db.models import Prefetch
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from django.views import View
@@ -13,6 +15,8 @@ from apps.presupuestos.models import ProyectoSistema, DespieceLinea, Configuraci
 from apps.comercial.models import Proyecto
 from apps.ingenieria.models import Sistema, Subsistema
 from apps.presupuestos.forms import ProyectoSistemaForm, DespieceLineaAjusteForm, ConfiguracionAPUForm, APUProyectoForm
+
+logger = logging.getLogger(__name__)
 
 
 # ── ProyectoSistema ───────────────────────────────────────────────────────────
@@ -276,3 +280,340 @@ class APUGenerarView(View):
         except Exception as exc:
             messages.error(request, f"Error al generar APU: {exc}")
             return redirect(reverse("presupuestos:despiece_proyecto", args=[ps.proyecto_id]))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# WIZARD POWERGRIP — Flujo guiado completo
+# ══════════════════════════════════════════════════════════════════════════════
+
+class PowerGripWizardView(View):
+    """
+    Vista principal del wizard PowerGrip.
+
+    GET  /presupuestos/powergrip/<proyecto_pk>/
+    Muestra en una sola pantalla:
+      1. Selección de subsistema
+      2. Variables de entrada + selección de productos por categoría
+      3. Resultado del despiece (si ya fue calculado)
+      4. APU por secciones (Materiales / Mano de Obra / Herramientas / Admin / Consolidado)
+    """
+    template_name = "presupuestos/powergrip_wizard.html"
+
+    def get(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+
+        try:
+            sistema_pg = Sistema.objects.get(codigo="POWERGRIP")
+        except Sistema.DoesNotExist:
+            messages.error(request, "Sistema POWERGRIP no encontrado. Créelo en Ingeniería → Sistemas.")
+            return redirect(reverse("comercial:proyecto_list"))
+
+        subsistemas = Subsistema.objects.filter(sistema=sistema_pg, activo=True).order_by("nombre")
+
+        # ProyectoSistemas PowerGrip existentes para este proyecto
+        ps_list = (
+            ProyectoSistema.objects
+            .filter(proyecto=proyecto, sistema=sistema_pg)
+            .prefetch_related(
+                Prefetch("despiece_lineas", queryset=DespieceLinea.objects.select_related(
+                    "producto", "producto__unidad", "categoria_producto"
+                ).order_by("id")),
+            )
+            .select_related("subsistema")
+        )
+
+        # Productos disponibles por categoría (para los selects del wizard)
+        from apps.catalogos.models import CategoriaProducto, Producto
+        CATEGORIAS_PG = ["PowerGrip", "Fijaciones", "Accesorios", "Estopa", "Sellador"]
+        productos_por_categoria = {}
+        for slug in CATEGORIAS_PG:
+            prods = list(
+                Producto.objects.filter(
+                    categoria__nombre__iexact=slug, activo=True
+                ).values("pk", "nombre", "codigo")
+            )
+            productos_por_categoria[slug] = prods
+
+        # Variables de cada subsistema (para el JS dinámico)
+        from apps.ingenieria.system_defs.registry import get_subsistema_def
+        subsistemas_def = {}
+        for sub in subsistemas:
+            sub_def = get_subsistema_def(sistema_pg.codigo, sub.codigo)
+            if sub_def:
+                VARS_PROYECTO = {"area_m2", "perimetro_ml"}
+                subsistemas_def[sub.pk] = {
+                    "variables": [
+                        {
+                            "variable":    v.variable,
+                            "label":       v.label,
+                            "unidad":      v.unidad,
+                            "default":     v.default,
+                            "opciones":    v.opciones,
+                            "descripcion": v.descripcion,
+                        }
+                        for v in sub_def.variables
+                        if v.variable not in VARS_PROYECTO
+                    ],
+                    "categorias": [c.categoria_slug for c in sub_def.componentes],
+                }
+
+        ctx = {
+            "proyecto":                proyecto,
+            "sistema_pg":              sistema_pg,
+            "subsistemas":             subsistemas,
+            "ps_list":                 ps_list,
+            "productos_por_categoria": json.dumps(productos_por_categoria),
+            "subsistemas_def":         json.dumps(subsistemas_def),
+        }
+        return render(request, self.template_name, ctx)
+
+
+class CalcularPowerGripView(View):
+    """
+    POST /presupuestos/powergrip/calcular/<proyecto_pk>/
+
+    Payload (form POST):
+      subsistema_id
+      parametros[total_powergrip]
+      parametros[tornilleria_u7]   (o tornilleria_plus)
+      parametros[desperdicio]
+      productos[PowerGrip]         → producto_pk
+      productos[Fijaciones]        → producto_pk
+      productos[Accesorios]        → producto_pk
+      productos[Estopa]            → producto_pk
+      productos[Sellador]          → producto_pk
+
+    Valida que todos los productos estén seleccionados ANTES de calcular.
+    Llama a ProyectoService.calcular_powergrip() que orquesta todo.
+    """
+    def post(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        post = request.POST
+
+        subsistema_id = post.get("subsistema_id")
+        if not subsistema_id:
+            messages.error(request, "Debe seleccionar un subsistema.")
+            return redirect(reverse("presupuestos:powergrip_wizard", args=[pk]))
+
+        # Parsear parametros[variable] → float
+        parametros = {}
+        for key, val in post.items():
+            if key.startswith("parametros[") and key.endswith("]") and val not in ("", None):
+                var_name = key[len("parametros["):-1]
+                try:
+                    parametros[var_name] = float(val)
+                except (ValueError, TypeError):
+                    parametros[var_name] = val
+
+        # Parsear productos[categoria] → int(pk)
+        productos_map = {}
+        for key, val in post.items():
+            if key.startswith("productos[") and key.endswith("]") and val:
+                cat_slug = key[len("productos["):-1]
+                try:
+                    productos_map[cat_slug] = int(val)
+                except (ValueError, TypeError):
+                    pass
+
+        # Validación temprana: todos los productos deben estar seleccionados
+        CATEGORIAS_PG = ["PowerGrip", "Fijaciones", "Accesorios", "Estopa", "Sellador"]
+        faltantes = [c for c in CATEGORIAS_PG if c not in productos_map]
+        if faltantes:
+            messages.error(
+                request,
+                f"Seleccione un producto para cada categoría antes de calcular. "
+                f"Faltan: {', '.join(faltantes)}."
+            )
+            return redirect(reverse("presupuestos:powergrip_wizard", args=[pk]))
+
+        try:
+            from apps.presupuestos.services.proyecto_service import ProyectoService
+            ps = ProyectoService.calcular_powergrip(
+                proyecto_id=proyecto.pk,
+                subsistema_id=int(subsistema_id),
+                parametros=parametros,
+                productos_map=productos_map,
+            )
+            messages.success(request, f"Despiece PowerGrip calculado: {ps.despiece_lineas.count()} líneas.")
+        except Exception as exc:
+            messages.error(request, f"Error al calcular: {exc}")
+
+        return redirect(reverse("presupuestos:powergrip_wizard", args=[pk]))
+
+
+# ── API: productos por categoría (para el wizard) ──────────────────────────
+
+class ProductosPorCategoriaAPIView(View):
+    """
+    GET /presupuestos/api/productos/<categoria_slug>/
+    Devuelve productos activos de esa categoría (por nombre).
+    """
+    def get(self, request, slug):
+        from apps.catalogos.models import Producto
+        productos = list(
+            Producto.objects.filter(
+                categoria__nombre__iexact=slug, activo=True
+            ).values("pk", "nombre", "codigo")
+        )
+        return JsonResponse({"productos": productos, "categoria": slug})
+
+
+# ── API: definición de subsistema (variables + categorías) ─────────────────
+
+class SubsistemaDefAPIView(View):
+    """
+    GET /presupuestos/api/subsistema-def/<subsistema_pk>/
+    Devuelve las variables y categorías requeridas para el subsistema.
+    Usado por el wizard cuando el usuario cambia el subsistema (JS fetch).
+    """
+    def get(self, request, pk):
+        sub = get_object_or_404(Subsistema, pk=pk)
+        from apps.ingenieria.system_defs.registry import get_subsistema_def
+        sub_def = get_subsistema_def(sub.sistema.codigo, sub.codigo)
+        if not sub_def:
+            return JsonResponse({"error": "Sin definición backend para este subsistema."}, status=404)
+
+        VARS_PROYECTO = {"area_m2", "perimetro_ml"}
+        return JsonResponse({
+            "subsistema_pk":  sub.pk,
+            "subsistema_cod": sub.codigo,
+            "variables": [
+                {
+                    "variable":    v.variable,
+                    "label":       v.label,
+                    "unidad":      v.unidad,
+                    "default":     v.default,
+                    "opciones":    v.opciones,
+                    "descripcion": v.descripcion,
+                }
+                for v in sub_def.variables
+                if v.variable not in VARS_PROYECTO
+            ],
+            "categorias": [
+                {"codigo": c.codigo, "nombre": c.nombre, "categoria_slug": c.categoria_slug}
+                for c in sub_def.componentes
+            ],
+        })
+
+
+# ── APU Mano de Obra ────────────────────────────────────────────────────────
+
+class APUManoObraView(View):
+    """
+    POST /presupuestos/apu/<pk>/mano-obra/
+
+    Registra las líneas de mano de obra del APU.
+    El usuario ingresa los costos diarios de cada concepto (APE).
+    La cuadrilla tiene 7 personas (predeterminado del modelo APUProyecto).
+
+    IMPORTANTE: La cuadrilla NO se relaciona con el despiece — es un APE independiente.
+    """
+    def post(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            cuadrilla_personas = int(request.POST.get("cuadrilla_personas", 7) or 7)
+            hya_dia        = float(request.POST.get("hya_dia", 0) or 0)
+            cuadrilla_dia  = float(request.POST.get("cuadrilla_dia", 0) or 0)
+            dotacion_dia   = float(request.POST.get("dotacion_dia", 0) or 0)
+            proteccion_dia = float(request.POST.get("proteccion_dia", 0) or 0)
+
+            # Actualizar cuadrilla_personas en el APU si cambió
+            if apu.cuadrilla_personas != cuadrilla_personas:
+                apu.cuadrilla_personas = cuadrilla_personas
+                apu.save(update_fields=["cuadrilla_personas", "updated_at"])
+
+            from apps.presupuestos.services.apu_service import APUService
+            svc = APUService(apu.proyecto_sistema)
+            svc.apu = apu  # Reusar APU existente sin recrear
+            svc.generar_mano_obra(
+                hya_dia=hya_dia,
+                cuadrilla_dia=cuadrilla_dia,
+                dotacion_dia=dotacion_dia,
+                proteccion_dia=proteccion_dia,
+            )
+            svc.finalizar()
+            messages.success(request, "Mano de obra registrada y APU actualizado.")
+        except Exception as exc:
+            messages.error(request, f"Error al registrar mano de obra: {exc}")
+            logger.exception("[APUManoObraView] Error APU %s", pk)
+
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
+class APUHerramientasView(View):
+    """
+    POST /presupuestos/apu/<pk>/herramientas/
+
+    Registra ítems de herramientas/equipos al APU.
+    El form puede enviar múltiples filas: descripcion[] y precio_total[].
+    """
+    def post(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            descripciones  = request.POST.getlist("descripcion[]")
+            precios_totales = request.POST.getlist("precio_total[]")
+
+            items = []
+            for desc, precio_str in zip(descripciones, precios_totales):
+                desc = desc.strip()
+                if not desc or not precio_str:
+                    continue
+                try:
+                    precio = float(precio_str)
+                    if precio > 0:
+                        items.append({"descripcion": desc, "precio_total": precio})
+                except (ValueError, TypeError):
+                    pass
+
+            if not items:
+                messages.warning(request, "No se ingresaron ítems de herramientas válidos.")
+                return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+            from apps.presupuestos.services.apu_service import APUService
+            svc = APUService(apu.proyecto_sistema)
+            svc.apu = apu
+            svc.generar_herramientas(items)
+            svc.finalizar()
+            messages.success(request, f"{len(items)} ítem(s) de herramientas registrados.")
+        except Exception as exc:
+            messages.error(request, f"Error al registrar herramientas: {exc}")
+            logger.exception("[APUHerramientasView] Error APU %s", pk)
+
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
+class APUAdminView(View):
+    """
+    POST /presupuestos/apu/<pk>/administrativo/
+
+    Registra el costo administrativo del APU como porcentaje sobre la base
+    (materiales + mano de obra + herramientas) o como valor directo.
+    """
+    def post(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            modo = request.POST.get("modo", "porcentaje")  # "porcentaje" | "valor"
+            valor_str = request.POST.get("valor", "0") or "0"
+            valor = float(valor_str)
+
+            if modo == "porcentaje":
+                base = float(
+                    apu.subtotal_materiales
+                    + apu.subtotal_mano_obra
+                    + apu.subtotal_herramientas
+                )
+                costo_admin = base * (valor / 100)
+            else:
+                costo_admin = valor
+
+            from apps.presupuestos.services.apu_service import APUService
+            svc = APUService(apu.proyecto_sistema)
+            svc.apu = apu
+            svc.generar_administracion(costo_admin)
+            svc.finalizar()
+            messages.success(request, f"Administrativo registrado: ${costo_admin:,.2f}.")
+        except Exception as exc:
+            messages.error(request, f"Error al registrar administrativo: {exc}")
+            logger.exception("[APUAdminView] Error APU %s", pk)
+
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))

@@ -1,0 +1,733 @@
+{% extends "base.html" %}
+{% block title %}PowerGrip — {{ proyecto.consecutivo }}{% endblock %}
+{% block nav_presupuestos %}active{% endblock %}
+{% block page_title %}PowerGrip{% endblock %}
+{% block breadcrumb %}Proyectos → {{ proyecto.consecutivo }} → PowerGrip{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-ghost btn-sm">← Volver al proyecto</a>
+{% endblock %}
+
+{% block content %}
+{% load static %}
+
+<!-- ── Cabecera proyecto ─────────────────────────────────────────────────── -->
+<div class="panel fade-up" style="margin-bottom:12px;padding:14px 20px;">
+  <div style="display:flex;align-items:center;gap:20px;">
+    <div>
+      <div style="font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.5px;">Proyecto</div>
+      <div style="font-size:15px;font-weight:600;">{{ proyecto.consecutivo }} — {{ proyecto.nombre }}</div>
+    </div>
+    <div style="border-left:1px solid var(--border);padding-left:20px;">
+      <div style="font-size:11px;color:var(--ink-soft);">Cliente</div>
+      <div style="font-size:13px;">{{ proyecto.cliente.nombre }}</div>
+    </div>
+    {% if proyecto.area_total_m2 %}
+    <div style="border-left:1px solid var(--border);padding-left:20px;">
+      <div style="font-size:11px;color:var(--ink-soft);">Área total</div>
+      <div style="font-size:13px;">{{ proyecto.area_total_m2|floatformat:0 }} m²</div>
+    </div>
+    {% endif %}
+    <div style="border-left:1px solid var(--border);padding-left:20px;">
+      <div style="font-size:11px;color:var(--ink-soft);">Estado</div>
+      <div><span class="badge-status bs-activo">{{ proyecto.get_estado_display }}</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+  SECCIÓN 1 — CONFIGURACIÓN DEL DESPIECE
+══════════════════════════════════════════════════════════════════════════════ -->
+<div class="panel fade-up" id="panelConfiguracion">
+  <div class="panel-header">
+    <span class="panel-title">① Configuración del despiece</span>
+    <span class="badge-status bs-activo" style="font-size:11px;">Sistema PowerGrip</span>
+  </div>
+
+  <form method="post" action="{% url 'presupuestos:powergrip_calcular' proyecto.pk %}" id="formPowerGrip">
+    {% csrf_token %}
+
+    <!-- ── Subsistema ───────────────────────────────────────────────────── -->
+    <div style="padding:16px 20px 0;">
+      <div class="form-group" style="max-width:360px;">
+        <label style="font-weight:600;">Subsistema <span style="color:var(--red)">*</span></label>
+        <select name="subsistema_id" id="subsistemaSelect" class="form-select form-select-sm" required
+                onchange="onSubsistemaChange(this.value)">
+          <option value="">— Seleccionar subsistema —</option>
+          {% for sub in subsistemas %}
+          <option value="{{ sub.pk }}"
+            {% for ps in ps_list %}{% if ps.subsistema_id == sub.pk %}selected{% endif %}{% endfor %}>
+            {{ sub.nombre }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Variables + Productos (dinámicos) ────────────────────────────── -->
+    <div id="seccionVariables" style="display:none;padding:0 20px;">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:16px;">
+
+        <!-- Bloque A: Variables de entrada -->
+        <div>
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+                      color:var(--ink-soft);margin-bottom:10px;">Variables de cálculo</div>
+          <div id="variablesContainer"></div>
+        </div>
+
+        <!-- Bloque B: Selección de productos -->
+        <div>
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+                      color:var(--ink-soft);margin-bottom:10px;">
+            Productos
+            <span style="color:var(--red);font-weight:400;font-size:11px;margin-left:4px;">
+              (obligatorio antes de calcular)
+            </span>
+          </div>
+          <div id="productosContainer"></div>
+        </div>
+
+      </div>
+
+      <!-- ── Botón calcular ─────────────────────────────────────────────── -->
+      <div style="margin:20px 0 16px;display:flex;align-items:center;gap:12px;">
+        <button type="submit" id="btnCalcular" class="btn btn-primary"
+                style="min-width:160px;" disabled>
+          Calcular despiece
+        </button>
+        <span id="lblValidacion" style="font-size:12px;color:var(--ink-soft);">
+          Seleccione todos los productos para habilitar el cálculo.
+        </span>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% if ps_list %}
+{% for ps in ps_list %}
+{% if ps.despiece_lineas.all %}
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+  SECCIÓN 2 — RESULTADO DEL DESPIECE
+══════════════════════════════════════════════════════════════════════════════ -->
+<div class="panel fade-up" id="panelDespiece_{{ ps.pk }}" style="margin-top:16px;">
+  <div class="panel-header">
+    <span class="panel-title">② Resultado del despiece — {{ ps.subsistema.nombre }}</span>
+    <div style="display:flex;gap:8px;align-items:center;">
+      {% with pendientes=ps.despiece_lineas.all|length %}
+      {% for dl in ps.despiece_lineas.all %}{% if dl.pendiente_seleccion %}<span class="badge-status" style="background:var(--amber-soft,#fff3cd);color:#856404;">Producto pendiente</span>{% endif %}{% endfor %}
+      {% endwith %}
+      <form method="post" action="{% url 'presupuestos:despiece_ejecutar' ps.pk %}" style="display:inline">
+        {% csrf_token %}
+        <button class="btn btn-ghost btn-xs" type="submit">↺ Recalcular</button>
+      </form>
+    </div>
+  </div>
+
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Componente</th>
+        <th>Producto</th>
+        <th style="text-align:right">Cantidad calculada</th>
+        <th style="text-align:right">Cantidad final</th>
+        <th>Und.</th>
+        <th style="text-align:right">Precio unit.</th>
+        <th style="text-align:right">Subtotal</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for dl in ps.despiece_lineas.all %}
+      <tr>
+        <td class="td-mono" style="color:var(--ink-soft)">{{ forloop.counter }}</td>
+        <td>
+          <div style="font-weight:500;">{{ dl.componente_codigo|upper|cut:"_U7"|cut:"_PLUS"|cut:"_TPO" }}</div>
+          {% if dl.categoria_producto %}
+          <div style="font-size:11px;color:var(--ink-soft);">Cat: {{ dl.categoria_producto.nombre }}</div>
+          {% endif %}
+        </td>
+        <td>
+          {% if dl.producto %}
+            <span style="font-size:13px;">{{ dl.producto.nombre }}</span>
+            <div style="font-size:11px;color:var(--ink-soft);">{{ dl.producto.codigo }}</div>
+          {% else %}
+            <span style="color:var(--red);font-size:12px;">⚠ Sin producto</span>
+          {% endif %}
+        </td>
+        <td style="text-align:right;font-family:monospace;">{{ dl.cantidad_calculada|floatformat:2 }}</td>
+        <td style="text-align:right;font-family:monospace;font-weight:{% if dl.cantidad_ajustada %}600{% else %}400{% endif %}">
+          {{ dl.cantidad_final|floatformat:2 }}
+        </td>
+        <td style="font-size:12px;color:var(--ink-soft);">
+          {% if dl.producto %}{{ dl.producto.unidad.abreviatura }}{% else %}—{% endif %}
+        </td>
+        <td style="text-align:right;font-family:monospace;">
+          {% if dl.precio_snapshot %}${{ dl.precio_snapshot|floatformat:2 }}{% else %}<span style="color:var(--ink-soft);">—</span>{% endif %}
+        </td>
+        <td style="text-align:right;font-family:monospace;font-weight:500;">
+          {% if dl.precio_snapshot %}
+            ${% widthratio dl.cantidad_final 1 dl.precio_snapshot %}
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if dl.estado_tecnico == "RESUELTO" %}
+            <span class="badge-status bs-activo">Resuelto</span>
+          {% elif dl.estado_tecnico == "PENDIENTE_SELECCION" %}
+            <span class="badge-status" style="background:#fff3cd;color:#856404;">Pendiente</span>
+          {% else %}
+            <span class="badge-status bs-inactivo">Error config</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Totales del despiece -->
+  <div style="padding:12px 20px;background:var(--surface-alt,#f8f9fa);border-top:1px solid var(--border);
+              display:flex;justify-content:flex-end;gap:32px;">
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:var(--ink-soft);">Total PowerGrips</div>
+      <div style="font-weight:700;font-size:15px;">
+        {{ ps.parametros_entrada.total_powergrip|default:"—"|floatformat:0 }} und
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:var(--ink-soft);">Líneas calculadas</div>
+      <div style="font-weight:700;font-size:15px;">{{ ps.despiece_lineas.all|length }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+  SECCIÓN 3 — APU POR ETAPAS
+══════════════════════════════════════════════════════════════════════════════ -->
+{% with apu=ps.apu %}
+<div class="panel fade-up" style="margin-top:16px;">
+  <div class="panel-header">
+    <span class="panel-title">③ APU — Análisis de Precios Unitarios</span>
+    {% if not apu %}
+    <form method="post" action="{% url 'presupuestos:apu_generar' ps.pk %}">
+      {% csrf_token %}
+      <button class="btn btn-primary btn-sm" type="submit">Generar APU de materiales</button>
+    </form>
+    {% else %}
+    <a href="{% url 'presupuestos:apu_detail' apu.pk %}" class="btn btn-ghost btn-sm">Ver APU completo</a>
+    {% endif %}
+  </div>
+
+  {% if apu %}
+  <!-- ── Tabs APU ──────────────────────────────────────────────────────── -->
+  <div style="padding:0 20px;">
+    <ul class="nav nav-tabs" id="apuTabs_{{ apu.pk }}" style="margin-bottom:0;border-bottom:1px solid var(--border);">
+      <li class="nav-item">
+        <a class="nav-link active" data-bs-toggle="tab" href="#tab_mat_{{ apu.pk }}">Materiales</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab_mo_{{ apu.pk }}">Mano de obra</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab_herr_{{ apu.pk }}">Herramientas</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab_admin_{{ apu.pk }}">Administrativo</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="tab" href="#tab_total_{{ apu.pk }}">Consolidado</a>
+      </li>
+    </ul>
+  </div>
+
+  <div class="tab-content" style="padding:0 20px 16px;">
+
+    <!-- ── Tab Materiales ─────────────────────────────────────────────── -->
+    <div class="tab-pane fade show active" id="tab_mat_{{ apu.pk }}">
+      {% with mat_lineas=apu.lineas.all %}
+      {% if mat_lineas %}
+      <table class="imp-table" style="margin-top:12px;">
+        <thead>
+          <tr>
+            <th>Ítem</th>
+            <th style="text-align:right">Rendimiento</th>
+            <th style="text-align:right">Precio ref.</th>
+            <th style="text-align:right">Costo unit.</th>
+            <th style="text-align:right">Costo total</th>
+            <th style="text-align:right">Valor total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in mat_lineas %}{% if l.tipo == "MATERIALES" %}
+          <tr>
+            <td>{{ l.descripcion }}</td>
+            <td style="text-align:right;font-family:monospace;">{{ l.rendimiento|floatformat:4 }}</td>
+            <td style="text-align:right;font-family:monospace;">${{ l.precio_referencia|floatformat:2 }}</td>
+            <td style="text-align:right;font-family:monospace;">${{ l.costo_unitario|floatformat:2 }}</td>
+            <td style="text-align:right;font-family:monospace;">${{ l.costo_total|floatformat:2 }}</td>
+            <td style="text-align:right;font-family:monospace;font-weight:600;">${{ l.valor_total|floatformat:2 }}</td>
+          </tr>
+          {% endif %}{% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700;background:var(--surface-alt,#f8f9fa);">
+            <td colspan="4">Total materiales</td>
+            <td style="text-align:right;font-family:monospace;">${{ apu.subtotal_materiales|floatformat:2 }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+      {% else %}
+      <div class="empty-state" style="padding:24px;">
+        <div class="empty-state-text">Sin líneas de materiales. Genere el APU primero.</div>
+      </div>
+      {% endif %}
+      {% endwith %}
+    </div>
+
+    <!-- ── Tab Mano de Obra ───────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab_mo_{{ apu.pk }}">
+      <div style="margin-top:16px;">
+        <div style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
+          La cuadrilla estándar es de <strong>7 personas</strong>.
+          Los APE (análisis de precios de equipamiento) se ingresan por día.
+          El sistema calcula los días con base en el rendimiento y las unidades totales.
+        </div>
+        <form method="post" action="{% url 'presupuestos:apu_mano_obra' apu.pk %}">
+          {% csrf_token %}
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Personas en la cuadrilla</label>
+              <input type="number" name="cuadrilla_personas" class="form-control form-control-sm"
+                     value="{{ apu.cuadrilla_personas|default:7 }}" min="1" max="50">
+              <small class="text-muted">Cuadrilla estándar PowerGrip: 7 personas.</small>
+            </div>
+            <div class="form-group">
+              <label>HYA — Herramientas y andamios ($/día)</label>
+              <input type="number" name="hya_dia" class="form-control form-control-sm"
+                     value="0" min="0" step="1000" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label>Cuadrilla de instalación ($/día)</label>
+              <input type="number" name="cuadrilla_dia" class="form-control form-control-sm"
+                     value="0" min="0" step="1000" placeholder="0">
+              <small class="text-muted">Costo diario del equipo completo de instalación.</small>
+            </div>
+            <div class="form-group">
+              <label>Dotación ($/día)</label>
+              <input type="number" name="dotacion_dia" class="form-control form-control-sm"
+                     value="0" min="0" step="1000" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label>Elementos de protección ($/día)</label>
+              <input type="number" name="proteccion_dia" class="form-control form-control-sm"
+                     value="0" min="0" step="1000" placeholder="0">
+            </div>
+          </div>
+
+          <!-- Líneas MO existentes -->
+          {% with mo_lineas=apu.lineas.all %}
+          {% for l in mo_lineas %}{% if l.tipo == "MANO_DE_OBRA" %}
+          {% if forloop.first %}
+          <div style="margin-top:16px;font-size:12px;font-weight:600;color:var(--ink-soft);
+                      text-transform:uppercase;letter-spacing:.5px;">Líneas registradas</div>
+          <table class="imp-table" style="margin-bottom:12px;">
+            <thead><tr><th>Concepto</th><th style="text-align:right">CU</th><th style="text-align:right">CT</th></tr></thead>
+            <tbody>
+          {% endif %}
+          <tr>
+            <td>{{ l.descripcion }}</td>
+            <td style="text-align:right;font-family:monospace;">${{ l.costo_unitario|floatformat:4 }}</td>
+            <td style="text-align:right;font-family:monospace;">${{ l.costo_total|floatformat:2 }}</td>
+          </tr>
+          {% if forloop.last %}</tbody>
+            <tfoot><tr style="font-weight:700;"><td>Subtotal MO</td><td></td>
+              <td style="text-align:right;font-family:monospace;">${{ apu.subtotal_mano_obra|floatformat:2 }}</td></tr></tfoot>
+          </table>{% endif %}
+          {% endif %}{% endfor %}
+          {% endwith %}
+
+          <button type="submit" class="btn btn-primary btn-sm">Guardar mano de obra</button>
+        </form>
+
+        {% if apu.dias_trabajo %}
+        <div style="margin-top:12px;padding:10px 14px;background:var(--surface-alt,#f8f9fa);
+                    border-radius:6px;font-size:12px;">
+          <strong>Tiempo estimado:</strong>
+          {{ apu.dias_trabajo|floatformat:1 }} días ·
+          {{ apu.tiempo_estimado_meses|floatformat:2 }} meses ·
+          {{ apu.rendimiento_und_dia|floatformat:2 }} und/día
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ── Tab Herramientas ───────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab_herr_{{ apu.pk }}">
+      <div style="margin-top:16px;">
+        <form method="post" action="{% url 'presupuestos:apu_herramientas' apu.pk %}">
+          {% csrf_token %}
+          <div id="herramientasRows_{{ apu.pk }}">
+            <div class="form-grid-2" style="margin-bottom:8px;">
+              <div class="form-group">
+                <label>Descripción</label>
+                <input type="text" name="descripcion[]" class="form-control form-control-sm"
+                       placeholder="Ej: Andamio tubular">
+              </div>
+              <div class="form-group">
+                <label>Costo total ($)</label>
+                <input type="number" name="precio_total[]" class="form-control form-control-sm"
+                       step="1000" min="0" placeholder="0">
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-xs"
+                  onclick="agregarFilaHerramienta('{{ apu.pk }}')">+ Agregar ítem</button>
+          <button type="submit" class="btn btn-primary btn-sm" style="margin-left:8px;">Guardar herramientas</button>
+        </form>
+
+        <!-- Líneas existentes -->
+        {% with herr_lineas=apu.lineas.all %}
+        {% for l in herr_lineas %}{% if l.tipo == "HERRAMIENTAS_EQUIPOS" %}
+        {% if forloop.first %}
+        <div style="margin-top:16px;font-size:12px;font-weight:600;color:var(--ink-soft);
+                    text-transform:uppercase;letter-spacing:.5px;">Registradas</div>
+        <table class="imp-table"><thead><tr><th>Ítem</th><th style="text-align:right">CU</th></tr></thead><tbody>
+        {% endif %}
+        <tr><td>{{ l.descripcion }}</td>
+            <td style="text-align:right;font-family:monospace;">${{ l.costo_unitario|floatformat:4 }}</td></tr>
+        {% if forloop.last %}</tbody><tfoot><tr style="font-weight:700;"><td>Subtotal herramientas</td>
+          <td style="text-align:right;font-family:monospace;">${{ apu.subtotal_herramientas|floatformat:2 }}</td>
+        </tr></tfoot></table>{% endif %}
+        {% endif %}{% endfor %}
+        {% endwith %}
+      </div>
+    </div>
+
+    <!-- ── Tab Administrativo ─────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab_admin_{{ apu.pk }}">
+      <div style="margin-top:16px;max-width:440px;">
+        <form method="post" action="{% url 'presupuestos:apu_admin' apu.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label>Tipo</label>
+            <select name="modo" class="form-select form-select-sm" id="modoAdmin_{{ apu.pk }}"
+                    onchange="toggleAdminLabel('{{ apu.pk }}',this.value)">
+              <option value="porcentaje">% sobre base (mat + MO + herr)</option>
+              <option value="valor">Valor fijo ($)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label id="lblAdmin_{{ apu.pk }}">Porcentaje (%)</label>
+            <input type="number" name="valor" class="form-control form-control-sm"
+                   step="0.01" min="0" placeholder="Ej: 15">
+          </div>
+          <div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">
+            Base actual: ${{ apu.subtotal_materiales|floatformat:2 }} (mat)
+            + ${{ apu.subtotal_mano_obra|floatformat:2 }} (MO)
+            + ${{ apu.subtotal_herramientas|floatformat:2 }} (herr)
+          </div>
+          {% with admin_lineas=apu.lineas.all %}
+          {% for l in admin_lineas %}{% if l.tipo == "ADMINISTRACION" %}
+          <div style="font-size:12px;margin-bottom:8px;padding:8px 12px;
+                      background:var(--surface-alt,#f8f9fa);border-radius:6px;">
+            Admin registrado: ${{ l.costo_total|floatformat:2 }}
+          </div>
+          {% endif %}{% endfor %}
+          {% endwith %}
+          <button type="submit" class="btn btn-primary btn-sm">Guardar administrativo</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Tab Consolidado ────────────────────────────────────────────── -->
+    <div class="tab-pane fade" id="tab_total_{{ apu.pk }}">
+      <div style="margin-top:20px;max-width:500px;">
+        <table class="imp-table">
+          <thead>
+            <tr><th>Concepto</th><th style="text-align:right">Costo total</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Materiales</td>
+              <td style="text-align:right;font-family:monospace;">${{ apu.subtotal_materiales|floatformat:2 }}</td>
+            </tr>
+            <tr>
+              <td>Mano de obra</td>
+              <td style="text-align:right;font-family:monospace;">${{ apu.subtotal_mano_obra|floatformat:2 }}</td>
+            </tr>
+            <tr>
+              <td>Herramientas y equipos</td>
+              <td style="text-align:right;font-family:monospace;">${{ apu.subtotal_herramientas|floatformat:2 }}</td>
+            </tr>
+            <tr>
+              <td>Transporte</td>
+              <td style="text-align:right;font-family:monospace;">${{ apu.subtotal_transporte|floatformat:2 }}</td>
+            </tr>
+            <tr>
+              <td>Administrativo</td>
+              <td style="text-align:right;font-family:monospace;">${{ apu.subtotal_administracion|floatformat:2 }}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr style="font-weight:800;font-size:15px;background:var(--surface-alt,#f8f9fa);">
+              <td>COSTO TOTAL</td>
+              <td style="text-align:right;font-family:monospace;">${{ apu.total_costo|floatformat:2 }}</td>
+            </tr>
+            <tr style="font-weight:700;color:var(--blue,#0d6efd);">
+              <td>VALOR DE VENTA</td>
+              <td style="text-align:right;font-family:monospace;">${{ apu.total_valor_venta|floatformat:2 }}</td>
+            </tr>
+            {% if ps.parametros_entrada.total_powergrip %}
+            <tr style="color:var(--ink-soft);font-size:12px;">
+              <td>Costo unitario por PowerGrip</td>
+              <td style="text-align:right;font-family:monospace;">
+                ${% widthratio apu.total_costo ps.parametros_entrada.total_powergrip 1 %}
+              </td>
+            </tr>
+            {% endif %}
+          </tfoot>
+        </table>
+
+        <div style="margin-top:16px;display:flex;gap:8px;">
+          <form method="post" action="{% url 'presupuestos:apu_generar' ps.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-ghost btn-sm" type="submit">↺ Regenerar materiales</button>
+          </form>
+          <a href="{% url 'presupuestos:apu_update' apu.pk %}" class="btn btn-ghost btn-sm">⚙ Parámetros APU</a>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-content -->
+
+  {% else %}
+  <!-- Sin APU: mostrar botón para generar -->
+  <div class="empty-state" style="padding:32px;">
+    <div class="empty-state-icon">≡</div>
+    <div class="empty-state-text">
+      El despiece está calculado. Genere el APU de materiales para comenzar el análisis de costos.
+    </div>
+    <form method="post" action="{% url 'presupuestos:apu_generar' ps.pk %}" style="margin-top:12px;">
+      {% csrf_token %}
+      <button class="btn btn-primary" type="submit">Generar APU de materiales</button>
+    </form>
+  </div>
+  {% endif %}
+
+</div>
+{% endwith %}
+
+{% endif %}{# /if despiece_lineas #}
+{% endfor %}{# /for ps in ps_list #}
+
+{% else %}
+<!-- Sin cálculo previo: guía -->
+<div class="panel fade-up" style="margin-top:16px;">
+  <div class="empty-state" style="padding:48px;">
+    <div class="empty-state-icon">⊞</div>
+    <div class="empty-state-text" style="max-width:420px;">
+      Configure el subsistema, ingrese las variables y seleccione los productos en el panel de arriba.
+      El despiece se calculará automáticamente cuando haga clic en <strong>Calcular despiece</strong>.
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Datos del backend ──────────────────────────────────────────────────────
+const PRODUCTOS_POR_CATEGORIA = {{ productos_por_categoria|safe }};
+const SUBSISTEMAS_DEF         = {{ subsistemas_def|safe }};
+
+// ── Mapa de categorías según el slug real ─────────────────────────────────
+const LABEL_CATEGORIA = {
+  "PowerGrip":  "Producto PowerGrip",
+  "Fijaciones": "Producto Fijaciones",
+  "Accesorios": "Limpiador (Accesorios)",
+  "Estopa":     "Estopa",
+  "Sellador":   "Sellador",
+};
+
+// ── Estado de selección ───────────────────────────────────────────────────
+let categoriasRequeridas = [];
+let productosSeleccionados = {};
+
+function onSubsistemaChange(subsistemaId) {
+  if (!subsistemaId) {
+    document.getElementById("seccionVariables").style.display = "none";
+    return;
+  }
+
+  const def = SUBSISTEMAS_DEF[subsistemaId];
+  if (!def) {
+    console.warn("Sin definición para subsistema", subsistemaId);
+    return;
+  }
+
+  // Mostrar sección
+  document.getElementById("seccionVariables").style.display = "block";
+  categoriasRequeridas = def.categorias;
+  productosSeleccionados = {};
+
+  renderVariables(def.variables);
+  renderProductos(def.categorias);
+  validarCalcular();
+}
+
+function renderVariables(variables) {
+  const cont = document.getElementById("variablesContainer");
+  cont.innerHTML = "";
+  variables.forEach(v => {
+    const grupo = document.createElement("div");
+    grupo.className = "form-group";
+    grupo.style.marginBottom = "12px";
+
+    const label = document.createElement("label");
+    label.textContent = v.label + (v.unidad ? ` (${v.unidad})` : "");
+    grupo.appendChild(label);
+
+    let input;
+    if (v.opciones && v.opciones.length > 0) {
+      // Renderizar como select
+      input = document.createElement("select");
+      input.name = `parametros[${v.variable}]`;
+      input.className = "form-select form-select-sm";
+      v.opciones.forEach(([val, lbl]) => {
+        const opt = new Option(lbl, val, val == v.default, val == v.default);
+        input.appendChild(opt);
+      });
+    } else {
+      // Renderizar como number input
+      input = document.createElement("input");
+      input.type = "number";
+      input.name = `parametros[${v.variable}]`;
+      input.className = "form-control form-control-sm";
+      input.step = v.variable === "desperdicio" ? "0.001" : "1";
+      if (v.default !== null && v.default !== undefined) input.value = v.default;
+      input.placeholder = v.default !== null ? String(v.default) : "";
+    }
+    grupo.appendChild(input);
+
+    if (v.descripcion) {
+      const help = document.createElement("small");
+      help.className = "text-muted";
+      help.textContent = v.descripcion;
+      grupo.appendChild(help);
+    }
+    cont.appendChild(grupo);
+  });
+}
+
+function renderProductos(categorias) {
+  const cont = document.getElementById("productosContainer");
+  cont.innerHTML = "";
+  categorias.forEach(slug => {
+    const productos = PRODUCTOS_POR_CATEGORIA[slug] || [];
+    const grupo = document.createElement("div");
+    grupo.className = "form-group";
+    grupo.style.marginBottom = "12px";
+
+    const label = document.createElement("label");
+    label.innerHTML = (LABEL_CATEGORIA[slug] || slug) +
+      ' <span style="color:var(--red);font-size:11px;">*</span>';
+    grupo.appendChild(label);
+
+    if (productos.length === 0) {
+      const warn = document.createElement("div");
+      warn.style.cssText = "font-size:12px;color:var(--red);padding:6px 0;";
+      warn.textContent = `⚠ Sin productos en la categoría "${slug}". Agréguelos en Catálogos.`;
+      grupo.appendChild(warn);
+    } else {
+      const sel = document.createElement("select");
+      sel.name = `productos[${slug}]`;
+      sel.className = "form-select form-select-sm";
+      sel.dataset.categoria = slug;
+      sel.addEventListener("change", () => {
+        productosSeleccionados[slug] = sel.value;
+        validarCalcular();
+      });
+
+      const opt0 = new Option("— Seleccionar producto —", "");
+      sel.appendChild(opt0);
+      productos.forEach(p => {
+        sel.appendChild(new Option(`${p.nombre} (${p.codigo})`, p.pk));
+      });
+      grupo.appendChild(sel);
+    }
+
+    cont.appendChild(grupo);
+  });
+}
+
+function validarCalcular() {
+  const btn = document.getElementById("btnCalcular");
+  const lbl = document.getElementById("lblValidacion");
+
+  const faltantes = categoriasRequeridas.filter(c => !productosSeleccionados[c]);
+
+  if (faltantes.length === 0) {
+    btn.disabled = false;
+    lbl.textContent = "✓ Todos los productos seleccionados. Puede calcular.";
+    lbl.style.color = "var(--green,#198754)";
+  } else {
+    btn.disabled = true;
+    lbl.textContent = `Faltan: ${faltantes.map(c => LABEL_CATEGORIA[c] || c).join(", ")}.`;
+    lbl.style.color = "var(--ink-soft)";
+  }
+}
+
+// ── Helper: agregar fila herramientas ──────────────────────────────────────
+function agregarFilaHerramienta(apuPk) {
+  const cont = document.getElementById("herramientasRows_" + apuPk);
+  const fila = document.createElement("div");
+  fila.className = "form-grid-2";
+  fila.style.marginBottom = "8px";
+  fila.innerHTML = `
+    <div class="form-group">
+      <input type="text" name="descripcion[]" class="form-control form-control-sm"
+             placeholder="Descripción del ítem">
+    </div>
+    <div class="form-group">
+      <input type="number" name="precio_total[]" class="form-control form-control-sm"
+             step="1000" min="0" placeholder="Costo total ($)">
+    </div>`;
+  cont.appendChild(fila);
+}
+
+// ── Admin toggle label ─────────────────────────────────────────────────────
+function toggleAdminLabel(apuPk, modo) {
+  const lbl = document.getElementById("lblAdmin_" + apuPk);
+  if (lbl) lbl.textContent = modo === "porcentaje" ? "Porcentaje (%)" : "Valor fijo ($)";
+}
+
+// ── Init: si ya hay subsistema seleccionado, renderizar ───────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  const sel = document.getElementById("subsistemaSelect");
+  if (sel && sel.value) {
+    onSubsistemaChange(sel.value);
+
+    // Pre-seleccionar productos ya asignados en líneas existentes
+    {% for ps in ps_list %}
+    {% for dl in ps.despiece_lineas.all %}
+    {% if dl.producto and dl.categoria_producto %}
+    setTimeout(() => {
+      const catSlug = "{{ dl.categoria_producto.nombre }}";
+      const prodPk  = "{{ dl.producto.pk }}";
+      const select = document.querySelector(`select[name="productos[${catSlug}]"]`);
+      if (select) {
+        select.value = prodPk;
+        productosSeleccionados[catSlug] = prodPk;
+        validarCalcular();
+      }
+    }, 50);
+    {% endif %}
+    {% endfor %}
+    {% endfor %}
+  }
+});
+</script>
+{% endblock %}

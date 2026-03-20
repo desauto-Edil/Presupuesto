@@ -158,3 +158,81 @@ class DespieceService:
             ps.pk, len(resultados), ps.sistema.codigo, ps.subsistema.codigo,
         )
         return resultados
+
+    def validar_productos_completos(self) -> list[str]:
+        """
+        Devuelve la lista de categorías que aún no tienen producto asignado.
+        Lista vacía = todos los productos resueltos = listo para APU.
+
+        Uso:
+            pendientes = DespieceService(ps).validar_productos_completos()
+            if pendientes:
+                raise ValueError(f"Faltan productos: {pendientes}")
+        """
+        from apps.presupuestos.models import DespieceLinea
+
+        pendientes = list(
+            DespieceLinea.objects.filter(
+                proyecto_sistema=self.ps,
+                producto__isnull=True,
+                categoria_producto__isnull=False,
+            ).values_list("categoria_producto__nombre", flat=True)
+        )
+
+        if pendientes:
+            logger.warning(
+                "[DespieceService] PS %s — %d categorías sin producto: %s",
+                self.ps.pk, len(pendientes), pendientes,
+            )
+        else:
+            logger.debug(
+                "[DespieceService] PS %s — todos los productos resueltos.", self.ps.pk
+            )
+
+        return pendientes
+
+    def asignar_productos(self, productos_map: dict[str, int]) -> list[str]:
+        """
+        Asigna productos a las líneas pendientes de selección.
+
+        productos_map: {categoria_slug: producto_pk}
+        Devuelve lista de errores (vacía si todo OK).
+
+        Flujo:
+          1. Para cada línea pendiente de selección.
+          2. Busca el producto_pk en productos_map usando el nombre de la categoría.
+          3. Llama a linea.resolver_producto(producto) que valida la categoría.
+          4. Si hay error, lo registra y continúa (no aborta el loop).
+        """
+        from apps.catalogos.models import Producto
+        from apps.presupuestos.models import DespieceLinea
+        from django.core.exceptions import ValidationError
+
+        errores = []
+        lineas_pendientes = DespieceLinea.objects.filter(
+            proyecto_sistema=self.ps,
+            producto__isnull=True,
+            categoria_producto__isnull=False,
+        ).select_related("categoria_producto")
+
+        for linea in lineas_pendientes:
+            slug = linea.categoria_producto.nombre
+            producto_pk = productos_map.get(slug)
+            if not producto_pk:
+                errores.append(f"Sin producto para categoría '{slug}'.")
+                continue
+            try:
+                producto = Producto.objects.get(pk=producto_pk, activo=True)
+                linea.resolver_producto(producto)
+                logger.debug(
+                    "[DespieceService] Línea %s → producto '%s' asignado.",
+                    linea.pk, producto.nombre,
+                )
+            except Producto.DoesNotExist:
+                errores.append(f"Producto pk={producto_pk} no encontrado o inactivo.")
+            except ValidationError as exc:
+                errores.append(f"Producto inválido para '{slug}': {exc.message}")
+            except Exception as exc:
+                errores.append(f"Error asignando '{slug}': {exc}")
+
+        return errores

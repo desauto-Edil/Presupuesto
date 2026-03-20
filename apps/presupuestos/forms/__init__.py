@@ -2,6 +2,7 @@
 
 from django import forms
 from apps.presupuestos.models import ProyectoSistema, DespieceLinea, ConfiguracionAPU, APUProyecto, APULinea
+from apps.catalogos.models import Producto
 
 
 class ProyectoSistemaForm(forms.ModelForm):
@@ -67,3 +68,57 @@ class APUProyectoForm(forms.ModelForm):
             "tiempo_estimado_meses":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "rendimiento_und_dia":    forms.NumberInput(attrs={"class": "form-control", "step": "0.000001"}),
         }
+
+
+class APUManoObraForm(forms.Form):
+    """Formulario para ingresar costos diarios de mano de obra (APE)."""
+    cuadrilla_personas = forms.IntegerField(
+        label="Personas en la cuadrilla",
+        initial=7,
+        min_value=1,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+        help_text="Cuadrilla estándar: 7 personas.",
+    )
+    hya_dia = forms.DecimalField(
+        label="HYA — Herramientas y andamios ($/día)",
+        required=False, initial=0, min_value=0,
+        decimal_places=2, max_digits=18,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "1000", "placeholder": "0"}),
+    )
+    cuadrilla_dia = forms.DecimalField(
+        label="Cuadrilla de instalación ($/día)",
+        required=False, initial=0, min_value=0,
+        decimal_places=2, max_digits=18,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "1000", "placeholder": "0"}),
+    )
+    dotacion_dia = forms.DecimalField(
+        label="Dotación ($/día)",
+        required=False, initial=0, min_value=0,
+        decimal_places=2, max_digits=18,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "1000", "placeholder": "0"}),
+    )
+    proteccion_dia = forms.DecimalField(
+        label="Elementos de protección ($/día)",
+        required=False, initial=0, min_value=0,
+        decimal_places=2, max_digits=18,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "1000", "placeholder": "0"}),
+    )
+
+
+class APUAdminForm(forms.Form):
+    """Formulario para registrar el costo administrativo del APU."""
+    MODO_CHOICES = [
+        ("porcentaje", "% sobre base (materiales + MO + herramientas)"),
+        ("valor",      "Valor fijo ($)"),
+    ]
+    modo = forms.ChoiceField(
+        label="Tipo de administrativo",
+        choices=MODO_CHOICES,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    valor = forms.DecimalField(
+        label="Valor (%  o $)",
+        min_value=0,
+        decimal_places=4, max_digits=18,
+        widget=forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "placeholder": "0"}),
+    )

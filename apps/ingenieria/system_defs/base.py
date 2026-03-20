@@ -19,6 +19,9 @@ class VariableRequerida:
     """
     Variable de entrada que el presupuestador debe ingresar para este sistema.
 
+    opciones: si se provee, la UI renderiza un <select> en vez de <input type="number">.
+              Formato: lista de (value, label), ej: [(4, "4 fijaciones"), (8, "8 fijaciones")].
+
     Ejemplo:
         VariableRequerida(
             variable="total_powergrip",
@@ -27,11 +30,12 @@ class VariableRequerida:
             default=0.0,
         )
     """
-    variable: str           # Clave en el contexto (snake_case)
-    label:    str           # Texto para mostrar en el formulario
-    unidad:   str  = "und"  # Unidad de medida (solo informativa)
+    variable: str                       # Clave en el contexto (snake_case)
+    label:    str                       # Texto para mostrar en el formulario
+    unidad:   str  = "und"              # Unidad de medida (solo informativa)
     default:  Optional[float] = None
     descripcion: str = ""
+    opciones: Optional[list] = None     # [(value, label), ...] → renderiza dropdown
 
 
 @dataclass
