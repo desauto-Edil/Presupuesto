@@ -2,14 +2,15 @@
 apps/catalogos/models.py — Catálogo maestro reutilizable.
   - Unidades de medida
   - Categorías de producto
-  - Productos -tecnico
+  - Productos (con proveedor y precio integrados)
   - Proveedores
-  - Relación producto-proveedor con precio
+  - ProductoProveedor (tabla técnica usada por DespieceService)
 
 Dependencias: solo apps.common (choices).
 """
 
 from django.db import models
+from django.utils import timezone
 from apps.common.choices import OrigenProducto, Moneda
 
 
@@ -53,6 +54,18 @@ class CategoriaProducto(models.Model):
 # ---------------------------------------------------------------------------
 
 class Producto(models.Model):
+    """
+    Producto del catálogo técnico.
+
+    El precio se gestiona DIRECTAMENTE en este modelo:
+      · proveedor              → FK al proveedor principal
+      · precio_actual          → precio vigente (obligatorio vía form)
+      · fecha_actualizacion_precio → se actualiza automáticamente al cambiar precio
+
+    ProductoProveedor sigue existiendo como tabla técnica usada por DespieceService.
+    Al guardar el precio aquí, se sincroniza automáticamente allá.
+    """
+
     codigo = models.CharField(max_length=50, unique=True)
     nombre = models.CharField(max_length=300)
     categoria = models.ForeignKey(
@@ -61,6 +74,26 @@ class Producto(models.Model):
     unidad = models.ForeignKey(
         UnidadMedida, on_delete=models.PROTECT, related_name="productos"
     )
+    # ── Proveedor, precio y moneda ────────────────────────────────────────────
+    proveedor = models.ForeignKey(
+        "Proveedor", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="productos_directos",
+        verbose_name="Proveedor principal",
+    )
+    precio_actual = models.DecimalField(
+        max_digits=18, decimal_places=2,
+        null=True, blank=True,
+        verbose_name="Precio actual",
+    )
+    moneda = models.CharField(
+        max_length=3, choices=Moneda.choices, default=Moneda.COP,
+        verbose_name="Moneda",
+    )
+    fecha_actualizacion_precio = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name="Última actualización de precio",
+    )
+    # ─────────────────────────────────────────────────────────────────────────
     origen = models.CharField(
         max_length=15, choices=OrigenProducto.choices, default=OrigenProducto.NACIONAL
     )
@@ -77,6 +110,24 @@ class Producto(models.Model):
 
     def __str__(self):
         return f"{self.codigo} — {self.nombre}"
+
+    def save(self, *args, **kwargs):
+        """
+        Auto-detecta cambio de precio y actualiza fecha_actualizacion_precio.
+        NO hace sync a ProductoProveedor aquí para evitar dependencias circulares
+        en el modelo — la sincronización ocurre en la vista (form_valid).
+        """
+        if self.precio_actual is not None:
+            precio_cambio = True
+            if self.pk:
+                try:
+                    anterior = Producto.objects.get(pk=self.pk)
+                    precio_cambio = (anterior.precio_actual != self.precio_actual)
+                except Producto.DoesNotExist:
+                    pass
+            if precio_cambio:
+                self.fecha_actualizacion_precio = timezone.now()
+        super().save(*args, **kwargs)
 
     @classmethod
     def generar_codigo(cls, categoria) -> str:

@@ -1,24 +1,77 @@
 """apps/comercial/forms.py — Formularios del módulo comercial."""
 
 from django import forms
-from django.core.exceptions import ValidationError
 from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto
 
 
 class ClienteForm(forms.ModelForm):
+    """Formulario base de Cliente (solo datos de la empresa)."""
+
     class Meta:
         model = Cliente
         fields = ["nit", "razon_social", "ciudad", "direccion",
                   "telefono_principal", "email_principal", "activo"]
         widgets = {
-            "nit": forms.TextInput(attrs={"class": "form-control"}),
-            "razon_social": forms.TextInput(attrs={"class": "form-control"}),
-            "ciudad": forms.TextInput(attrs={"class": "form-control"}),
-            "direccion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "telefono_principal": forms.TextInput(attrs={"class": "form-control"}),
-            "email_principal": forms.EmailInput(attrs={"class": "form-control"}),
-            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nit":               forms.TextInput(attrs={"class": "form-control"}),
+            "razon_social":      forms.TextInput(attrs={"class": "form-control"}),
+            "ciudad":            forms.TextInput(attrs={"class": "form-control"}),
+            "direccion":         forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "telefono_principal":forms.TextInput(attrs={"class": "form-control"}),
+            "email_principal":   forms.EmailInput(attrs={"class": "form-control"}),
+            "activo":            forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+
+class ClienteConContactoForm(forms.ModelForm):
+    """
+    Formulario combinado: Cliente + Contacto principal en una sola pantalla.
+    · Creación: la vista crea el ContactoCliente con es_principal=True.
+    · Edición: la vista actualiza el ContactoCliente principal existente.
+    contacto_nombre es obligatorio; los demás campos del contacto son opcionales.
+    """
+
+    # ── Campos del contacto principal (prefijo "contacto_") ──────────────────
+    contacto_nombre   = forms.CharField(
+        max_length=200, label="Nombre del contacto",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Nombre completo"}),
+    )
+    contacto_cargo    = forms.CharField(
+        max_length=120, required=False, label="Cargo",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: Gerente de proyectos"}),
+    )
+    contacto_email    = forms.EmailField(
+        required=False, label="Email del contacto",
+        widget=forms.EmailInput(attrs={"class": "form-control"}),
+    )
+    contacto_telefono = forms.CharField(
+        max_length=30, required=False, label="Teléfono del contacto",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+
+    class Meta:
+        model = Cliente
+        fields = ["nit", "razon_social", "ciudad", "direccion",
+                  "telefono_principal", "email_principal", "activo"]
+        widgets = {
+            "nit":               forms.TextInput(attrs={"class": "form-control"}),
+            "razon_social":      forms.TextInput(attrs={"class": "form-control"}),
+            "ciudad":            forms.TextInput(attrs={"class": "form-control"}),
+            "direccion":         forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "telefono_principal":forms.TextInput(attrs={"class": "form-control"}),
+            "email_principal":   forms.EmailInput(attrs={"class": "form-control"}),
+            "activo":            forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # En edición: pre-poblar campos del contacto desde el contacto principal existente
+        if self.instance and self.instance.pk:
+            cp = self.instance.contacto_principal
+            if cp:
+                self.fields["contacto_nombre"].initial   = cp.nombre
+                self.fields["contacto_cargo"].initial    = cp.cargo or ""
+                self.fields["contacto_email"].initial    = cp.email or ""
+                self.fields["contacto_telefono"].initial = cp.telefono or ""
 
 
 class ContactoClienteForm(forms.ModelForm):
@@ -50,25 +103,17 @@ class TipoProyectoForm(forms.ModelForm):
 class SolicitudForm(forms.ModelForm):
     """
     Formulario de Solicitud.
-    · contacto se filtra dinámicamente por cliente vía JS (AJAX).
-    · clean() garantiza que contacto pertenezca al cliente seleccionado.
+    consecutivo, estado y creado_por son controlados por el sistema (excluidos).
     """
 
     class Meta:
         model = Solicitud
         fields = [
-            "cliente", "contacto",
+            "cliente",
             "nombre", "descripcion", "fecha_entrega", "observaciones",
         ]
         widgets = {
-            "cliente": forms.Select(attrs={
-                "class": "form-select",
-                "id": "id_cliente",
-            }),
-            "contacto": forms.Select(attrs={
-                "class": "form-select",
-                "id": "id_contacto",
-            }),
+            "cliente": forms.Select(attrs={"class": "form-select"}),
             "nombre": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Nombre del proyecto o requerimiento",
@@ -77,31 +122,6 @@ class SolicitudForm(forms.ModelForm):
             "fecha_entrega": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # En edición: filtrar contactos al cliente ya seleccionado
-        # (el JS los actualiza dinámicamente cuando el usuario cambia el cliente)
-        if self.instance and self.instance.pk and self.instance.cliente_id:
-            self.fields["contacto"].queryset = ContactoCliente.objects.filter(
-                cliente_id=self.instance.cliente_id, activo=True
-            ).order_by("-es_principal", "nombre")
-        else:
-            # Creación: empty queryset — el JS carga los contactos via AJAX
-            self.fields["contacto"].queryset = ContactoCliente.objects.none()
-        self.fields["contacto"].required = False
-
-    def clean(self):
-        """Garantiza que el contacto pertenezca al cliente seleccionado."""
-        cd = super().clean()
-        cliente = cd.get("cliente")
-        contacto = cd.get("contacto")
-        if contacto and cliente:
-            if contacto.cliente_id != cliente.pk:
-                raise ValidationError({
-                    "contacto": "El contacto seleccionado no pertenece a este cliente."
-                })
-        return cd
 
 
 class ProyectoForm(forms.ModelForm):

@@ -2,41 +2,115 @@
 {% block title %}{% if object %}Editar{% else %}Nuevo{% endif %} Cliente{% endblock %}
 {% block nav_clientes %}active{% endblock %}
 {% block page_title %}{% if object %}Editar Cliente{% else %}Nuevo Cliente{% endif %}{% endblock %}
-{% block breadcrumb %}Comercial → Clientes → {% if object %}{{ object.razon_social }}{% else %}Nuevo{% endif %}{% endblock %}
-
-{% block topbar_actions %}
-  <a href="{% url 'comercial:cliente_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+{% block breadcrumb %}
+  <a href="{% url 'comercial:cliente_list' %}" style="color:inherit;text-decoration:none;">Clientes</a>
+  → {% if object %}{{ object.razon_social }}{% else %}Nuevo{% endif %}
 {% endblock %}
 
 {% block content %}
 <div class="form-page-card fade-up">
-  <div class="form-page-header">
-    <span class="form-page-title">
-      {% if object %}{{ object.razon_social }}{% else %}Nuevo cliente{% endif %}
-    </span>
+
+  <div class="form-page-header accent-top-violet">
+    <div>
+      <div class="form-page-title">
+        {% if object %}{{ object.razon_social }}{% else %}Nuevo cliente{% endif %}
+      </div>
+    </div>
+    <a href="{% url 'comercial:cliente_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
   </div>
-  <form method="post">
-    {% csrf_token %}
-    <div class="form-page-body">
+
+  <div class="form-page-body">
+
+    <form method="post" id="formCliente">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="msg-bar msg-error">✕ {{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <!-- ── Datos de la empresa ── -->
+      <div class="section-heading">Datos de la empresa</div>
+
       <div class="form-grid-2">
-        <div class="form-group"><label>NIT / ID</label>{{ form.nit }}</div>
-        <div class="form-group"><label>Ciudad</label>{{ form.ciudad }}</div>
+        <div class="form-group">
+          <label>NIT / ID <span style="color:var(--brand-red)">*</span></label>
+          {{ form.nit }}
+          {% if form.nit.errors %}<div class="invalid-feedback d-block">{{ form.nit.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>Ciudad</label>
+          {{ form.ciudad }}
+        </div>
       </div>
-      <div class="form-group"><label>Razón social</label>{{ form.razon_social }}</div>
-      <div class="form-group"><label>Dirección</label>{{ form.direccion }}</div>
+
+      <div class="form-group">
+        <label>Razón social <span style="color:var(--brand-red)">*</span></label>
+        {{ form.razon_social }}
+        {% if form.razon_social.errors %}<div class="invalid-feedback d-block">{{ form.razon_social.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label>Dirección</label>
+        {{ form.direccion }}
+      </div>
+
       <div class="form-grid-2">
-        <div class="form-group"><label>Teléfono</label>{{ form.telefono_principal }}</div>
-        <div class="form-group"><label>Email</label>{{ form.email_principal }}</div>
+        <div class="form-group">
+          <label>Teléfono empresa</label>
+          {{ form.telefono_principal }}
+        </div>
+        <div class="form-group">
+          <label>Email empresa</label>
+          {{ form.email_principal }}
+        </div>
       </div>
-      <div class="form-check">{{ form.activo }}<label class="form-check-label">Activo</label></div>
-      {% if form.errors %}<div class="msg-bar msg-error">✕ Revisa los errores.</div>{% endif %}
-    </div>
-    <div class="form-page-footer">
-      <a href="{% url 'comercial:cliente_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
-      <button type="submit" class="btn btn-primary btn-sm">
-        {% if object %}Guardar cambios{% else %}Crear cliente{% endif %}
-      </button>
-    </div>
-  </form>
+
+      <div class="form-group">
+        <div class="form-check">
+          {{ form.activo }}
+          <label class="form-check-label" style="font-size:13px;">Cliente activo</label>
+        </div>
+      </div>
+
+      <!-- ── Contacto principal ── -->
+      <div style="border-top:1px solid var(--border);margin:18px -24px 18px;padding:18px 24px 0;
+                  background:rgba(86,83,148,0.03);">
+        <div class="section-heading" style="color:var(--brand-violet);margin-bottom:14px;">
+          Contacto principal
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label>Nombre <span style="color:var(--brand-red)">*</span></label>
+            {{ form.contacto_nombre }}
+            {% if form.contacto_nombre.errors %}<div class="invalid-feedback d-block">{{ form.contacto_nombre.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label>Cargo</label>
+            {{ form.contacto_cargo }}
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label>Email</label>
+            {{ form.contacto_email }}
+          </div>
+          <div class="form-group">
+            <label>Teléfono</label>
+            {{ form.contacto_telefono }}
+          </div>
+        </div>
+      </div>
+
+      <div class="form-page-footer" style="margin:0 -24px -22px;border-radius:0 0 var(--radius) var(--radius);">
+        <a href="{% url 'comercial:cliente_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+        <button type="submit" class="btn btn-primary btn-sm">
+          {% if object %}Guardar cambios{% else %}Crear cliente{% endif %}
+        </button>
+      </div>
+
+    </form>
+  </div>
 </div>
 {% endblock %}

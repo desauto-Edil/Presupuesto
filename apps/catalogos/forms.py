@@ -1,6 +1,7 @@
 """apps/catalogos/forms.py — Formularios del módulo de catálogos."""
 
 from django import forms
+from django.core.exceptions import ValidationError
 from .models import UnidadMedida, CategoriaProducto, Producto, Proveedor, ProductoProveedor
 
 
@@ -28,23 +29,55 @@ class CategoriaProductoForm(forms.ModelForm):
 
 
 class ProductoForm(forms.ModelForm):
+    """
+    Formulario de Producto con precio y proveedor integrados.
+    · precio_actual es obligatorio (validado en clean()).
+    · Al guardar, la vista sincroniza ProductoProveedor para el DespieceService.
+    """
+
     class Meta:
         model = Producto
         fields = [
             "codigo", "nombre", "categoria", "unidad",
+            "proveedor", "precio_actual", "moneda",
             "origen", "marca", "linea", "rendimiento", "activo",
         ]
         widgets = {
-            "codigo": forms.TextInput(attrs={"class": "form-control"}),
-            "nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "categoria": forms.Select(attrs={"class": "form-select"}),
-            "unidad": forms.Select(attrs={"class": "form-select"}),
-            "origen": forms.Select(attrs={"class": "form-select"}),
-            "marca": forms.TextInput(attrs={"class": "form-control"}),
-            "linea": forms.TextInput(attrs={"class": "form-control"}),
-            "rendimiento": forms.NumberInput(attrs={"class": "form-control", "step": "0.000001"}),
-            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "codigo":        forms.TextInput(attrs={"class": "form-control",
+                                                    "placeholder": "Auto-generado al guardar"}),
+            "nombre":        forms.TextInput(attrs={"class": "form-control"}),
+            "categoria":     forms.Select(attrs={"class": "form-select"}),
+            "unidad":        forms.Select(attrs={"class": "form-select"}),
+            "proveedor":     forms.Select(attrs={"class": "form-select"}),
+            "precio_actual": forms.NumberInput(attrs={"class": "form-control", "step": "0.01",
+                                                      "placeholder": "Ej: 8500"}),
+            "moneda":        forms.Select(attrs={"class": "form-select"}),
+            "origen":        forms.Select(attrs={"class": "form-select"}),
+            "marca":         forms.TextInput(attrs={"class": "form-control"}),
+            "linea":         forms.TextInput(attrs={"class": "form-control"}),
+            "rendimiento":   forms.NumberInput(attrs={"class": "form-control", "step": "0.000001"}),
+            "activo":        forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+    def clean(self):
+        cd = super().clean()
+        precio    = cd.get("precio_actual")
+        proveedor = cd.get("proveedor")
+        moneda    = cd.get("moneda")
+        if precio is None:
+            raise ValidationError({"precio_actual": "El precio es obligatorio."})
+        if precio <= 0:
+            raise ValidationError({"precio_actual": "El precio debe ser mayor a cero."})
+        if not proveedor:
+            raise ValidationError({"proveedor": "Debe asignar un proveedor al producto."})
+        if not moneda:
+            raise ValidationError({"moneda": "Selecciona la moneda del precio."})
+        return cd
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # codigo no es required en el form — se auto-genera en la vista si está vacío
+        self.fields["codigo"].required = False
 
 
 class ProveedorForm(forms.ModelForm):

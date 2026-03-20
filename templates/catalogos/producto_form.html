@@ -1,11 +1,160 @@
 {% extends "base.html" %}
-{% block title %}{% if object %}Editar{% else %}Crear{% endif %} Producto{% endblock %}
+{% block title %}{% if object %}Editar producto{% else %}Nuevo producto{% endif %}{% endblock %}
+{% block nav_productos %}active{% endblock %}
+{% block page_title %}{% if object %}Editar producto{% else %}Nuevo producto{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'catalogos:producto_list' %}" style="color:inherit;text-decoration:none;">Productos</a>
+  → {% if object %}{{ object.codigo }}{% else %}Nuevo{% endif %}
+{% endblock %}
+
 {% block content %}
-<h2>{% if object %}Editar producto{% else %}Nuevo producto{% endif %}</h2>
-<div class="card mt-3"><div class="card-body">
-<form method="post">{% csrf_token %}
-{% for f in form %}<div class="mb-3"><label class="form-label">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors }}</div>{% endif %}</div>{% endfor %}
-<button type="submit" class="btn btn-primary">Guardar</button>
-<a href="{% url 'catalogos:producto_list' %}" class="btn btn-secondary">Volver</a>
-</form></div></div>
+<div class="form-page-card fade-up">
+
+  <div class="form-page-header accent-top-lime">
+    <div>
+      <div class="form-page-title">
+        {% if object %}Editar producto{% else %}Nuevo producto{% endif %}
+      </div>
+      {% if object %}
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
+        Código: <strong style="color:var(--brand-violet);font-family:'Syne',sans-serif;">{{ object.codigo }}</strong>
+      </div>
+      {% else %}
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
+        El código se genera automáticamente según la categoría.
+      </div>
+      {% endif %}
+    </div>
+    <a href="{% url 'catalogos:producto_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+  </div>
+
+  <div class="form-page-body">
+
+    {% if object %}
+    <div style="background:rgba(86,83,148,0.06);border:1px solid rgba(86,83,148,0.15);
+                border-radius:8px;padding:12px 18px;margin-bottom:22px;display:flex;gap:28px;flex-wrap:wrap;">
+      <div>
+        <div class="sys-label">Código</div>
+        <span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--brand-violet);font-size:15px;">{{ object.codigo }}</span>
+      </div>
+      <div>
+        <div class="sys-label">Registrado</div>
+        <span style="font-size:12.5px;">{{ object.created_at|date:"d/m/Y" }}</span>
+      </div>
+      {% if object.fecha_actualizacion_precio %}
+      <div>
+        <div class="sys-label">Último precio</div>
+        <span style="font-size:12.5px;">{{ object.fecha_actualizacion_precio|date:"d/m/Y H:i" }}</span>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <form method="post" id="formProducto">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+      <div class="msg-bar msg-error">✕ {{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <!-- ── Identificación ── -->
+      <div class="section-heading">Identificación</div>
+
+      <div class="form-group">
+        <label>Nombre del producto <span style="color:var(--brand-red)">*</span></label>
+        {{ form.nombre }}
+        {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>
+            Código
+            <span style="font-size:10px;color:var(--ink-soft);margin-left:4px;">(opcional — auto-generado)</span>
+          </label>
+          {{ form.codigo }}
+          {% if form.codigo.errors %}<div class="invalid-feedback d-block">{{ form.codigo.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>Unidad de medida <span style="color:var(--brand-red)">*</span></label>
+          {{ form.unidad }}
+          {% if form.unidad.errors %}<div class="invalid-feedback d-block">{{ form.unidad.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Categoría <span style="color:var(--brand-red)">*</span></label>
+          {{ form.categoria }}
+          {% if form.categoria.errors %}<div class="invalid-feedback d-block">{{ form.categoria.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label>Origen</label>
+          {{ form.origen }}
+        </div>
+      </div>
+
+      <!-- ── Proveedor y precio ── -->
+      <div class="section-heading" style="margin-top:22px;">Proveedor y precio</div>
+
+      <div style="background:rgba(182,205,30,0.07);border:1px solid rgba(182,205,30,0.3);
+                  border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+
+        <div class="form-grid-2" style="margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Proveedor <span style="color:var(--brand-red)">*</span></label>
+            {{ form.proveedor }}
+            {% if form.proveedor.errors %}<div class="invalid-feedback d-block">{{ form.proveedor.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Precio actual <span style="color:var(--brand-red)">*</span></label>
+            {{ form.precio_actual }}
+            {% if form.precio_actual.errors %}<div class="invalid-feedback d-block">{{ form.precio_actual.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0;max-width:200px;">
+          <label>Moneda <span style="color:var(--brand-red)">*</span></label>
+          {{ form.moneda }}
+          {% if form.moneda.errors %}<div class="invalid-feedback d-block">{{ form.moneda.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+
+      <!-- ── Datos adicionales ── -->
+      <div class="section-heading" style="margin-top:22px;">Datos adicionales</div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Marca</label>
+          {{ form.marca }}
+        </div>
+        <div class="form-group">
+          <label>Línea</label>
+          {{ form.linea }}
+        </div>
+      </div>
+
+      <div class="form-group" style="max-width:220px;">
+        <label>Rendimiento</label>
+        {{ form.rendimiento }}
+        <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">Unidades por unidad base (si aplica)</div>
+      </div>
+
+      <div class="form-group">
+        <div class="form-check">
+          {{ form.activo }}
+          <label class="form-check-label" style="font-size:13px;">Producto activo</label>
+        </div>
+      </div>
+
+      <div class="form-page-footer" style="margin:18px -24px -22px;border-radius:0 0 var(--radius) var(--radius);">
+        <a href="{% url 'catalogos:producto_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+        <button type="submit" class="btn btn-primary btn-sm">
+          {% if object %}Guardar cambios{% else %}Crear producto{% endif %}
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
 {% endblock %}

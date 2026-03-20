@@ -52,17 +52,12 @@
   <a href="{% url 'catalogos:proveedor_list' %}" class="nav-item {% block nav_proveedores %}{% endblock %}">
     <span class="nav-icon">◉</span> Proveedores
   </a>
-  <a href="{% url 'catalogos:precio_list' %}" class="nav-item {% block nav_precios %}{% endblock %}">
-    <span class="nav-icon">◐</span> Precios
-  </a>
 
+  
   <!-- ── Configuración ── -->
   <div class="nav-section-label">Configuración</div>
-  <a href="{% url 'ingenieria:sistema_list' %}" class="nav-item {% block nav_sistemas %}{% endblock %}">
-    <span class="nav-icon">⬡</span> Sistemas constructivos
-  </a>
-  <a href="{% url 'presupuestos:configapu_list' %}" class="nav-item {% block nav_apu %}{% endblock %}">
-    <span class="nav-icon">≡</span> Config. APU
+  <a href="{% url 'catalogos:maestros' %}" class="nav-item {% block nav_maestros %}{% endblock %}">
+    <span class="nav-icon">⊞</span> Catálogos base
   </a>
   <a href="{% url 'usuarios:usuario_list' %}" class="nav-item {% block nav_usuarios %}{% endblock %}">
     <span class="nav-icon">◒</span> Usuarios y roles

@@ -6,6 +6,9 @@ from . import views
 app_name = "catalogos"
 
 urlpatterns = [
+    # Vista combinada (menú principal)
+    path("maestros/", views.MaestrosView.as_view(), name="maestros"),
+
     # Unidades de medida
     path("unidades/", views.UnidadListView.as_view(), name="unidad_list"),
     path("unidades/nueva/", views.UnidadCreateView.as_view(), name="unidad_create"),

@@ -25,9 +25,9 @@
         <th>Código</th>
         <th>Nombre</th>
         <th>Categoría</th>
-        <th>Unidad</th>
-        <th>Origen</th>
-        <th>Marca</th>
+        <th>Proveedor</th>
+        <th>Precio actual</th>
+        <th>Actualizado</th>
         <th>Estado</th>
         <th></th>
       </tr>
@@ -35,16 +35,26 @@
     <tbody>
       {% for p in productos %}
       <tr>
-        <td class="td-mono">{{ p.codigo }}</td>
-        <td>{{ p.nombre }}</td>
-        <td style="font-size:12px;">{{ p.categoria.nombre|default:"—" }}</td>
-        <td style="font-size:12px;">{{ p.unidad.abreviatura|default:"—" }}</td>
+        <td class="td-mono" style="color:var(--brand-violet);font-weight:600;">{{ p.codigo }}</td>
         <td>
-          <span class="badge-status bs-inactivo" style="font-size:10px;">
-            {{ p.get_origen_display|default:p.origen }}
-          </span>
+          <div style="font-weight:500;">{{ p.nombre }}</div>
+          {% if p.unidad %}<div style="font-size:11px;color:var(--ink-soft);">{{ p.unidad.abreviatura }}</div>{% endif %}
         </td>
-        <td style="font-size:12px;">{{ p.marca|default:"—" }}</td>
+        <td style="font-size:12px;">{{ p.categoria.nombre|default:"—" }}</td>
+        <td style="font-size:12px;">{{ p.proveedor.nombre|default:"—" }}</td>
+        <td>
+          {% if p.precio_actual %}
+          <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;">
+            ${{ p.precio_actual|floatformat:0 }}
+          </span>
+          <span style="font-size:10px;color:var(--ink-soft);margin-left:2px;">{{ p.moneda }}</span>
+          {% else %}
+          <span style="color:var(--brand-red);font-size:12px;">Sin precio</span>
+          {% endif %}
+        </td>
+        <td style="font-size:11px;color:var(--ink-soft);">
+          {{ p.fecha_actualizacion_precio|date:"d/m/Y"|default:"—" }}
+        </td>
         <td>
           <span class="badge-status {% if p.activo %}bs-activo{% else %}bs-inactivo{% endif %}">
             {% if p.activo %}Activo{% else %}Inactivo{% endif %}
@@ -55,9 +65,7 @@
           <button class="btn btn-ghost btn-xs"
                   data-bs-toggle="modal" data-bs-target="#deleteModal"
                   data-delete-url="{% url 'catalogos:producto_delete' p.pk %}"
-                  data-delete-name="{{ p.nombre }}">
-            ✕
-          </button>
+                  data-delete-name="{{ p.nombre }}">✕</button>
         </td>
       </tr>
       {% endfor %}
@@ -76,30 +84,38 @@
 <div class="modal fade" id="createProductoModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <div class="modal-header">
+      <div class="modal-header" style="border-left:4px solid var(--brand-lime);border-radius:var(--radius) 0 0 0;">
         <h5 class="modal-title">Nuevo producto</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="post" action="{% url 'catalogos:producto_create' %}">
         {% csrf_token %}
         <div class="modal-body">
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Código</label>
-              {{ create_form.codigo }}
-            </div>
-            <div class="form-group">
-              <label>Unidad de medida</label>
-              {{ create_form.unidad }}
-            </div>
-          </div>
+
+          <!-- Nombre + Código -->
           <div class="form-group">
-            <label>Nombre</label>
+            <label>Nombre del producto <span style="color:var(--brand-red)">*</span></label>
             {{ create_form.nombre }}
           </div>
           <div class="form-grid-2">
             <div class="form-group">
-              <label>Categoría</label>
+              <label>
+                Código
+                <span style="font-size:10px;color:var(--ink-soft);margin-left:4px;">
+                  (opcional — se auto-genera)
+                </span>
+              </label>
+              {{ create_form.codigo }}
+            </div>
+            <div class="form-group">
+              <label>Unidad de medida <span style="color:var(--brand-red)">*</span></label>
+              {{ create_form.unidad }}
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Categoría <span style="color:var(--brand-red)">*</span></label>
               {{ create_form.categoria }}
             </div>
             <div class="form-group">
@@ -107,6 +123,29 @@
               {{ create_form.origen }}
             </div>
           </div>
+
+          <!-- PRECIO Y PROVEEDOR — datos críticos -->
+          <div style="background:rgba(182,205,30,0.08);border:1px solid rgba(182,205,30,0.3);
+                      border-radius:8px;padding:12px 16px;margin:8px 0 12px;">
+            <div style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;
+                        color:#5a6e00;margin-bottom:10px;">Proveedor y precio</div>
+            <div class="form-grid-2" style="margin-bottom:10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Proveedor <span style="color:var(--brand-red)">*</span></label>
+                {{ create_form.proveedor }}
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Precio actual <span style="color:var(--brand-red)">*</span></label>
+                {{ create_form.precio_actual }}
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;max-width:180px;">
+              <label>Moneda <span style="color:var(--brand-red)">*</span></label>
+              {{ create_form.moneda }}
+            </div>
+          </div>
+
+          <!-- Opcionales -->
           <div class="form-grid-2">
             <div class="form-group">
               <label>Marca</label>
@@ -117,18 +156,14 @@
               {{ create_form.linea }}
             </div>
           </div>
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Rendimiento</label>
-              {{ create_form.rendimiento }}
-            </div>
-            <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px;">
-              <div class="form-check">
-                {{ create_form.activo }}
-                <label class="form-check-label">Activo</label>
-              </div>
+
+          <div class="form-group">
+            <div class="form-check">
+              {{ create_form.activo }}
+              <label class="form-check-label" style="font-size:13px;">Producto activo</label>
             </div>
           </div>
+
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>

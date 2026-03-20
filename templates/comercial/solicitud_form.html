@@ -90,19 +90,7 @@
           {{ form.cliente }}
           {% if form.cliente.errors %}<div class="invalid-feedback d-block">{{ form.cliente.errors.0 }}</div>{% endif %}
         </div>
-        <div class="form-group">
-          <label for="id_contacto">
-            Contacto
-            <span id="contacto-loading" style="display:none;font-size:10px;color:var(--brand-violet);margin-left:6px;">
-              ⟳ Cargando...
-            </span>
-          </label>
-          {{ form.contacto }}
-          <div id="contacto-hint" style="font-size:11px;color:var(--ink-soft);margin-top:3px;">
-            {% if not object %}Selecciona primero un cliente.{% endif %}
-          </div>
-          {% if form.contacto.errors %}<div class="invalid-feedback d-block">{{ form.contacto.errors.0 }}</div>{% endif %}
-        </div>
+        
       </div>
 
       <div class="form-group">

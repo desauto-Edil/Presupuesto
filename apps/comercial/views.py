@@ -8,7 +8,7 @@ from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto
 from .forms import (
-    ClienteForm, ContactoClienteForm, TipoProyectoForm,
+    ClienteForm, ClienteConContactoForm, ContactoClienteForm, TipoProyectoForm,
     SolicitudForm, ProyectoForm, ProyectoFromSolicitudForm,
 )
 from apps.common.mixins import WithCreateFormMixin
@@ -28,10 +28,13 @@ def _usuario_sistema(request):
 
 class ClienteListView(WithCreateFormMixin, ListView):
     model = Cliente
-    form_class = ClienteForm
+    form_class = ClienteConContactoForm   # modal usa el form combinado
     template_name = "comercial/cliente_list.html"
     context_object_name = "clientes"
     ordering = ["razon_social"]
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related("contactos")
 
 
 class ClienteDetailView(DetailView):
@@ -41,17 +44,71 @@ class ClienteDetailView(DetailView):
 
 
 class ClienteCreateView(CreateView):
+    """
+    Crea un Cliente y su Contacto principal en una sola operación.
+    Usa ClienteConContactoForm (campos de ambos modelos en un solo form).
+    """
     model = Cliente
-    form_class = ClienteForm
+    form_class = ClienteConContactoForm
     template_name = "comercial/cliente_form.html"
     success_url = reverse_lazy("comercial:cliente_list")
+
+    def form_valid(self, form):
+        # 1. Guardar el cliente
+        self.object = form.save()
+        # 2. Crear el contacto principal con los campos extra del form
+        ContactoCliente.objects.create(
+            cliente     = self.object,
+            nombre      = form.cleaned_data["contacto_nombre"],
+            cargo       = form.cleaned_data.get("contacto_cargo", ""),
+            email       = form.cleaned_data.get("contacto_email", ""),
+            telefono    = form.cleaned_data.get("contacto_telefono", ""),
+            es_principal= True,
+            activo      = True,
+        )
+        messages.success(
+            self.request,
+            f"Cliente {self.object.razon_social} creado con su contacto principal.",
+        )
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class ClienteUpdateView(UpdateView):
+    """
+    Actualiza el Cliente y su contacto principal en una sola operación.
+    Si existe un ContactoCliente principal lo actualiza; si no, lo crea.
+    """
     model = Cliente
-    form_class = ClienteForm
+    form_class = ClienteConContactoForm
     template_name = "comercial/cliente_form.html"
     success_url = reverse_lazy("comercial:cliente_list")
+
+    def form_valid(self, form):
+        self.object = form.save()
+        # Actualizar o crear el contacto principal
+        cp = self.object.contacto_principal
+        datos_contacto = {
+            "nombre":   form.cleaned_data["contacto_nombre"],
+            "cargo":    form.cleaned_data.get("contacto_cargo", ""),
+            "email":    form.cleaned_data.get("contacto_email", ""),
+            "telefono": form.cleaned_data.get("contacto_telefono", ""),
+        }
+        if cp:
+            for campo, valor in datos_contacto.items():
+                setattr(cp, campo, valor)
+            cp.save()
+        else:
+            ContactoCliente.objects.create(
+                cliente=self.object,
+                es_principal=True,
+                activo=True,
+                **datos_contacto,
+            )
+        messages.success(
+            self.request,
+            f"Cliente {self.object.razon_social} actualizado correctamente.",
+        )
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class ClienteDeleteView(DeleteView):
