@@ -10,8 +10,8 @@ class ContactoClienteInline(admin.TabularInline):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ("nit", "razon_social", "ciudad", "activo")
-    list_filter = ("activo",)
+    list_display = ("nit", "razon_social", "creacion_selford", "activo")
+    list_filter = ("activo", "creacion_selford")
     search_fields = ("nit", "razon_social")
     readonly_fields = ("created_at", "updated_at")
     inlines = [ContactoClienteInline]

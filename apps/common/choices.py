@@ -8,6 +8,13 @@ Si solo lo usa una app, puede vivir en esa app.
 from django.db import models
 
 
+class UnidadNegocio(models.TextChoices):
+    IMPERANDINA = "IMPERANDINA", "Imperandina"
+    SOLARANDINA = "SOLARANDINA", "Solarandina"
+    IMPERTIENDA = "IMPERTIENDA", "Impertienda"
+
+
+
 class RolSistema(models.TextChoices):
     ADMINISTRADOR = "ADMINISTRADOR", "Administrador"
     PRESUPUESTOS = "PRESUPUESTOS", "Presupuestos"

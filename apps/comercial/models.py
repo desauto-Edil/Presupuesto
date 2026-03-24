@@ -27,16 +27,7 @@ class Cliente(models.Model):
         unique=True
         )
     razon_social = models.CharField(max_length=300)
-    ciudad = models.CharField(max_length=100, 
-                              blank=True, 
-                              null=True
-                              )
-    direccion = models.TextField(blank=True, 
-                                 null=True)
-    telefono_principal = models.CharField(max_length=30, 
-                                          blank=True, 
-                                          null=True)
-    email_principal = models.EmailField(blank=True, null=True)
+    creacion_selford = models.BooleanField(default=False)
     activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -71,7 +62,12 @@ class ContactoCliente(models.Model):
     def __str__(self):
         return f"{self.nombre} — {self.cliente.razon_social}"
 
-
+class LogSistema(models.Model):
+    usuario = models.ForeignKey('usuarios.UsuarioSistema', on_delete=models.CASCADE)
+    accion = models.TextField()
+    unidad_negocio = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
 # ---------------------------------------------------------------------------
 # TIPO DE PROYECTO
 # ---------------------------------------------------------------------------

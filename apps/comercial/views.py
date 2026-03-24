@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy, reverse
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
-from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto
+from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto, LogSistema
 from .forms import (
     ClienteForm, ClienteConContactoForm, ContactoClienteForm, TipoProyectoForm,
     SolicitudForm, ProyectoForm, ProyectoFromSolicitudForm,
@@ -58,13 +58,13 @@ class ClienteCreateView(CreateView):
         self.object = form.save()
         # 2. Crear el contacto principal con los campos extra del form
         ContactoCliente.objects.create(
-            cliente     = self.object,
-            nombre      = form.cleaned_data["contacto_nombre"],
-            cargo       = form.cleaned_data.get("contacto_cargo", ""),
-            email       = form.cleaned_data.get("contacto_email", ""),
-            telefono    = form.cleaned_data.get("contacto_telefono", ""),
-            es_principal= True,
-            activo      = True,
+            cliente = self.object,
+            nombre = form.cleaned_data["contacto_nombre"],
+            cargo = form.cleaned_data.get("contacto_cargo", ""),
+            email = form.cleaned_data.get("contacto_email", ""),
+            telefono = form.cleaned_data.get("contacto_telefono", ""),
+            es_principal = True,
+            activo = True,
         )
         messages.success(
             self.request,
@@ -88,9 +88,9 @@ class ClienteUpdateView(UpdateView):
         # Actualizar o crear el contacto principal
         cp = self.object.contacto_principal
         datos_contacto = {
-            "nombre":   form.cleaned_data["contacto_nombre"],
-            "cargo":    form.cleaned_data.get("contacto_cargo", ""),
-            "email":    form.cleaned_data.get("contacto_email", ""),
+            "nombre": form.cleaned_data["contacto_nombre"],
+            "cargo": form.cleaned_data.get("contacto_cargo", ""),
+            "email": form.cleaned_data.get("contacto_email", ""),
             "telefono": form.cleaned_data.get("contacto_telefono", ""),
         }
         if cp:
@@ -243,6 +243,11 @@ class ProyectoListView(ListView):
     context_object_name = "proyectos"
     ordering = ["-created_at"]
 
+    def get_queryset(self):
+        return super().get_queryset().select_related(
+            "cliente", "tipo_proyecto", "creado_por", "solicitud"
+        )
+
 
 class ProyectoDetailView(DetailView):
     model = Proyecto
@@ -373,3 +378,13 @@ class CrearProyectoDesdeSolicitudView(CreateView):
             f"Proyecto {self.object.consecutivo} creado correctamente.",
         )
         return redirect("comercial:proyecto_detail", pk=self.object.pk)
+    
+class LogListView(ListView):
+    model = LogSistema
+    
+    def get_queryset(self):
+        # Filtro estricto por la unidad del usuario actual
+        usuario = _usuario_sistema(self.request)
+        if usuario:
+            return LogSistema.objects.filter(unidad_negocio=usuario.unidad_negocio)
+        return LogSistema.objects.none()

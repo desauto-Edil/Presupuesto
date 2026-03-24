@@ -9,16 +9,12 @@ class ClienteForm(forms.ModelForm):
 
     class Meta:
         model = Cliente
-        fields = ["nit", "razon_social", "ciudad", "direccion",
-                  "telefono_principal", "email_principal", "activo"]
+        fields = ["nit", "razon_social", "creacion_selford", "activo"]
         widgets = {
-            "nit":               forms.TextInput(attrs={"class": "form-control"}),
-            "razon_social":      forms.TextInput(attrs={"class": "form-control"}),
-            "ciudad":            forms.TextInput(attrs={"class": "form-control"}),
-            "direccion":         forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "telefono_principal":forms.TextInput(attrs={"class": "form-control"}),
-            "email_principal":   forms.EmailInput(attrs={"class": "form-control"}),
-            "activo":            forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nit":forms.TextInput(attrs={"class": "form-control"}),
+            "razon_social":forms.TextInput(attrs={"class": "form-control"}),
+            "creacion_selford":forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "activo":forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
 
@@ -31,35 +27,31 @@ class ClienteConContactoForm(forms.ModelForm):
     """
 
     # ── Campos del contacto principal (prefijo "contacto_") ──────────────────
-    contacto_nombre   = forms.CharField(
+    contacto_nombre = forms.CharField(
         max_length=200, label="Nombre del contacto",
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Nombre completo"}),
     )
-    contacto_cargo    = forms.CharField(
-        max_length=120, required=False, label="Cargo",
+    contacto_cargo = forms.CharField(
+        max_length=120, label="Cargo",
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: Gerente de proyectos"}),
     )
-    contacto_email    = forms.EmailField(
-        required=False, label="Email del contacto",
+    contacto_email = forms.EmailField(
+        max_length=120, label="Email del contacto",
         widget=forms.EmailInput(attrs={"class": "form-control"}),
     )
     contacto_telefono = forms.CharField(
-        max_length=30, required=False, label="Teléfono del contacto",
+        max_length=30, label="Teléfono del contacto",
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
 
     class Meta:
         model = Cliente
-        fields = ["nit", "razon_social", "ciudad", "direccion",
-                  "telefono_principal", "email_principal", "activo"]
+        fields = ["nit", "razon_social", "activo"]
         widgets = {
-            "nit":               forms.TextInput(attrs={"class": "form-control"}),
-            "razon_social":      forms.TextInput(attrs={"class": "form-control"}),
-            "ciudad":            forms.TextInput(attrs={"class": "form-control"}),
-            "direccion":         forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "telefono_principal":forms.TextInput(attrs={"class": "form-control"}),
-            "email_principal":   forms.EmailInput(attrs={"class": "form-control"}),
-            "activo":            forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nit": forms.TextInput(attrs={"class": "form-control"}),
+            "razon_social": forms.TextInput(attrs={"class": "form-control"}),
+            "creacion_selford": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -68,9 +60,9 @@ class ClienteConContactoForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             cp = self.instance.contacto_principal
             if cp:
-                self.fields["contacto_nombre"].initial   = cp.nombre
-                self.fields["contacto_cargo"].initial    = cp.cargo or ""
-                self.fields["contacto_email"].initial    = cp.email or ""
+                self.fields["contacto_nombre"].initial = cp.nombre
+                self.fields["contacto_cargo"].initial = cp.cargo or ""
+                self.fields["contacto_email"].initial = cp.email or ""
                 self.fields["contacto_telefono"].initial = cp.telefono or ""
 
 
@@ -136,19 +128,19 @@ class ProyectoForm(forms.ModelForm):
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
         widgets = {
-            "cliente":             forms.Select(attrs={"class": "form-select"}),
-            "tipo_proyecto":       forms.Select(attrs={"class": "form-select"}),
-            "nombre":              forms.TextInput(attrs={"class": "form-control"}),
-            "descripcion":         forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-            "area_total_m2":       forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
-            "perimetro_ml":        forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
-            "trm":                 forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "cliente": forms.Select(attrs={"class": "form-select"}),
+            "tipo_proyecto": forms.Select(attrs={"class": "form-select"}),
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "area_total_m2": forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
+            "perimetro_ml": forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
+            "trm": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "margen_comercial_pct":forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "iva_pct":             forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "aiu_pct":             forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "moneda":              forms.Select(attrs={"class": "form-select"}),
+            "iva_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "aiu_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "moneda": forms.Select(attrs={"class": "form-select"}),
             "aplica_exencion_iva": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "observaciones":       forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }
 
 
@@ -172,16 +164,16 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
         widgets = {
-            "tipo_proyecto":       forms.Select(attrs={"class": "form-select"}),
-            "nombre":              forms.TextInput(attrs={"class": "form-control"}),
-            "descripcion":         forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-            "area_total_m2":       forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "perimetro_ml":        forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "trm":                 forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "tipo_proyecto": forms.Select(attrs={"class": "form-select"}),
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "area_total_m2": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "perimetro_ml": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "trm": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "margen_comercial_pct":forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "iva_pct":             forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "aiu_pct":             forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "moneda":              forms.Select(attrs={"class": "form-select"}),
+            "iva_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "aiu_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "moneda": forms.Select(attrs={"class": "form-select"}),
             "aplica_exencion_iva": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "observaciones":       forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }

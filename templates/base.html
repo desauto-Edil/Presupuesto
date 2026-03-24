@@ -4,80 +4,87 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Imperandina{% endblock %} · Imperandina</title>
+  <title>{% block title %}Andicost{% endblock %} · Andicost</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="{% static 'css/imperandina.css' %}" rel="stylesheet">
   {% block extra_head %}{% endblock %}
 </head>
-<body>
 
-<!-- ── SIDEBAR ── -->
+{# ── SESIÓN: Usamos request.session porque tu login es manual ── #}
+{% with unidad_slug=request.session.unidad_negocio|lower|default:"imperandina" %}
+<body class="theme-{{ unidad_slug }}">
+
+
 <aside class="sidebar">
   <div class="sidebar-logo">
-    <!-- Bloque de color marca como logo simplificado -->
-    <div style="display:flex;gap:3px;margin-bottom:10px;">
-      <div style="width:5px;border-radius:2px;background:var(--brand-red);height:22px;"></div>
-      <div style="width:5px;border-radius:2px;background:var(--brand-lime);height:22px;margin-top:4px;"></div>
-      <div style="width:5px;border-radius:2px;background:#8080c4;height:22px;margin-top:8px;"></div>
+    <div class="sidebar-brand-mark">
+      <div class="brand-bar brand-bar--1"></div>
+      <div class="brand-bar brand-bar--2"></div>
+      <div class="brand-bar brand-bar--3"></div>
     </div>
-    <div class="logo-wordmark">Imperandina</div>
-    <div class="logo-unit">impercots</div>
+    <div class="logo-unit">
+      {{ request.session.unidad_negocio|default:"Andicost"|upper }}
+    </div>
+
   </div>
 
-  <!-- ── Comercial ── -->
-  <div class="nav-section-label">Comercial</div>
-  <a href="{% url 'comercial:proyecto_list' %}" class="nav-item {% block nav_proyectos %}{% endblock %}">
-    <span class="nav-icon">◫</span> Proyectos
-  </a>
-  <a href="{% url 'comercial:solicitud_list' %}" class="nav-item {% block nav_solicitudes %}{% endblock %}">
-    <span class="nav-icon">◷</span> Solicitudes
-  </a>
-  <a href="{% url 'comercial:cliente_list' %}" class="nav-item {% block nav_clientes %}{% endblock %}">
-    <span class="nav-icon">◎</span> Clientes
-  </a>
 
-  <!-- ── Presupuestación ── -->
-  <div class="nav-section-label">Presupuestación</div>
-  <a href="{% url 'presupuestos:proyectosistema_list' %}" class="nav-item {% block nav_presupuestos %}{% endblock %}">
-    <span class="nav-icon">⊞</span> Despiece paramétrico
-  </a>
+  {# TODO EL MENÚ DEBE IR DENTRO DEL ASIDE #}
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Comercial</div>
+    <a href="{% url 'comercial:proyecto_list' %}" class="nav-item {% block nav_proyectos %}{% endblock %}">
+      <span class="nav-icon">◫</span> Proyectos
+    </a>
+    <a href="{% url 'comercial:solicitud_list' %}" class="nav-item {% block nav_solicitudes %}{% endblock %}">
+      <span class="nav-icon">◷</span> Solicitudes
+    </a>
+    <a href="{% url 'comercial:cliente_list' %}" class="nav-item {% block nav_clientes %}{% endblock %}">
+      <span class="nav-icon">◎</span> Clientes
+    </a>
 
-  <!-- ── Catálogos ── -->
-  <div class="nav-section-label">Catálogos</div>
-  <a href="{% url 'catalogos:producto_list' %}" class="nav-item {% block nav_productos %}{% endblock %}">
-    <span class="nav-icon">◈</span> Productos
-  </a>
-  <a href="{% url 'catalogos:proveedor_list' %}" class="nav-item {% block nav_proveedores %}{% endblock %}">
-    <span class="nav-icon">◉</span> Proveedores
-  </a>
+    <div class="nav-section-label">Presupuestación</div>
+    <a href="{% url 'presupuestos:proyectosistema_list' %}" class="nav-item {% block nav_presupuestos %}{% endblock %}">
+      <span class="nav-icon">⊞</span> Despiece paramétrico
+    </a>
 
-  
-  <!-- ── Configuración ── -->
-  <div class="nav-section-label">Configuración</div>
-  <a href="{% url 'catalogos:maestros' %}" class="nav-item {% block nav_maestros %}{% endblock %}">
-    <span class="nav-icon">⊞</span> Catálogos base
-  </a>
-  <a href="{% url 'usuarios:usuario_list' %}" class="nav-item {% block nav_usuarios %}{% endblock %}">
-    <span class="nav-icon">◒</span> Usuarios y roles
-  </a>
+    <div class="nav-section-label">Catálogos</div>
+    <a href="{% url 'catalogos:producto_list' %}" class="nav-item {% block nav_productos %}{% endblock %}">
+      <span class="nav-icon">◈</span> Productos
+    </a>
+    <a href="{% url 'catalogos:proveedor_list' %}" class="nav-item {% block nav_proveedores %}{% endblock %}">
+      <span class="nav-icon">◉</span> Proveedores
+    </a>
+
+    <div class="nav-section-label">Configuración</div>
+    <a href="{% url 'catalogos:maestros' %}" class="nav-item {% block nav_maestros %}{% endblock %}">
+      <span class="nav-icon">⊞</span> Catálogos base
+    </a>
+    <a href="{% url 'usuarios:usuario_list' %}" class="nav-item {% block nav_usuarios %}{% endblock %}">
+      <span class="nav-icon">◒</span> Usuarios y roles
+    </a>
+  </nav>
 
   <div class="sidebar-bottom">
     <div class="user-chip">
-      <div class="user-avatar">IM</div>
-      <div>
-        <div class="user-name">Imperandina</div>
+      <div class="user-avatar">
+        {{ request.session.usuario_nombre|slice:":2"|upper|default:"US" }}
+      </div>
+      <div class="overflow-hidden">
+        <div class="user-name text-truncate">{{ request.session.usuario_nombre|default:"Usuario" }}</div>
         <div class="user-role">Sistema</div>
       </div>
+      {# Agregamos link de salida ya que estamos aquí #}
+      <a href="{% url 'usuarios:logout' %}" class="ms-auto text-white-50" title="Cerrar sesión">✕</a>
     </div>
   </div>
 </aside>
-
-<!-- ── MAIN ── -->
+{% endwith %}
 <div class="main">
 
   <header class="topbar">
+    <div class="topbar-unit-indicator"></div>
     <span class="topbar-title">{% block page_title %}{% endblock %}</span>
     <div class="topbar-sep"></div>
     <span class="breadcrumb-text">{% block breadcrumb %}{% endblock %}</span>
@@ -87,8 +94,7 @@
   <div class="content">
     {% if messages %}
       {% for message in messages %}
-      <div class="msg-bar msg-{{ message.tags|default:'info' }}" data-auto-dismiss>
-        {% if message.tags == 'success' %}✓{% elif message.tags == 'error' %}✕{% else %}ℹ{% endif %}
+      <div class="msg-bar msg-{{ message.tags|default:'info' }} fade-up" data-auto-dismiss>
         {{ message }}
       </div>
       {% endfor %}
@@ -98,7 +104,7 @@
   </div>
 </div>
 
-<!-- ── GLOBAL DELETE MODAL ── -->
+
 <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -112,7 +118,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
-        <form id="deleteForm" method="post" action="#" style="display:inline">
+        <form id="deleteForm" method="post">
           {% csrf_token %}
           <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
         </form>

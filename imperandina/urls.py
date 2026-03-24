@@ -8,7 +8,8 @@ from django.views.generic import RedirectView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", RedirectView.as_view(url="/comercial/proyectos/"), name="home"),
+    
+    path("", RedirectView.as_view(pattern_name="usuarios:login"), name="home"),
 
     path("catalogos/", include("apps.catalogos.urls")),
     path("comercial/", include("apps.comercial.urls")),
