@@ -17,21 +17,16 @@
 <body class="theme-{{ unidad_slug }}">
 
 
-<aside class="sidebar">
+<aside class="sidebar" id="appSidebar">
   <div class="sidebar-logo">
-    <div class="sidebar-brand-mark">
-      <div class="brand-bar brand-bar--1"></div>
-      <div class="brand-bar brand-bar--2"></div>
-      <div class="brand-bar brand-bar--3"></div>
-    </div>
+    <img src="{% static 'img/edil-andina-logo.png' %}"
+         alt="Edil Andina"
+         class="sidebar-edil-logo">
     <div class="logo-unit">
-      {{ request.session.unidad_negocio|default:"Andicost"|upper }}
+      {{ request.session.unidad_negocio|default:"Edil Andina"|upper }}
     </div>
-
   </div>
 
-
-  {# TODO EL MENÚ DEBE IR DENTRO DEL ASIDE #}
   <nav class="sidebar-nav">
     <div class="nav-section-label">Comercial</div>
     <a href="{% url 'comercial:proyecto_list' %}" class="nav-item {% block nav_proyectos %}{% endblock %}">
@@ -50,17 +45,14 @@
     </a>
 
     <div class="nav-section-label">Catálogos</div>
-    <a href="{% url 'catalogos:producto_list' %}" class="nav-item {% block nav_productos %}{% endblock %}">
-      <span class="nav-icon">◈</span> Productos
+    <a href="{% url 'catalogos:catalogo' %}" class="nav-item {% block nav_catalogos %}{% endblock %}">
+      <span class="nav-icon">⊞</span> Catálogos
     </a>
-    <a href="{% url 'catalogos:proveedor_list' %}" class="nav-item {% block nav_proveedores %}{% endblock %}">
+    <a href="{% url 'catalogos:proveedor_list' %}" class="nav-item nav-sub {% block nav_proveedores %}{% endblock %}">
       <span class="nav-icon">◉</span> Proveedores
     </a>
 
     <div class="nav-section-label">Configuración</div>
-    <a href="{% url 'catalogos:maestros' %}" class="nav-item {% block nav_maestros %}{% endblock %}">
-      <span class="nav-icon">⊞</span> Catálogos base
-    </a>
     <a href="{% url 'usuarios:usuario_list' %}" class="nav-item {% block nav_usuarios %}{% endblock %}">
       <span class="nav-icon">◒</span> Usuarios y roles
     </a>
@@ -73,17 +65,26 @@
       </div>
       <div class="overflow-hidden">
         <div class="user-name text-truncate">{{ request.session.usuario_nombre|default:"Usuario" }}</div>
-        <div class="user-role">Sistema</div>
+        <div class="user-role">{{ request.session.unidad_negocio|default:"Usuario" }}</div>
       </div>
-      {# Agregamos link de salida ya que estamos aquí #}
       <a href="{% url 'usuarios:logout' %}" class="ms-auto text-white-50" title="Cerrar sesión">✕</a>
     </div>
   </div>
 </aside>
 {% endwith %}
-<div class="main">
+
+<div class="main" id="appMain">
 
   <header class="topbar">
+    <!-- Botón hamburguesa para colapsar el sidebar -->
+    <button id="sidebarToggle"
+            class="sidebar-toggle-btn"
+            aria-label="Alternar menú"
+            aria-expanded="true"
+            title="Colapsar menú">
+      <span></span><span></span><span></span>
+    </button>
+
     <div class="topbar-unit-indicator"></div>
     <span class="topbar-title">{% block page_title %}{% endblock %}</span>
     <div class="topbar-sep"></div>
@@ -105,6 +106,7 @@
 </div>
 
 
+<!-- ── MODAL ELIMINAR (global) ── -->
 <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -129,6 +131,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{% static 'js/modals.js' %}"></script>
+<script src="{% static 'js/sidebar.js' %}"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

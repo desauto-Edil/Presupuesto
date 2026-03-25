@@ -9,6 +9,15 @@ from .models import UsuarioSistema
 from .forms import UsuarioSistemaForm
 
 
+def _form_errors(form):
+    """Convierte los errores del form en un string legible para messages."""
+    errors = []
+    for field, errs in form.errors.items():
+        label = form.fields[field].label if field in form.fields else field
+        errors.append(f"{label}: {', '.join(errs)}")
+    return " | ".join(errors) if errors else "Error al guardar el formulario."
+
+
 class UsuarioListView(ListView):
     model = UsuarioSistema
     template_name = "usuarios/usuario_list.html"
@@ -18,15 +27,35 @@ class UsuarioListView(ListView):
 class UsuarioCreateView(CreateView):
     model = UsuarioSistema
     form_class = UsuarioSistemaForm
-    # Usaremos un template que SOLO tiene el contenido del form
-    template_name = "usuarios/partials/usuario_form_inner.html"
+    template_name = "usuarios/usuario_list.html"
     success_url = reverse_lazy("usuarios:usuario_list")
-    
+
+    def form_invalid(self, form):
+        messages.error(self.request, _form_errors(form))
+        return redirect("usuarios:usuario_list")
+
+
 class UsuarioUpdateView(UpdateView):
     model = UsuarioSistema
     form_class = UsuarioSistemaForm
-    template_name = "usuarios/partials/usuario_form_inner.html"
+    template_name = "usuarios/usuario_list.html"
     success_url = reverse_lazy("usuarios:usuario_list")
+
+    def form_valid(self, form):
+        usuario = form.save(commit=False)
+        nueva_password = form.cleaned_data.get("password_hash", "").strip()
+        if not nueva_password:
+            # Conservar la contraseña existente sin tocarla
+            usuario.password_hash = UsuarioSistema.objects.get(pk=usuario.pk).password_hash
+        else:
+            usuario.password_hash = nueva_password
+        usuario.save()
+        messages.success(self.request, f"Usuario {usuario.nombre_completo} actualizado.")
+        return redirect(self.success_url)
+
+    def form_invalid(self, form):
+        messages.error(self.request, _form_errors(form))
+        return redirect("usuarios:usuario_list")
 
 
 class UsuarioDetailView(DetailView):

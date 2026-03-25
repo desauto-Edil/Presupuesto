@@ -1,140 +1,125 @@
 """apps/catalogos/views.py — Vistas CRUD para catálogos maestros."""
 
 from django.contrib import messages
-from django.http import HttpResponseRedirect
-from django.shortcuts import redirect
-from django.urls import reverse_lazy
-from django.views import View
 from django.views.generic import (
-    ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView,
+    ListView, CreateView, UpdateView, DeleteView, DetailView, RedirectView
 )
-from .models import UnidadMedida, CategoriaProducto, Producto, Proveedor, ProductoProveedor
-from .forms import (
-    UnidadMedidaForm, CategoriaProductoForm, ProductoForm,
-    ProveedorForm, ProductoProveedorForm,
-)
-from apps.common.mixins import WithCreateFormMixin
+from django.urls import reverse_lazy
+from django.db.models import Count, Prefetch
 
-_MAESTROS_URL = reverse_lazy("catalogos:maestros")
+from .models import CategoriaProducto, Producto, UnidadMedida, ProductoProveedor, Proveedor
+from .forms  import CategoriaForm, ProductoForm, UnidadMedidaForm, ProveedorForm
 
 
-# ── Vista combinada: Unidades + Categorías ──────────────────────────────────
-
-class MaestrosView(TemplateView):
+# ─────────────────────────────────────────────────────────────────
+# VISTA PRINCIPAL UNIFICADA  →  /catalogos/
+# ─────────────────────────────────────────────────────────────────
+class CatalogoView(ListView):
     """
-    Página única con los dos catálogos base:
-      · Unidades de medida
-      · Categorías de producto
-    Ambos con modales de creación integrados.
+    Muestra en una sola pantalla:
+      - Unidades de medida (panel colapsable)
+      - Categorías como cards con sus productos anidados
     """
-    template_name = "catalogos/maestros.html"
+    template_name = "catalogos/catalogos.html"
+    context_object_name = "categorias"
+
+    def get_queryset(self):
+        return (
+            CategoriaProducto.objects
+            .prefetch_related(
+                Prefetch(
+                    "productos",
+                    queryset=Producto.objects
+                        .select_related("proveedor", "unidad")
+                        .filter(activo=True)
+                        .order_by("nombre"),
+                )
+            )
+            .annotate(cantidad_productos=Count("productos"))
+            .order_by("nombre")
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["unidades"]       = UnidadMedida.objects.all().order_by("codigo")
-        ctx["categorias"]     = CategoriaProducto.objects.all().order_by("codigo")
-        ctx["unidad_form"]    = UnidadMedidaForm()
-        ctx["categoria_form"] = CategoriaProductoForm()
+        qs  = self.get_queryset()
+
+        ctx["unidades"]          = UnidadMedida.objects.order_by("nombre")
+        ctx["total_categorias"]  = qs.count()
+        ctx["categorias_activas"]= qs.filter(activa=True).count()
+        ctx["total_productos"]   = Producto.objects.filter(activo=True).count()
+
+        # Formularios para los modales de creación
+        ctx["modal_categoria_form"] = CategoriaForm()
+        ctx["modal_producto_form"]  = ProductoForm()
+        ctx["modal_unidad_form"]    = UnidadMedidaForm()
+
         return ctx
 
 
-# ── Unidades de medida ──────────────────────────────────────────────────────
-
-class UnidadListView(ListView):
-    model = UnidadMedida
-    template_name = "catalogos/unidad_list.html"
-    context_object_name = "unidades"
-    ordering = ["codigo"]
+# Alias de compatibilidad
+class MaestrosView(RedirectView):
+    permanent = False
+    pattern_name = "catalogos:catalogo"
 
 
-class UnidadCreateView(CreateView):
-    model = UnidadMedida
-    form_class = UnidadMedidaForm
-    template_name = "catalogos/unidad_form.html"
-    success_url = _MAESTROS_URL
-
-
-class UnidadUpdateView(UpdateView):
-    model = UnidadMedida
-    form_class = UnidadMedidaForm
-    template_name = "catalogos/unidad_form.html"
-    success_url = _MAESTROS_URL
-
-
-class UnidadDeleteView(DeleteView):
-    model = UnidadMedida
-    template_name = "catalogos/confirm_delete.html"
-    success_url = _MAESTROS_URL
-
-
-# ── Categorías de producto ──────────────────────────────────────────────────
-
-class CategoriaListView(ListView):
-    model = CategoriaProducto
-    template_name = "catalogos/categoria_list.html"
-    context_object_name = "categorias"
-    ordering = ["codigo"]
-
-
+# ─────────────────────────────────────────────────────────────────
+# CATEGORÍAS
+# ─────────────────────────────────────────────────────────────────
 class CategoriaCreateView(CreateView):
     model = CategoriaProducto
-    form_class = CategoriaProductoForm
+    form_class = CategoriaForm
     template_name = "catalogos/categoria_form.html"
-    success_url = _MAESTROS_URL
+    success_url = reverse_lazy("catalogos:catalogo")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Categoría creada correctamente.")
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, "Corrige los errores del formulario.")
+        return super().form_invalid(form)
 
 
 class CategoriaUpdateView(UpdateView):
     model = CategoriaProducto
-    form_class = CategoriaProductoForm
+    form_class = CategoriaForm
     template_name = "catalogos/categoria_form.html"
-    success_url = _MAESTROS_URL
+    success_url = reverse_lazy("catalogos:catalogo")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Categoría actualizada correctamente.")
+        return super().form_valid(form)
 
 
 class CategoriaDeleteView(DeleteView):
     model = CategoriaProducto
     template_name = "catalogos/confirm_delete.html"
-    success_url = _MAESTROS_URL
+    success_url = reverse_lazy("catalogos:catalogo")
 
 
-# ── Productos ───────────────────────────────────────────────────────────────
-
-def _sincronizar_producto_proveedor(producto, proveedor, precio):
+# ─────────────────────────────────────────────────────────────────
+# PRODUCTOS
+# ─────────────────────────────────────────────────────────────────
+class ProductoListView(ListView):
     """
-    Mantiene la tabla ProductoProveedor sincronizada con el precio directo
-    del Producto. Esta tabla la usa DespieceService.capturar_precio().
-    Si el proveedor cambia, desactiva el registro anterior.
+    Vista de tabla filtrable por categoría
+    (accesible desde botón 'Ver todos' dentro de una tarjeta)
     """
-    # Desactivar registros de otros proveedores
-    ProductoProveedor.objects.filter(producto=producto).exclude(proveedor=proveedor).update(activo=False)
-    # Upsert del proveedor activo
-    ProductoProveedor.objects.update_or_create(
-        producto=producto,
-        proveedor=proveedor,
-        defaults={
-            "precio_unitario": precio,
-            "activo": producto.activo,
-        },
-    )
-
-
-class ProductoListView(WithCreateFormMixin, ListView):
     model = Producto
-    form_class = ProductoForm
     template_name = "catalogos/producto_list.html"
     context_object_name = "productos"
-    ordering = ["codigo"]
 
     def get_queryset(self):
-        return (
-            super().get_queryset()
-            .select_related("categoria", "unidad", "proveedor")
-        )
+        qs = Producto.objects.select_related("categoria", "proveedor", "unidad")
+        cat_pk = self.request.GET.get("categoria")
+        if cat_pk:
+            qs = qs.filter(categoria__pk=cat_pk)
+        return qs.order_by("categoria__nombre", "nombre")
 
-
-class ProductoDetailView(DetailView):
-    model = Producto
-    template_name = "catalogos/producto_detail.html"
-    context_object_name = "producto"
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["create_form"] = ProductoForm()
+        return ctx
 
 
 class ProductoCreateView(CreateView):
@@ -143,119 +128,145 @@ class ProductoCreateView(CreateView):
     template_name = "catalogos/producto_form.html"
     success_url = reverse_lazy("catalogos:producto_list")
 
+    def get_initial(self):
+        initial = super().get_initial()
+        cat_pk = self.request.GET.get("categoria")
+        if cat_pk:
+            initial["categoria"] = cat_pk
+        return initial
+
     def form_valid(self, form):
-        producto = form.save(commit=False)
-        # Auto-generar código si no fue provisto
-        if not producto.codigo and producto.categoria_id:
-            producto.codigo = Producto.generar_codigo(producto.categoria)
-        producto.save()
-
-        # Sincronizar precio con ProductoProveedor (para DespieceService)
-        proveedor = form.cleaned_data.get("proveedor")
-        precio    = form.cleaned_data.get("precio_actual")
-        if proveedor and precio:
-            _sincronizar_producto_proveedor(producto, proveedor, precio)
-
-        return HttpResponseRedirect(self.get_success_url())
+        response = super().form_valid(form)
+        ProductoProveedor.objects.update_or_create(
+            producto=self.object,
+            proveedor=self.object.proveedor,
+            defaults={
+                "precio_unitario": self.object.precio_actual,
+                "moneda": self.object.moneda,
+                "activo": True,
+            }
+        )
+        messages.success(self.request, "Producto y precio registrados correctamente.")
+        return response
 
 
 class ProductoUpdateView(UpdateView):
     model = Producto
     form_class = ProductoForm
     template_name = "catalogos/producto_form.html"
-    success_url = reverse_lazy("catalogos:producto_list")
+    success_url = reverse_lazy("catalogos:catalogo")
 
     def form_valid(self, form):
-        producto = form.save()
-
-        # Sincronizar precio con ProductoProveedor (para DespieceService)
-        proveedor = form.cleaned_data.get("proveedor")
-        precio    = form.cleaned_data.get("precio_actual")
-        if proveedor and precio:
-            _sincronizar_producto_proveedor(producto, proveedor, precio)
-
-        return HttpResponseRedirect(self.get_success_url())
+        response = super().form_valid(form)
+        if self.object.proveedor:
+            ProductoProveedor.objects.update_or_create(
+                producto=self.object,
+                proveedor=self.object.proveedor,
+                defaults={
+                    "precio_unitario": self.object.precio_actual,
+                    "moneda": self.object.moneda,
+                    "activo": True,
+                }
+            )
+        messages.success(self.request, "Producto actualizado correctamente.")
+        return response
 
 
 class ProductoDeleteView(DeleteView):
     model = Producto
     template_name = "catalogos/confirm_delete.html"
-    success_url = reverse_lazy("catalogos:producto_list")
+    success_url = reverse_lazy("catalogos:catalogo")
 
 
-# ── Proveedores ─────────────────────────────────────────────────────────────
+class ProductoDetailView(DetailView):
+    model = Producto
+    template_name = "catalogos/producto_detail.html"
+    context_object_name = "producto"
 
-class ProveedorListView(WithCreateFormMixin, ListView):
+
+# ─────────────────────────────────────────────────────────────────
+# UNIDADES DE MEDIDA
+# ─────────────────────────────────────────────────────────────────
+class UnidadCreateView(CreateView):
+    model         = UnidadMedida
+    form_class    = UnidadMedidaForm
+    template_name = "catalogos/unidad_form.html"
+    success_url   = reverse_lazy("catalogos:catalogo")
+
+
+class UnidadUpdateView(UpdateView):
+    model         = UnidadMedida
+    form_class    = UnidadMedidaForm
+    template_name = "catalogos/unidad_form.html"
+    success_url   = reverse_lazy("catalogos:catalogo")
+
+
+class UnidadDeleteView(DeleteView):
+    model       = UnidadMedida
+    template_name = "catalogos/confirm_delete.html"
+    success_url = reverse_lazy("catalogos:catalogo")
+
+
+# ─────────────────────────────────────────────────────────────────
+# PROVEEDORES
+# ─────────────────────────────────────────────────────────────────
+class ProveedorListView(ListView):
     model = Proveedor
-    form_class = ProveedorForm
     template_name = "catalogos/proveedor_list.html"
     context_object_name = "proveedores"
     ordering = ["nombre"]
 
 
-class ProveedorDetailView(DetailView):
-    model = Proveedor
-    template_name = "catalogos/proveedor_detail.html"
-    context_object_name = "proveedor"
-
-
 class ProveedorCreateView(CreateView):
-    model = Proveedor
-    form_class = ProveedorForm
+    model         = Proveedor
     template_name = "catalogos/proveedor_form.html"
-    success_url = reverse_lazy("catalogos:proveedor_list")
+    fields        = "__all__"
+    success_url   = reverse_lazy("catalogos:proveedor_list")
 
 
 class ProveedorUpdateView(UpdateView):
-    model = Proveedor
-    form_class = ProveedorForm
+    model         = Proveedor
     template_name = "catalogos/proveedor_form.html"
-    success_url = reverse_lazy("catalogos:proveedor_list")
+    fields        = "__all__"
+    success_url   = reverse_lazy("catalogos:proveedor_list")
 
 
 class ProveedorDeleteView(DeleteView):
-    model = Proveedor
+    model         = Proveedor
     template_name = "catalogos/confirm_delete.html"
-    success_url = reverse_lazy("catalogos:proveedor_list")
+    success_url   = reverse_lazy("catalogos:proveedor_list")
 
 
-# ── Precios (eliminados de la UI — redirigen a producto_list) ────────────────
-# ProductoProveedor sigue existiendo como tabla técnica interna.
-# Los precios se gestionan desde el formulario de Producto.
+# ─────────────────────────────────────────────────────────────────
+# PRODUCTOS × PROVEEDOR (precios)
+# ─────────────────────────────────────────────────────────────────
+class PrecioListView(RedirectView):
+    permanent = False
+    pattern_name = "catalogos:producto_list"
 
-class PrecioListView(ListView):
-    """Redirige permanentemente al listado de productos."""
+
+class ProductoProveedorListView(ListView):
     model = ProductoProveedor
-    template_name = "catalogos/precio_list.html"
-    context_object_name = "precios"
-    ordering = ["producto__codigo"]
-
-    def get(self, request, *args, **kwargs):
-        messages.info(request, "Los precios ahora se gestionan directamente en el catálogo de Productos.")
-        return redirect("catalogos:producto_list")
+    template_name = "catalogos/productoproveedor_list.html"
+    context_object_name = "productos_proveedor"
+    ordering = ["producto__nombre"]
 
 
-class PrecioCreateView(CreateView):
-    model = ProductoProveedor
-    form_class = ProductoProveedorForm
-    template_name = "catalogos/precio_form.html"
-    success_url = reverse_lazy("catalogos:producto_list")
-
-    def get(self, request, *args, **kwargs):
-        return redirect("catalogos:producto_list")
+class ProductoProveedorCreateView(CreateView):
+    model         = ProductoProveedor
+    template_name = "catalogos/productoproveedor_form.html"
+    fields        = "__all__"
+    success_url   = reverse_lazy("catalogos:productoproveedor_list")
 
 
-class PrecioUpdateView(UpdateView):
-    model = ProductoProveedor
-    form_class = ProductoProveedorForm
-    template_name = "catalogos/precio_form.html"
-    success_url = reverse_lazy("catalogos:producto_list")
-
-    def get(self, request, *args, **kwargs):
-        return redirect("catalogos:producto_list")
+class ProductoProveedorUpdateView(UpdateView):
+    model         = ProductoProveedor
+    template_name = "catalogos/productoproveedor_form.html"
+    fields        = "__all__"
+    success_url   = reverse_lazy("catalogos:productoproveedor_list")
 
 
-class PrecioDeleteView(DeleteView):
-    model = ProductoProveedor
+class ProductoProveedorDeleteView(DeleteView):
+    model         = ProductoProveedor
     template_name = "catalogos/confirm_delete.html"
-    success_url = reverse_lazy("catalogos:producto_list")
+    success_url   = reverse_lazy("catalogos:productoproveedor_list")

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Historial del sistema{% endblock %}
+{% block page_title %}Historial del sistema{% endblock %}
+{% block breadcrumb %}Configuración → Logs{% endblock %}
+
+{% block content %}
+<div class="panel fade-up">
+  <div class="panel-header">
+    <span class="panel-title">Actividad registrada</span>
+    <span style="font-size:11px;color:var(--ink-soft);">
+      Unidad: <strong>{{ request.session.unidad_negocio }}</strong>
+    </span>
+  </div>
+
+  {% if logs %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>Fecha</th>
+        <th>Acción</th>
+        <th>Descripción</th>
+        <th>Usuario</th>
+        <th>Objeto</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td class="td-mono" style="white-space:nowrap;font-size:11.5px;">
+          {{ log.created_at|date:"d/m/Y H:i" }}
+        </td>
+        <td>
+          <span style="font-size:10.5px;font-family:monospace;background:rgba(86,83,148,0.08);
+                       padding:2px 7px;border-radius:4px;color:var(--brand-violet);">
+            {{ log.accion }}
+          </span>
+        </td>
+        <td style="font-size:13px;">{{ log.descripcion|default:"—" }}</td>
+        <td style="font-size:12.5px;">{{ log.usuario.nombre_completo }}</td>
+        <td style="font-size:11.5px;color:var(--ink-soft);">
+          {% if log.modelo_afectado %}
+          {{ log.modelo_afectado }}{% if log.objeto_id %} #{{ log.objeto_id }}{% endif %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if is_paginated %}
+  <div style="padding:12px 20px;display:flex;gap:8px;justify-content:flex-end;">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-ghost btn-sm">← Anterior</a>
+    {% endif %}
+    <span style="font-size:12px;padding:6px 10px;color:var(--ink-soft);">
+      Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+    </span>
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-ghost btn-sm">Siguiente →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="empty-state" style="padding:40px;">
+    <div class="empty-state-icon">◷</div>
+    <div class="empty-state-text">Sin actividad registrada para esta unidad.</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

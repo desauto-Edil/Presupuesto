@@ -16,14 +16,15 @@ class UnidadMedidaForm(forms.ModelForm):
         }
 
 
-class CategoriaProductoForm(forms.ModelForm):
+class CategoriaForm(forms.ModelForm):
     class Meta:
         model = CategoriaProducto
-        fields = ["codigo", "nombre", "descripcion", "activa"]
+        fields = ["codigo", "nombre", "descripcion", "imagen", "activa"]
         widgets = {
             "codigo": forms.TextInput(attrs={"class": "form-control"}),
             "nombre": forms.TextInput(attrs={"class": "form-control"}),
             "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "imagen": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "activa": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
@@ -43,27 +44,33 @@ class ProductoForm(forms.ModelForm):
             "origen", "marca", "linea", "rendimiento", "activo",
         ]
         widgets = {
-            "codigo":        forms.TextInput(attrs={"class": "form-control",
+            "codigo": forms.TextInput(attrs={"class": "form-control",
                                                     "placeholder": "Auto-generado al guardar"}),
-            "nombre":        forms.TextInput(attrs={"class": "form-control"}),
-            "categoria":     forms.Select(attrs={"class": "form-select"}),
-            "unidad":        forms.Select(attrs={"class": "form-select"}),
-            "proveedor":     forms.Select(attrs={"class": "form-select"}),
+            "nombre": forms.TextInput(attrs={"class": "form-control"}),
+            "categoria": forms.Select(attrs={"class": "form-select"}),
+            "unidad": forms.Select(attrs={"class": "form-select"}),
+            "proveedor": forms.Select(attrs={"class": "form-select"}),
             "precio_actual": forms.NumberInput(attrs={"class": "form-control", "step": "0.01",
                                                       "placeholder": "Ej: 8500"}),
-            "moneda":        forms.Select(attrs={"class": "form-select"}),
-            "origen":        forms.Select(attrs={"class": "form-select"}),
-            "marca":         forms.TextInput(attrs={"class": "form-control"}),
-            "linea":         forms.TextInput(attrs={"class": "form-control"}),
-            "rendimiento":   forms.NumberInput(attrs={"class": "form-control", "step": "0.000001"}),
-            "activo":        forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "moneda": forms.Select(attrs={"class": "form-select"}),
+            "origen": forms.Select(attrs={"class": "form-select"}),
+            "marca": forms.TextInput(attrs={"class": "form-control"}),
+            "linea": forms.TextInput(attrs={"class": "form-control"}),
+            "rendimiento": forms.NumberInput(attrs={"class": "form-control", "step": "0.000001"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+    def clean_precio_actual(self):
+            precio = self.cleaned_data.get("precio_actual")
+            if precio is not None and precio < 0:
+                raise ValidationError("El precio no puede ser negativo.")
+            return precio
 
     def clean(self):
         cd = super().clean()
-        precio    = cd.get("precio_actual")
+        precio = cd.get("precio_actual")
         proveedor = cd.get("proveedor")
-        moneda    = cd.get("moneda")
+        moneda = cd.get("moneda")
         if precio is None:
             raise ValidationError({"precio_actual": "El precio es obligatorio."})
         if precio <= 0:

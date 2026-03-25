@@ -23,7 +23,7 @@
 {% endblock %}
 
 {% block topbar_actions %}
-<button class="btn btn-brand btn-sm" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUser" onclick="prepareForm('create')">
+<button class="btn btn-primary btn-sm" data-bs-toggle="offcanvas" data-bs-target="#offcanvasUser" onclick="prepareForm('create')">
     + Nuevo Usuario
 </button>
 {% endblock %}
@@ -102,9 +102,11 @@
             </div>
 
             <div id="passwordSection" class="mb-3">
-                <label class="form-label small fw-bold text-uppercase">Contraseña</label>
-                <input type="password" name="password_hash" id="id_password_hash" class="form-control">
-                <div class="form-text" style="font-size: 10px;">En edición, dejar vacío para mantener la actual.</div>
+                <label class="form-label small fw-bold text-uppercase">Contraseña <span id="passwordRequired" style="color:var(--brand-red)">*</span></label>
+                <input type="password" name="password_hash" id="id_password_hash" class="form-control" autocomplete="new-password">
+                <div class="form-text" id="passwordHint" style="font-size: 10px; display:none;">
+                    Dejar vacío para conservar la contraseña actual.
+                </div>
             </div>
 
             <div class="mb-3">
@@ -131,7 +133,7 @@
             </div>
 
             <div class="mt-5 d-grid">
-                <button type="submit" class="btn btn-brand">Guardar Cambios</button>
+                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
             </div>
         </form>
     </div>
@@ -141,25 +143,35 @@
 {% block extra_js %}
 <script>
     function prepareForm(mode, data = null) {
-        const form = document.getElementById('userMainForm');
-        const title = document.getElementById('userTitle');
-        
+        const form        = document.getElementById('userMainForm');
+        const title       = document.getElementById('userTitle');
+        const pwInput     = document.getElementById('id_password_hash');
+        const pwRequired  = document.getElementById('passwordRequired');
+        const pwHint      = document.getElementById('passwordHint');
+
         if (mode === 'create') {
             title.innerText = "Crear Nuevo Usuario";
             form.action = "{% url 'usuarios:usuario_create' %}";
             form.reset();
             document.getElementById('id_activo').checked = true;
+            // Contraseña obligatoria al crear
+            pwInput.placeholder = "";
+            pwRequired.style.display = "inline";
+            pwHint.style.display = "none";
         } else {
             title.innerText = "Editar Usuario";
-            // Ajustamos la URL de acción dinámicamente
             form.action = `/usuarios/${data.id}/editar/`;
-            
-            // Llenamos los campos
+
             document.getElementById('id_nombre_completo').value = data.nombre;
             document.getElementById('id_email').value = data.email;
             document.getElementById('id_unidad_negocio').value = data.unidad;
             document.getElementById('id_rol').value = data.rol;
             document.getElementById('id_activo').checked = (data.activo === 'true');
+            // Contraseña opcional al editar
+            pwInput.value = "";
+            pwInput.placeholder = "Dejar vacío para no cambiar";
+            pwRequired.style.display = "none";
+            pwHint.style.display = "block";
         }
     }
 </script>

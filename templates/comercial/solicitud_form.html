@@ -16,37 +16,26 @@
       <div class="form-page-title">
         {% if object %}Editar solicitud{% else %}Nueva solicitud{% endif %}
       </div>
-      {% if object %}
       <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
-        Consecutivo, estado y usuario creador son controlados por el sistema.
+        Los campos de Selford son obligatorios. Estado y usuario creador son controlados por el sistema.
       </div>
-      {% endif %}
     </div>
     <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
   </div>
 
   <div class="form-page-body">
 
-    <!-- ── CAMPOS DEL SISTEMA (solo lectura) ── -->
+    <!-- ── ESTADO DEL SISTEMA (solo en edición) ── -->
     {% if object %}
     <div style="background:rgba(86,83,148,0.06);border:1px solid rgba(86,83,148,0.15);
                 border-radius:8px;padding:14px 18px;margin-bottom:22px;">
       <div class="section-heading" style="margin-bottom:12px;">Campos del sistema</div>
       <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start;">
-
-        <div>
-          <div class="sys-label">Consecutivo</div>
-          <input type="text" class="form-control" value="{{ object.consecutivo }}" disabled
-                 style="max-width:150px;font-family:'Syne',sans-serif;font-weight:700;
-                        color:var(--brand-violet);background:rgba(86,83,148,0.05);">
-        </div>
-
         <div>
           <div class="sys-label">Estado</div>
           <div style="display:flex;align-items:center;gap:8px;padding-top:8px;">
             <span class="badge-status
               {% if object.estado == 'EN_GESTION' %}bs-pendiente
-              {% elif object.estado == 'COTIZADA' %}bs-apu
               {% elif object.estado == 'APROBADA' %}bs-validado
               {% else %}bs-cerrado{% endif %}">
               {{ object.get_estado_display }}
@@ -54,21 +43,18 @@
           </div>
           <div style="font-size:10px;color:rgba(14,17,23,0.35);margin-top:3px;">Solo el sistema lo cambia</div>
         </div>
-
         <div>
           <div class="sys-label">Creado por</div>
           <input type="text" class="form-control"
                  value="{{ object.creado_por|default:'Sin asignar' }}" disabled
                  style="max-width:200px;background:rgba(86,83,148,0.05);">
         </div>
-
         <div>
           <div class="sys-label">Registrada el</div>
           <input type="text" class="form-control"
                  value="{{ object.created_at|date:'d/m/Y H:i' }}" disabled
                  style="max-width:160px;background:rgba(86,83,148,0.05);">
         </div>
-
       </div>
     </div>
     {% endif %}
@@ -81,20 +67,42 @@
       <div class="msg-bar msg-error">✕ {{ form.non_field_errors }}</div>
       {% endif %}
 
-      <div class="section-heading">Datos de la solicitud</div>
-
-      <!-- CLIENTE + CONTACTO (dependiente vía AJAX) -->
+      <!-- ── DATOS DE SELFORD ── -->
+      <div class="section-heading">Datos de Selford</div>
       <div class="form-grid-2" style="margin-bottom:0;">
         <div class="form-group">
-          <label for="id_cliente">Cliente <span style="color:var(--brand-red)">*</span></label>
-          {{ form.cliente }}
-          {% if form.cliente.errors %}<div class="invalid-feedback d-block">{{ form.cliente.errors.0 }}</div>{% endif %}
+          <label>Consecutivo de Selford <span style="color:var(--brand-red)">*</span></label>
+          {{ form.consecutivo }}
+          {% if form.consecutivo.errors %}
+          <div class="invalid-feedback d-block">{{ form.consecutivo.errors.0 }}</div>
+          {% endif %}
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">
+            Número de consecutivo asignado en el sistema Selford.
+          </div>
         </div>
-        
+        <div class="form-group">
+          <label>Link de Selford <span style="color:var(--brand-red)">*</span></label>
+          {{ form.link_selford }}
+          {% if form.link_selford.errors %}
+          <div class="invalid-feedback d-block">{{ form.link_selford.errors.0 }}</div>
+          {% endif %}
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">
+            URL directa al registro en Selford.
+          </div>
+        </div>
+      </div>
+
+      <!-- ── DATOS DE LA SOLICITUD ── -->
+      <div class="section-heading" style="margin-top:18px;">Datos de la solicitud</div>
+
+      <div class="form-group">
+        <label for="id_cliente">Cliente <span style="color:var(--brand-red)">*</span></label>
+        {{ form.cliente }}
+        {% if form.cliente.errors %}<div class="invalid-feedback d-block">{{ form.cliente.errors.0 }}</div>{% endif %}
       </div>
 
       <div class="form-group">
-        <label>Nombre del proyecto / requerimiento <span style="color:var(--brand-red)">*</span></label>
+        <label>Nombre / descripción <span style="color:var(--brand-red)">*</span></label>
         {{ form.nombre }}
         {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
       </div>
@@ -124,69 +132,4 @@
     </form>
   </div>
 </div>
-{% endblock %}
-
-
-{% block extra_js %}
-<script>
-(function () {
-  const clienteSelect  = document.getElementById('id_cliente');
-  const contactoSelect = document.getElementById('id_contacto');
-  const loadingBadge   = document.getElementById('contacto-loading');
-  const hint           = document.getElementById('contacto-hint');
-
-  // Contacto seleccionado actualmente (en edición)
-  const contactoActual = "{{ object.contacto_id|default:'' }}";
-
-  /**
-   * Carga los contactos del cliente vía AJAX y actualiza el <select>.
-   * @param {string|number} clienteId
-   * @param {string|number} preselect  – id del contacto a pre-seleccionar
-   */
-  function cargarContactos(clienteId, preselect) {
-    if (!clienteId) {
-      contactoSelect.innerHTML = '<option value="">— Sin cliente seleccionado —</option>';
-      hint.textContent = 'Selecciona primero un cliente.';
-      return;
-    }
-
-    loadingBadge.style.display = 'inline';
-    hint.textContent = '';
-
-    fetch(`/comercial/api/contactos-por-cliente/${clienteId}/`)
-      .then(r => r.json())
-      .then(data => {
-        contactoSelect.innerHTML = '<option value="">— Sin contacto —</option>';
-        if (data.contactos.length === 0) {
-          hint.textContent = 'Este cliente no tiene contactos registrados.';
-        } else {
-          data.contactos.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = c.nombre + (c.cargo ? ` — ${c.cargo}` : '') + (c.es_principal ? ' ★' : '');
-            if (String(c.id) === String(preselect)) opt.selected = true;
-            contactoSelect.appendChild(opt);
-          });
-          hint.textContent = `${data.contactos.length} contacto(s) disponible(s).`;
-        }
-      })
-      .catch(() => {
-        hint.textContent = 'Error al cargar contactos. Intenta de nuevo.';
-      })
-      .finally(() => {
-        loadingBadge.style.display = 'none';
-      });
-  }
-
-  // Al cambiar el cliente → recargar contactos (sin pre-selección)
-  clienteSelect.addEventListener('change', function () {
-    cargarContactos(this.value, null);
-  });
-
-  // Al cargar la página en modo edición → cargar contactos del cliente actual
-  if (clienteSelect.value) {
-    cargarContactos(clienteSelect.value, contactoActual);
-  }
-})();
-</script>
 {% endblock %}

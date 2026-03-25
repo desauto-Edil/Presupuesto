@@ -1,11 +1,11 @@
 """
-apps/comercial/models.py 
+apps/comercial/models.py
 
 Dominio: gestión de la relación con el cliente desde el primer contacto
 hasta la creación del proyecto.
 
   Cliente → ContactoCliente
-  Cliente → Solicitud → Proyecto
+  Cliente → Solicitud → Proyecto (múltiples versiones)
 
 Dependencias:
   - apps.common.choices (EstadoSolicitud, EstadoProyecto, Moneda)
@@ -22,12 +22,8 @@ from apps.common.choices import EstadoSolicitud, EstadoProyecto, Moneda
 # ---------------------------------------------------------------------------
 
 class Cliente(models.Model):
-    nit = models.CharField(
-        max_length=50, 
-        unique=True
-        )
+    nit = models.CharField(max_length=50, unique=True)
     razon_social = models.CharField(max_length=300)
-    creacion_selford = models.BooleanField(default=False)
     activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -62,12 +58,7 @@ class ContactoCliente(models.Model):
     def __str__(self):
         return f"{self.nombre} — {self.cliente.razon_social}"
 
-class LogSistema(models.Model):
-    usuario = models.ForeignKey('usuarios.UsuarioSistema', on_delete=models.CASCADE)
-    accion = models.TextField()
-    unidad_negocio = models.CharField(max_length=20)
-    created_at = models.DateTimeField(auto_now_add=True)
-    
+
 # ---------------------------------------------------------------------------
 # TIPO DE PROYECTO
 # ---------------------------------------------------------------------------
@@ -90,7 +81,21 @@ class TipoProyecto(models.Model):
 # ---------------------------------------------------------------------------
 
 class Solicitud(models.Model):
-    consecutivo = models.CharField(max_length=30, unique=True)
+    """
+    Solicitud de presupuesto proveniente de Selford.
+    El consecutivo es provisto por el usuario (no auto-generado).
+    Una solicitud puede tener múltiples versiones de proyecto.
+    """
+    consecutivo = models.CharField(
+        max_length=30,
+        unique=True,
+        verbose_name="Consecutivo de Selford",
+        help_text="Número de consecutivo asignado en Selford",
+    )
+    link_selford = models.URLField(
+        verbose_name="Link de Selford",
+        help_text="URL directa al registro en Selford",
+    )
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="solicitudes")
     contacto = models.ForeignKey(
         ContactoCliente, on_delete=models.SET_NULL,
@@ -100,7 +105,7 @@ class Solicitud(models.Model):
         "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
         blank=True, null=True, related_name="solicitudes_creadas",
     )
-    nombre = models.CharField(max_length=300)
+    nombre = models.CharField(max_length=300, verbose_name="Nombre / descripción")
     descripcion = models.TextField(blank=True, null=True)
     fecha_entrega = models.DateField(null=True, blank=True)
     estado = models.CharField(
@@ -118,38 +123,45 @@ class Solicitud(models.Model):
         return f"{self.consecutivo} — {self.nombre}"
 
     def save(self, *args, **kwargs):
-  
-        # ── Consecutivo automático (solo en creación) ──────────────────────
-        if not self.pk and not self.consecutivo:
-            self.consecutivo = self.__class__.siguiente_consecutivo()
-        # ── Contacto por defecto ───────────────────────────────────────────
+        # Asignar contacto principal del cliente si no se especificó
         if not self.contacto_id and self.cliente_id:
             self.contacto = self.cliente.contacto_principal
         super().save(*args, **kwargs)
 
-    @classmethod
-    def siguiente_consecutivo(cls):
-        """Genera el siguiente consecutivo SLD-YYYY-NNNN."""
-        year = timezone.now().year
-        prefix = f"SLD-{year}-"
-        last = cls.objects.filter(consecutivo__startswith=prefix).order_by("-consecutivo").first()
-        num = (int(last.consecutivo.split("-")[-1]) + 1) if last else 1
-        return f"{prefix}{num:04d}"
+    @property
+    def version_actual(self):
+        """Retorna el proyecto marcado como versión actual, o el más reciente."""
+        return self.proyectos.filter(es_version_actual=True).first()
+
+    @property
+    def total_versiones(self):
+        return self.proyectos.count()
 
 
 # ---------------------------------------------------------------------------
-# PROYECTOS
+# PROYECTOS  (múltiples versiones por solicitud)
 # ---------------------------------------------------------------------------
 
 class Proyecto(models.Model):
+    """
+    Versión de un proyecto asociada a una Solicitud.
+    Una solicitud puede tener múltiples versiones; solo una es la actual.
+    """
     consecutivo = models.CharField(max_length=30, unique=True)
-    #solicitud = models.ForeignKey(
-    solicitud = models.OneToOneField(
-        Solicitud, 
+    solicitud = models.ForeignKey(
+        Solicitud,
         on_delete=models.SET_NULL,
-        blank=True, 
-        null=True, 
-        related_name="proyecto",
+        blank=True,
+        null=True,
+        related_name="proyectos",
+    )
+    version = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Versión",
+    )
+    es_version_actual = models.BooleanField(
+        default=True,
+        verbose_name="Es versión actual",
     )
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos")
     creado_por = models.ForeignKey(
@@ -178,7 +190,7 @@ class Proyecto(models.Model):
     estado = models.CharField(
         max_length=25, choices=EstadoProyecto.choices, default=EstadoProyecto.SOLICITUD
     )
-    motivo_devolucion  = models.TextField(
+    motivo_devolucion = models.TextField(
         blank=True, null=True,
         help_text="Motivo de rechazo o devolución por parte del Administrador o Compras",
     )
@@ -188,14 +200,12 @@ class Proyecto(models.Model):
     class Meta:
         app_label = "comercial"
         db_table = "proyectos"
+        ordering = ["-version"]
 
     def __str__(self):
-        return f"{self.consecutivo} — {self.nombre}"
+        return f"{self.consecutivo} — {self.nombre} (v{self.version})"
 
     def save(self, *args, **kwargs):
-        """
-        Campos controlados por el sistema 
-        """
         if not self.pk and not self.consecutivo:
             self.consecutivo = self.__class__.siguiente_consecutivo()
         super().save(*args, **kwargs)
@@ -208,13 +218,13 @@ class Proyecto(models.Model):
         num = (int(last.consecutivo.split("-")[-1]) + 1) if last else 1
         return f"{prefix}{num:04d}"
 
-    # ── Transiciones de estado ────────────────────────────────────────────────
+    # ── Transiciones de estado ──────────────────────────────────────────────
 
     def avanzar_a_despiece(self):
         if self.estado == EstadoProyecto.SOLICITUD:
             self.estado = EstadoProyecto.DESPIECE
             self.save(update_fields=["estado", "updated_at"])
-            
+
     def avanzar_a_despiece_validado(self):
         if self.estado in (EstadoProyecto.DESPIECE, EstadoProyecto.EN_REVISION_COMPRAS):
             self.estado = EstadoProyecto.DESPIECE_VALIDADO
@@ -246,3 +256,99 @@ class Proyecto(models.Model):
         if self.estado == EstadoProyecto.COTIZADO:
             self.estado = EstadoProyecto.APROBADO
             self.save(update_fields=["estado", "updated_at"])
+
+
+# ---------------------------------------------------------------------------
+# ARCHIVOS DE PROYECTO
+# ---------------------------------------------------------------------------
+
+class ProyectoArchivo(models.Model):
+    """
+    Archivo adjunto a una versión de proyecto.
+    Sin límite de cantidad ni restricción de formato.
+    """
+    proyecto = models.ForeignKey(
+        Proyecto, on_delete=models.CASCADE, related_name="archivos",
+        verbose_name="Proyecto",
+    )
+    archivo = models.FileField(
+        upload_to="proyectos/archivos/%Y/%m/",
+        verbose_name="Archivo",
+    )
+    nombre = models.CharField(
+        max_length=300,
+        verbose_name="Nombre del archivo",
+        help_text="Nombre descriptivo del archivo",
+    )
+    fecha_subida = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de subida")
+    usuario = models.ForeignKey(
+        "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="archivos_subidos",
+        verbose_name="Subido por",
+    )
+
+    class Meta:
+        app_label = "comercial"
+        db_table = "proyectos_archivos"
+        verbose_name = "Archivo de proyecto"
+        verbose_name_plural = "Archivos de proyecto"
+        ordering = ["-fecha_subida"]
+
+    def __str__(self):
+        return f"{self.nombre} — {self.proyecto.consecutivo}"
+
+    @property
+    def extension(self):
+        import os
+        _, ext = os.path.splitext(self.archivo.name)
+        return ext.lower().lstrip(".")
+
+
+# ---------------------------------------------------------------------------
+# LOG DEL SISTEMA
+# ---------------------------------------------------------------------------
+
+class LogSistema(models.Model):
+    """
+    Registro de auditoría de acciones importantes.
+    Filtrado por unidad de negocio del usuario.
+    """
+    usuario = models.ForeignKey(
+        "usuarios.UsuarioSistema", on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    unidad_negocio = models.CharField(
+        max_length=20,
+        verbose_name="Unidad de negocio",
+        db_index=True,
+    )
+    accion = models.CharField(
+        max_length=100,
+        verbose_name="Acción",
+        help_text="Código de acción: CREAR_SOLICITUD, CREAR_VERSION, SUBIR_ARCHIVO, etc.",
+    )
+    descripcion = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Descripción",
+    )
+    modelo_afectado = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Modelo afectado",
+    )
+    objeto_id = models.PositiveIntegerField(
+        null=True, blank=True,
+        verbose_name="ID del objeto",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha")
+
+    class Meta:
+        app_label = "comercial"
+        db_table = "logs_sistema"
+        verbose_name = "Log del sistema"
+        verbose_name_plural = "Logs del sistema"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"[{self.unidad_negocio}] {self.accion} — {self.usuario} ({self.created_at:%d/%m/%Y %H:%M})"

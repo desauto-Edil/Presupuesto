@@ -27,13 +27,21 @@
     <div class="project-meta-label">Estado</div>
     <span class="badge-status
       {% if solicitud.estado == 'EN_GESTION' %}bs-pendiente
-      {% elif solicitud.estado == 'COTIZADA' %}bs-apu
       {% elif solicitud.estado == 'APROBADA' %}bs-validado
+      {% elif solicitud.estado == 'RECHAZADA' %}bs-rechazado
       {% else %}bs-cerrado{% endif %}"
       style="font-size:12px;padding:4px 12px;">
       {{ solicitud.get_estado_display }}
     </span>
-    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:4px;">Solo el sistema lo modifica</div>
+  </div>
+
+  <div class="project-divider"></div>
+  <div>
+    <div class="project-meta-label">Link Selford</div>
+    <a href="{{ solicitud.link_selford }}" target="_blank" rel="noopener"
+       style="font-size:12px;color:var(--brand-lime);">
+      Ver en Selford ↗
+    </a>
   </div>
 
   {% if solicitud.fecha_entrega %}
@@ -46,8 +54,10 @@
 
   <div class="project-divider"></div>
   <div>
-    <div class="project-meta-label">Registrada</div>
-    <div class="project-meta-value" style="font-size:13px;">{{ solicitud.created_at|date:"d/m/Y" }}</div>
+    <div class="project-meta-label">Versiones</div>
+    <div class="project-meta-value" style="font-size:20px;font-weight:700;">
+      {{ proyectos|length }}
+    </div>
   </div>
 
   <div class="project-status-chip">🔒 {{ solicitud.consecutivo }}</div>
@@ -60,12 +70,198 @@
   <div style="display:flex;flex-direction:column;gap:14px;">
 
     <!-- Descripción -->
+    {% if solicitud.descripcion %}
     <div class="panel">
       <div class="panel-header"><span class="panel-title">Descripción</span></div>
       <div style="padding:16px 20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;">
-        {{ solicitud.descripcion|default:"Sin descripción." }}
+        {{ solicitud.descripcion }}
       </div>
     </div>
+    {% endif %}
+
+    <!-- ─────────────────────────────────────────── -->
+    <!--  VERSIONES DEL PROYECTO                    -->
+    <!-- ─────────────────────────────────────────── -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Versiones del proyecto</span>
+        <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
+           class="btn btn-primary btn-sm"
+           style="background:var(--brand-lime);border-color:var(--brand-lime);color:#1a1a1a;">
+          + Nueva versión
+        </a>
+      </div>
+
+      {% if proyectos %}
+      <div style="padding:0;">
+        {% for p in proyectos %}
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);
+                    {% if p.es_version_actual %}background:rgba(86,83,148,0.04);{% endif %}">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+
+            <!-- Versión + info -->
+            <div style="display:flex;align-items:center;gap:14px;">
+              <!-- Badge versión -->
+              <div style="width:40px;height:40px;border-radius:8px;
+                          {% if p.es_version_actual %}
+                          background:var(--brand-violet);color:#fff;
+                          {% else %}
+                          background:rgba(86,83,148,0.1);color:var(--brand-violet);
+                          {% endif %}
+                          display:flex;align-items:center;justify-content:center;
+                          font-family:'Syne',sans-serif;font-weight:800;font-size:13px;
+                          flex-shrink:0;">
+                v{{ p.version }}
+              </div>
+
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;
+                               color:var(--brand-violet);">{{ p.consecutivo }}</span>
+                  {% if p.es_version_actual %}
+                  <span style="font-size:10px;font-weight:700;letter-spacing:0.06em;
+                               text-transform:uppercase;background:var(--brand-lime);
+                               color:#1a1a1a;padding:2px 8px;border-radius:20px;">
+                    ACTUAL
+                  </span>
+                  {% endif %}
+                </div>
+                <div style="font-size:13px;font-weight:500;margin-top:2px;">{{ p.nombre }}</div>
+                <div style="margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                  <span class="badge-status bs-solicitud" style="font-size:11px;">
+                    {{ p.get_estado_display }}
+                  </span>
+                  {% if p.tipo_proyecto %}
+                  <span style="font-size:11px;color:var(--ink-soft);">{{ p.tipo_proyecto.nombre }}</span>
+                  {% endif %}
+                  <span style="font-size:11px;color:var(--ink-soft);">
+                    {{ p.created_at|date:"d/m/Y" }} · por {{ p.creado_por|default:"—" }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Acciones -->
+            <div style="display:flex;gap:8px;align-items:center;">
+              {% if p.archivos.count %}
+              <span style="font-size:11px;color:var(--ink-soft);">
+                {{ p.archivos.count }} archivo{{ p.archivos.count|pluralize }}
+              </span>
+              {% endif %}
+              <a href="{% url 'comercial:proyecto_detail' p.pk %}"
+                 class="btn btn-ghost btn-sm">Ver proyecto →</a>
+            </div>
+          </div>
+
+          <!-- ── Archivos de esta versión ── -->
+          {% if p.archivos.all %}
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:0.07em;color:var(--ink-soft);margin-bottom:8px;">
+              Archivos adjuntos
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              {% for archivo in p.archivos.all %}
+              <div style="display:flex;align-items:center;gap:6px;background:rgba(14,17,23,0.04);
+                          border:1px solid var(--border);border-radius:6px;padding:5px 10px;
+                          font-size:12px;">
+                <span style="font-size:14px;">
+                  {% if archivo.extension == 'pdf' %}📄
+                  {% elif archivo.extension in 'jpg,jpeg,png,gif,webp' %}🖼️
+                  {% elif archivo.extension in 'xls,xlsx,csv' %}📊
+                  {% elif archivo.extension in 'doc,docx' %}📝
+                  {% else %}📎{% endif %}
+                </span>
+                <a href="{{ archivo.archivo.url }}" target="_blank"
+                   style="color:var(--ink);text-decoration:none;font-weight:500;">
+                  {{ archivo.nombre }}
+                </a>
+                <span style="color:rgba(14,17,23,0.35);">·</span>
+                <span style="color:var(--ink-soft);">{{ archivo.fecha_subida|date:"d/m" }}</span>
+                <form method="post"
+                      action="{% url 'comercial:proyecto_archivo_delete' archivo.pk %}"
+                      style="display:inline;"
+                      onsubmit="return confirm('¿Eliminar este archivo?')">
+                  {% csrf_token %}
+                  <button type="submit"
+                          style="background:none;border:none;cursor:pointer;
+                                 color:rgba(14,17,23,0.3);padding:0 2px;font-size:12px;"
+                          title="Eliminar archivo">✕</button>
+                </form>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- ── Subir archivo a esta versión ── -->
+          <div style="margin-top:10px;">
+            <form method="post"
+                  action="{% url 'comercial:proyecto_archivo_create' p.pk %}"
+                  enctype="multipart/form-data"
+                  style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              {% csrf_token %}
+              <input type="file" name="archivo" class="form-control form-control-sm"
+                     style="max-width:220px;" required>
+              <input type="text" name="nombre" class="form-control form-control-sm"
+                     placeholder="Nombre descriptivo" style="max-width:200px;" required>
+              <button type="submit" class="btn btn-ghost btn-sm">↑ Subir</button>
+            </form>
+          </div>
+
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="padding:28px 20px;display:flex;align-items:center;
+                  justify-content:space-between;flex-wrap:wrap;gap:16px;">
+        <div>
+          <div style="font-size:13.5px;font-weight:500;margin-bottom:4px;">
+            Esta solicitud aún no tiene versiones de proyecto.
+          </div>
+          <div style="font-size:12px;color:var(--ink-soft);">
+            Crea la primera versión para comenzar a presupuestar.
+          </div>
+        </div>
+        <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
+           class="btn btn-primary btn-sm"
+           style="background:var(--brand-lime);border-color:var(--brand-lime);
+                  color:#1a1a1a;white-space:nowrap;">
+          + Crear primera versión
+        </a>
+      </div>
+      {% endif %}
+    </div>
+    <!-- /VERSIONES -->
+
+    <!-- ── HISTORIAL / LOGS ── -->
+    {% if logs %}
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Historial de actividad</span>
+        <span style="font-size:11px;color:var(--ink-soft);">Últimos {{ logs|length }} eventos</span>
+      </div>
+      <div style="padding:0;">
+        {% for log in logs %}
+        <div style="padding:10px 20px;border-bottom:1px solid var(--border);
+                    display:flex;align-items:flex-start;gap:12px;">
+          <div style="width:6px;height:6px;border-radius:50%;background:var(--brand-violet);
+                      margin-top:6px;flex-shrink:0;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12.5px;font-weight:500;">
+              {{ log.descripcion|default:log.accion }}
+            </div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
+              {{ log.usuario }} · {{ log.created_at|date:"d/m/Y H:i" }}
+            </div>
+          </div>
+          <span style="font-size:10px;font-family:monospace;color:rgba(14,17,23,0.35);
+                       white-space:nowrap;padding-top:3px;">{{ log.accion }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
 
     <!-- Observaciones -->
     {% if solicitud.observaciones %}
@@ -76,92 +272,6 @@
       </div>
     </div>
     {% endif %}
-
-    <!-- ─────────────────────────────────────────────────────── -->
-    <!--  SECCIÓN PROYECTO (1 a 1)                              -->
-    <!-- ─────────────────────────────────────────────────────── -->
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-title">Proyecto vinculado</span>
-        <span style="font-size:10.5px;color:var(--ink-soft);">1 solicitud → 1 proyecto</span>
-      </div>
-
-      {% if solicitud.proyecto %}
-      {# ── Ya existe proyecto ── #}
-      {% with p=solicitud.proyecto %}
-      <div style="padding:16px 20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-
-          <!-- Info del proyecto -->
-          <div style="display:flex;align-items:center;gap:14px;">
-            <div style="width:42px;height:42px;border-radius:10px;background:rgba(86,83,148,0.12);
-                        display:flex;align-items:center;justify-content:center;
-                        font-family:'Syne',sans-serif;font-size:18px;color:var(--brand-violet);">◫</div>
-            <div>
-              <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;
-                          color:var(--brand-violet);">{{ p.consecutivo }}</div>
-              <div style="font-size:13px;font-weight:500;margin-top:1px;">{{ p.nombre }}</div>
-              <div style="margin-top:4px;">
-                <span class="badge-status bs-solicitud" style="font-size:11px;">
-                  {{ p.get_estado_display }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Botón Ver proyecto -->
-          <a href="{% url 'comercial:proyecto_detail' p.pk %}"
-             class="btn btn-primary btn-sm">
-            Ver proyecto →
-          </a>
-        </div>
-
-        <!-- Métricas rápidas si existen -->
-        {% if p.area_total_m2 or p.tipo_proyecto %}
-        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);
-                    display:flex;gap:24px;flex-wrap:wrap;">
-          {% if p.tipo_proyecto %}
-          <div>
-            <div class="sys-label">Tipo de proyecto</div>
-            <div style="font-size:13px;">{{ p.tipo_proyecto.nombre }}</div>
-          </div>
-          {% endif %}
-          {% if p.area_total_m2 %}
-          <div>
-            <div class="sys-label">Área total</div>
-            <div style="font-size:13px;">{{ p.area_total_m2|floatformat:1 }} m²</div>
-          </div>
-          {% endif %}
-          <div>
-            <div class="sys-label">Creado</div>
-            <div style="font-size:13px;">{{ p.created_at|date:"d/m/Y" }}</div>
-          </div>
-        </div>
-        {% endif %}
-      </div>
-      {% endwith %}
-
-      {% else %}
-      {# ── Sin proyecto todavía ── #}
-      <div style="padding:22px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
-        <div>
-          <div style="font-size:13.5px;font-weight:500;margin-bottom:4px;">
-            Esta solicitud aún no tiene un proyecto asignado.
-          </div>
-          <div style="font-size:12px;color:var(--ink-soft);">
-            Al crear el proyecto, heredará el cliente y los datos de esta solicitud.
-          </div>
-        </div>
-        <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
-           class="btn btn-primary btn-sm"
-           style="background:var(--brand-lime);border-color:var(--brand-lime);color:#1a1a1a;white-space:nowrap;">
-          + Crear proyecto
-        </a>
-      </div>
-      {% endif %}
-
-    </div>
-    <!-- /SECCIÓN PROYECTO -->
 
   </div>
 
@@ -176,7 +286,7 @@
       </div>
 
       <div class="summary-line">
-        <span class="s-label">Consecutivo</span>
+        <span class="s-label">Consecutivo Selford</span>
         <span class="s-value" style="font-family:'Courier New',monospace;
               font-size:12px;color:var(--brand-violet);">{{ solicitud.consecutivo }}</span>
       </div>
@@ -184,7 +294,6 @@
         <span class="s-label">Estado</span>
         <span class="badge-status
           {% if solicitud.estado == 'EN_GESTION' %}bs-pendiente
-          {% elif solicitud.estado == 'COTIZADA' %}bs-apu
           {% elif solicitud.estado == 'APROBADA' %}bs-validado
           {% else %}bs-cerrado{% endif %}">
           {{ solicitud.get_estado_display }}
@@ -202,6 +311,33 @@
         <span class="s-label">Actualizado</span>
         <span class="s-value" style="font-size:12px;">{{ solicitud.updated_at|date:"d/m/Y H:i" }}</span>
       </div>
+    </div>
+
+    <!-- Resumen versiones -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Resumen versiones</span></div>
+      {% if proyectos %}
+      {% for p in proyectos %}
+      <div class="summary-line">
+        <span class="s-label" style="display:flex;align-items:center;gap:6px;">
+          <span style="font-weight:700;color:{% if p.es_version_actual %}var(--brand-violet){% else %}var(--ink-soft){% endif %};">
+            v{{ p.version }}
+          </span>
+          {% if p.es_version_actual %}
+          <span style="font-size:9px;background:var(--brand-lime);color:#1a1a1a;
+                       padding:1px 6px;border-radius:10px;font-weight:700;">ACTUAL</span>
+          {% endif %}
+        </span>
+        <span class="badge-status bs-solicitud" style="font-size:10px;">
+          {{ p.get_estado_display }}
+        </span>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div style="padding:14px 18px;font-size:12px;color:var(--ink-soft);">
+        Sin versiones todavía.
+      </div>
+      {% endif %}
     </div>
 
     <!-- Contacto -->

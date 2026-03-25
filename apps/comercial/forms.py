@@ -1,7 +1,7 @@
 """apps/comercial/forms.py — Formularios del módulo comercial."""
 
 from django import forms
-from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto
+from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto, ProyectoArchivo
 
 
 class ClienteForm(forms.ModelForm):
@@ -9,12 +9,11 @@ class ClienteForm(forms.ModelForm):
 
     class Meta:
         model = Cliente
-        fields = ["nit", "razon_social", "creacion_selford", "activo"]
+        fields = ["nit", "razon_social", "activo"]
         widgets = {
-            "nit":forms.TextInput(attrs={"class": "form-control"}),
-            "razon_social":forms.TextInput(attrs={"class": "form-control"}),
-            "creacion_selford":forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "activo":forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nit": forms.TextInput(attrs={"class": "form-control"}),
+            "razon_social": forms.TextInput(attrs={"class": "form-control"}),
+            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
 
@@ -32,15 +31,15 @@ class ClienteConContactoForm(forms.ModelForm):
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Nombre completo"}),
     )
     contacto_cargo = forms.CharField(
-        max_length=120, label="Cargo",
+        max_length=120, label="Cargo", required=False,
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: Gerente de proyectos"}),
     )
     contacto_email = forms.EmailField(
-        max_length=120, label="Email del contacto",
+        max_length=120, label="Email del contacto", required=False,
         widget=forms.EmailInput(attrs={"class": "form-control"}),
     )
     contacto_telefono = forms.CharField(
-        max_length=30, label="Teléfono del contacto",
+        max_length=30, label="Teléfono del contacto", required=False,
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
 
@@ -50,7 +49,6 @@ class ClienteConContactoForm(forms.ModelForm):
         widgets = {
             "nit": forms.TextInput(attrs={"class": "form-control"}),
             "razon_social": forms.TextInput(attrs={"class": "form-control"}),
-            "creacion_selford": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
@@ -95,16 +93,28 @@ class TipoProyectoForm(forms.ModelForm):
 class SolicitudForm(forms.ModelForm):
     """
     Formulario de Solicitud.
-    consecutivo, estado y creado_por son controlados por el sistema (excluidos).
+    · consecutivo: provisto por el usuario (Consecutivo de Selford).
+    · link_selford: URL al registro en Selford.
+    · estado y creado_por son controlados por el sistema (excluidos).
     """
 
     class Meta:
         model = Solicitud
         fields = [
+            "consecutivo",
+            "link_selford",
             "cliente",
             "nombre", "descripcion", "fecha_entrega", "observaciones",
         ]
         widgets = {
+            "consecutivo": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ej: SEL-2026-0042",
+            }),
+            "link_selford": forms.URLInput(attrs={
+                "class": "form-control",
+                "placeholder": "https://selford.example.com/solicitud/42",
+            }),
             "cliente": forms.Select(attrs={"class": "form-select"}),
             "nombre": forms.TextInput(attrs={
                 "class": "form-control",
@@ -135,7 +145,7 @@ class ProyectoForm(forms.ModelForm):
             "area_total_m2": forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
             "perimetro_ml": forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
             "trm": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "margen_comercial_pct":forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "margen_comercial_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "iva_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "aiu_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "moneda": forms.Select(attrs={"class": "form-select"}),
@@ -144,14 +154,9 @@ class ProyectoForm(forms.ModelForm):
         }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Formulario especializado: crear Proyecto DESDE una Solicitud
-# cliente y solicitud los asigna la vista automáticamente
-# ─────────────────────────────────────────────────────────────────────────────
-
 class ProyectoFromSolicitudForm(forms.ModelForm):
     """
-    Formulario simplificado para crear un Proyecto a partir de una Solicitud.
+    Formulario simplificado para crear una nueva versión de Proyecto desde una Solicitud.
     No incluye cliente ni solicitud (los asigna CrearProyectoDesdeSolicitudView).
     """
 
@@ -170,10 +175,25 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
             "area_total_m2": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "perimetro_ml": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "trm": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "margen_comercial_pct":forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "margen_comercial_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "iva_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "aiu_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "moneda": forms.Select(attrs={"class": "form-select"}),
             "aplica_exencion_iva": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "observaciones": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
+
+
+class ProyectoArchivoForm(forms.ModelForm):
+    """Formulario para subir archivos adjuntos a una versión de proyecto."""
+
+    class Meta:
+        model = ProyectoArchivo
+        fields = ["archivo", "nombre"]
+        widgets = {
+            "archivo": forms.ClearableFileInput(attrs={"class": "form-control"}),
+            "nombre": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Nombre descriptivo del archivo",
+            }),
         }

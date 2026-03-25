@@ -39,6 +39,12 @@ class CategoriaProducto(models.Model):
     codigo = models.CharField(max_length=40, unique=True)
     nombre = models.CharField(max_length=120, unique=True)
     descripcion = models.TextField(blank=True, null=True)
+    imagen = models.ImageField(
+        upload_to="categorias/",
+        blank=True,
+        null=True,
+        verbose_name="Imagen de categoría",
+    )
     activa = models.BooleanField(default=True)
 
     class Meta:
@@ -77,22 +83,19 @@ class Producto(models.Model):
     # ── Proveedor, precio y moneda ────────────────────────────────────────────
     proveedor = models.ForeignKey(
         "Proveedor", on_delete=models.SET_NULL,
-        null=True, blank=True, related_name="productos_directos",
-        verbose_name="Proveedor principal",
+        null=True, blank=True, related_name="productos_principales",
     )
     precio_actual = models.DecimalField(
-        max_digits=18, decimal_places=2,
-        null=True, blank=True,
-        verbose_name="Precio actual",
-    )
+        max_digits=18, decimal_places=6, 
+        default=0)
+   
     moneda = models.CharField(
         max_length=3, choices=Moneda.choices, default=Moneda.COP,
         verbose_name="Moneda",
     )
     fecha_actualizacion_precio = models.DateTimeField(
-        null=True, blank=True,
-        verbose_name="Última actualización de precio",
-    )
+        auto_now=True
+        )
     # ─────────────────────────────────────────────────────────────────────────
     origen = models.CharField(
         max_length=15, choices=OrigenProducto.choices, default=OrigenProducto.NACIONAL
@@ -196,3 +199,4 @@ class ProductoProveedor(models.Model):
 
     def __str__(self):
         return f"{self.producto.nombre} — {self.proveedor.nombre}"
+    

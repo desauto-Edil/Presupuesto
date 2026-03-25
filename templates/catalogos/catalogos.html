@@ -1,0 +1,549 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Catálogos{% endblock %}
+{% block nav_catalogos %}active{% endblock %}
+{% block page_title %}Catálogos{% endblock %}
+{% block breadcrumb %}Catálogos{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/catalogos.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block topbar_actions %}
+<div class="cat-dropdown-wrap">
+  <button class="btn btn-ghost btn-sm cat-dropdown-trigger" aria-expanded="false">
+    + Nuevo <span class="cat-chevron">▾</span>
+  </button>
+  <div class="cat-dropdown-menu" role="menu">
+
+    <button type="button"
+            class="cat-dropdown-item"
+            data-bs-toggle="modal"
+            data-bs-target="#modalCategoria"
+            role="menuitem">
+      <span class="cat-dropdown-icon">⊞</span>
+      <span>
+        <strong>Nueva categoría</strong>
+        <small>Agrupa productos del catálogo</small>
+      </span>
+    </button>
+
+    <button type="button"
+            class="cat-dropdown-item"
+            data-bs-toggle="modal"
+            data-bs-target="#modalProducto"
+            role="menuitem">
+      <span class="cat-dropdown-icon">◈</span>
+      <span>
+        <strong>Nuevo producto</strong>
+        <small>Añade producto a una categoría</small>
+      </span>
+    </button>
+
+    <div class="cat-dropdown-divider"></div>
+
+    <button type="button"
+            class="cat-dropdown-item"
+            data-bs-toggle="modal"
+            data-bs-target="#modalUnidad"
+            role="menuitem">
+      <span class="cat-dropdown-icon">⊠</span>
+      <span>
+        <strong>Nueva unidad</strong>
+        <small>Unidad de medida</small>
+      </span>
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+
+{% block content %}
+
+<!-- ──────────────────────────────────────────────
+     BARRA DE STATS
+────────────────────────────────────────────── -->
+<div class="cat-stats-bar fade-up">
+  <div>
+    <div class="cat-stats-bar__title">
+      {{ total_categorias }} categoría{{ total_categorias|pluralize }}
+    </div>
+    <div class="cat-stats-bar__sub">
+      {{ total_productos }} producto{{ total_productos|pluralize }} en el catálogo
+    </div>
+  </div>
+  <div class="cat-stats-group">
+    <div class="cat-stat">
+      <div class="cat-stat__num">{{ categorias_activas }}</div>
+      <div class="cat-stat__label">activas</div>
+    </div>
+    <div class="cat-stat">
+      <div class="cat-stat__num">{{ total_productos }}</div>
+      <div class="cat-stat__label">productos</div>
+    </div>
+    <div class="cat-stat">
+      <div class="cat-stat__num cat-stat__num--soft">{{ unidades|length }}</div>
+      <div class="cat-stat__label">unidades</div>
+    </div>
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────
+     PANEL UNIDADES (colapsable)
+────────────────────────────────────────────── -->
+<div class="cat-unidades-panel fade-up-1" id="unidadesPanel">
+  <div class="cat-unidades-header"
+       id="unidadesToggleBtn"
+       role="button"
+       aria-expanded="false"
+       aria-controls="unidadesPills">
+    <div class="cat-unidades-title">
+      <span style="opacity:.5;">⊠</span>
+      Unidades de medida
+      <span style="font-family:'Syne',sans-serif;font-size:11px;color:var(--ink-soft);
+                   background:rgba(0,0,0,0.06);padding:1px 7px;border-radius:10px;">
+        {{ unidades|length }}
+      </span>
+    </div>
+    <span style="font-size:11px;color:var(--ink-soft);display:flex;align-items:center;gap:5px;">
+      <span id="unidadesToggleLabel">Mostrar</span>
+      <span id="unidadesChevron" style="transition:transform .2s;display:inline-block;">▾</span>
+    </span>
+  </div>
+  <div class="cat-unidades-pills" id="unidadesPills">
+    {% for u in unidades %}
+    <div class="cat-unidad-pill">
+      <span class="cat-unidad-pill__abbr">{{ u.abreviatura }}</span>
+      {{ u.nombre }}
+      <a href="{% url 'catalogos:unidad_update' u.pk %}"
+         class="cat-unidad-pill__edit" title="Editar">✎</a>
+    </div>
+    {% empty %}
+    <span style="font-size:12px;color:var(--ink-soft);">Sin unidades registradas.</span>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────
+     BARRA DE BÚSQUEDA
+────────────────────────────────────────────── -->
+<div class="cat-search-bar fade-up-2">
+  <div class="cat-search-input-wrap">
+    <input type="text"
+           id="catSearch"
+           class="cat-search-input"
+           placeholder="Buscar categorías o productos…"
+           autocomplete="off">
+  </div>
+  <div class="cat-filter-chips">
+    <span class="cat-chip active" data-filter="all">Todas</span>
+    <span class="cat-chip" data-filter="activa">Activas</span>
+    <span class="cat-chip" data-filter="inactiva">Inactivas</span>
+  </div>
+</div>
+
+<!-- ──────────────────────────────────────────────
+     GRID DE CATEGORÍAS
+────────────────────────────────────────────── -->
+{% if categorias %}
+<div class="cat-grid" id="catGrid">
+
+  {% for cat in categorias %}
+  <div class="cat-card"
+       data-status="{% if cat.activa %}activa{% else %}inactiva{% endif %}"
+       data-name="{{ cat.nombre|lower }} {{ cat.codigo|lower }}">
+
+    <!-- Imagen -->
+    <div class="cat-card__img">
+      {% if cat.imagen %}
+        <img src="{{ cat.imagen.url }}"
+             alt="{{ cat.nombre }}"
+             loading="lazy">
+      {% else %}
+        <div class="cat-card__img-placeholder">⊞</div>
+      {% endif %}
+      <div class="cat-card__img-overlay"></div>
+      <span class="cat-card__status {% if cat.activa %}cat-card__status--activa{% else %}cat-card__status--inactiva{% endif %}">
+        {% if cat.activa %}● Activa{% else %}○ Inactiva{% endif %}
+      </span>
+      <div class="cat-card__img-label">
+        <span class="cat-card__code-badge">{{ cat.codigo }}</span>
+        <span class="cat-card__img-title">{{ cat.nombre }}</span>
+      </div>
+    </div>
+
+    <!-- Cuerpo -->
+    <div class="cat-card__body">
+      <div class="cat-card__desc">
+        {{ cat.descripcion|default:"Sin descripción registrada." }}
+      </div>
+
+      <div class="cat-card__count-row">
+        <div class="cat-card__count">
+          <span class="cat-card__count-num">{{ cat.cantidad_productos }}</span>
+          <span>producto{{ cat.cantidad_productos|pluralize }}</span>
+        </div>
+        {% if cat.cantidad_productos > 0 %}
+        <button class="cat-card__toggle"
+                data-target="prods-{{ cat.pk }}"
+                aria-expanded="false">
+          Ver lista
+          <span class="cat-card__toggle-icon">▾</span>
+        </button>
+        {% endif %}
+      </div>
+
+      <!-- Productos colapsables -->
+      {% if cat.cantidad_productos > 0 %}
+      <div class="cat-prods" id="prods-{{ cat.pk }}">
+        <div class="cat-prods-inner">
+          {% for prod in cat.productos.all %}
+          {% if forloop.counter <= 6 %}
+          <div class="cat-prod-item"
+               data-prod-name="{{ prod.nombre|lower }} {{ prod.codigo|lower }}"
+               data-bs-toggle="modal"
+               data-bs-target="#modalDetalleProd"
+               data-prod-nombre="{{ prod.nombre }}"
+               data-prod-codigo="{{ prod.codigo }}"
+               data-prod-categoria="{{ cat.nombre }}"
+               data-prod-precio="{{ prod.precio_actual|floatformat:0 }}"
+               data-prod-moneda="{{ prod.moneda }}"
+               data-prod-proveedor="{{ prod.proveedor.nombre|default:'—' }}"
+               data-prod-unidad="{{ prod.unidad.abreviatura|default:'—' }}"
+               data-prod-marca="{{ prod.marca|default:'—' }}"
+               data-prod-activo="{{ prod.activo|yesno:'Activo,Inactivo' }}"
+               data-prod-edit-url="{% url 'catalogos:producto_update' prod.pk %}"
+               title="Ver detalle">
+            <div class="cat-prod-item__left">
+              <span class="cat-prod-item__dot"></span>
+              <div>
+                <div class="cat-prod-item__name">{{ prod.nombre }}</div>
+                {% if prod.proveedor %}
+                <div class="cat-prod-item__sub">{{ prod.proveedor.nombre }}</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="cat-prod-item__right">
+              {% if prod.precio_actual %}
+              <span class="cat-prod-item__price">
+                ${{ prod.precio_actual|floatformat:0 }}
+                <span class="cat-prod-item__moneda">{{ prod.moneda }}</span>
+              </span>
+              {% else %}
+              <span class="cat-prod-item__no-price">Sin precio</span>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
+          {% endfor %}
+
+          {% if cat.cantidad_productos > 6 %}
+          <div class="cat-prods-more">
+            + {{ cat.cantidad_productos|add:"-6" }} más →
+            <a href="{% url 'catalogos:producto_list' %}?categoria={{ cat.pk }}"
+               style="color:inherit;">Ver todos</a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="cat-prods-empty">Sin productos en esta categoría.</div>
+      {% endif %}
+
+    </div><!-- /.cat-card__body -->
+
+    <!-- Footer -->
+    <div class="cat-card__footer">
+      <button type="button"
+              class="btn btn-ghost btn-xs"
+              data-bs-toggle="modal"
+              data-bs-target="#modalProducto"
+              data-categoria-pk="{{ cat.pk }}"
+              data-categoria-nombre="{{ cat.nombre }}">
+        + Producto
+      </button>
+      <div class="cat-card__actions">
+        <a href="{% url 'catalogos:categoria_update' cat.pk %}"
+           class="btn btn-ghost btn-xs" title="Editar categoría">✎ Editar</a>
+        <button class="btn btn-ghost btn-xs"
+                data-bs-toggle="modal"
+                data-bs-target="#deleteModal"
+                data-delete-url="{% url 'catalogos:categoria_delete' cat.pk %}"
+                data-delete-name="{{ cat.nombre }}"
+                title="Eliminar"
+                style="color:rgba(14,17,23,0.3);">✕</button>
+      </div>
+    </div>
+
+  </div><!-- /.cat-card -->
+  {% endfor %}
+
+</div><!-- /#catGrid -->
+
+{% else %}
+<div class="cat-grid">
+  <div class="cat-empty fade-up">
+    <div class="cat-empty__icon">⊞</div>
+    <div class="cat-empty__title">Sin categorías registradas</div>
+    <div class="cat-empty__sub">
+      Las categorías agrupan los productos del catálogo. Crea la primera para comenzar.
+    </div>
+    <button type="button"
+            class="btn btn-primary btn-sm"
+            data-bs-toggle="modal"
+            data-bs-target="#modalCategoria">
+      + Crear primera categoría
+    </button>
+  </div>
+</div>
+{% endif %}
+
+
+<!-- ════════════════════════════════════════════════════════
+     MODAL — CREAR CATEGORÍA
+════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalCategoria" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header cat-modal-header">
+        <h5 class="modal-title">Nueva categoría</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post"
+            action="{% url 'catalogos:categoria_create' %}"
+            enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-body">
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código <span style="color:var(--red)">*</span></label>
+              {{ modal_categoria_form.codigo }}
+            </div>
+            <div class="form-group">
+              <label>Nombre <span style="color:var(--red)">*</span></label>
+              {{ modal_categoria_form.nombre }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Descripción</label>
+            {{ modal_categoria_form.descripcion }}
+          </div>
+
+          <div class="form-group">
+            <label>Imagen de categoría</label>
+            {{ modal_categoria_form.imagen }}
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
+              Formatos: JPG, PNG, WEBP. La imagen se mostrará en la tarjeta.
+            </div>
+            <img id="catImgPreview" class="cat-img-preview" alt="Vista previa">
+          </div>
+
+          <div class="form-group">
+            <div class="form-check">
+              {{ modal_categoria_form.activa }}
+              <label class="form-check-label" style="font-size:13px;">Categoría activa</label>
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar categoría</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════
+     MODAL — CREAR PRODUCTO
+════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalProducto" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header cat-modal-header">
+        <h5 class="modal-title">Nuevo producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'catalogos:producto_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+
+          <div class="form-group">
+            <label>Nombre del producto <span style="color:var(--red)">*</span></label>
+            {{ modal_producto_form.nombre }}
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>
+                Código
+                <span style="font-size:10px;color:var(--ink-soft);margin-left:4px;">(auto-generado)</span>
+              </label>
+              {{ modal_producto_form.codigo }}
+            </div>
+            <div class="form-group">
+              <label>Unidad de medida <span style="color:var(--red)">*</span></label>
+              {{ modal_producto_form.unidad }}
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Categoría <span style="color:var(--red)">*</span></label>
+              {{ modal_producto_form.categoria }}
+            </div>
+            <div class="form-group">
+              <label>Origen</label>
+              {{ modal_producto_form.origen }}
+            </div>
+          </div>
+
+          <!-- Proveedor y precio -->
+          <div class="cat-modal-section">
+            <div class="cat-modal-section-label">Proveedor y precio</div>
+            <div class="form-grid-2" style="margin-bottom:10px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Proveedor <span style="color:var(--red)">*</span></label>
+                {{ modal_producto_form.proveedor }}
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Precio actual <span style="color:var(--red)">*</span></label>
+                {{ modal_producto_form.precio_actual }}
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;max-width:180px;">
+              <label>Moneda <span style="color:var(--red)">*</span></label>
+              {{ modal_producto_form.moneda }}
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Marca</label>
+              {{ modal_producto_form.marca }}
+            </div>
+            <div class="form-group">
+              <label>Línea</label>
+              {{ modal_producto_form.linea }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="form-check">
+              {{ modal_producto_form.activo }}
+              <label class="form-check-label" style="font-size:13px;">Producto activo</label>
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar producto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════
+     MODAL — CREAR UNIDAD
+════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalUnidad" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header cat-modal-header">
+        <h5 class="modal-title">Nueva unidad de medida</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'catalogos:unidad_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código <span style="color:var(--red)">*</span></label>
+              {{ modal_unidad_form.codigo }}
+            </div>
+            <div class="form-group">
+              <label>Abreviatura <span style="color:var(--red)">*</span></label>
+              {{ modal_unidad_form.abreviatura }}
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Nombre <span style="color:var(--red)">*</span></label>
+            {{ modal_unidad_form.nombre }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar unidad</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════
+     MODAL — DETALLE DE PRODUCTO (read-only)
+════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalDetalleProd" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header cat-modal-header">
+        <div>
+          <h5 class="modal-title" id="detalleProdNombre">—</h5>
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;"
+               id="detalleProdCodigo">—</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:18px;">
+          <span class="prod-detail-price" id="detalleProdPrecio">—</span>
+          <span style="font-size:12px;color:var(--ink-soft);" id="detalleProdMoneda"></span>
+          <span class="prod-detail-badge prod-detail-badge--active ms-auto"
+                id="detalleProdEstado">Activo</span>
+        </div>
+
+        <div id="detalleProdRows">
+          <div class="prod-detail-row">
+            <span class="prod-detail-label">Categoría</span>
+            <span id="detalleProdCategoria">—</span>
+          </div>
+          <div class="prod-detail-row">
+            <span class="prod-detail-label">Proveedor</span>
+            <span id="detalleProdProveedor">—</span>
+          </div>
+          <div class="prod-detail-row">
+            <span class="prod-detail-label">Unidad</span>
+            <span id="detalleProdUnidad">—</span>
+          </div>
+          <div class="prod-detail-row">
+            <span class="prod-detail-label">Marca</span>
+            <span id="detalleProdMarca">—</span>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cerrar</button>
+        <a id="detalleProdEditUrl" href="#" class="btn btn-primary btn-sm">✎ Editar producto</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script src="{% static 'js/catalogos.js' %}"></script>
+{% endblock %}

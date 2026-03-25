@@ -24,6 +24,7 @@
       <tr>
         <th>NIT</th>
         <th>Razón social</th>
+        <th>Contacto principal</th>
         <th>Estado</th>
         <th></th>
       </tr>
@@ -35,23 +36,14 @@
         <td class="td-mono">{{ c.nit }}</td>
         <td>
           <div style="font-weight:500;">{{ c.razon_social }}</div>
-          {% if c.ciudad %}<div style="font-size:11px;color:var(--ink-soft);">{{ c.ciudad }}</div>{% endif %}
         </td>
-        <td style="font-size:12px;">{{ c.ciudad|default:"—" }}</td>
         <td>
           {% if cp %}
           <div style="font-size:13px;font-weight:500;">{{ cp.nombre }}</div>
           {% if cp.cargo %}<div style="font-size:11px;color:var(--ink-soft);">{{ cp.cargo }}</div>{% endif %}
+          {% if cp.email %}<div style="font-size:11px;color:var(--brand-violet);">{{ cp.email }}</div>{% endif %}
           {% else %}
           <span style="font-size:12px;color:rgba(14,17,23,0.35);">Sin contacto</span>
-          {% endif %}
-        </td>
-        <td style="font-size:12px;">
-          {% if cp %}
-          <div>{{ cp.telefono|default:"—" }}</div>
-          <div style="color:var(--brand-violet);">{{ cp.email|default:"" }}</div>
-          {% else %}
-          {{ c.telefono_principal|default:"—" }}
           {% endif %}
         </td>
         <td>
@@ -61,18 +53,7 @@
         </td>
         <td class="td-actions">
           <a href="{% url 'comercial:cliente_detail' c.pk %}" class="btn btn-ghost btn-xs">Ver</a>
-          <button class="btn btn-ghost btn-xs"
-                  data-bs-toggle="modal" data-bs-target="#editClienteModal"
-                  data-edit-url="{% url 'comercial:cliente_update' c.pk %}"
-                  data-field-nit="{{ c.nit }}"
-                  data-field-razon-social="{{ c.razon_social }}"
-                  data-field-ciudad="{{ c.ciudad|default:'' }}"
-                  data-field-direccion="{{ c.direccion|default:'' }}"
-                  data-field-telefono-principal="{{ c.telefono_principal|default:'' }}"
-                  data-field-email-principal="{{ c.email_principal|default:'' }}"
-                  data-field-activo="{{ c.activo }}">
-            Editar
-          </button>
+          <a href="{% url 'comercial:cliente_update' c.pk %}" class="btn btn-ghost btn-xs">Editar</a>
           <button class="btn btn-ghost btn-xs"
                   data-bs-toggle="modal" data-bs-target="#deleteModal"
                   data-delete-url="{% url 'comercial:cliente_delete' c.pk %}"
@@ -110,7 +91,6 @@
         {% csrf_token %}
         <div class="modal-body">
 
-          <!-- ── DATOS DE LA EMPRESA ── -->
           <div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;
                       color:rgba(14,17,23,0.45);margin-bottom:10px;">Datos de la empresa</div>
 
@@ -119,12 +99,11 @@
               <label>NIT / ID <span style="color:var(--brand-red)">*</span></label>
               {{ create_form.nit }}
             </div>
-            
+            <div class="form-group">
+              <label>Razón social <span style="color:var(--brand-red)">*</span></label>
+              {{ create_form.razon_social }}
+            </div>
           </div>
-          <div class="form-group">
-            <label>Razón social <span style="color:var(--brand-red)">*</span></label>
-            {{ create_form.razon_social }}
-          
           <div class="form-group">
             <div class="form-check">
               {{ create_form.activo }}
@@ -164,51 +143,6 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
           <button type="submit" class="btn btn-primary btn-sm">Guardar cliente</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- ── MODAL EDITAR (solo datos empresa) ── -->
-<div class="modal fade" id="editClienteModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Editar cliente</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="post" id="editClienteForm" action="#">
-        {% csrf_token %}
-        <div class="modal-body">
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>NIT / ID</label>
-              <input type="text" name="nit" class="form-control">
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Razón social</label>
-            <input type="text" name="razon_social" class="form-control">
-          </div>
-          <div class="form-group">
-            <label>Creacione..</label>
-            <input type="text" name="creacion_selford" class="form-control">
-          </div>
-      
-          <div class="form-group">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="activo" id="editClienteActivo">
-              <label class="form-check-label" for="editClienteActivo">Activo</label>
-            </div>
-          </div>
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
-            Para editar el contacto principal, accede al detalle del cliente.
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
         </div>
       </form>
     </div>

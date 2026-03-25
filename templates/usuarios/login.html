@@ -2,34 +2,231 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{% static 'css/imperandina.css' %}" rel="stylesheet">
-    <style>
-        body { background: var(--surface); display: flex; align-items: center; justify-content: center; height: 100vh; }
-        .login-card { width: 100%; max-width: 400px; padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
-        .btn-brand { background: var(--brand-violet); color: white; border: none; width: 100%; padding: 0.8rem; }
-    </style>
-</head>
-<body class="theme-imperandina">
-    <div class="login-card fade-up">
-        <h3 class="text-center mb-4" style="color: var(--brand-violet); font-family: 'Syne';">Andicost Login</h3>
-        
-        {% if messages %}
-            {% for m in messages %}<div class="alert alert-danger small">{{ m }}</div>{% endfor %}
-        {% endif %}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso · Andicost</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap"
+        rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        <form method="post">
-            {% csrf_token %}
-            <div class="mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" name="email" class="form-control" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Contraseña</label>
-                <input type="password" name="password" class="form-control" required>
-            </div>
-            <button type="submit" class="btn btn-brand">Entrar al Sistema</button>
-        </form>
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #f2f2f2;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .login-wrap {
+      width: 100%;
+      max-width: 380px;
+    }
+
+    /* Encabezado / marca */
+    .login-brand {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .login-brand__logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      background: #1a1a1a;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    .login-brand__logo svg {
+      width: 28px;
+      height: 28px;
+      fill: #fff;
+      opacity: 0.9;
+    }
+
+    .login-brand__name {
+      font-family: 'Syne', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      color: #1a1a1a;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .login-brand__sub {
+      font-size: 12px;
+      color: #888;
+      margin-top: 3px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Card */
+    .login-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px;
+      border: 1px solid rgba(0,0,0,0.08);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    }
+
+    .login-card__title {
+      font-size: 15px;
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 22px;
+      text-align: center;
+    }
+
+    /* Alertas */
+    .login-alert {
+      background: #fef2f2;
+      border: 1px solid rgba(220,60,60,0.25);
+      color: #b91c1c;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+
+    /* Campos */
+    .login-field {
+      margin-bottom: 16px;
+    }
+
+    .login-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #555;
+      margin-bottom: 6px;
+      letter-spacing: 0.03em;
+    }
+
+    .login-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 9px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: #1a1a1a;
+      background: #fafafa;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+
+    .login-input:focus {
+      border-color: #666;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
+    }
+
+    /* Botón */
+    .login-btn {
+      width: 100%;
+      padding: 11px;
+      margin-top: 8px;
+      background: #1a1a1a;
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: background .15s, transform .1s;
+    }
+
+    .login-btn:hover {
+      background: #333;
+    }
+
+    .login-btn:active {
+      transform: scale(0.99);
+    }
+
+    /* Pie */
+    .login-footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 11.5px;
+      color: #bbb;
+    }
+
+    /* Animación de entrada */
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-wrap {
+      animation: slideUp .35s ease both;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+
+    <!-- Marca -->
+    <div class="login-brand">
+      <div class="login-brand__logo">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3"  y="2"  width="4" height="20" rx="1"/>
+          <rect x="10" y="6"  width="4" height="16" rx="1"/>
+          <rect x="17" y="10" width="4" height="12" rx="1"/>
+        </svg>
+      </div>
+      <div class="login-brand__name">Andicost</div>
+      <div class="login-brand__sub">Sistema de presupuestación</div>
     </div>
+
+    <!-- Card de login -->
+    <div class="login-card">
+      <div class="login-card__title">Ingresa tus credenciales</div>
+
+      {% if messages %}
+        {% for m in messages %}
+        <div class="login-alert">{{ m }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" autocomplete="on">
+        {% csrf_token %}
+
+        <div class="login-field">
+          <label class="login-label" for="loginEmail">Email</label>
+          <input id="loginEmail"
+                 type="email"
+                 name="email"
+                 class="login-input"
+                 placeholder="usuario@edilandina.com"
+                 autocomplete="email"
+                 required>
+        </div>
+
+        <div class="login-field">
+          <label class="login-label" for="loginPassword">Contraseña</label>
+          <input id="loginPassword"
+                 type="password"
+                 name="password"
+                 class="login-input"
+                 placeholder="••••••••"
+                 autocomplete="current-password"
+                 required>
+        </div>
+
+        <button type="submit" class="login-btn">Entrar al Sistema</button>
+      </form>
+    </div>
+
+    <div class="login-footer">Edil Andina · Andicost v3</div>
+  </div>
 </body>
 </html>

@@ -1,18 +1,25 @@
 """apps/comercial/views.py — Vistas CRUD para el módulo comercial."""
 
 from django.contrib import messages
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy, reverse
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
-from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, Proyecto, LogSistema
+from .models import (
+    Cliente, ContactoCliente, TipoProyecto, Solicitud,
+    Proyecto, ProyectoArchivo, LogSistema,
+)
 from .forms import (
     ClienteForm, ClienteConContactoForm, ContactoClienteForm, TipoProyectoForm,
-    SolicitudForm, ProyectoForm, ProyectoFromSolicitudForm,
+    SolicitudForm, ProyectoForm, ProyectoFromSolicitudForm, ProyectoArchivoForm,
 )
 from apps.common.mixins import WithCreateFormMixin
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _usuario_sistema(request):
     """Retorna el UsuarioSistema del request, o None si no hay sesión activa."""
@@ -24,11 +31,34 @@ def _usuario_sistema(request):
     return None
 
 
-# ── Clientes ────────────────────────────────────────────────────────────────
+def registrar_log(request, accion, descripcion="", modelo_afectado="", objeto_id=None):
+    """
+    Registra una acción en LogSistema usando la unidad del usuario en sesión.
+    Silencia errores para no interrumpir el flujo principal.
+    """
+    try:
+        usuario = _usuario_sistema(request)
+        unidad = request.session.get("unidad_negocio", "")
+        if usuario and unidad:
+            LogSistema.objects.create(
+                usuario=usuario,
+                unidad_negocio=unidad,
+                accion=accion,
+                descripcion=descripcion,
+                modelo_afectado=modelo_afectado,
+                objeto_id=objeto_id,
+            )
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Clientes
+# ---------------------------------------------------------------------------
 
 class ClienteListView(WithCreateFormMixin, ListView):
     model = Cliente
-    form_class = ClienteConContactoForm   # modal usa el form combinado
+    form_class = ClienteConContactoForm
     template_name = "comercial/cliente_list.html"
     context_object_name = "clientes"
     ordering = ["razon_social"]
@@ -44,27 +74,22 @@ class ClienteDetailView(DetailView):
 
 
 class ClienteCreateView(CreateView):
-    """
-    Crea un Cliente y su Contacto principal en una sola operación.
-    Usa ClienteConContactoForm (campos de ambos modelos en un solo form).
-    """
+    """Crea un Cliente y su Contacto principal en una sola operación."""
     model = Cliente
     form_class = ClienteConContactoForm
     template_name = "comercial/cliente_form.html"
     success_url = reverse_lazy("comercial:cliente_list")
 
     def form_valid(self, form):
-        # 1. Guardar el cliente
         self.object = form.save()
-        # 2. Crear el contacto principal con los campos extra del form
         ContactoCliente.objects.create(
-            cliente = self.object,
-            nombre = form.cleaned_data["contacto_nombre"],
-            cargo = form.cleaned_data.get("contacto_cargo", ""),
-            email = form.cleaned_data.get("contacto_email", ""),
-            telefono = form.cleaned_data.get("contacto_telefono", ""),
-            es_principal = True,
-            activo = True,
+            cliente=self.object,
+            nombre=form.cleaned_data["contacto_nombre"],
+            cargo=form.cleaned_data.get("contacto_cargo", ""),
+            email=form.cleaned_data.get("contacto_email", ""),
+            telefono=form.cleaned_data.get("contacto_telefono", ""),
+            es_principal=True,
+            activo=True,
         )
         messages.success(
             self.request,
@@ -74,10 +99,7 @@ class ClienteCreateView(CreateView):
 
 
 class ClienteUpdateView(UpdateView):
-    """
-    Actualiza el Cliente y su contacto principal en una sola operación.
-    Si existe un ContactoCliente principal lo actualiza; si no, lo crea.
-    """
+    """Actualiza el Cliente y su contacto principal en una sola operación."""
     model = Cliente
     form_class = ClienteConContactoForm
     template_name = "comercial/cliente_form.html"
@@ -85,7 +107,6 @@ class ClienteUpdateView(UpdateView):
 
     def form_valid(self, form):
         self.object = form.save()
-        # Actualizar o crear el contacto principal
         cp = self.object.contacto_principal
         datos_contacto = {
             "nombre": form.cleaned_data["contacto_nombre"],
@@ -117,7 +138,9 @@ class ClienteDeleteView(DeleteView):
     success_url = reverse_lazy("comercial:cliente_list")
 
 
-# ── Contactos de cliente ─────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Contactos de cliente
+# ---------------------------------------------------------------------------
 
 class ContactoListView(ListView):
     model = ContactoCliente
@@ -146,7 +169,9 @@ class ContactoDeleteView(DeleteView):
     success_url = reverse_lazy("comercial:contacto_list")
 
 
-# ── Tipos de proyecto ────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Tipos de proyecto
+# ---------------------------------------------------------------------------
 
 class TipoProyectoListView(ListView):
     model = TipoProyecto
@@ -175,7 +200,9 @@ class TipoProyectoDeleteView(DeleteView):
     success_url = reverse_lazy("comercial:tipoproyecto_list")
 
 
-# ── Solicitudes ──────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Solicitudes
+# ---------------------------------------------------------------------------
 
 class SolicitudListView(WithCreateFormMixin, ListView):
     model = Solicitud
@@ -190,6 +217,20 @@ class SolicitudDetailView(DetailView):
     template_name = "comercial/solicitud_detail.html"
     context_object_name = "solicitud"
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        solicitud = self.object
+        # Versiones ordenadas de mayor a menor
+        ctx["proyectos"] = solicitud.proyectos.select_related(
+            "tipo_proyecto", "creado_por"
+        ).prefetch_related("archivos").order_by("-version")
+        # Logs de esta solicitud
+        ctx["logs"] = LogSistema.objects.filter(
+            modelo_afectado="Solicitud",
+            objeto_id=solicitud.pk,
+        ).select_related("usuario").order_by("-created_at")[:50]
+        return ctx
+
 
 class SolicitudCreateView(CreateView):
     model = Solicitud
@@ -198,16 +239,17 @@ class SolicitudCreateView(CreateView):
     success_url = reverse_lazy("comercial:solicitud_list")
 
     def form_valid(self, form):
-        """
-        Asigna campos del sistema antes de persistir:
-          · consecutivo  → model.save() lo genera automáticamente.
-          · estado       → default EN_GESTION (definido en el modelo).
-          · creado_por   → se resuelve aquí desde el request; nunca del form.
-        """
         self.object = form.save(commit=False)
         self.object.creado_por = _usuario_sistema(self.request)
         self.object.save()
         form.save_m2m()
+        registrar_log(
+            self.request,
+            accion="CREAR_SOLICITUD",
+            descripcion=f"Solicitud {self.object.consecutivo} — {self.object.nombre}",
+            modelo_afectado="Solicitud",
+            objeto_id=self.object.pk,
+        )
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -218,10 +260,9 @@ class SolicitudUpdateView(UpdateView):
     success_url = reverse_lazy("comercial:solicitud_list")
 
     def form_valid(self, form):
-
         self.object = form.save(commit=False)
+        # Proteger campos de sistema: solo estado y creado_por
         original = Solicitud.objects.get(pk=self.object.pk)
-        self.object.consecutivo = original.consecutivo
         self.object.estado = original.estado
         self.object.creado_por_id = original.creado_por_id
         self.object.save()
@@ -229,13 +270,33 @@ class SolicitudUpdateView(UpdateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class SolicitudDeleteView(DeleteView):
-    model = Solicitud
-    template_name = "comercial/confirm_delete.html"
-    success_url = reverse_lazy("comercial:solicitud_list")
+class SolicitudDeleteView(View):
+    """
+    Las solicitudes NO se eliminan. Esta vista bloquea cualquier intento
+    de borrado y redirige al detalle con un mensaje informativo.
+    """
+
+    def get(self, request, pk, *args, **kwargs):
+        solicitud = get_object_or_404(Solicitud, pk=pk)
+        messages.warning(
+            request,
+            f"La solicitud {solicitud.consecutivo} no puede eliminarse. "
+            "Las solicitudes son registros permanentes del sistema.",
+        )
+        return redirect("comercial:solicitud_detail", pk=pk)
+
+    def post(self, request, pk, *args, **kwargs):
+        solicitud = get_object_or_404(Solicitud, pk=pk)
+        messages.error(
+            request,
+            f"La solicitud {solicitud.consecutivo} no puede eliminarse.",
+        )
+        return redirect("comercial:solicitud_detail", pk=pk)
 
 
-# ── Proyectos ────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Proyectos (versiones)
+# ---------------------------------------------------------------------------
 
 class ProyectoListView(ListView):
     model = Proyecto
@@ -254,6 +315,17 @@ class ProyectoDetailView(DetailView):
     template_name = "comercial/proyecto_detail.html"
     context_object_name = "proyecto"
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["archivos"] = self.object.archivos.select_related("usuario").all()
+        ctx["archivo_form"] = ProyectoArchivoForm()
+        # Otras versiones de la misma solicitud
+        if self.object.solicitud:
+            ctx["otras_versiones"] = self.object.solicitud.proyectos.exclude(
+                pk=self.object.pk
+            ).order_by("-version")
+        return ctx
+
 
 class ProyectoCreateView(CreateView):
     model = Proyecto
@@ -264,7 +336,6 @@ class ProyectoCreateView(CreateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.creado_por = _usuario_sistema(self.request)
-        # consecutivo y estado: gestionados en model.save() y default del modelo
         self.object.save()
         form.save_m2m()
         return HttpResponseRedirect(self.get_success_url())
@@ -278,11 +349,12 @@ class ProyectoUpdateView(UpdateView):
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
-        # Protección: restaurar campos del sistema desde la BD
         original = Proyecto.objects.get(pk=self.object.pk)
         self.object.consecutivo = original.consecutivo
         self.object.estado = original.estado
         self.object.creado_por_id = original.creado_por_id
+        self.object.version = original.version
+        self.object.es_version_actual = original.es_version_actual
         self.object.save()
         form.save_m2m()
         return HttpResponseRedirect(self.get_success_url())
@@ -294,13 +366,158 @@ class ProyectoDeleteView(DeleteView):
     success_url = reverse_lazy("comercial:proyecto_list")
 
 
-# ── API: contactos por cliente (AJAX) ────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Crear Proyecto (nueva versión) desde Solicitud
+# ---------------------------------------------------------------------------
+
+class CrearProyectoDesdeSolicitudView(CreateView):
+    """
+    Crea una nueva versión de Proyecto asociada a una Solicitud.
+    · Incrementa automáticamente el número de versión.
+    · Marca las versiones anteriores como no actuales.
+    · Registra la acción en LogSistema.
+    """
+
+    model = Proyecto
+    form_class = ProyectoFromSolicitudForm
+    template_name = "comercial/proyecto_desde_solicitud.html"
+
+    def _get_solicitud(self):
+        return get_object_or_404(Solicitud, pk=self.kwargs["pk"])
+
+    def get_initial(self):
+        solicitud = self._get_solicitud()
+        version_actual = solicitud.version_actual
+        return {
+            "nombre": (version_actual.nombre if version_actual else solicitud.nombre),
+            "descripcion": (version_actual.descripcion if version_actual else solicitud.descripcion),
+        }
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        solicitud = self._get_solicitud()
+        ctx["solicitud"] = solicitud
+        ctx["proxima_version"] = solicitud.total_versiones + 1
+        return ctx
+
+    def form_valid(self, form):
+        solicitud = self._get_solicitud()
+
+        # Calcular próxima versión
+        versiones_existentes = solicitud.proyectos.order_by("-version")
+        proxima_version = (versiones_existentes.first().version + 1) if versiones_existentes.exists() else 1
+
+        # Desmarcar versión actual de las versiones anteriores
+        solicitud.proyectos.filter(es_version_actual=True).update(es_version_actual=False)
+
+        # Crear nueva versión
+        self.object = form.save(commit=False)
+        self.object.solicitud = solicitud
+        self.object.cliente = solicitud.cliente
+        self.object.creado_por = _usuario_sistema(self.request)
+        self.object.version = proxima_version
+        self.object.es_version_actual = True
+        self.object.save()
+        form.save_m2m()
+
+        registrar_log(
+            self.request,
+            accion="CREAR_VERSION",
+            descripcion=(
+                f"Versión v{proxima_version} del proyecto {self.object.consecutivo} "
+                f"para solicitud {solicitud.consecutivo}"
+            ),
+            modelo_afectado="Solicitud",
+            objeto_id=solicitud.pk,
+        )
+
+        messages.success(
+            self.request,
+            f"Versión v{proxima_version} — {self.object.consecutivo} creada correctamente.",
+        )
+        return redirect("comercial:solicitud_detail", pk=solicitud.pk)
+
+
+# ---------------------------------------------------------------------------
+# Archivos de Proyecto
+# ---------------------------------------------------------------------------
+
+class ProyectoArchivoCreateView(CreateView):
+    """
+    Sube un archivo a una versión de proyecto.
+    Redirige de vuelta al detalle de la solicitud.
+    """
+    model = ProyectoArchivo
+    form_class = ProyectoArchivoForm
+    http_method_names = ["post"]  # solo POST; el formulario está en proyecto_detail
+
+    def _get_proyecto(self):
+        return get_object_or_404(Proyecto, pk=self.kwargs["proyecto_pk"])
+
+    def form_valid(self, form):
+        proyecto = self._get_proyecto()
+        self.object = form.save(commit=False)
+        self.object.proyecto = proyecto
+        self.object.usuario = _usuario_sistema(self.request)
+        self.object.save()
+
+        registrar_log(
+            self.request,
+            accion="SUBIR_ARCHIVO",
+            descripcion=f"Archivo '{self.object.nombre}' subido al proyecto {proyecto.consecutivo} (v{proyecto.version})",
+            modelo_afectado="Proyecto",
+            objeto_id=proyecto.pk,
+        )
+
+        messages.success(self.request, f"Archivo '{self.object.nombre}' subido correctamente.")
+
+        # Redirigir al detalle de la solicitud si existe, si no al proyecto
+        if proyecto.solicitud:
+            return redirect("comercial:solicitud_detail", pk=proyecto.solicitud.pk)
+        return redirect("comercial:proyecto_detail", pk=proyecto.pk)
+
+    def form_invalid(self, form):
+        proyecto = self._get_proyecto()
+        messages.error(self.request, "Error al subir el archivo. Verifica el formulario.")
+        if proyecto.solicitud:
+            return redirect("comercial:solicitud_detail", pk=proyecto.solicitud.pk)
+        return redirect("comercial:proyecto_detail", pk=proyecto.pk)
+
+
+class ProyectoArchivoDeleteView(View):
+    """Elimina un archivo de proyecto."""
+
+    def post(self, request, pk, *args, **kwargs):
+        archivo = get_object_or_404(ProyectoArchivo, pk=pk)
+        proyecto = archivo.proyecto
+        nombre = archivo.nombre
+        # Borrar archivo físico
+        if archivo.archivo:
+            archivo.archivo.delete(save=False)
+        archivo.delete()
+
+        registrar_log(
+            request,
+            accion="ELIMINAR_ARCHIVO",
+            descripcion=f"Archivo '{nombre}' eliminado del proyecto {proyecto.consecutivo}",
+            modelo_afectado="Proyecto",
+            objeto_id=proyecto.pk,
+        )
+
+        messages.success(request, f"Archivo '{nombre}' eliminado.")
+        if proyecto.solicitud:
+            return redirect("comercial:solicitud_detail", pk=proyecto.solicitud.pk)
+        return redirect("comercial:proyecto_detail", pk=proyecto.pk)
+
+
+# ---------------------------------------------------------------------------
+# API: contactos por cliente (AJAX)
+# ---------------------------------------------------------------------------
 
 class ContactosPorClienteView(View):
     """
     GET /comercial/api/contactos-por-cliente/<cliente_id>/
     Retorna JSON con los contactos activos del cliente.
-    Usado por el select dinámico en solicitud_form.html.
     """
 
     def get(self, request, cliente_id):
@@ -313,78 +530,20 @@ class ContactosPorClienteView(View):
         return JsonResponse({"contactos": contactos})
 
 
-# ── Crear Proyecto desde Solicitud ───────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Logs del sistema
+# ---------------------------------------------------------------------------
 
-class CrearProyectoDesdeSolicitudView(CreateView):
-    """
-    Crea un único Proyecto asociado a una Solicitud (relación OneToOne).
-    · GET  → muestra formulario pre-rellenado con datos de la solicitud.
-    · POST → valida, crea el proyecto y redirige al detalle del proyecto.
-
-    Guarda doble: validación previa en dispatch + constraint de BD.
-    """
-
-    model = Proyecto
-    form_class = ProyectoFromSolicitudForm
-    template_name = "comercial/proyecto_desde_solicitud.html"
-
-    def _get_solicitud(self):
-        return get_object_or_404(Solicitud, pk=self.kwargs["pk"])
-
-    def dispatch(self, request, *args, **kwargs):
-        """Bloqueo temprano si la solicitud ya tiene proyecto."""
-        solicitud = self._get_solicitud()
-        try:
-            proyecto_existente = solicitud.proyecto
-            messages.warning(
-                request,
-                f"La solicitud {solicitud.consecutivo} ya tiene el proyecto "
-                f"{proyecto_existente.consecutivo} asignado.",
-            )
-            return redirect("comercial:proyecto_detail", pk=proyecto_existente.pk)
-        except Proyecto.DoesNotExist:
-            pass
-        return super().dispatch(request, *args, **kwargs)
-
-    def get_initial(self):
-        """Pre-rellena el formulario con datos heredados de la solicitud."""
-        solicitud = self._get_solicitud()
-        return {
-            "nombre": solicitud.nombre,
-            "descripcion": solicitud.descripcion,
-        }
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx["solicitud"] = self._get_solicitud()
-        return ctx
-
-    def form_valid(self, form):
-        solicitud = self._get_solicitud()
-        # Doble verificación: puede haber race condition entre dispatch y aquí
-        if Proyecto.objects.filter(solicitud=solicitud).exists():
-            messages.error(self.request, "Ya existe un proyecto para esta solicitud.")
-            return redirect("comercial:solicitud_detail", pk=solicitud.pk)
-
-        self.object = form.save(commit=False)
-        self.object.solicitud = solicitud
-        self.object.cliente = solicitud.cliente   # hereda cliente de la solicitud
-        self.object.creado_por = _usuario_sistema(self.request)
-        self.object.save()
-        form.save_m2m()
-
-        messages.success(
-            self.request,
-            f"Proyecto {self.object.consecutivo} creado correctamente.",
-        )
-        return redirect("comercial:proyecto_detail", pk=self.object.pk)
-    
 class LogListView(ListView):
     model = LogSistema
-    
+    template_name = "comercial/log_list.html"
+    context_object_name = "logs"
+    paginate_by = 50
+
     def get_queryset(self):
-        # Filtro estricto por la unidad del usuario actual
         usuario = _usuario_sistema(self.request)
         if usuario:
-            return LogSistema.objects.filter(unidad_negocio=usuario.unidad_negocio)
+            return LogSistema.objects.filter(
+                unidad_negocio=usuario.unidad_negocio
+            ).select_related("usuario").order_by("-created_at")
         return LogSistema.objects.none()

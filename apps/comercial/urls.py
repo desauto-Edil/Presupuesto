@@ -26,7 +26,7 @@ urlpatterns = [
     path("solicitudes/<int:pk>/", views.SolicitudDetailView.as_view(), name="solicitud_detail"),
     path("solicitudes/<int:pk>/editar/", views.SolicitudUpdateView.as_view(), name="solicitud_update"),
     path("solicitudes/<int:pk>/eliminar/", views.SolicitudDeleteView.as_view(), name="solicitud_delete"),
-    path("solicitudes/<int:pk>/crear-proyecto/", views.CrearProyectoDesdeSolicitudView.as_view(),
+    path("solicitudes/<int:pk>/nueva-version/", views.CrearProyectoDesdeSolicitudView.as_view(),
          name="crear_proyecto_desde_solicitud"),
 
     # ── Proyectos ─────────────────────────────────────────────────────────────
@@ -35,6 +35,17 @@ urlpatterns = [
     path("proyectos/<int:pk>/", views.ProyectoDetailView.as_view(), name="proyecto_detail"),
     path("proyectos/<int:pk>/editar/", views.ProyectoUpdateView.as_view(), name="proyecto_update"),
     path("proyectos/<int:pk>/eliminar/", views.ProyectoDeleteView.as_view(), name="proyecto_delete"),
+
+    # ── Archivos de Proyecto ──────────────────────────────────────────────────
+    path("proyectos/<int:proyecto_pk>/archivos/subir/",
+         views.ProyectoArchivoCreateView.as_view(),
+         name="proyecto_archivo_create"),
+    path("archivos/<int:pk>/eliminar/",
+         views.ProyectoArchivoDeleteView.as_view(),
+         name="proyecto_archivo_delete"),
+
+    # ── Logs ──────────────────────────────────────────────────────────────────
+    path("logs/", views.LogListView.as_view(), name="log_list"),
 
     # ── API interna ───────────────────────────────────────────────────────────
     path("api/contactos-por-cliente/<int:cliente_id>/",
