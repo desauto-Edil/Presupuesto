@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block breadcrumb %}Inicio{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ── Pipeline ── */
+    .pipeline {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin-bottom: 22px;
+    }
+    .pipe-step {
+        padding: 20px 22px;
+        position: relative;
+        border-right: 1px solid var(--border);
+    }
+    .pipe-step:last-child { border-right: none; }
+    .pipe-step::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: var(--pipe-color, var(--border));
+    }
+    .pipe-step.active::before { background: var(--theme-accent); }
+    .pipe-number {
+        font-family: 'Syne', sans-serif;
+        font-size: 28px;
+        font-weight: 800;
+        color: var(--pipe-color, var(--ink-soft));
+        line-height: 1;
+        margin-bottom: 4px;
+    }
+    .pipe-step.active .pipe-number { color: var(--theme-accent); }
+    .pipe-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--ink-soft);
+    }
+    .pipe-sublabel {
+        font-size: 11px;
+        color: rgba(14,17,23,0.35);
+        margin-top: 4px;
+    }
+    .pipe-arrow {
+        position: absolute;
+        right: -10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 14px;
+        color: var(--border);
+        z-index: 2;
+        background: var(--card);
+    }
+
+    /* ── Tarjetas de stat ── */
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 14px;
+        margin-bottom: 22px;
+    }
+    .stat-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 18px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        position: relative;
+        overflow: hidden;
+    }
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        background: var(--stat-color, var(--theme-accent));
+    }
+    .stat-value {
+        font-family: 'Syne', sans-serif;
+        font-size: 30px;
+        font-weight: 800;
+        color: var(--stat-color, var(--theme-accent));
+        line-height: 1;
+    }
+    .stat-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--ink-soft);
+    }
+    .stat-card.total   { --stat-color: var(--theme-accent); }
+    .stat-card.gestion { --stat-color: var(--amber); }
+    .stat-card.ok      { --stat-color: var(--green); }
+    .stat-card.bad     { --stat-color: var(--brand-red); }
+    .stat-card.neutral { --stat-color: var(--ink-soft); }
+
+    /* ── Tabla recientes ── */
+    .dash-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin-bottom: 14px;
+    }
+    .dash-card-header {
+        padding: 13px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .dash-card-title {
+        font-family: 'Syne', sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+    }
+    .dash-card .table thead th {
+        background: var(--surface);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 10px 16px;
+        color: var(--ink-soft);
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+    }
+    .dash-card .table tbody td {
+        padding: 10px 16px;
+        font-size: 13px;
+        vertical-align: middle;
+        border-bottom: 1px solid rgba(14,17,23,0.04);
+    }
+    .dash-card .table tbody tr:last-child td { border-bottom: none; }
+    .dash-card .table tbody tr:hover td { background: var(--theme-accent-pale); }
+    .sol-code {
+        font-family: monospace;
+        font-weight: 700;
+        color: var(--theme-accent);
+        font-size: 13px;
+    }
+
+    @media (max-width: 768px) {
+        .pipeline { grid-template-columns: 1fr 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Cabecera ── -->
+<div style="margin-bottom: 22px;" class="fade-up">
+    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:var(--ink);">
+        Panel general
+    </div>
+    <div style="font-size:13px;color:var(--ink-soft);margin-top:4px;">
+        Estado del flujo comercial y presupuestación.
+    </div>
+</div>
+
+<!-- ── Pipeline de proceso ── -->
+<div class="pipeline fade-up">
+
+    <div class="pipe-step active" style="--pipe-color:var(--theme-accent);">
+        <div class="pipe-number">{{ total }}</div>
+        <div class="pipe-label">Solicitudes</div>
+        <div class="pipe-sublabel">Total registradas</div>
+    </div>
+
+    <div class="pipe-step {% if total_proyectos > 0 %}active{% endif %}" style="--pipe-color:var(--amber);">
+        <div class="pipe-number">{{ total_proyectos }}</div>
+        <div class="pipe-label">Proyectos</div>
+        <div class="pipe-sublabel">En presupuestación</div>
+    </div>
+
+    <div class="pipe-step {% if total_despieces > 0 %}active{% endif %}" style="--pipe-color:var(--green);">
+        <div class="pipe-number">{{ total_despieces }}</div>
+        <div class="pipe-label">Despieces</div>
+        <div class="pipe-sublabel">Sistemas calculados</div>
+    </div>
+
+    <div class="pipe-step {% if total_apus > 0 %}active{% endif %}" style="--pipe-color:#6366f1;">
+        <div class="pipe-number">{{ total_apus }}</div>
+        <div class="pipe-label">APU</div>
+        <div class="pipe-sublabel">Análisis generados</div>
+    </div>
+
+</div>
+
+<!-- ── Estado de solicitudes ── -->
+<div class="stat-grid fade-up">
+    {% for es in por_estado %}
+    {% if es.count > 0 %}
+    <div class="stat-card
+        {% if es.value == 'EN_GESTION' %}gestion
+        {% elif es.value == 'APROBADA' %}ok
+        {% elif es.value == 'RECHAZADA' %}bad
+        {% elif es.value == 'CERRADA' %}neutral
+        {% else %}neutral{% endif %}">
+        <div class="stat-value">{{ es.count }}</div>
+        <div class="stat-label">{{ es.label }}</div>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<!-- ── Solicitudes recientes ── -->
+<div class="dash-card fade-up-1">
+    <div class="dash-card-header">
+        <div class="dash-card-title">Solicitudes recientes</div>
+        <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">Ver todas →</a>
+    </div>
+
+    {% if recientes %}
+    <table class="table mb-0">
+        <thead>
+            <tr>
+                <th>Consecutivo</th>
+                <th>Cliente</th>
+                <th>Nombre</th>
+                <th>Proyecto</th>
+                <th>F. entrega</th>
+                <th>Estado</th>
+                <th class="text-end">Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in recientes %}
+            <tr>
+                <td><span class="sol-code">{{ s.consecutivo }}</span></td>
+                <td style="color:var(--ink-soft);font-size:12px;">{{ s.cliente.razon_social }}</td>
+                <td style="font-weight:500;">{{ s.nombre|truncatechars:35 }}</td>
+                <td style="font-size:12px;">
+                    {% if s.proyecto_actual %}
+                        <a href="{% url 'comercial:proyecto_detail' s.proyecto_actual.pk %}"
+                           style="color:var(--theme-accent);text-decoration:none;">
+                            {{ s.proyecto_actual.consecutivo }}
+                            <span style="font-size:10px;opacity:.6;">v{{ s.proyecto_actual.version }}</span>
+                        </a>
+                    {% else %}
+                        <span style="color:rgba(14,17,23,0.3);">—</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:12px;color:var(--ink-soft);">
+                    {{ s.fecha_entrega|date:"d/m/Y"|default:"—" }}
+                </td>
+                <td>
+                    <span class="badge-status
+                        {% if s.estado == 'EN_GESTION' %}bs-pendiente
+                        {% elif s.estado == 'APROBADA' %}bs-validado
+                        {% elif s.estado == 'RECHAZADA' %}bs-cerrado
+                        {% elif s.estado == 'CERRADA' %}bs-inactivo
+                        {% else %}bs-inactivo{% endif %}">
+                        {{ s.get_estado_display }}
+                    </span>
+                </td>
+                <td class="text-end">
+                    <a href="{% url 'comercial:solicitud_detail' s.pk %}"
+                       class="btn btn-ghost btn-xs">Ver →</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="padding:44px 24px;">
+        <div class="empty-state-icon">◷</div>
+        <div class="empty-state-text" style="margin-bottom:16px;">
+            Aún no hay solicitudes registradas.
+        </div>
+        <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-primary btn-sm">
+            + Registrar primera solicitud
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

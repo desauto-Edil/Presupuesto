@@ -1,51 +1,297 @@
 {% extends "base.html" %}
-{% block title %}Proyecto: {{ proyecto.consecutivo }}{% endblock %}
+{% block title %}{{ proyecto.consecutivo }} v{{ proyecto.version }}{% endblock %}
+{% block page_title %}Proyecto{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'comercial:solicitud_list' %}" style="color:inherit;text-decoration:none;">Solicitudes</a>
+  {% if proyecto.solicitud %}
+  → <a href="{% url 'comercial:solicitud_detail' proyecto.solicitud.pk %}" style="color:inherit;text-decoration:none;">{{ proyecto.solicitud.consecutivo }}</a>
+  {% endif %}
+  → {{ proyecto.consecutivo }}
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'presupuestos:powergrip_wizard' proyecto.pk %}" class="btn btn-primary btn-sm">⊞ Ir al despiece</a>
+  <a href="{% url 'comercial:crear_proyecto_desde_solicitud' proyecto.solicitud.pk %}" class="btn btn-ghost btn-sm">+ Nueva versión</a>
+  <a href="{% url 'comercial:proyecto_update' proyecto.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .det-grid { display: grid; grid-template-columns: 1fr 300px; gap: 14px; }
+  .det-col { display: flex; flex-direction: column; gap: 14px; }
+  @media (max-width: 768px) { .det-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>{{ proyecto.consecutivo }} — {{ proyecto.nombre }}</h2>
-    <div>
-        <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}" class="btn btn-info">Ver despiece</a>
-        <a href="{% url 'comercial:proyecto_update' proyecto.pk %}" class="btn btn-secondary">Editar</a>
-    </div>
+
+<!-- ── CABECERA ── -->
+<div class="project-header fade-up">
+  <div>
+    <div class="project-id">{{ proyecto.consecutivo }}</div>
+    <div class="project-name">{{ proyecto.nombre }}</div>
+    <div class="project-client">{{ proyecto.cliente.razon_social }}</div>
+  </div>
+
+  <div class="project-divider"></div>
+
+  <div>
+    <div class="project-meta-label">Estado</div>
+    <span class="badge-status
+      {% if proyecto.estado == 'SOLICITUD' %}bs-pendiente
+      {% elif proyecto.estado == 'DESPIECE' or proyecto.estado == 'EN_REVISION_COMPRAS' %}bs-despiece
+      {% elif proyecto.estado == 'DESPIECE_VALIDADO' or proyecto.estado == 'APU' %}bs-apu
+      {% elif proyecto.estado == 'APU_GENERADO' %}bs-validado
+      {% elif proyecto.estado == 'CERRADO' or proyecto.estado == 'ANULADO' %}bs-cerrado
+      {% else %}bs-inactivo{% endif %}"
+      style="font-size:12px;padding:4px 12px;">
+      {{ proyecto.get_estado_display }}
+    </span>
+  </div>
+
+  {% if proyecto.solicitud %}
+  <div class="project-divider"></div>
+  <div>
+    <div class="project-meta-label">Solicitud origen</div>
+    <a href="{% url 'comercial:solicitud_detail' proyecto.solicitud.pk %}"
+       style="font-size:12px;color:var(--theme-accent);">
+      {{ proyecto.solicitud.consecutivo }} ↗
+    </a>
+  </div>
+  {% endif %}
+
+  <div class="project-divider"></div>
+  <div>
+    <div class="project-meta-label">Moneda</div>
+    <div class="project-meta-value">{{ proyecto.moneda }}</div>
+  </div>
+
+  <div class="project-divider"></div>
+  <div>
+    <div class="project-meta-label">TRM</div>
+    <div class="project-meta-value">{{ proyecto.trm }}</div>
+  </div>
+
+  <div class="project-status-chip">◫ {{ proyecto.consecutivo }}</div>
 </div>
-<div class="card"><div class="card-body">
-<dl class="row">
-    <dt class="col-sm-3">Cliente</dt><dd class="col-sm-9">{{ proyecto.cliente }}</dd>
-    <dt class="col-sm-3">Estado</dt><dd class="col-sm-9"><span class="badge bg-secondary">{{ proyecto.estado }}</span></dd>
-    <dt class="col-sm-3">Solicitud</dt><dd class="col-sm-9">{{ proyecto.solicitud|default:"-" }}</dd>
-    <dt class="col-sm-3">Tipo</dt><dd class="col-sm-9">{{ proyecto.tipo_proyecto|default:"-" }}</dd>
-    <dt class="col-sm-3">Moneda</dt><dd class="col-sm-9">{{ proyecto.moneda }}</dd>
-    <dt class="col-sm-3">TRM</dt><dd class="col-sm-9">{{ proyecto.trm }}</dd>
-    <dt class="col-sm-3">Area m2</dt><dd class="col-sm-9">{{ proyecto.area_total_m2|default:"-" }}</dd>
-    <dt class="col-sm-3">Perimetro ml</dt><dd class="col-sm-9">{{ proyecto.perimetro_ml|default:"-" }}</dd>
-    <dt class="col-sm-3">Margen comercial %</dt><dd class="col-sm-9">{{ proyecto.margen_comercial_pct }}</dd>
-    <dt class="col-sm-3">IVA %</dt><dd class="col-sm-9">{{ proyecto.iva_pct }}</dd>
-    <dt class="col-sm-3">Exencion IVA</dt><dd class="col-sm-9">{% if proyecto.aplica_exencion_iva %}Si{% else %}No{% endif %}</dd>
-    <dt class="col-sm-3">Observaciones</dt><dd class="col-sm-9">{{ proyecto.observaciones|default:"-" }}</dd>
-</dl>
-</div></div>
 
-<h5 class="mt-4">Sistemas asignados</h5>
-<table class="table table-sm table-bordered bg-white">
-    <thead class="table-secondary"><tr><th>Sistema</th><th>Subsistema</th><th>Total PowerGrip</th><th>Lineas despiece</th><th>Acciones</th></tr></thead>
-    <tbody>
-    {% for ps in proyecto.proyecto_sistemas.all %}
-    <tr>
-        <td>{{ ps.sistema }}</td><td>{{ ps.subsistema|default:"-" }}</td>
-        <td>{{ ps.total_powergip|default:"-" }}</td>
-        <td>{{ ps.despiece_lineas.count }}</td>
-        <td>
-            <a href="{% url 'presupuestos:proyectosistema_detail' ps.pk %}" class="btn btn-sm btn-outline-primary">Ver</a>
-            <form method="post" action="{% url 'presupuestos:despiece_ejecutar' ps.pk %}" style="display:inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-success">Calcular</button>
-            </form>
-        </td>
-    </tr>
-    {% empty %}<tr><td colspan="5" class="text-muted">Sin sistemas asignados.</td></tr>{% endfor %}
-    </tbody>
-</table>
-<a href="{% url 'presupuestos:proyectosistema_create' %}" class="btn btn-outline-primary btn-sm mb-3">Agregar sistema</a>
+<!-- ── CONTENIDO ── -->
+<div class="det-grid fade-up-1">
 
-<a href="{% url 'comercial:proyecto_list' %}" class="btn btn-outline-secondary">Volver</a>
+  <div class="det-col">
+
+    {% if proyecto.descripcion %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Descripción</span></div>
+      <div style="padding:16px 20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;">
+        {{ proyecto.descripcion }}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Parámetros técnicos -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Parámetros técnicos</span></div>
+      <div class="summary-line">
+        <span class="s-label">Tipo de proyecto</span>
+        <span class="s-value">{{ proyecto.tipo_proyecto.nombre|default:"—" }}</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Área total (m²)</span>
+        <span class="s-value">{{ proyecto.area_total_m2|default:"—" }}</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Perímetro (ml)</span>
+        <span class="s-value">{{ proyecto.perimetro_ml|default:"—" }}</span>
+      </div>
+    </div>
+
+    <!-- Parámetros financieros -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Parámetros financieros</span></div>
+      <div class="summary-line">
+        <span class="s-label">TRM</span>
+        <span class="s-value">{{ proyecto.trm }}</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Margen comercial (%)</span>
+        <span class="s-value">{{ proyecto.margen_comercial_pct }}</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">IVA (%)</span>
+        <span class="s-value">{{ proyecto.iva_pct }}</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">AIU (%)</span>
+        <span class="s-value">{{ proyecto.aiu_pct }}</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Exención IVA</span>
+        <span class="s-value">{% if proyecto.aplica_exencion_iva %}Sí{% else %}No{% endif %}</span>
+      </div>
+    </div>
+
+    {% if proyecto.observaciones %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Observaciones</span></div>
+      <div style="padding:16px 20px;font-size:13px;color:var(--ink-soft);line-height:1.6;">
+        {{ proyecto.observaciones }}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ── DESPIECES / SISTEMAS ── -->
+    <div class="panel">
+      <div class="panel-header accent-top-theme" style="border-radius:var(--radius) var(--radius) 0 0;">
+        <span class="panel-title">Sistemas y despiece</span>
+        {% if proyecto_sistemas %}
+        <span style="font-size:11px;color:var(--ink-soft);">{{ proyecto_sistemas|length }} sistema{{ proyecto_sistemas|length|pluralize }}</span>
+        {% endif %}
+        <a href="{% url 'presupuestos:powergrip_wizard' proyecto.pk %}"
+           class="btn btn-primary btn-xs" style="margin-left:auto;">
+          ⊞ Abrir despiece
+        </a>
+      </div>
+
+      {% if proyecto_sistemas %}
+      <div>
+        {% for ps in proyecto_sistemas %}
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border);
+                    display:flex;align-items:center;gap:12px;">
+          <!-- ícono sistema -->
+          <div style="width:32px;height:32px;border-radius:8px;flex-shrink:0;
+                      background:var(--theme-accent-pale);
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:15px;">◱</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:var(--ink);">
+              {{ ps.sistema.nombre }}
+              {% if ps.subsistema %}
+              <span style="font-size:11px;color:var(--ink-soft);font-weight:400;">
+                / {{ ps.subsistema.nombre }}
+              </span>
+              {% endif %}
+            </div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
+              {{ ps.despiece_lineas.count }} línea{{ ps.despiece_lineas.count|pluralize }} de despiece
+            </div>
+          </div>
+          <!-- estado lineas -->
+          {% with total=ps.despiece_lineas.count %}
+          {% if total > 0 %}
+          <span style="font-size:11px;background:var(--theme-accent-pale);
+                       color:var(--theme-accent);padding:2px 8px;border-radius:4px;
+                       font-weight:600;">Calculado</span>
+          {% else %}
+          <span style="font-size:11px;background:var(--surface-2);
+                       color:var(--ink-soft);padding:2px 8px;border-radius:4px;">Pendiente</span>
+          {% endif %}
+          {% endwith %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state" style="padding:28px 20px;">
+        <div class="empty-state-icon" style="font-size:22px;">◱</div>
+        <div class="empty-state-text" style="font-size:12.5px;margin-bottom:14px;">
+          Aún no se ha ejecutado el despiece para este proyecto.
+        </div>
+        <a href="{% url 'presupuestos:powergrip_wizard' proyecto.pk %}"
+           class="btn btn-primary btn-sm">
+          ⊞ Ejecutar despiece
+        </a>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- ── COLUMNA LATERAL ── -->
+  <div class="det-col">
+
+    <div class="panel">
+      <div class="panel-header accent-top-theme" style="border-radius:var(--radius) var(--radius) 0 0;">
+        <span class="panel-title">Datos del sistema</span>
+        <span style="font-size:10px;color:rgba(14,17,23,0.35);">🔒 Solo lectura</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Consecutivo</span>
+        <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;color:var(--theme-accent);">
+          {{ proyecto.consecutivo }}
+        </span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Estado</span>
+        <span class="badge-status
+          {% if proyecto.estado == 'SOLICITUD' %}bs-pendiente
+          {% elif proyecto.estado == 'DESPIECE' %}bs-despiece
+          {% elif proyecto.estado == 'APU_GENERADO' %}bs-validado
+          {% elif proyecto.estado == 'CERRADO' %}bs-cerrado
+          {% else %}bs-inactivo{% endif %}">
+          {{ proyecto.get_estado_display }}
+        </span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Creado por</span>
+        <span class="s-value" style="font-size:12px;">{{ proyecto.creado_por|default:"—" }}</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Fecha proyecto</span>
+        <span class="s-value" style="font-size:12px;">{{ proyecto.fecha_proyecto|date:"d/m/Y" }}</span>
+      </div>
+      <div class="summary-line">
+        <span class="s-label">Última edición</span>
+        <span class="s-value" style="font-size:12px;">{{ proyecto.updated_at|date:"d/m/Y H:i" }}</span>
+      </div>
+    </div>
+
+    {% if proyecto.solicitud %}
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Solicitud origen</span></div>
+      <div style="padding:14px 18px;">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--theme-accent);">
+          {{ proyecto.solicitud.consecutivo }}
+        </div>
+        <div style="font-size:13px;margin-top:4px;">{{ proyecto.solicitud.nombre }}</div>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">
+          {{ proyecto.solicitud.cliente.razon_social }}
+        </div>
+        <a href="{% url 'comercial:solicitud_detail' proyecto.solicitud.pk %}"
+           class="btn btn-ghost btn-xs" style="margin-top:12px;">
+          Ver solicitud →
+        </a>
+      </div>
+    </div>
+
+    <!-- Otras versiones -->
+    {% if otras_versiones %}
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Otras versiones</span>
+        <span style="font-size:10px;color:rgba(14,17,23,.35);">{{ otras_versiones|length }}</span>
+      </div>
+      {% for ov in otras_versiones %}
+      <div style="padding:9px 16px;border-bottom:1px solid var(--border);
+                  display:flex;align-items:center;gap:9px;">
+        <div style="width:22px;height:22px;border-radius:50%;background:var(--surface-2);
+                    display:flex;align-items:center;justify-content:center;
+                    font-family:'Syne',sans-serif;font-size:10px;font-weight:800;
+                    color:var(--ink-soft);flex-shrink:0;">
+          {{ ov.version }}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:500;color:var(--ink);">{{ ov.consecutivo }}</div>
+          <div style="font-size:10.5px;color:var(--ink-soft);">{{ ov.get_estado_display }}</div>
+        </div>
+        <a href="{% url 'comercial:proyecto_detail' ov.pk %}"
+           class="btn btn-ghost btn-xs">Ver</a>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+  </div>
+</div>
+
 {% endblock %}

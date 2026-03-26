@@ -1,176 +1,221 @@
 {% extends "base.html" %}
-{% block title %}Proveedores{% endblock %}
+
+{% block title %}Proveedores · Andicost{% endblock %}
 {% block nav_proveedores %}active{% endblock %}
 {% block page_title %}Proveedores{% endblock %}
 {% block breadcrumb %}Catálogos → Proveedores{% endblock %}
 
-{% block topbar_actions %}
-  <button class="btn btn-primary btn-sm"
-          data-bs-toggle="modal" data-bs-target="#createProvModal">
-    + Nuevo proveedor
-  </button>
+{% block extra_head %}
+<style>
+    .prov-card { background: white; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+    .table thead th { background: #fcfcfd; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 15px; }
+
+    .prov-avatar {
+        width: 36px; height: 36px; border-radius: 8px;
+        background: var(--color-proveedores); color: white;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; flex-shrink: 0;
+    }
+
+    .prov-section {
+        font-size: 10px; font-weight: 700; letter-spacing: .07em;
+        text-transform: uppercase; color: var(--ink-soft);
+        margin: 18px 0 10px; padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+    }
+    .prov-section:first-child { margin-top: 0; }
+
+    #offcanvasProv .offcanvas-title::before {
+        content: ''; display: inline-block;
+        width: 4px; height: 18px; border-radius: 2px;
+        background: var(--color-proveedores); margin-right: 8px;
+        vertical-align: middle;
+    }
+</style>
 {% endblock %}
+
+
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm"
+        onclick="prepareForm('create')"
+        data-bs-toggle="offcanvas" data-bs-target="#offcanvasProv">
+    + Nuevo proveedor
+</button>
+{% endblock %}
+
 
 {% block content %}
-<div class="panel fade-up">
-  <div class="panel-header">
-    <span class="panel-title">Proveedores</span>
-    <span class="text-muted" style="font-size:12px;">{{ proveedores|length }} registros</span>
-  </div>
 
-  {% if proveedores %}
-  <table class="imp-table">
-    <thead>
-      <tr>
-        <th>NIT</th>
-        <th>Nombre</th>
-        <th>Ciudad</th>
-        <th>Teléfono</th>
-        <th>Email</th>
-        <th>Estado</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for p in proveedores %}
-      <tr>
-        <td class="td-mono">{{ p.nit }}</td>
-        <td>{{ p.nombre }}</td>
-        <td>{{ p.ciudad|default:"—" }}</td>
-        <td>{{ p.telefono|default:"—" }}</td>
-        <td>{{ p.email|default:"—" }}</td>
-        <td>
-          <span class="badge-status {% if p.activo %}bs-activo{% else %}bs-inactivo{% endif %}">
-            {% if p.activo %}Activo{% else %}Inactivo{% endif %}
-          </span>
-        </td>
-        <td class="td-actions">
-          <button class="btn btn-ghost btn-xs"
-                  data-bs-toggle="modal" data-bs-target="#editProvModal"
-                  data-edit-url="{% url 'catalogos:proveedor_update' p.pk %}"
-                  data-field-nit="{{ p.nit }}"
-                  data-field-nombre="{{ p.nombre }}"
-                  data-field-ciudad="{{ p.ciudad|default:'' }}"
-                  data-field-direccion="{{ p.direccion|default:'' }}"
-                  data-field-telefono="{{ p.telefono|default:'' }}"
-                  data-field-email="{{ p.email|default:'' }}"
-                  data-field-activo="{{ p.activo }}">
-            Editar
-          </button>
-          <button class="btn btn-ghost btn-xs"
-                  data-bs-toggle="modal" data-bs-target="#deleteModal"
-                  data-delete-url="{% url 'catalogos:proveedor_delete' p.pk %}"
-                  data-delete-name="{{ p.nombre }}">
-            ✕
-          </button>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="empty-state">
-    <div class="empty-state-icon">◉</div>
-    <div class="empty-state-text">Sin proveedores registrados.</div>
-  </div>
-  {% endif %}
+<!-- Stats -->
+<div class="d-flex align-items-center justify-content-between mb-4 fade-up">
+    <div>
+        <span style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;">{{ proveedores|length }}</span>
+        <span class="text-muted ms-1 small">proveedor{{ proveedores|length|pluralize }} registrado{{ proveedores|length|pluralize }}</span>
+    </div>
+    <div class="d-flex gap-4">
+        <div class="text-center">
+            <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--color-proveedores);">{{ proveedores_activos }}</div>
+            <div class="text-muted" style="font-size:11px;">activos</div>
+        </div>
+        <div class="text-center">
+            <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--ink-soft);">{{ proveedores_inactivos }}</div>
+            <div class="text-muted" style="font-size:11px;">inactivos</div>
+        </div>
+    </div>
 </div>
 
-<!-- ── MODAL CREAR ── -->
-{% if create_form %}
-<div class="modal fade" id="createProvModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Nuevo proveedor</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="post" action="{% url 'catalogos:proveedor_create' %}">
-        {% csrf_token %}
-        <div class="modal-body">
-          <div class="form-grid-2">
-            <div class="form-group"><label>NIT</label>{{ create_form.nit }}</div>
-            <div class="form-group"><label>Ciudad</label>{{ create_form.ciudad }}</div>
-          </div>
-          <div class="form-group"><label>Nombre / Razón social</label>{{ create_form.nombre }}</div>
-          <div class="form-group"><label>Dirección</label>{{ create_form.direccion }}</div>
-          <div class="form-grid-2">
-            <div class="form-group"><label>Teléfono</label>{{ create_form.telefono }}</div>
-            <div class="form-group"><label>Email</label>{{ create_form.email }}</div>
-          </div>
-          <div class="form-check" style="margin-top:4px;">
-            {{ create_form.activo }}
-            <label class="form-check-label">Activo</label>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary btn-sm">Guardar proveedor</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-{% endif %}
+<div class="prov-card fade-up">
+    {% if proveedores %}
+    <table class="table mb-0">
+        <thead>
+            <tr>
+                <th>Proveedor</th>
+                <th>Ciudad</th>
+                <th>Teléfono</th>
+                <th>Email</th>
+                <th>Estado</th>
+                <th class="text-end">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in proveedores %}
+            <tr>
+                <td class="d-flex align-items-center gap-3">
+                    <div class="prov-avatar">{{ p.nombre|slice:":2"|upper }}</div>
+                    <div>
+                        <div class="fw-bold">{{ p.nombre }}</div>
+                        <div class="text-muted small font-monospace">NIT {{ p.nit }}</div>
+                    </div>
+                </td>
+                <td class="text-muted">{{ p.ciudad|default:"—" }}</td>
+                <td class="text-muted">{{ p.telefono|default:"—" }}</td>
+                <td class="text-muted">{{ p.email|default:"—" }}</td>
+                <td>
+                    {% if p.activo %}
+                        <span class="text-success">● Activo</span>
+                    {% else %}
+                        <span class="text-muted">○ Inactivo</span>
+                    {% endif %}
+                </td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-ghost"
+                            onclick="prepareForm('edit', {
+                                id:        '{{ p.pk }}',
+                                nit:       '{{ p.nit|escapejs }}',
+                                nombre:    '{{ p.nombre|escapejs }}',
+                                ciudad:    '{{ p.ciudad|default:''|escapejs }}',
+                                direccion: '{{ p.direccion|default:''|escapejs }}',
+                                telefono:  '{{ p.telefono|default:''|escapejs }}',
+                                email:     '{{ p.email|default:''|escapejs }}',
+                                activo:    '{{ p.activo|yesno:'true,false' }}'
+                            })"
+                            data-bs-toggle="offcanvas" data-bs-target="#offcanvasProv">✎</button>
+                    <button class="btn btn-sm btn-ghost text-danger"
+                            data-bs-toggle="modal" data-bs-target="#deleteModal"
+                            data-delete-url="{% url 'catalogos:proveedor_delete' p.pk %}"
+                            data-delete-name="{{ p.nombre }}">✕</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-<!-- ── MODAL EDITAR ── -->
-<div class="modal fade" id="editProvModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Editar proveedor</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="post" id="editProvForm" action="#">
-        {% csrf_token %}
-        <div class="modal-body">
-          <div class="form-grid-2">
-            <div class="form-group"><label>NIT</label>
-              <input type="text" name="nit" class="form-control form-control-sm"></div>
-            <div class="form-group"><label>Ciudad</label>
-              <input type="text" name="ciudad" class="form-control form-control-sm"></div>
-          </div>
-          <div class="form-group"><label>Nombre / Razón social</label>
-            <input type="text" name="nombre" class="form-control form-control-sm"></div>
-          <div class="form-group"><label>Dirección</label>
-            <input type="text" name="direccion" class="form-control form-control-sm"></div>
-          <div class="form-grid-2">
-            <div class="form-group"><label>Teléfono</label>
-              <input type="text" name="telefono" class="form-control form-control-sm"></div>
-            <div class="form-group"><label>Email</label>
-              <input type="email" name="email" class="form-control form-control-sm"></div>
-          </div>
-          <div class="form-check" style="margin-top:4px;">
-            <input class="form-check-input" type="checkbox" name="activo" id="editProvActivo">
-            <label class="form-check-label" for="editProvActivo">Activo</label>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
-        </div>
-      </form>
+    {% else %}
+    <div style="padding:60px 24px;text-align:center;">
+        <div style="font-size:36px;opacity:.2;margin-bottom:14px;">◉</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px;">Sin proveedores registrados</div>
+        <div class="text-muted small mb-4">Los proveedores se asocian a productos del catálogo.</div>
+        <button class="btn btn-primary btn-sm"
+                onclick="prepareForm('create')"
+                data-bs-toggle="offcanvas" data-bs-target="#offcanvasProv">
+            + Crear primer proveedor
+        </button>
     </div>
-  </div>
+    {% endif %}
+</div>
+
+
+<!-- ── OFFCANVAS Crear / Editar proveedor ── -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasProv" style="width:420px;">
+    <div class="offcanvas-header border-bottom">
+        <h5 class="offcanvas-title fw-bold" id="provTitle">Proveedor</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form id="provForm" method="post" action="{% url 'catalogos:proveedor_create' %}">
+            {% csrf_token %}
+
+            <div class="prov-section">Identificación</div>
+
+            <div class="row g-3 mb-3">
+                <div class="col">
+                    <label class="form-label small fw-bold text-uppercase">NIT <span style="color:var(--brand-red)">*</span></label>
+                    <input type="text" name="nit" id="prov_nit" class="form-control" required>
+                </div>
+                <div class="col">
+                    <label class="form-label small fw-bold text-uppercase">Ciudad</label>
+                    <input type="text" name="ciudad" id="prov_ciudad" class="form-control">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-uppercase">Nombre / Razón social <span style="color:var(--brand-red)">*</span></label>
+                <input type="text" name="nombre" id="prov_nombre" class="form-control" required>
+            </div>
+
+            <div class="prov-section">Contacto</div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-uppercase">Dirección</label>
+                <input type="text" name="direccion" id="prov_direccion" class="form-control">
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col">
+                    <label class="form-label small fw-bold text-uppercase">Teléfono</label>
+                    <input type="text" name="telefono" id="prov_telefono" class="form-control">
+                </div>
+                <div class="col">
+                    <label class="form-label small fw-bold text-uppercase">Email</label>
+                    <input type="email" name="email" id="prov_email" class="form-control">
+                </div>
+            </div>
+
+            <div class="form-check form-switch mt-4">
+                <input class="form-check-input" type="checkbox" name="activo" id="prov_activo" checked>
+                <label class="form-check-label fw-bold" for="prov_activo">Proveedor activo</label>
+            </div>
+
+            <div class="mt-5 d-grid">
+                <button type="submit" class="btn btn-primary">Guardar proveedor</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 {% endblock %}
+
 
 {% block extra_js %}
 <script>
-document.getElementById('editProvModal').addEventListener('show.bs.modal', function(e) {
-  const btn = e.relatedTarget;
-  if (!btn) return;
-  this.querySelector('form').action = btn.dataset.editUrl;
-  ['nit','nombre','ciudad','direccion','telefono','email'].forEach(f => {
-    const el = this.querySelector('[name=' + f + ']');
-    if (el) {
-      const key = 'field' + f.charAt(0).toUpperCase() + f.slice(1);
-      el.value = btn.dataset[key] || '';
+function prepareForm(mode, data) {
+    const form  = document.getElementById('provForm');
+    const title = document.getElementById('provTitle');
+    form.reset();
+
+    if (mode === 'create') {
+        title.textContent = 'Nuevo proveedor';
+        form.action = "{% url 'catalogos:proveedor_create' %}";
+        document.getElementById('prov_activo').checked = true;
+    } else {
+        title.textContent = 'Editar: ' + data.nombre;
+        form.action = '/catalogos/proveedores/' + data.id + '/editar/';
+        document.getElementById('prov_nit').value       = data.nit       || '';
+        document.getElementById('prov_nombre').value    = data.nombre    || '';
+        document.getElementById('prov_ciudad').value    = data.ciudad    || '';
+        document.getElementById('prov_direccion').value = data.direccion || '';
+        document.getElementById('prov_telefono').value  = data.telefono  || '';
+        document.getElementById('prov_email').value     = data.email     || '';
+        document.getElementById('prov_activo').checked  = (data.activo === 'true');
     }
-  });
-  const chk = this.querySelector('[name=activo]');
-  if (chk) chk.checked = btn.dataset.fieldActivo === 'True';
-});
+}
 </script>
 {% endblock %}

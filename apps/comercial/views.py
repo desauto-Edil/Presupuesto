@@ -1,20 +1,22 @@
-"""apps/comercial/views.py — Vistas CRUD para el módulo comercial."""
+"""apps/comercial/views.py — Vistas del módulo comercial."""
 
 from django.contrib import messages
-from django.http import HttpResponseRedirect, JsonResponse, HttpResponseForbidden
+from django.db.models import Count
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse_lazy, reverse
+from django.urls import reverse_lazy
 from django.views import View
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
-from .models import (
-    Cliente, ContactoCliente, TipoProyecto, Solicitud,
-    Proyecto, ProyectoArchivo, LogSistema,
+from django.views.generic import (
+    ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView,
 )
+from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto, LogSistema
 from .forms import (
-    ClienteForm, ClienteConContactoForm, ContactoClienteForm, TipoProyectoForm,
-    SolicitudForm, ProyectoForm, ProyectoFromSolicitudForm, ProyectoArchivoForm,
+    ClienteConContactoForm, ContactoClienteForm,
+    TipoProyectoForm, SolicitudForm, SolicitudArchivoForm,
+    ProyectoForm, ProyectoFromSolicitudForm,
 )
 from apps.common.mixins import WithCreateFormMixin
+from apps.common.choices import EstadoSolicitud
 
 
 # ---------------------------------------------------------------------------
@@ -32,10 +34,7 @@ def _usuario_sistema(request):
 
 
 def registrar_log(request, accion, descripcion="", modelo_afectado="", objeto_id=None):
-    """
-    Registra una acción en LogSistema usando la unidad del usuario en sesión.
-    Silencia errores para no interrumpir el flujo principal.
-    """
+    """Registra una acción en LogSistema. Silencia errores para no interrumpir el flujo."""
     try:
         usuario = _usuario_sistema(request)
         unidad = request.session.get("unidad_negocio", "")
@@ -50,6 +49,54 @@ def registrar_log(request, accion, descripcion="", modelo_afectado="", objeto_id
             )
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+class DashboardView(TemplateView):
+    template_name = "comercial/dashboard.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        qs = Solicitud.objects.select_related("cliente", "creado_por")
+
+        # Conteo solicitudes por estado
+        by_estado = {
+            item["estado"]: item["total"]
+            for item in qs.values("estado").annotate(total=Count("id"))
+        }
+
+        ctx["total"] = qs.count()
+        ctx["por_estado"] = [
+            {
+                "label": label,
+                "value": estado,
+                "count": by_estado.get(estado, 0),
+            }
+            for estado, label in EstadoSolicitud.choices
+        ]
+
+        # Solicitudes recientes — añadir proyecto_actual por anotación
+        recientes_qs = list(qs.order_by("-created_at")[:10])
+        for s in recientes_qs:
+            s.proyecto_actual = s.proyectos.filter(es_version_actual=True).first()
+        ctx["recientes"] = recientes_qs
+
+        # Conteo proyectos (solo versiones actuales)
+        ctx["total_proyectos"] = Proyecto.objects.filter(es_version_actual=True).count()
+
+        # Conteo despiece y APU (presupuestos)
+        try:
+            from apps.presupuestos.models import ProyectoSistema, APUProyecto
+            ctx["total_despieces"] = ProyectoSistema.objects.count()
+            ctx["total_apus"] = APUProyecto.objects.count()
+        except Exception:
+            ctx["total_despieces"] = 0
+            ctx["total_apus"] = 0
+
+        return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +116,7 @@ class ClienteListView(WithCreateFormMixin, ListView):
 
 class ClienteDetailView(DetailView):
     model = Cliente
-    template_name = "comercial/cliente_detail.html"
+    template_name = "comercial/cliente_list.html"
     context_object_name = "cliente"
 
 
@@ -77,7 +124,7 @@ class ClienteCreateView(CreateView):
     """Crea un Cliente y su Contacto principal en una sola operación."""
     model = Cliente
     form_class = ClienteConContactoForm
-    template_name = "comercial/cliente_form.html"
+    template_name = "comercial/cliente_list.html"
     success_url = reverse_lazy("comercial:cliente_list")
 
     def form_valid(self, form):
@@ -93,16 +140,23 @@ class ClienteCreateView(CreateView):
         )
         messages.success(
             self.request,
-            f"Cliente {self.object.razon_social} creado con su contacto principal.",
+            f"Cliente {self.object.razon_social} creado correctamente.",
         )
         return HttpResponseRedirect(self.get_success_url())
+
+    def form_invalid(self, form):
+        for field, errors in form.errors.items():
+            for error in errors:
+                label = form.fields[field].label if field in form.fields else field
+                messages.error(self.request, f"{label}: {error}")
+        return redirect("comercial:cliente_list")
 
 
 class ClienteUpdateView(UpdateView):
     """Actualiza el Cliente y su contacto principal en una sola operación."""
     model = Cliente
     form_class = ClienteConContactoForm
-    template_name = "comercial/cliente_form.html"
+    template_name = "comercial/cliente_list.html"
     success_url = reverse_lazy("comercial:cliente_list")
 
     def form_valid(self, form):
@@ -130,6 +184,13 @@ class ClienteUpdateView(UpdateView):
             f"Cliente {self.object.razon_social} actualizado correctamente.",
         )
         return HttpResponseRedirect(self.get_success_url())
+
+    def form_invalid(self, form):
+        for field, errors in form.errors.items():
+            for error in errors:
+                label = form.fields[field].label if field in form.fields else field
+                messages.error(self.request, f"{label}: {error}")
+        return redirect("comercial:cliente_list")
 
 
 class ClienteDeleteView(DeleteView):
@@ -170,7 +231,162 @@ class ContactoDeleteView(DeleteView):
 
 
 # ---------------------------------------------------------------------------
-# Tipos de proyecto
+# Solicitudes
+# ---------------------------------------------------------------------------
+
+class SolicitudListView(WithCreateFormMixin, ListView):
+    model = Solicitud
+    form_class = SolicitudForm
+    template_name = "comercial/solicitud_list.html"
+    context_object_name = "solicitudes"
+    ordering = ["-created_at"]
+
+
+class SolicitudDetailView(DetailView):
+    model = Solicitud
+    template_name = "comercial/solicitud_detail.html"
+    context_object_name = "solicitud"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        solicitud = self.object
+        ctx["archivos"] = solicitud.archivos.select_related("usuario").all()
+        ctx["archivo_form"] = SolicitudArchivoForm()
+
+        # Proyectos / versiones vinculadas a esta solicitud
+        ctx["proyectos"] = solicitud.proyectos.select_related(
+            "tipo_proyecto", "creado_por"
+        ).order_by("-version")
+        ctx["proyecto_actual"] = solicitud.proyectos.filter(
+            es_version_actual=True
+        ).first()
+
+        ctx["logs"] = LogSistema.objects.filter(
+            modelo_afectado="Solicitud",
+            objeto_id=solicitud.pk,
+        ).select_related("usuario").order_by("-created_at")[:50]
+        return ctx
+
+
+class SolicitudCreateView(CreateView):
+    model = Solicitud
+    form_class = SolicitudForm
+    template_name = "comercial/solicitud_form.html"
+    success_url = reverse_lazy("comercial:solicitud_list")
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.creado_por = _usuario_sistema(self.request)
+        self.object.save()
+        form.save_m2m()
+        registrar_log(
+            self.request,
+            accion="CREAR_SOLICITUD",
+            descripcion=f"Solicitud {self.object.consecutivo} — {self.object.nombre}",
+            modelo_afectado="Solicitud",
+            objeto_id=self.object.pk,
+        )
+        messages.success(self.request, f"Solicitud {self.object.consecutivo} creada.")
+        return HttpResponseRedirect(self.get_success_url())
+
+
+class SolicitudUpdateView(UpdateView):
+    model = Solicitud
+    form_class = SolicitudForm
+    template_name = "comercial/solicitud_form.html"
+    success_url = reverse_lazy("comercial:solicitud_list")
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        # Proteger campos de sistema
+        original = Solicitud.objects.get(pk=self.object.pk)
+        self.object.estado = original.estado
+        self.object.creado_por_id = original.creado_por_id
+        self.object.save()
+        form.save_m2m()
+        messages.success(self.request, "Solicitud actualizada correctamente.")
+        return HttpResponseRedirect(self.get_success_url())
+
+
+class SolicitudDeleteView(View):
+    """Las solicitudes NO se eliminan — son registros permanentes."""
+
+    def get(self, request, pk, *args, **kwargs):
+        solicitud = get_object_or_404(Solicitud, pk=pk)
+        messages.warning(
+            request,
+            f"La solicitud {solicitud.consecutivo} no puede eliminarse. "
+            "Es un registro permanente del sistema.",
+        )
+        return redirect("comercial:solicitud_detail", pk=pk)
+
+    def post(self, request, pk, *args, **kwargs):
+        solicitud = get_object_or_404(Solicitud, pk=pk)
+        messages.error(
+            request,
+            f"La solicitud {solicitud.consecutivo} no puede eliminarse.",
+        )
+        return redirect("comercial:solicitud_detail", pk=pk)
+
+
+# ---------------------------------------------------------------------------
+# Archivos de Solicitud
+# ---------------------------------------------------------------------------
+
+class SolicitudArchivoCreateView(CreateView):
+    """Sube un archivo adjunto a una Solicitud."""
+    model = SolicitudArchivo
+    form_class = SolicitudArchivoForm
+    http_method_names = ["post"]
+
+    def _get_solicitud(self):
+        return get_object_or_404(Solicitud, pk=self.kwargs["solicitud_pk"])
+
+    def form_valid(self, form):
+        solicitud = self._get_solicitud()
+        self.object = form.save(commit=False)
+        self.object.solicitud = solicitud
+        self.object.usuario = _usuario_sistema(self.request)
+        self.object.save()
+        registrar_log(
+            self.request,
+            accion="SUBIR_ARCHIVO",
+            descripcion=f"Archivo '{self.object.nombre}' subido a {solicitud.consecutivo}",
+            modelo_afectado="Solicitud",
+            objeto_id=solicitud.pk,
+        )
+        messages.success(self.request, f"Archivo '{self.object.nombre}' subido correctamente.")
+        return redirect("comercial:solicitud_detail", pk=solicitud.pk)
+
+    def form_invalid(self, form):
+        solicitud = self._get_solicitud()
+        messages.error(self.request, "Error al subir el archivo. Verifica los datos.")
+        return redirect("comercial:solicitud_detail", pk=solicitud.pk)
+
+
+class SolicitudArchivoDeleteView(View):
+    """Elimina un archivo de solicitud."""
+
+    def post(self, request, pk, *args, **kwargs):
+        archivo = get_object_or_404(SolicitudArchivo, pk=pk)
+        solicitud = archivo.solicitud
+        nombre = archivo.nombre
+        if archivo.archivo:
+            archivo.archivo.delete(save=False)
+        archivo.delete()
+        registrar_log(
+            request,
+            accion="ELIMINAR_ARCHIVO",
+            descripcion=f"Archivo '{nombre}' eliminado de {solicitud.consecutivo}",
+            modelo_afectado="Solicitud",
+            objeto_id=solicitud.pk,
+        )
+        messages.success(request, f"Archivo '{nombre}' eliminado.")
+        return redirect("comercial:solicitud_detail", pk=solicitud.pk)
+
+
+# ---------------------------------------------------------------------------
+# Tipos de Proyecto
 # ---------------------------------------------------------------------------
 
 class TipoProyectoListView(ListView):
@@ -201,101 +417,7 @@ class TipoProyectoDeleteView(DeleteView):
 
 
 # ---------------------------------------------------------------------------
-# Solicitudes
-# ---------------------------------------------------------------------------
-
-class SolicitudListView(WithCreateFormMixin, ListView):
-    model = Solicitud
-    form_class = SolicitudForm
-    template_name = "comercial/solicitud_list.html"
-    context_object_name = "solicitudes"
-    ordering = ["-created_at"]
-
-
-class SolicitudDetailView(DetailView):
-    model = Solicitud
-    template_name = "comercial/solicitud_detail.html"
-    context_object_name = "solicitud"
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        solicitud = self.object
-        # Versiones ordenadas de mayor a menor
-        ctx["proyectos"] = solicitud.proyectos.select_related(
-            "tipo_proyecto", "creado_por"
-        ).prefetch_related("archivos").order_by("-version")
-        # Logs de esta solicitud
-        ctx["logs"] = LogSistema.objects.filter(
-            modelo_afectado="Solicitud",
-            objeto_id=solicitud.pk,
-        ).select_related("usuario").order_by("-created_at")[:50]
-        return ctx
-
-
-class SolicitudCreateView(CreateView):
-    model = Solicitud
-    form_class = SolicitudForm
-    template_name = "comercial/solicitud_form.html"
-    success_url = reverse_lazy("comercial:solicitud_list")
-
-    def form_valid(self, form):
-        self.object = form.save(commit=False)
-        self.object.creado_por = _usuario_sistema(self.request)
-        self.object.save()
-        form.save_m2m()
-        registrar_log(
-            self.request,
-            accion="CREAR_SOLICITUD",
-            descripcion=f"Solicitud {self.object.consecutivo} — {self.object.nombre}",
-            modelo_afectado="Solicitud",
-            objeto_id=self.object.pk,
-        )
-        return HttpResponseRedirect(self.get_success_url())
-
-
-class SolicitudUpdateView(UpdateView):
-    model = Solicitud
-    form_class = SolicitudForm
-    template_name = "comercial/solicitud_form.html"
-    success_url = reverse_lazy("comercial:solicitud_list")
-
-    def form_valid(self, form):
-        self.object = form.save(commit=False)
-        # Proteger campos de sistema: solo estado y creado_por
-        original = Solicitud.objects.get(pk=self.object.pk)
-        self.object.estado = original.estado
-        self.object.creado_por_id = original.creado_por_id
-        self.object.save()
-        form.save_m2m()
-        return HttpResponseRedirect(self.get_success_url())
-
-
-class SolicitudDeleteView(View):
-    """
-    Las solicitudes NO se eliminan. Esta vista bloquea cualquier intento
-    de borrado y redirige al detalle con un mensaje informativo.
-    """
-
-    def get(self, request, pk, *args, **kwargs):
-        solicitud = get_object_or_404(Solicitud, pk=pk)
-        messages.warning(
-            request,
-            f"La solicitud {solicitud.consecutivo} no puede eliminarse. "
-            "Las solicitudes son registros permanentes del sistema.",
-        )
-        return redirect("comercial:solicitud_detail", pk=pk)
-
-    def post(self, request, pk, *args, **kwargs):
-        solicitud = get_object_or_404(Solicitud, pk=pk)
-        messages.error(
-            request,
-            f"La solicitud {solicitud.consecutivo} no puede eliminarse.",
-        )
-        return redirect("comercial:solicitud_detail", pk=pk)
-
-
-# ---------------------------------------------------------------------------
-# Proyectos (versiones)
+# Proyectos
 # ---------------------------------------------------------------------------
 
 class ProyectoListView(ListView):
@@ -303,11 +425,6 @@ class ProyectoListView(ListView):
     template_name = "comercial/proyecto_list.html"
     context_object_name = "proyectos"
     ordering = ["-created_at"]
-
-    def get_queryset(self):
-        return super().get_queryset().select_related(
-            "cliente", "tipo_proyecto", "creado_por", "solicitud"
-        )
 
 
 class ProyectoDetailView(DetailView):
@@ -317,13 +434,26 @@ class ProyectoDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["archivos"] = self.object.archivos.select_related("usuario").all()
-        ctx["archivo_form"] = ProyectoArchivoForm()
+        # ProyectoSistemas (despieces) de este proyecto
+        try:
+            from apps.presupuestos.models import ProyectoSistema
+            ctx["proyecto_sistemas"] = (
+                self.object.proyecto_sistemas
+                .select_related("sistema", "subsistema")
+                .prefetch_related("despiece_lineas")
+                .order_by("sistema__nombre")
+            )
+        except Exception:
+            ctx["proyecto_sistemas"] = []
         # Otras versiones de la misma solicitud
-        if self.object.solicitud:
-            ctx["otras_versiones"] = self.object.solicitud.proyectos.exclude(
-                pk=self.object.pk
-            ).order_by("-version")
+        if self.object.solicitud_id:
+            ctx["otras_versiones"] = (
+                self.object.solicitud.proyectos
+                .exclude(pk=self.object.pk)
+                .order_by("-version")
+            )
+        else:
+            ctx["otras_versiones"] = Proyecto.objects.none()
         return ctx
 
 
@@ -353,10 +483,9 @@ class ProyectoUpdateView(UpdateView):
         self.object.consecutivo = original.consecutivo
         self.object.estado = original.estado
         self.object.creado_por_id = original.creado_por_id
-        self.object.version = original.version
-        self.object.es_version_actual = original.es_version_actual
         self.object.save()
         form.save_m2m()
+        messages.success(self.request, "Proyecto actualizado correctamente.")
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -366,18 +495,11 @@ class ProyectoDeleteView(DeleteView):
     success_url = reverse_lazy("comercial:proyecto_list")
 
 
-# ---------------------------------------------------------------------------
-# Crear Proyecto (nueva versión) desde Solicitud
-# ---------------------------------------------------------------------------
-
 class CrearProyectoDesdeSolicitudView(CreateView):
     """
-    Crea una nueva versión de Proyecto asociada a una Solicitud.
-    · Incrementa automáticamente el número de versión.
-    · Marca las versiones anteriores como no actuales.
-    · Registra la acción en LogSistema.
+    Crea una nueva versión de Proyecto para una Solicitud.
+    Permite múltiples versiones; el modelo auto-gestiona el número y la versión actual.
     """
-
     model = Proyecto
     form_class = ProyectoFromSolicitudForm
     template_name = "comercial/proyecto_desde_solicitud.html"
@@ -387,139 +509,50 @@ class CrearProyectoDesdeSolicitudView(CreateView):
 
     def get_initial(self):
         solicitud = self._get_solicitud()
-        version_actual = solicitud.version_actual
-        return {
-            "nombre": (version_actual.nombre if version_actual else solicitud.nombre),
-            "descripcion": (version_actual.descripcion if version_actual else solicitud.descripcion),
-        }
+        return {"nombre": solicitud.nombre, "descripcion": solicitud.descripcion}
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         solicitud = self._get_solicitud()
         ctx["solicitud"] = solicitud
-        ctx["proxima_version"] = solicitud.total_versiones + 1
+        # Versiones existentes para mostrar historial
+        ctx["versiones_existentes"] = solicitud.proyectos.order_by("-version")
+        # Próxima versión
+        ultima = solicitud.proyectos.order_by("-version").first()
+        ctx["proxima_version"] = (ultima.version + 1) if ultima else 1
         return ctx
 
     def form_valid(self, form):
         solicitud = self._get_solicitud()
-
-        # Calcular próxima versión
-        versiones_existentes = solicitud.proyectos.order_by("-version")
-        proxima_version = (versiones_existentes.first().version + 1) if versiones_existentes.exists() else 1
-
-        # Desmarcar versión actual de las versiones anteriores
-        solicitud.proyectos.filter(es_version_actual=True).update(es_version_actual=False)
-
-        # Crear nueva versión
         self.object = form.save(commit=False)
         self.object.solicitud = solicitud
         self.object.cliente = solicitud.cliente
         self.object.creado_por = _usuario_sistema(self.request)
-        self.object.version = proxima_version
-        self.object.es_version_actual = True
+        # version y es_version_actual se asignan en Proyecto.save()
         self.object.save()
         form.save_m2m()
-
         registrar_log(
             self.request,
-            accion="CREAR_VERSION",
+            accion="CREAR_PROYECTO",
             descripcion=(
-                f"Versión v{proxima_version} del proyecto {self.object.consecutivo} "
-                f"para solicitud {solicitud.consecutivo}"
+                f"Proyecto {self.object.consecutivo} v{self.object.version} "
+                f"creado desde {solicitud.consecutivo}"
             ),
-            modelo_afectado="Solicitud",
-            objeto_id=solicitud.pk,
+            modelo_afectado="Proyecto",
+            objeto_id=self.object.pk,
         )
-
         messages.success(
             self.request,
-            f"Versión v{proxima_version} — {self.object.consecutivo} creada correctamente.",
+            f"Proyecto {self.object.consecutivo} (v{self.object.version}) creado correctamente.",
         )
-        return redirect("comercial:solicitud_detail", pk=solicitud.pk)
+        return redirect("comercial:proyecto_detail", pk=self.object.pk)
 
 
 # ---------------------------------------------------------------------------
-# Archivos de Proyecto
-# ---------------------------------------------------------------------------
-
-class ProyectoArchivoCreateView(CreateView):
-    """
-    Sube un archivo a una versión de proyecto.
-    Redirige de vuelta al detalle de la solicitud.
-    """
-    model = ProyectoArchivo
-    form_class = ProyectoArchivoForm
-    http_method_names = ["post"]  # solo POST; el formulario está en proyecto_detail
-
-    def _get_proyecto(self):
-        return get_object_or_404(Proyecto, pk=self.kwargs["proyecto_pk"])
-
-    def form_valid(self, form):
-        proyecto = self._get_proyecto()
-        self.object = form.save(commit=False)
-        self.object.proyecto = proyecto
-        self.object.usuario = _usuario_sistema(self.request)
-        self.object.save()
-
-        registrar_log(
-            self.request,
-            accion="SUBIR_ARCHIVO",
-            descripcion=f"Archivo '{self.object.nombre}' subido al proyecto {proyecto.consecutivo} (v{proyecto.version})",
-            modelo_afectado="Proyecto",
-            objeto_id=proyecto.pk,
-        )
-
-        messages.success(self.request, f"Archivo '{self.object.nombre}' subido correctamente.")
-
-        # Redirigir al detalle de la solicitud si existe, si no al proyecto
-        if proyecto.solicitud:
-            return redirect("comercial:solicitud_detail", pk=proyecto.solicitud.pk)
-        return redirect("comercial:proyecto_detail", pk=proyecto.pk)
-
-    def form_invalid(self, form):
-        proyecto = self._get_proyecto()
-        messages.error(self.request, "Error al subir el archivo. Verifica el formulario.")
-        if proyecto.solicitud:
-            return redirect("comercial:solicitud_detail", pk=proyecto.solicitud.pk)
-        return redirect("comercial:proyecto_detail", pk=proyecto.pk)
-
-
-class ProyectoArchivoDeleteView(View):
-    """Elimina un archivo de proyecto."""
-
-    def post(self, request, pk, *args, **kwargs):
-        archivo = get_object_or_404(ProyectoArchivo, pk=pk)
-        proyecto = archivo.proyecto
-        nombre = archivo.nombre
-        # Borrar archivo físico
-        if archivo.archivo:
-            archivo.archivo.delete(save=False)
-        archivo.delete()
-
-        registrar_log(
-            request,
-            accion="ELIMINAR_ARCHIVO",
-            descripcion=f"Archivo '{nombre}' eliminado del proyecto {proyecto.consecutivo}",
-            modelo_afectado="Proyecto",
-            objeto_id=proyecto.pk,
-        )
-
-        messages.success(request, f"Archivo '{nombre}' eliminado.")
-        if proyecto.solicitud:
-            return redirect("comercial:solicitud_detail", pk=proyecto.solicitud.pk)
-        return redirect("comercial:proyecto_detail", pk=proyecto.pk)
-
-
-# ---------------------------------------------------------------------------
-# API: contactos por cliente (AJAX)
+# API interna: contactos por cliente (AJAX)
 # ---------------------------------------------------------------------------
 
 class ContactosPorClienteView(View):
-    """
-    GET /comercial/api/contactos-por-cliente/<cliente_id>/
-    Retorna JSON con los contactos activos del cliente.
-    """
-
     def get(self, request, cliente_id):
         contactos = list(
             ContactoCliente.objects.filter(

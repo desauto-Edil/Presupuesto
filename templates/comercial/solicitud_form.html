@@ -7,129 +7,250 @@
   → {% if object %}{{ object.consecutivo }}{% else %}Nueva{% endif %}
 {% endblock %}
 
+{% block extra_head %}
+<style>
+    /* ── Tarjeta de página ── */
+    .sol-form-card {
+        max-width: 740px;
+        margin: 0 auto;
+        background: var(--card);
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        overflow: hidden;
+    }
+
+    /* ── Encabezado ── */
+    .sol-header {
+        padding: 20px 28px;
+        border-bottom: 1px solid var(--border);
+        border-top: 3px solid var(--theme-accent);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+    }
+    .sol-header-title {
+        font-family: 'Syne', sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--ink);
+    }
+    .sol-header-sub {
+        font-size: 12px;
+        color: var(--ink-soft);
+        margin-top: 3px;
+    }
+
+    /* ── Bloque de campos del sistema ── */
+    .sol-sys-block {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 22px;
+        display: flex;
+        gap: 28px;
+        flex-wrap: wrap;
+    }
+    .sol-sys-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--ink-soft);
+        margin-bottom: 5px;
+    }
+    .sol-sys-value {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+    }
+
+    /* ── Cuerpo y secciones ── */
+    .sol-body { padding: 24px 28px; }
+    .sol-footer {
+        padding: 16px 28px;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
+    /* ── Grid 2 columnas ── */
+    .sol-grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+    }
+
+    /* ── Campo obligatorio ── */
+    .req { color: var(--brand-red); margin-left: 2px; }
+
+    /* ── Ayuda de campo ── */
+    .field-help {
+        font-size: 11px;
+        color: var(--ink-soft);
+        margin-top: 4px;
+    }
+
+    @media (max-width: 600px) {
+        .sol-grid2 { grid-template-columns: 1fr; }
+        .sol-body   { padding: 18px; }
+        .sol-header { padding: 16px 18px; }
+        .sol-footer { padding: 14px 18px; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="form-page-card fade-up">
+<div class="sol-form-card fade-up">
 
-  <!-- ── ENCABEZADO ── -->
-  <div class="form-page-header accent-top-violet">
-    <div>
-      <div class="form-page-title">
-        {% if object %}Editar solicitud{% else %}Nueva solicitud{% endif %}
-      </div>
-      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
-        Los campos de Selford son obligatorios. Estado y usuario creador son controlados por el sistema.
-      </div>
+    <!-- ── Encabezado ── -->
+    <div class="sol-header">
+        <div>
+            <div class="sol-header-title">
+                {% if object %}Editar solicitud{% else %}Nueva solicitud{% endif %}
+            </div>
+            <div class="sol-header-sub">
+                Todos los campos son obligatorios. Estado y creador son asignados por el sistema.
+            </div>
+        </div>
+        <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
     </div>
-    <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
-  </div>
 
-  <div class="form-page-body">
-
-    <!-- ── ESTADO DEL SISTEMA (solo en edición) ── -->
+    <!-- ── Campos del sistema (solo edición) ── -->
     {% if object %}
-    <div style="background:rgba(86,83,148,0.06);border:1px solid rgba(86,83,148,0.15);
-                border-radius:8px;padding:14px 18px;margin-bottom:22px;">
-      <div class="section-heading" style="margin-bottom:12px;">Campos del sistema</div>
-      <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start;">
-        <div>
-          <div class="sys-label">Estado</div>
-          <div style="display:flex;align-items:center;gap:8px;padding-top:8px;">
-            <span class="badge-status
-              {% if object.estado == 'EN_GESTION' %}bs-pendiente
-              {% elif object.estado == 'APROBADA' %}bs-validado
-              {% else %}bs-cerrado{% endif %}">
-              {{ object.get_estado_display }}
-            </span>
-          </div>
-          <div style="font-size:10px;color:rgba(14,17,23,0.35);margin-top:3px;">Solo el sistema lo cambia</div>
+    <div style="padding: 16px 28px 0;">
+        <div class="sol-sys-block">
+            <div>
+                <div class="sol-sys-label">Estado</div>
+                <span class="badge-status
+                    {% if object.estado == 'EN_GESTION' %}bs-pendiente
+                    {% elif object.estado == 'APROBADA' %}bs-validado
+                    {% else %}bs-cerrado{% endif %}">
+                    {{ object.get_estado_display }}
+                </span>
+                <div class="sol-sys-label" style="margin-top:6px;">Solo el sistema lo modifica</div>
+            </div>
+            <div>
+                <div class="sol-sys-label">Creado por</div>
+                <div class="sol-sys-value">{{ object.creado_por|default:"Sin asignar" }}</div>
+            </div>
+            <div>
+                <div class="sol-sys-label">Registrado el</div>
+                <div class="sol-sys-value">{{ object.created_at|date:"d/m/Y H:i" }}</div>
+            </div>
         </div>
-        <div>
-          <div class="sys-label">Creado por</div>
-          <input type="text" class="form-control"
-                 value="{{ object.creado_por|default:'Sin asignar' }}" disabled
-                 style="max-width:200px;background:rgba(86,83,148,0.05);">
-        </div>
-        <div>
-          <div class="sys-label">Registrada el</div>
-          <input type="text" class="form-control"
-                 value="{{ object.created_at|date:'d/m/Y H:i' }}" disabled
-                 style="max-width:160px;background:rgba(86,83,148,0.05);">
-        </div>
-      </div>
     </div>
     {% endif %}
 
-    <!-- ── FORMULARIO EDITABLE ── -->
-    <form method="post" id="formSolicitud">
-      {% csrf_token %}
+    <!-- ── Formulario ── -->
+    <form method="post" id="formSolicitud" novalidate>
+        {% csrf_token %}
 
-      {% if form.non_field_errors %}
-      <div class="msg-bar msg-error">✕ {{ form.non_field_errors }}</div>
-      {% endif %}
+        <div class="sol-body">
 
-      <!-- ── DATOS DE SELFORD ── -->
-      <div class="section-heading">Datos de Selford</div>
-      <div class="form-grid-2" style="margin-bottom:0;">
-        <div class="form-group">
-          <label>Consecutivo de Selford <span style="color:var(--brand-red)">*</span></label>
-          {{ form.consecutivo }}
-          {% if form.consecutivo.errors %}
-          <div class="invalid-feedback d-block">{{ form.consecutivo.errors.0 }}</div>
-          {% endif %}
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">
-            Número de consecutivo asignado en el sistema Selford.
-          </div>
+            <!-- Errores globales -->
+            {% if form.non_field_errors %}
+            <div class="msg-bar msg-error" style="margin-bottom:18px;">
+                ✕ {{ form.non_field_errors|join:", " }}
+            </div>
+            {% endif %}
+
+            <!-- ─── SECCIÓN 1: Referencia Selford ─── -->
+            <div class="section-heading">Referencia Selford</div>
+
+            <div class="sol-grid2" style="margin-bottom:14px;">
+                <div>
+                    <label class="form-label">
+                        Consecutivo Selford <span class="req">*</span>
+                    </label>
+                    {{ form.consecutivo }}
+                    {% if form.consecutivo.errors %}
+                    <div class="invalid-feedback d-block">{{ form.consecutivo.errors.0 }}</div>
+                    {% endif %}
+                    <div class="field-help">Número asignado en el sistema Selford.</div>
+                </div>
+                <div>
+                    <label class="form-label">
+                        Link de Selford <span class="req">*</span>
+                    </label>
+                    {{ form.link_selford }}
+                    {% if form.link_selford.errors %}
+                    <div class="invalid-feedback d-block">{{ form.link_selford.errors.0 }}</div>
+                    {% endif %}
+                    <div class="field-help">URL directa al registro en Selford.</div>
+                </div>
+            </div>
+
+            <!-- ─── SECCIÓN 2: Cliente y nombre ─── -->
+            <div class="section-heading">Cliente y proyecto</div>
+
+            <div class="sol-grid2" style="margin-bottom:14px;">
+                <div>
+                    <label class="form-label">
+                        Cliente <span class="req">*</span>
+                    </label>
+                    {{ form.cliente }}
+                    {% if form.cliente.errors %}
+                    <div class="invalid-feedback d-block">{{ form.cliente.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="form-label">
+                        Fecha de entrega esperada <span class="req">*</span>
+                    </label>
+                    {{ form.fecha_entrega }}
+                    {% if form.fecha_entrega.errors %}
+                    <div class="invalid-feedback d-block">{{ form.fecha_entrega.errors.0 }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label class="form-label">
+                    Nombre / descripción breve <span class="req">*</span>
+                </label>
+                {{ form.nombre }}
+                {% if form.nombre.errors %}
+                <div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <!-- ─── SECCIÓN 3: Detalle ─── -->
+            <div class="section-heading">Detalle</div>
+
+            <div style="margin-bottom:14px;">
+                <label class="form-label">
+                    Descripción completa <span class="req">*</span>
+                </label>
+                {{ form.descripcion }}
+                {% if form.descripcion.errors %}
+                <div class="invalid-feedback d-block">{{ form.descripcion.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div>
+                <label class="form-label">
+                    Observaciones <span class="req">*</span>
+                </label>
+                {{ form.observaciones }}
+                {% if form.observaciones.errors %}
+                <div class="invalid-feedback d-block">{{ form.observaciones.errors.0 }}</div>
+                {% endif %}
+            </div>
+
         </div>
-        <div class="form-group">
-          <label>Link de Selford <span style="color:var(--brand-red)">*</span></label>
-          {{ form.link_selford }}
-          {% if form.link_selford.errors %}
-          <div class="invalid-feedback d-block">{{ form.link_selford.errors.0 }}</div>
-          {% endif %}
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">
-            URL directa al registro en Selford.
-          </div>
+
+        <!-- ── Footer ── -->
+        <div class="sol-footer">
+            <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+            <button type="submit" class="btn btn-primary btn-sm">
+                {% if object %}Guardar cambios{% else %}Crear solicitud{% endif %}
+            </button>
         </div>
-      </div>
-
-      <!-- ── DATOS DE LA SOLICITUD ── -->
-      <div class="section-heading" style="margin-top:18px;">Datos de la solicitud</div>
-
-      <div class="form-group">
-        <label for="id_cliente">Cliente <span style="color:var(--brand-red)">*</span></label>
-        {{ form.cliente }}
-        {% if form.cliente.errors %}<div class="invalid-feedback d-block">{{ form.cliente.errors.0 }}</div>{% endif %}
-      </div>
-
-      <div class="form-group">
-        <label>Nombre / descripción <span style="color:var(--brand-red)">*</span></label>
-        {{ form.nombre }}
-        {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
-      </div>
-
-      <div class="form-group" style="max-width:240px;">
-        <label>Fecha de entrega esperada</label>
-        {{ form.fecha_entrega }}
-      </div>
-
-      <div class="form-group">
-        <label>Descripción</label>
-        {{ form.descripcion }}
-      </div>
-
-      <div class="form-group">
-        <label>Observaciones</label>
-        {{ form.observaciones }}
-      </div>
-
-      <div class="form-page-footer" style="margin:18px -24px -22px;border-radius:0 0 var(--radius) var(--radius);">
-        <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
-        <button type="submit" class="btn btn-primary btn-sm">
-          {% if object %}Guardar cambios{% else %}Crear solicitud{% endif %}
-        </button>
-      </div>
 
     </form>
-  </div>
 </div>
 {% endblock %}

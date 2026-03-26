@@ -1,22 +1,58 @@
 {% extends "base.html" %}
 {% block title %}Tipos de proyecto{% endblock %}
+{% block page_title %}Tipos de proyecto{% endblock %}
+{% block breadcrumb %}Configuración → Tipos de proyecto{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'comercial:tipoproyecto_create' %}" class="btn btn-primary btn-sm">+ Nuevo tipo</a>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Tipos de proyecto</h2>
-    <a href="{% url 'comercial:tipoproyecto_create' %}" class="btn btn-primary">Crear</a>
-</div>
-<table class="table table-bordered bg-white">
-    <thead class="table-dark"><tr><th>Codigo</th><th>Nombre</th><th>Activo</th><th>Acciones</th></tr></thead>
+<div class="panel fade-up">
+  <div class="panel-header">
+    <span class="panel-title">Tipos de proyecto</span>
+    <span style="font-size:12px;color:var(--ink-soft);">{{ tipos|length }} registros</span>
+  </div>
+
+  {% if tipos %}
+  <table class="imp-table">
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nombre</th>
+        <th>Activo</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
-    {% for t in tipos %}
-    <tr>
-        <td>{{ t.codigo }}</td><td>{{ t.nombre }}</td><td>{% if t.activo %}Si{% else %}No{% endif %}</td>
+      {% for t in tipos %}
+      <tr>
+        <td class="td-mono" style="font-size:12px;color:var(--theme-accent);">{{ t.codigo }}</td>
+        <td style="font-weight:500;">{{ t.nombre }}</td>
         <td>
-            <a href="{% url 'comercial:tipoproyecto_update' t.pk %}" class="btn btn-sm btn-outline-secondary">Editar</a>
-            <a href="{% url 'comercial:tipoproyecto_delete' t.pk %}" class="btn btn-sm btn-outline-danger">Eliminar</a>
+          {% if t.activo %}
+            <span class="badge-status bs-validado">Activo</span>
+          {% else %}
+            <span class="badge-status bs-inactivo">Inactivo</span>
+          {% endif %}
         </td>
-    </tr>
-    {% empty %}<tr><td colspan="4" class="text-center text-muted">Sin registros.</td></tr>{% endfor %}
+        <td class="td-actions">
+          <a href="{% url 'comercial:tipoproyecto_update' t.pk %}" class="btn btn-ghost btn-xs">Editar</a>
+          <a href="{% url 'comercial:tipoproyecto_delete' t.pk %}" class="btn btn-ghost btn-xs"
+             onclick="return confirm('¿Eliminar «{{ t.nombre }}»?')">✕</a>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
+  {% else %}
+  <div class="empty-state" style="padding:44px 24px;">
+    <div class="empty-state-icon">◱</div>
+    <div class="empty-state-text">Sin tipos de proyecto registrados.</div>
+    <a href="{% url 'comercial:tipoproyecto_create' %}" class="btn btn-primary btn-sm" style="margin-top:14px;">
+      + Crear primer tipo
+    </a>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

@@ -1,27 +1,56 @@
 /* ============================================================
-   sidebar.js — Toggle de visibilidad del menú lateral
+   sidebar.js — Menú flotante (overlay)
    ============================================================ */
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "sidebarCollapsed";
+  var body     = document.body;
+  var trigger  = document.getElementById("sidebarToggle");
+  var closeBtn = document.getElementById("sidebarClose");
+  var backdrop = document.getElementById("sidebarBackdrop");
+  var sidebar  = document.getElementById("appSidebar");
 
-  var body    = document.body;
-  var sidebar = document.querySelector(".sidebar");
-  var trigger = document.getElementById("sidebarToggle");
+  if (!trigger) return;
 
-  if (!sidebar || !trigger) return;
-
-  /* ── Restaurar estado guardado ── */
-  if (localStorage.getItem(STORAGE_KEY) === "1") {
-    body.classList.add("sidebar-collapsed");
+  function openSidebar() {
+    body.classList.add("sidebar-open");
+    trigger.setAttribute("aria-expanded", "true");
   }
 
-  /* ── Toggle al hacer clic ── */
+  function closeSidebar() {
+    body.classList.remove("sidebar-open");
+    trigger.setAttribute("aria-expanded", "false");
+  }
+
+  /* Botón hamburguesa — abre/cierra */
   trigger.addEventListener("click", function () {
-    var collapsed = body.classList.toggle("sidebar-collapsed");
-    localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
-    trigger.setAttribute("aria-expanded", !collapsed);
+    if (body.classList.contains("sidebar-open")) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
   });
+
+  /* Botón ✕ dentro del sidebar — siempre cierra */
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeSidebar);
+  }
+
+  /* Clic en el backdrop cierra */
+  if (backdrop) {
+    backdrop.addEventListener("click", closeSidebar);
+  }
+
+  /* Escape cierra */
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeSidebar();
+  });
+
+  /* Navegar a un enlace cierra el overlay */
+  if (sidebar) {
+    sidebar.querySelectorAll("a.nav-item").forEach(function (link) {
+      link.addEventListener("click", closeSidebar);
+    });
+  }
 
 })();

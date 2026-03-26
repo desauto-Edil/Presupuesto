@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "django",
+      "runtimeExecutable": "/bin/sleep",
+      "runtimeArgs": ["3600"],
+      "port": 8000
+    }
+  ]
+}

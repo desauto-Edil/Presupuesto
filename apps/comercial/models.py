@@ -2,10 +2,13 @@
 apps/comercial/models.py
 
 Dominio: gestión de la relación con el cliente desde el primer contacto
-hasta la creación del proyecto.
+hasta el seguimiento de solicitudes y proyectos de presupuesto.
 
   Cliente → ContactoCliente
-  Cliente → Solicitud → Proyecto (múltiples versiones)
+  Cliente → Solicitud → SolicitudArchivo
+  Solicitud → Proyecto (ForeignKey, versionado: N versiones por solicitud)
+
+Flujo: Solicitud → crear Proyecto (versión) → seleccionar Sistema → Despiece
 
 Dependencias:
   - apps.common.choices (EstadoSolicitud, EstadoProyecto, Moneda)
@@ -14,7 +17,6 @@ Dependencias:
 
 from django.db import models
 from django.utils import timezone
-from apps.common.choices import EstadoSolicitud, EstadoProyecto, Moneda
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +72,7 @@ class TipoProyecto(models.Model):
 
     class Meta:
         app_label = "comercial"
-        db_table  = "tipos_proyecto"
+        db_table = "tipos_proyecto"
 
     def __str__(self):
         return self.nombre
@@ -84,8 +86,10 @@ class Solicitud(models.Model):
     """
     Solicitud de presupuesto proveniente de Selford.
     El consecutivo es provisto por el usuario (no auto-generado).
-    Una solicitud puede tener múltiples versiones de proyecto.
+    Los archivos asociados se gestionan en SolicitudArchivo.
     """
+    from apps.common.choices import EstadoSolicitud
+
     consecutivo = models.CharField(
         max_length=30,
         unique=True,
@@ -128,41 +132,85 @@ class Solicitud(models.Model):
             self.contacto = self.cliente.contacto_principal
         super().save(*args, **kwargs)
 
-    @property
-    def version_actual(self):
-        """Retorna el proyecto marcado como versión actual, o el más reciente."""
-        return self.proyectos.filter(es_version_actual=True).first()
+
+# ---------------------------------------------------------------------------
+# ARCHIVOS DE SOLICITUD
+# ---------------------------------------------------------------------------
+
+class SolicitudArchivo(models.Model):
+    """
+    Archivo adjunto a una Solicitud.
+    Centraliza toda la documentación en la solicitud, sin depender de proyectos.
+    """
+    solicitud = models.ForeignKey(
+        Solicitud, on_delete=models.CASCADE, related_name="archivos",
+        verbose_name="Solicitud",
+    )
+    archivo = models.FileField(
+        upload_to="solicitudes/archivos/%Y/%m/",
+        verbose_name="Archivo",
+    )
+    nombre = models.CharField(max_length=300, verbose_name="Nombre del archivo")
+    fecha_subida = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de subida")
+    usuario = models.ForeignKey(
+        "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="archivos_solicitud",
+        verbose_name="Subido por",
+    )
+
+    class Meta:
+        app_label = "comercial"
+        db_table = "solicitudes_archivos"
+        verbose_name = "Archivo de solicitud"
+        verbose_name_plural = "Archivos de solicitud"
+        ordering = ["-fecha_subida"]
+
+    def __str__(self):
+        return f"{self.nombre} — {self.solicitud.consecutivo}"
 
     @property
-    def total_versiones(self):
-        return self.proyectos.count()
+    def extension(self):
+        import os
+        _, ext = os.path.splitext(self.archivo.name)
+        return ext.lower().lstrip(".")
 
 
 # ---------------------------------------------------------------------------
-# PROYECTOS  (múltiples versiones por solicitud)
+# PROYECTOS
 # ---------------------------------------------------------------------------
 
 class Proyecto(models.Model):
     """
-    Versión de un proyecto asociada a una Solicitud.
-    Una solicitud puede tener múltiples versiones; solo una es la actual.
+    Versión de presupuesto para una Solicitud.
+    Una Solicitud puede tener N Proyectos (versiones); solo uno es el actual.
+
+    Flujo: Solicitud → Proyecto → ProyectoSistema → Despiece → APU
     """
+    from apps.common.choices import EstadoProyecto, Moneda
+
     consecutivo = models.CharField(max_length=30, unique=True)
+
+    # ── Relación con solicitud (versionado) ──────────────────────────────────
     solicitud = models.ForeignKey(
         Solicitud,
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        related_name="proyectos",
+        related_name="proyectos",          # solicitud.proyectos.all()
     )
     version = models.PositiveIntegerField(
         default=1,
         verbose_name="Versión",
+        help_text="Número de versión dentro de la solicitud",
     )
     es_version_actual = models.BooleanField(
         default=True,
+        db_index=True,
         verbose_name="Es versión actual",
+        help_text="Solo una versión por solicitud puede ser la actual",
     )
+
+    # ── Datos del proyecto ───────────────────────────────────────────────────
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos")
     creado_por = models.ForeignKey(
         "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
@@ -178,7 +226,7 @@ class Proyecto(models.Model):
     area_total_m2 = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)
     perimetro_ml = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)
 
-    # Variables financieras (predeterminadas, editables)
+    # ── Parámetros financieros ───────────────────────────────────────────────
     trm = models.DecimalField(max_digits=14, decimal_places=4, default=4200)
     margen_comercial_pct = models.DecimalField(max_digits=8, decimal_places=4, default=130)
     iva_pct = models.DecimalField(max_digits=8, decimal_places=4, default=19)
@@ -190,10 +238,7 @@ class Proyecto(models.Model):
     estado = models.CharField(
         max_length=25, choices=EstadoProyecto.choices, default=EstadoProyecto.SOLICITUD
     )
-    motivo_devolucion = models.TextField(
-        blank=True, null=True,
-        help_text="Motivo de rechazo o devolución por parte del Administrador o Compras",
-    )
+    motivo_devolucion = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -203,11 +248,24 @@ class Proyecto(models.Model):
         ordering = ["-version"]
 
     def __str__(self):
-        return f"{self.consecutivo} — {self.nombre} (v{self.version})"
+        return f"{self.consecutivo} v{self.version} — {self.nombre}"
 
     def save(self, *args, **kwargs):
         if not self.pk and not self.consecutivo:
             self.consecutivo = self.__class__.siguiente_consecutivo()
+        # Auto-versionado: solo cuando se crea un proyecto vinculado a solicitud
+        if not self.pk and self.solicitud_id:
+            ultimo = (
+                Proyecto.objects.filter(solicitud_id=self.solicitud_id)
+                .order_by("-version")
+                .first()
+            )
+            self.version = (ultimo.version + 1) if ultimo else 1
+            # Marcar todas las versiones anteriores como no actuales
+            Proyecto.objects.filter(
+                solicitud_id=self.solicitud_id
+            ).update(es_version_actual=False)
+            self.es_version_actual = True
         super().save(*args, **kwargs)
 
     @classmethod
@@ -217,91 +275,6 @@ class Proyecto(models.Model):
         last = cls.objects.filter(consecutivo__startswith=prefix).order_by("-consecutivo").first()
         num = (int(last.consecutivo.split("-")[-1]) + 1) if last else 1
         return f"{prefix}{num:04d}"
-
-    # ── Transiciones de estado ──────────────────────────────────────────────
-
-    def avanzar_a_despiece(self):
-        if self.estado == EstadoProyecto.SOLICITUD:
-            self.estado = EstadoProyecto.DESPIECE
-            self.save(update_fields=["estado", "updated_at"])
-
-    def avanzar_a_despiece_validado(self):
-        if self.estado in (EstadoProyecto.DESPIECE, EstadoProyecto.EN_REVISION_COMPRAS):
-            self.estado = EstadoProyecto.DESPIECE_VALIDADO
-            self.save(update_fields=["estado", "updated_at"])
-
-    def avanzar_a_apu(self):
-        if self.estado == EstadoProyecto.DESPIECE_VALIDADO:
-            self.estado = EstadoProyecto.APU
-            self.save(update_fields=["estado", "updated_at"])
-
-    def avanzar_a_apu_generado(self):
-        if self.estado == EstadoProyecto.APU:
-            self.estado = EstadoProyecto.APU_GENERADO
-            self.save(update_fields=["estado", "updated_at"])
-
-    def aprobar_cotizacion(self):
-        if self.estado == EstadoProyecto.APU_GENERADO:
-            self.estado = EstadoProyecto.COTIZADO
-            self.motivo_devolucion = None
-            self.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
-
-    def rechazar_apu(self, motivo: str = ""):
-        if self.estado == EstadoProyecto.APU_GENERADO:
-            self.estado = EstadoProyecto.APU
-            self.motivo_devolucion = motivo
-            self.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
-
-    def avanzar_a_cotizado(self):
-        if self.estado == EstadoProyecto.COTIZADO:
-            self.estado = EstadoProyecto.APROBADO
-            self.save(update_fields=["estado", "updated_at"])
-
-
-# ---------------------------------------------------------------------------
-# ARCHIVOS DE PROYECTO
-# ---------------------------------------------------------------------------
-
-class ProyectoArchivo(models.Model):
-    """
-    Archivo adjunto a una versión de proyecto.
-    Sin límite de cantidad ni restricción de formato.
-    """
-    proyecto = models.ForeignKey(
-        Proyecto, on_delete=models.CASCADE, related_name="archivos",
-        verbose_name="Proyecto",
-    )
-    archivo = models.FileField(
-        upload_to="proyectos/archivos/%Y/%m/",
-        verbose_name="Archivo",
-    )
-    nombre = models.CharField(
-        max_length=300,
-        verbose_name="Nombre del archivo",
-        help_text="Nombre descriptivo del archivo",
-    )
-    fecha_subida = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de subida")
-    usuario = models.ForeignKey(
-        "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
-        null=True, blank=True, related_name="archivos_subidos",
-        verbose_name="Subido por",
-    )
-
-    class Meta:
-        app_label = "comercial"
-        db_table = "proyectos_archivos"
-        verbose_name = "Archivo de proyecto"
-        verbose_name_plural = "Archivos de proyecto"
-        ordering = ["-fecha_subida"]
-
-    def __str__(self):
-        return f"{self.nombre} — {self.proyecto.consecutivo}"
-
-    @property
-    def extension(self):
-        import os
-        _, ext = os.path.splitext(self.archivo.name)
-        return ext.lower().lstrip(".")
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +298,7 @@ class LogSistema(models.Model):
     accion = models.CharField(
         max_length=100,
         verbose_name="Acción",
-        help_text="Código de acción: CREAR_SOLICITUD, CREAR_VERSION, SUBIR_ARCHIVO, etc.",
+        help_text="Código de acción: CREAR_SOLICITUD, SUBIR_ARCHIVO, etc.",
     )
     descripcion = models.TextField(
         blank=True,

@@ -1,11 +1,46 @@
 {% extends "base.html" %}
-{% block title %}{% if object %}Editar{% else %}Crear{% endif %} Tipo de proyecto{% endblock %}
+{% block title %}{% if object %}Editar{% else %}Nuevo{% endif %} Tipo de proyecto{% endblock %}
+{% block page_title %}{% if object %}Editar tipo{% else %}Nuevo tipo{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'comercial:tipoproyecto_list' %}" style="color:inherit;text-decoration:none;">Tipos de proyecto</a>
+  → {% if object %}{{ object.nombre }}{% else %}Nuevo{% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{% url 'comercial:tipoproyecto_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+{% endblock %}
+
 {% block content %}
-<h2>{% if object %}Editar tipo de proyecto{% else %}Nuevo tipo de proyecto{% endif %}</h2>
-<div class="card mt-3"><div class="card-body">
-<form method="post">{% csrf_token %}
-{% for f in form %}<div class="mb-3"><label class="form-label">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors }}</div>{% endif %}</div>{% endfor %}
-<button type="submit" class="btn btn-primary">Guardar</button>
-<a href="{% url 'comercial:tipoproyecto_list' %}" class="btn btn-secondary">Volver</a>
-</form></div></div>
+<div class="form-page-card fade-up" style="max-width:520px;">
+  <div class="form-page-header">
+    <span class="form-page-title">
+      {% if object %}{{ object.nombre }}{% else %}Nuevo tipo de proyecto{% endif %}
+    </span>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-page-body">
+      <div class="form-group">
+        <label>Código <span style="color:var(--brand-red)">*</span></label>
+        {{ form.codigo }}
+        {% if form.codigo.errors %}<div class="invalid-feedback d-block">{{ form.codigo.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label>Nombre <span style="color:var(--brand-red)">*</span></label>
+        {{ form.nombre }}
+        {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="form-check" style="margin-top:8px;">
+        {{ form.activo }}
+        <label class="form-check-label" style="font-size:13px;">Activo</label>
+      </div>
+    </div>
+    <div class="form-page-footer">
+      <a href="{% url 'comercial:tipoproyecto_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+      <button type="submit" class="btn btn-primary btn-sm">
+        {% if object %}Guardar cambios{% else %}Crear tipo{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
 {% endblock %}

@@ -8,362 +8,381 @@
 {% endblock %}
 
 {% block topbar_actions %}
+  {% if proyecto_actual %}
+    <a href="{% url 'presupuestos:powergrip_wizard' proyecto_actual.pk %}" class="btn btn-primary btn-sm">⊞ Despiece</a>
+    <a href="{% url 'comercial:proyecto_detail' proyecto_actual.pk %}" class="btn btn-ghost btn-sm">◫ Proyecto</a>
+  {% endif %}
+  <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}" class="btn btn-ghost btn-sm">+ Versión</a>
   <a href="{% url 'comercial:solicitud_update' solicitud.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .det-grid {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 14px;
+    }
+    .det-col { display: flex; flex-direction: column; gap: 14px; }
+
+    .archivo-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+    }
+    .archivo-item:last-child { border-bottom: none; }
+    .archivo-ext {
+        width: 32px; height: 32px; border-radius: 6px;
+        background: var(--theme-accent-pale);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; flex-shrink: 0;
+    }
+    .archivo-nombre {
+        font-weight: 500; color: var(--ink);
+        text-decoration: none; flex: 1;
+    }
+    .archivo-nombre:hover { color: var(--theme-accent); }
+    .archivo-meta { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+    .archivo-del {
+        background: none; border: none; cursor: pointer;
+        color: rgba(14,17,23,0.28); font-size: 13px; padding: 4px;
+        line-height: 1; border-radius: 4px; transition: color .15s;
+    }
+    .archivo-del:hover { color: var(--brand-red); }
+
+    .upload-bar {
+        display: flex; gap: 8px; align-items: center;
+        flex-wrap: wrap; padding: 14px 16px;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+    }
+    .upload-bar input[type=file] { flex: 0 0 auto; }
+    .upload-bar input[type=text] { flex: 1; min-width: 160px; }
+
+    @media (max-width: 768px) {
+        .det-grid { grid-template-columns: 1fr; }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
 
 <!-- ── CABECERA ── -->
 <div class="project-header fade-up">
-  <div>
-    <div class="project-id">{{ solicitud.consecutivo }}</div>
-    <div class="project-name">{{ solicitud.nombre }}</div>
-    <div class="project-client">{{ solicitud.cliente.razon_social }}</div>
-  </div>
-
-  <div class="project-divider"></div>
-
-  <div>
-    <div class="project-meta-label">Estado</div>
-    <span class="badge-status
-      {% if solicitud.estado == 'EN_GESTION' %}bs-pendiente
-      {% elif solicitud.estado == 'APROBADA' %}bs-validado
-      {% elif solicitud.estado == 'RECHAZADA' %}bs-rechazado
-      {% else %}bs-cerrado{% endif %}"
-      style="font-size:12px;padding:4px 12px;">
-      {{ solicitud.get_estado_display }}
-    </span>
-  </div>
-
-  <div class="project-divider"></div>
-  <div>
-    <div class="project-meta-label">Link Selford</div>
-    <a href="{{ solicitud.link_selford }}" target="_blank" rel="noopener"
-       style="font-size:12px;color:var(--brand-lime);">
-      Ver en Selford ↗
-    </a>
-  </div>
-
-  {% if solicitud.fecha_entrega %}
-  <div class="project-divider"></div>
-  <div>
-    <div class="project-meta-label">Fecha entrega</div>
-    <div class="project-meta-value">{{ solicitud.fecha_entrega|date:"d/m/Y" }}</div>
-  </div>
-  {% endif %}
-
-  <div class="project-divider"></div>
-  <div>
-    <div class="project-meta-label">Versiones</div>
-    <div class="project-meta-value" style="font-size:20px;font-weight:700;">
-      {{ proyectos|length }}
+    <div>
+        <div class="project-id">{{ solicitud.consecutivo }}</div>
+        <div class="project-name">{{ solicitud.nombre }}</div>
+        <div class="project-client">{{ solicitud.cliente.razon_social }}</div>
     </div>
-  </div>
 
-  <div class="project-status-chip">🔒 {{ solicitud.consecutivo }}</div>
+    <div class="project-divider"></div>
+
+    <div>
+        <div class="project-meta-label">Estado</div>
+        <span class="badge-status
+            {% if solicitud.estado == 'EN_GESTION' %}bs-pendiente
+            {% elif solicitud.estado == 'APROBADA' %}bs-validado
+            {% elif solicitud.estado == 'RECHAZADA' %}bs-cerrado
+            {% else %}bs-inactivo{% endif %}"
+            style="font-size:12px;padding:4px 12px;">
+            {{ solicitud.get_estado_display }}
+        </span>
+    </div>
+
+    <div class="project-divider"></div>
+    <div>
+        <div class="project-meta-label">Link Selford</div>
+        <a href="{{ solicitud.link_selford }}" target="_blank" rel="noopener"
+           style="font-size:12px;color:var(--brand-lime);">
+            Ver en Selford ↗
+        </a>
+    </div>
+
+    {% if solicitud.fecha_entrega %}
+    <div class="project-divider"></div>
+    <div>
+        <div class="project-meta-label">Fecha entrega</div>
+        <div class="project-meta-value">{{ solicitud.fecha_entrega|date:"d/m/Y" }}</div>
+    </div>
+    {% endif %}
+
+    <div class="project-divider"></div>
+    <div>
+        <div class="project-meta-label">Archivos</div>
+        <div class="project-meta-value" style="font-size:20px;font-weight:700;">
+            {{ archivos|length }}
+        </div>
+    </div>
+
+    <div class="project-status-chip">🔒 {{ solicitud.consecutivo }}</div>
 </div>
 
-<!-- ── CONTENIDO ── -->
-<div style="display:grid;grid-template-columns:1fr 300px;gap:14px;" class="fade-up-1">
 
-  <!-- ── COLUMNA PRINCIPAL ── -->
-  <div style="display:flex;flex-direction:column;gap:14px;">
+<!-- ── CONTENIDO EN DOS COLUMNAS ── -->
+<div class="det-grid fade-up-1">
 
-    <!-- Descripción -->
-    {% if solicitud.descripcion %}
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Descripción</span></div>
-      <div style="padding:16px 20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;">
-        {{ solicitud.descripcion }}
-      </div>
-    </div>
-    {% endif %}
+    <!-- ── COLUMNA PRINCIPAL ── -->
+    <div class="det-col">
 
-    <!-- ─────────────────────────────────────────── -->
-    <!--  VERSIONES DEL PROYECTO                    -->
-    <!-- ─────────────────────────────────────────── -->
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-title">Versiones del proyecto</span>
-        <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
-           class="btn btn-primary btn-sm"
-           style="background:var(--brand-lime);border-color:var(--brand-lime);color:#1a1a1a;">
-          + Nueva versión
-        </a>
-      </div>
-
-      {% if proyectos %}
-      <div style="padding:0;">
-        {% for p in proyectos %}
-        <div style="padding:14px 20px;border-bottom:1px solid var(--border);
-                    {% if p.es_version_actual %}background:rgba(86,83,148,0.04);{% endif %}">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-
-            <!-- Versión + info -->
-            <div style="display:flex;align-items:center;gap:14px;">
-              <!-- Badge versión -->
-              <div style="width:40px;height:40px;border-radius:8px;
-                          {% if p.es_version_actual %}
-                          background:var(--brand-violet);color:#fff;
-                          {% else %}
-                          background:rgba(86,83,148,0.1);color:var(--brand-violet);
-                          {% endif %}
-                          display:flex;align-items:center;justify-content:center;
-                          font-family:'Syne',sans-serif;font-weight:800;font-size:13px;
-                          flex-shrink:0;">
-                v{{ p.version }}
-              </div>
-
-              <div>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                  <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;
-                               color:var(--brand-violet);">{{ p.consecutivo }}</span>
-                  {% if p.es_version_actual %}
-                  <span style="font-size:10px;font-weight:700;letter-spacing:0.06em;
-                               text-transform:uppercase;background:var(--brand-lime);
-                               color:#1a1a1a;padding:2px 8px;border-radius:20px;">
-                    ACTUAL
-                  </span>
-                  {% endif %}
-                </div>
-                <div style="font-size:13px;font-weight:500;margin-top:2px;">{{ p.nombre }}</div>
-                <div style="margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                  <span class="badge-status bs-solicitud" style="font-size:11px;">
-                    {{ p.get_estado_display }}
-                  </span>
-                  {% if p.tipo_proyecto %}
-                  <span style="font-size:11px;color:var(--ink-soft);">{{ p.tipo_proyecto.nombre }}</span>
-                  {% endif %}
-                  <span style="font-size:11px;color:var(--ink-soft);">
-                    {{ p.created_at|date:"d/m/Y" }} · por {{ p.creado_por|default:"—" }}
-                  </span>
-                </div>
-              </div>
+        <!-- Descripción -->
+        {% if solicitud.descripcion %}
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Descripción</span></div>
+            <div style="padding:16px 20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;">
+                {{ solicitud.descripcion }}
             </div>
+        </div>
+        {% endif %}
 
-            <!-- Acciones -->
-            <div style="display:flex;gap:8px;align-items:center;">
-              {% if p.archivos.count %}
-              <span style="font-size:11px;color:var(--ink-soft);">
-                {{ p.archivos.count }} archivo{{ p.archivos.count|pluralize }}
-              </span>
-              {% endif %}
-              <a href="{% url 'comercial:proyecto_detail' p.pk %}"
-                 class="btn btn-ghost btn-sm">Ver proyecto →</a>
-            </div>
-          </div>
-
-          <!-- ── Archivos de esta versión ── -->
-          {% if p.archivos.all %}
-          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;
-                        letter-spacing:0.07em;color:var(--ink-soft);margin-bottom:8px;">
-              Archivos adjuntos
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;">
-              {% for archivo in p.archivos.all %}
-              <div style="display:flex;align-items:center;gap:6px;background:rgba(14,17,23,0.04);
-                          border:1px solid var(--border);border-radius:6px;padding:5px 10px;
-                          font-size:12px;">
-                <span style="font-size:14px;">
-                  {% if archivo.extension == 'pdf' %}📄
-                  {% elif archivo.extension in 'jpg,jpeg,png,gif,webp' %}🖼️
-                  {% elif archivo.extension in 'xls,xlsx,csv' %}📊
-                  {% elif archivo.extension in 'doc,docx' %}📝
-                  {% else %}📎{% endif %}
+        <!-- ── ARCHIVOS ADJUNTOS ── -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Archivos adjuntos</span>
+                {% if archivos %}
+                <span style="font-size:11px;color:var(--ink-soft);">
+                    {{ archivos|length }} archivo{{ archivos|length|pluralize }}
                 </span>
-                <a href="{{ archivo.archivo.url }}" target="_blank"
-                   style="color:var(--ink);text-decoration:none;font-weight:500;">
-                  {{ archivo.nombre }}
-                </a>
-                <span style="color:rgba(14,17,23,0.35);">·</span>
-                <span style="color:var(--ink-soft);">{{ archivo.fecha_subida|date:"d/m" }}</span>
-                <form method="post"
-                      action="{% url 'comercial:proyecto_archivo_delete' archivo.pk %}"
-                      style="display:inline;"
-                      onsubmit="return confirm('¿Eliminar este archivo?')">
-                  {% csrf_token %}
-                  <button type="submit"
-                          style="background:none;border:none;cursor:pointer;
-                                 color:rgba(14,17,23,0.3);padding:0 2px;font-size:12px;"
-                          title="Eliminar archivo">✕</button>
-                </form>
-              </div>
-              {% endfor %}
+                {% endif %}
             </div>
-          </div>
-          {% endif %}
 
-          <!-- ── Subir archivo a esta versión ── -->
-          <div style="margin-top:10px;">
+            {% if archivos %}
+            <div>
+                {% for archivo in archivos %}
+                <div class="archivo-item">
+                    <div class="archivo-ext">
+                        {% if archivo.extension == 'pdf' %}📄
+                        {% elif archivo.extension in 'jpg,jpeg,png,gif,webp' %}🖼️
+                        {% elif archivo.extension in 'xls,xlsx,csv' %}📊
+                        {% elif archivo.extension in 'doc,docx' %}📝
+                        {% else %}📎{% endif %}
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <a href="{{ archivo.archivo.url }}" target="_blank"
+                           class="archivo-nombre">{{ archivo.nombre }}</a>
+                        <div class="archivo-meta">
+                            {{ archivo.extension|upper }} ·
+                            {{ archivo.fecha_subida|date:"d/m/Y H:i" }}
+                            {% if archivo.usuario %} · {{ archivo.usuario }}{% endif %}
+                        </div>
+                    </div>
+                    <form method="post"
+                          action="{% url 'comercial:solicitud_archivo_delete' archivo.pk %}"
+                          onsubmit="return confirm('¿Eliminar «{{ archivo.nombre }}»?')">
+                        {% csrf_token %}
+                        <button type="submit" class="archivo-del" title="Eliminar">✕</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding:28px 20px;">
+                <div class="empty-state-icon" style="font-size:24px;">📎</div>
+                <div class="empty-state-text">Sin archivos adjuntos.</div>
+            </div>
+            {% endif %}
+
+            <!-- ── Subir archivo ── -->
             <form method="post"
-                  action="{% url 'comercial:proyecto_archivo_create' p.pk %}"
+                  action="{% url 'comercial:solicitud_archivo_create' solicitud.pk %}"
                   enctype="multipart/form-data"
-                  style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              {% csrf_token %}
-              <input type="file" name="archivo" class="form-control form-control-sm"
-                     style="max-width:220px;" required>
-              <input type="text" name="nombre" class="form-control form-control-sm"
-                     placeholder="Nombre descriptivo" style="max-width:200px;" required>
-              <button type="submit" class="btn btn-ghost btn-sm">↑ Subir</button>
+                  class="upload-bar">
+                {% csrf_token %}
+                {{ archivo_form.archivo }}
+                {{ archivo_form.nombre }}
+                <button type="submit" class="btn btn-ghost btn-sm">↑ Subir</button>
             </form>
-          </div>
-
         </div>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div style="padding:28px 20px;display:flex;align-items:center;
-                  justify-content:space-between;flex-wrap:wrap;gap:16px;">
-        <div>
-          <div style="font-size:13.5px;font-weight:500;margin-bottom:4px;">
-            Esta solicitud aún no tiene versiones de proyecto.
-          </div>
-          <div style="font-size:12px;color:var(--ink-soft);">
-            Crea la primera versión para comenzar a presupuestar.
-          </div>
-        </div>
-        <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
-           class="btn btn-primary btn-sm"
-           style="background:var(--brand-lime);border-color:var(--brand-lime);
-                  color:#1a1a1a;white-space:nowrap;">
-          + Crear primera versión
-        </a>
-      </div>
-      {% endif %}
-    </div>
-    <!-- /VERSIONES -->
 
-    <!-- ── HISTORIAL / LOGS ── -->
-    {% if logs %}
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-title">Historial de actividad</span>
-        <span style="font-size:11px;color:var(--ink-soft);">Últimos {{ logs|length }} eventos</span>
-      </div>
-      <div style="padding:0;">
-        {% for log in logs %}
-        <div style="padding:10px 20px;border-bottom:1px solid var(--border);
-                    display:flex;align-items:flex-start;gap:12px;">
-          <div style="width:6px;height:6px;border-radius:50%;background:var(--brand-violet);
-                      margin-top:6px;flex-shrink:0;"></div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:12.5px;font-weight:500;">
-              {{ log.descripcion|default:log.accion }}
+        <!-- ── HISTORIAL DE ACTIVIDAD ── -->
+        {% if logs %}
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Historial de actividad</span>
+                <span style="font-size:11px;color:var(--ink-soft);">
+                    Últimos {{ logs|length }} eventos
+                </span>
             </div>
-            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
-              {{ log.usuario }} · {{ log.created_at|date:"d/m/Y H:i" }}
+            <div>
+                {% for log in logs %}
+                <div style="padding:10px 20px;border-bottom:1px solid var(--border);
+                            display:flex;align-items:flex-start;gap:12px;">
+                    <div style="width:6px;height:6px;border-radius:50%;
+                                background:var(--theme-accent);margin-top:6px;flex-shrink:0;"></div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:12.5px;font-weight:500;">
+                            {{ log.descripcion|default:log.accion }}
+                        </div>
+                        <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
+                            {{ log.usuario }} · {{ log.created_at|date:"d/m/Y H:i" }}
+                        </div>
+                    </div>
+                    <span style="font-size:10px;font-family:monospace;
+                                 color:rgba(14,17,23,0.35);white-space:nowrap;padding-top:3px;">
+                        {{ log.accion }}
+                    </span>
+                </div>
+                {% endfor %}
             </div>
-          </div>
-          <span style="font-size:10px;font-family:monospace;color:rgba(14,17,23,0.35);
-                       white-space:nowrap;padding-top:3px;">{{ log.accion }}</span>
         </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Observaciones -->
-    {% if solicitud.observaciones %}
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Observaciones</span></div>
-      <div style="padding:16px 20px;font-size:13px;color:var(--ink-soft);line-height:1.6;">
-        {{ solicitud.observaciones }}
-      </div>
-    </div>
-    {% endif %}
-
-  </div>
-
-  <!-- ── COLUMNA LATERAL ── -->
-  <div style="display:flex;flex-direction:column;gap:14px;">
-
-    <!-- Datos del sistema -->
-    <div class="panel">
-      <div class="panel-header accent-top-violet" style="border-radius:var(--radius) var(--radius) 0 0;">
-        <span class="panel-title">Datos del sistema</span>
-        <span style="font-size:10px;color:rgba(14,17,23,0.35);">🔒 Solo lectura</span>
-      </div>
-
-      <div class="summary-line">
-        <span class="s-label">Consecutivo Selford</span>
-        <span class="s-value" style="font-family:'Courier New',monospace;
-              font-size:12px;color:var(--brand-violet);">{{ solicitud.consecutivo }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Estado</span>
-        <span class="badge-status
-          {% if solicitud.estado == 'EN_GESTION' %}bs-pendiente
-          {% elif solicitud.estado == 'APROBADA' %}bs-validado
-          {% else %}bs-cerrado{% endif %}">
-          {{ solicitud.get_estado_display }}
-        </span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Creado por</span>
-        <span class="s-value" style="font-size:12px;">{{ solicitud.creado_por|default:"—" }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Fecha registro</span>
-        <span class="s-value" style="font-size:12px;">{{ solicitud.created_at|date:"d/m/Y" }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Actualizado</span>
-        <span class="s-value" style="font-size:12px;">{{ solicitud.updated_at|date:"d/m/Y H:i" }}</span>
-      </div>
-    </div>
-
-    <!-- Resumen versiones -->
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Resumen versiones</span></div>
-      {% if proyectos %}
-      {% for p in proyectos %}
-      <div class="summary-line">
-        <span class="s-label" style="display:flex;align-items:center;gap:6px;">
-          <span style="font-weight:700;color:{% if p.es_version_actual %}var(--brand-violet){% else %}var(--ink-soft){% endif %};">
-            v{{ p.version }}
-          </span>
-          {% if p.es_version_actual %}
-          <span style="font-size:9px;background:var(--brand-lime);color:#1a1a1a;
-                       padding:1px 6px;border-radius:10px;font-weight:700;">ACTUAL</span>
-          {% endif %}
-        </span>
-        <span class="badge-status bs-solicitud" style="font-size:10px;">
-          {{ p.get_estado_display }}
-        </span>
-      </div>
-      {% endfor %}
-      {% else %}
-      <div style="padding:14px 18px;font-size:12px;color:var(--ink-soft);">
-        Sin versiones todavía.
-      </div>
-      {% endif %}
-    </div>
-
-    <!-- Contacto -->
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Contacto</span></div>
-      {% if solicitud.contacto %}
-      <div style="padding:14px 18px;">
-        <div style="font-weight:500;font-size:13.5px;">{{ solicitud.contacto.nombre }}</div>
-        {% if solicitud.contacto.cargo %}
-        <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">{{ solicitud.contacto.cargo }}</div>
         {% endif %}
-        {% if solicitud.contacto.email %}
-        <div style="font-size:12px;color:var(--brand-violet);margin-top:4px;">{{ solicitud.contacto.email }}</div>
+
+        <!-- Observaciones -->
+        {% if solicitud.observaciones %}
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Observaciones</span></div>
+            <div style="padding:16px 20px;font-size:13px;color:var(--ink-soft);line-height:1.6;">
+                {{ solicitud.observaciones }}
+            </div>
+        </div>
         {% endif %}
-        {% if solicitud.contacto.telefono %}
-        <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">{{ solicitud.contacto.telefono }}</div>
-        {% endif %}
-      </div>
-      {% else %}
-      <div class="empty-state" style="padding:20px;">
-        <div class="empty-state-text">Sin contacto asignado.</div>
-      </div>
-      {% endif %}
+
     </div>
 
-  </div>
+    <!-- ── COLUMNA LATERAL ── -->
+    <div class="det-col">
+
+        <!-- Datos del sistema -->
+        <div class="panel">
+            <div class="panel-header accent-top-theme"
+                 style="border-radius:var(--radius) var(--radius) 0 0;">
+                <span class="panel-title">Datos del sistema</span>
+                <span style="font-size:10px;color:rgba(14,17,23,0.35);">🔒 Solo lectura</span>
+            </div>
+            <div class="summary-line">
+                <span class="s-label">Consecutivo</span>
+                <span class="s-value"
+                      style="font-family:'Courier New',monospace;font-size:12px;
+                             color:var(--theme-accent);">{{ solicitud.consecutivo }}</span>
+            </div>
+            <div class="summary-line">
+                <span class="s-label">Estado</span>
+                <span class="badge-status
+                    {% if solicitud.estado == 'EN_GESTION' %}bs-pendiente
+                    {% elif solicitud.estado == 'APROBADA' %}bs-validado
+                    {% else %}bs-cerrado{% endif %}">
+                    {{ solicitud.get_estado_display }}
+                </span>
+            </div>
+            <div class="summary-line">
+                <span class="s-label">Creado por</span>
+                <span class="s-value" style="font-size:12px;">
+                    {{ solicitud.creado_por|default:"—" }}
+                </span>
+            </div>
+            <div class="summary-line">
+                <span class="s-label">Fecha registro</span>
+                <span class="s-value" style="font-size:12px;">
+                    {{ solicitud.created_at|date:"d/m/Y" }}
+                </span>
+            </div>
+            <div class="summary-line">
+                <span class="s-label">Última edición</span>
+                <span class="s-value" style="font-size:12px;">
+                    {{ solicitud.updated_at|date:"d/m/Y H:i" }}
+                </span>
+            </div>
+        </div>
+
+        <!-- ── VERSIONES DEL PROYECTO ── -->
+        <div class="panel">
+            <div class="panel-header accent-top-theme" style="border-radius:var(--radius) var(--radius) 0 0;">
+                <span class="panel-title">Versiones del proyecto</span>
+                <span style="font-size:10px;color:rgba(14,17,23,.35);">{{ proyectos|length }}</span>
+            </div>
+
+            {% if proyectos %}
+            <div>
+                {% for proy in proyectos %}
+                <div style="padding:11px 16px;border-bottom:1px solid var(--border);
+                            display:flex;align-items:flex-start;gap:10px;
+                            {% if proy.es_version_actual %}background:var(--theme-accent-pale);{% endif %}">
+
+                    <!-- versión badge -->
+                    <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;
+                                background:{% if proy.es_version_actual %}var(--theme-accent){% else %}var(--border){% endif %};
+                                display:flex;align-items:center;justify-content:center;
+                                font-family:'Syne',sans-serif;font-weight:800;font-size:11px;
+                                color:{% if proy.es_version_actual %}#fff{% else %}var(--ink-soft){% endif %};">
+                        v{{ proy.version }}
+                    </div>
+
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:12px;font-weight:600;color:var(--ink);
+                                    display:flex;align-items:center;gap:6px;">
+                            {{ proy.consecutivo }}
+                            {% if proy.es_version_actual %}
+                            <span style="font-size:9px;background:var(--theme-accent);color:#fff;
+                                         padding:1px 5px;border-radius:3px;font-weight:700;">ACTUAL</span>
+                            {% endif %}
+                        </div>
+                        <div style="font-size:11px;color:var(--ink-soft);margin-top:1px;
+                                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            {{ proy.nombre|truncatechars:28 }}
+                        </div>
+                        <div style="font-size:11px;color:rgba(14,17,23,.4);margin-top:2px;">
+                            {{ proy.get_estado_display }}
+                        </div>
+
+                        <!-- botones de acción -->
+                        <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;">
+                            <a href="{% url 'comercial:proyecto_detail' proy.pk %}"
+                               class="btn btn-ghost btn-xs">◫ Ver</a>
+                            <a href="{% url 'presupuestos:powergrip_wizard' proy.pk %}"
+                               class="btn btn-primary btn-xs">⊞ Despiece</a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding:20px 16px;">
+                <div class="empty-state-icon" style="font-size:20px;">◫</div>
+                <div class="empty-state-text" style="font-size:12px;">Sin versiones de proyecto.</div>
+            </div>
+            {% endif %}
+
+            <!-- Crear nueva versión -->
+            <div style="padding:10px 14px;border-top:1px solid var(--border);">
+                <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
+                   class="btn btn-primary btn-sm" style="width:100%;text-align:center;">
+                    + Crear versión
+                </a>
+            </div>
+        </div>
+
+        <!-- Contacto -->
+        <div class="panel">
+            <div class="panel-header"><span class="panel-title">Contacto</span></div>
+            {% if solicitud.contacto %}
+            <div style="padding:14px 18px;">
+                <div style="font-weight:500;font-size:13.5px;">{{ solicitud.contacto.nombre }}</div>
+                {% if solicitud.contacto.cargo %}
+                <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">
+                    {{ solicitud.contacto.cargo }}
+                </div>
+                {% endif %}
+                {% if solicitud.contacto.email %}
+                <div style="font-size:12px;color:var(--theme-accent);margin-top:4px;">
+                    {{ solicitud.contacto.email }}
+                </div>
+                {% endif %}
+                {% if solicitud.contacto.telefono %}
+                <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">
+                    {{ solicitud.contacto.telefono }}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding:20px;">
+                <div class="empty-state-text">Sin contacto asignado.</div>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
 </div>
 
 {% endblock %}
