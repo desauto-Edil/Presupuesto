@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}Editar sistema{% else %}Nuevo sistema{% endif %}{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}{% if form.instance.pk %}Editar sistema{% else %}Nuevo sistema{% endif %}{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'ingenieria:sistema_list' %}" style="color:inherit;text-decoration:none;">Sistemas</a>
+  · {% if form.instance.pk %}Editar{% else %}Nuevo{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-8 col-lg-6">
+    <div class="panel fade-up">
+      <div class="panel-header d-flex align-items-center gap-2">
+        <span style="font-size:16px; font-weight:700; color:var(--ink);">
+          {% if form.instance.pk %}Editar: {{ form.instance.nombre }}{% else %}Nuevo sistema{% endif %}
+        </span>
+      </div>
+      <div style="padding:24px;">
+        <form method="post">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+          <div class="msg-bar msg-error mb-3">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="row g-3 mb-3">
+            <div class="col-4">
+              <label class="form-label" style="font-size:12.5px;font-weight:600;">Código *</label>
+              {{ form.codigo }}
+              {% if form.codigo.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.codigo.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-8">
+              <label class="form-label" style="font-size:12.5px;font-weight:600;">Nombre *</label>
+              {{ form.nombre }}
+              {% if form.nombre.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.nombre.errors.0 }}</div>{% endif %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" style="font-size:12.5px;font-weight:600;">Línea de negocio *</label>
+            {{ form.linea_negocio }}
+            {% if form.linea_negocio.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.linea_negocio.errors.0 }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" style="font-size:12.5px;font-weight:600;">Descripción</label>
+            {{ form.descripcion }}
+          </div>
+
+          <div class="mb-4">
+            <div class="form-check">
+              {{ form.activo }}
+              <label class="form-check-label" style="font-size:13px;">Sistema activo</label>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 justify-content-end">
+            <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+            <button type="submit" class="btn btn-primary btn-sm">
+              {% if form.instance.pk %}Guardar cambios{% else %}Crear sistema{% endif %}
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

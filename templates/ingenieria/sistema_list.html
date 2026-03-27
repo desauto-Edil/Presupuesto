@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sistemas e Ingeniería{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Ingeniería{% endblock %}
+{% block breadcrumb %}Sistemas y Subsistemas{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/catalogos.css' %}" rel="stylesheet">
+<style>
+  /* ── Tarjeta sistema: header visual ── */
+  .sist-card-header {
+    position: relative;
+    background: linear-gradient(135deg, var(--theme-accent-pale) 0%, var(--surface-2) 100%);
+    border-radius: 16px 16px 0 0;
+    padding: 22px 20px 18px;
+    min-height: 88px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-bottom: 1px solid var(--sidebar-light-border);
+  }
+  .sist-card-codigo {
+    font-family: 'Lato';
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--theme-accent);
+    letter-spacing: .04em;
+    line-height: 1;
+  }
+  .sist-card-linea {
+    font-family: 'Lato';
+    font-size: 10px;
+    color: rgba(14,17,23,0.40);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+  .sist-card-nombre {
+    font-family: 'Lato';
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<div class="cat-dropdown-wrap">
+  <button class="btn btn-ghost btn-sm cat-dropdown-trigger" aria-expanded="false">
+    + Nuevo <span class="cat-chevron">▾</span>
+  </button>
+  <div class="cat-dropdown-menu" role="menu">
+
+    <button type="button"
+            class="cat-dropdown-item"
+            data-bs-toggle="modal"
+            data-bs-target="#modalSistema"
+            role="menuitem">
+      <span class="cat-dropdown-icon">◈</span>
+      <span>
+        <strong>Nuevo sistema</strong>
+        <small>Familia técnica de componentes</small>
+      </span>
+    </button>
+
+    <div class="cat-dropdown-divider"></div>
+
+    <button type="button"
+            class="cat-dropdown-item"
+            data-bs-toggle="modal"
+            data-bs-target="#modalSubsistema"
+            role="menuitem">
+      <span class="cat-dropdown-icon">⊞</span>
+      <span>
+        <strong>Nuevo subsistema</strong>
+        <small>Receta técnica dentro de un sistema</small>
+      </span>
+    </button>
+
+  </div>
+</div>
+{% endblock %}
+
+
+{% block content %}
+
+<!-- ── STATS BAR ── -->
+<div class="cat-stats-bar fade-up">
+  <div>
+    <div class="cat-stats-bar__title">
+      {{ sistemas|length }} sistema{{ sistemas|length|pluralize }}
+    </div>
+    <div class="cat-stats-bar__sub">
+      {{ subsistemas|length }} subsistema{{ subsistemas|length|pluralize }} registrado{{ subsistemas|length|pluralize }}
+    </div>
+  </div>
+  <div class="cat-stats-group">
+    <div class="cat-stat">
+      <div class="cat-stat__num">{{ sistemas|length }}</div>
+      <div class="cat-stat__label">sistemas</div>
+    </div>
+    <div class="cat-stat">
+      <div class="cat-stat__num">{{ subsistemas|length }}</div>
+      <div class="cat-stat__label">subsistemas</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── GRID DE SISTEMAS COMO TARJETAS ── -->
+{% if sistemas %}
+<div class="cat-grid fade-up-1" id="sistGrid">
+
+  {% for sis in sistemas %}
+  <div class="cat-card" data-name="{{ sis.nombre|lower }} {{ sis.codigo|lower }}">
+
+    <!-- Header visual con código -->
+    <div class="sist-card-header">
+      <div class="sist-card-codigo">{{ sis.codigo }}</div>
+      <div class="sist-card-linea">{{ sis.get_linea_negocio_display }}</div>
+      <span class="cat-card__status {% if sis.activo %}cat-card__status--activa{% else %}cat-card__status--inactiva{% endif %}">
+        {% if sis.activo %}● Activo{% else %}○ Inactivo{% endif %}
+      </span>
+    </div>
+
+    <!-- Cuerpo -->
+    <div class="cat-card__body">
+
+      <div class="sist-card-nombre">{{ sis.nombre }}</div>
+
+      <div class="cat-card__desc">
+        {{ sis.descripcion|default:"Sin descripción registrada." }}
+      </div>
+
+      <!-- Subsistemas de este sistema -->
+      {% with subs=sis.subsistemas.all %}
+      <div class="cat-card__count-row">
+        <div class="cat-card__count">
+          <span class="cat-card__count-num">{{ subs|length }}</span>
+          <span>subsistema{{ subs|length|pluralize }}</span>
+        </div>
+        {% if subs %}
+        <button class="cat-card__toggle"
+                data-target="subs-{{ sis.pk }}"
+                aria-expanded="false">
+          Ver lista <span class="cat-card__toggle-icon">▾</span>
+        </button>
+        {% endif %}
+      </div>
+
+      {% if subs %}
+      <div class="cat-prods" id="subs-{{ sis.pk }}">
+        <div class="cat-prods-inner">
+          {% for sub in subs %}
+          <div class="cat-prod-item">
+            <div class="cat-prod-item__left">
+              <span class="cat-prod-item__dot"></span>
+              <div>
+                <div class="cat-prod-item__name">{{ sub.nombre }}</div>
+                <div class="cat-prod-item__sub">{{ sub.codigo }}</div>
+              </div>
+            </div>
+            <div class="cat-prod-item__right">
+              <a href="{% url 'ingenieria:subsistema_update' sub.pk %}"
+                 class="btn btn-ghost btn-xs"
+                 title="Editar subsistema"
+                 style="font-size:11px;">✎</a>
+              <button class="btn btn-ghost btn-xs"
+                      data-bs-toggle="modal"
+                      data-bs-target="#deleteModal"
+                      data-delete-url="{% url 'ingenieria:subsistema_delete' sub.pk %}"
+                      data-delete-name="{{ sub.nombre }}"
+                      style="color:rgba(14,17,23,0.28);font-size:11px;">✕</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="cat-prods-empty">Sin subsistemas. Agrega el primero.</div>
+      {% endif %}
+      {% endwith %}
+
+    </div><!-- /.cat-card__body -->
+
+    <!-- Footer -->
+    <div class="cat-card__footer">
+      <button type="button"
+              class="btn btn-ghost btn-xs"
+              data-bs-toggle="modal"
+              data-bs-target="#modalSubsistema"
+              data-sistema-pk="{{ sis.pk }}"
+              data-sistema-nombre="{{ sis.nombre }}">
+        + Subsistema
+      </button>
+      <div class="cat-card__actions">
+        <a href="{% url 'ingenieria:sistema_update' sis.pk %}"
+           class="btn btn-ghost btn-xs" title="Editar sistema">✎ Editar</a>
+        <button class="btn btn-ghost btn-xs"
+                data-bs-toggle="modal"
+                data-bs-target="#deleteModal"
+                data-delete-url="{% url 'ingenieria:sistema_delete' sis.pk %}"
+                data-delete-name="{{ sis.nombre }}"
+                title="Eliminar sistema"
+                style="color:rgba(14,17,23,0.3);">✕</button>
+      </div>
+    </div>
+
+  </div><!-- /.cat-card -->
+  {% endfor %}
+
+</div><!-- /#sistGrid -->
+
+{% else %}
+<div class="cat-grid fade-up-1">
+  <div class="cat-empty">
+    <div class="cat-empty__icon">◈</div>
+    <div class="cat-empty__title">Sin sistemas registrados</div>
+    <div class="cat-empty__sub">
+      Los sistemas agrupan subsistemas técnicos que definen las recetas de componentes para presupuestar.
+    </div>
+    <button type="button"
+            class="btn btn-primary btn-sm"
+            data-bs-toggle="modal"
+            data-bs-target="#modalSistema">
+      + Crear primer sistema
+    </button>
+  </div>
+</div>
+{% endif %}
+
+
+<!-- ════════════════════════════════════════════════════════
+     MODAL — CREAR SISTEMA
+════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalSistema" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header cat-modal-header">
+        <h5 class="modal-title">Nuevo sistema</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'ingenieria:sistema_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código <span style="color:var(--red)">*</span></label>
+              {{ create_form.codigo }}
+            </div>
+            <div class="form-group">
+              <label>Nombre <span style="color:var(--red)">*</span></label>
+              {{ create_form.nombre }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Línea de negocio <span style="color:var(--red)">*</span></label>
+            {{ create_form.linea_negocio }}
+          </div>
+
+          <div class="form-group">
+            <label>Descripción</label>
+            {{ create_form.descripcion }}
+          </div>
+
+          <div class="form-group">
+            <div class="form-check">
+              {{ create_form.activo }}
+              <label class="form-check-label" style="font-size:13px;">Sistema activo</label>
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar sistema</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════
+     MODAL — CREAR SUBSISTEMA
+════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalSubsistema" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header cat-modal-header">
+        <h5 class="modal-title">Nuevo subsistema</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'ingenieria:subsistema_create' %}">
+        {% csrf_token %}
+        <div class="modal-body">
+
+          <div class="form-group">
+            <label>Sistema <span style="color:var(--red)">*</span></label>
+            {{ create_subsistema_form.sistema }}
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código <span style="color:var(--red)">*</span></label>
+              {{ create_subsistema_form.codigo }}
+            </div>
+            <div class="form-group">
+              <label>Nombre <span style="color:var(--red)">*</span></label>
+              {{ create_subsistema_form.nombre }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Descripción</label>
+            {{ create_subsistema_form.descripcion }}
+          </div>
+
+          <div class="form-group">
+            <div class="form-check">
+              {{ create_subsistema_form.activo }}
+              <label class="form-check-label" style="font-size:13px;">Subsistema activo</label>
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar subsistema</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script src="{% static 'js/catalogos.js' %}"></script>
+<script>
+// Pre-selecciona el sistema cuando se hace clic en "+ Subsistema" de una tarjeta
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('[data-sistema-pk]');
+  if (!btn) return;
+  const pk = btn.dataset.sistemaPk;
+  const select = document.querySelector('#modalSubsistema select[name="sistema"]');
+  if (select && pk) select.value = pk;
+});
+</script>
+{% endblock %}

@@ -75,7 +75,7 @@ class LoginUsuarioView(View):
 
     def get(self, request):
         if "usuario_id" in request.session:
-            return redirect("comercial:proyecto_list")
+            return redirect("comercial:dashboard")
         return render(request, self.template_name)
 
     def post(self, request):
@@ -90,7 +90,7 @@ class LoginUsuarioView(View):
                 request.session["usuario_nombre"] = usuario.nombre_completo
                 request.session["unidad_negocio"] = usuario.unidad_negocio
                 
-                return redirect("comercial:proyecto_list") # Redirigir al inicio real
+                return redirect("comercial:dashboard") # Redirigir al inicio real
             else:
                 messages.error(request, "Credenciales inválidas.")
         except UsuarioSistema.DoesNotExist:

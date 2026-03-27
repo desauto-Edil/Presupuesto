@@ -1,6 +1,6 @@
 /* ============================================================
    Imperandina — Design System v3.1
-   Syne + DM Sans
+   Lato
    Temas dinámicos por Unidad de Negocio:
      .theme-imperandina  → Gris carbón + Amarillo quemado
      .theme-solarandina  → Gris azul   + Rojo solar
@@ -61,19 +61,19 @@
    TEMA: IMPERANDINA — Gris carbón + Amarillo quemado
    ══════════════════════════════════════════════ */
 .theme-imperandina {
-  --theme-accent: #efcd1a;
-  --theme-accent-h: #d4b510;
+  --theme-accent: #dcbc1e;
+  --theme-accent-h: #c6ab12;
   --theme-accent-pale: rgba(239, 205, 26, 0.10);
   --theme-accent-glow: rgba(239, 205, 26, 0.22);
   --theme-accent-border: rgba(239, 205, 26, 0.30);
   --theme-sidebar-bg: #151515;
   --theme-sidebar-text: rgba(255, 255, 255, 0.60);
   --theme-active-bg: rgba(239, 205, 26, 0.15);
-  --theme-logo-color: #efcd1a;
-  --theme-bar1: #efcd1a;
-  --theme-bar2: #f7e16d;
+  --theme-logo-color: #dcbc1e;
+  --theme-bar1: #dcbc1e;
+  --theme-bar2: #d5c263;
   --theme-bar3: #a38b0d;
-  --theme-topbar-strip: #efcd1a;
+  --theme-topbar-strip: #dcbc1e;
 }
 
 /* ══════════════════════════════════════════════
@@ -118,7 +118,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Lato';
   background: var(--surface);
   color: var(--ink);
   display: flex;
@@ -202,7 +202,7 @@ body {
 }
 
 .logo-wordmark {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Lato';
   font-weight: 800;
   font-size: 14px;
   color: #fff;
@@ -290,7 +290,7 @@ body {
   background: rgba(255,255,255,0.10);
   border: 2px solid var(--theme-accent);
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Lato';
   font-size: 11px; font-weight: 700; color: #fff;
   flex-shrink: 0;
 }
@@ -338,7 +338,7 @@ body {
 }
 
 .topbar-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Lato';
   font-size: 14px;
   font-weight: 700;
   color: var(--ink);
@@ -361,7 +361,7 @@ body {
   gap: 6px;
   padding: 7px 14px;
   border-radius: 8px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Lato';
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -437,7 +437,7 @@ body {
   gap: 10px;
 }
 .panel-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Lato';
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -462,7 +462,7 @@ body {
   margin-bottom: 8px;
 }
 .stat-value {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Lato';
   font-size: 22px;
   font-weight: 800;
   color: var(--ink);
@@ -527,7 +527,7 @@ table.data-table tbody tr:hover td { background: var(--surface); }
 
 /* ── FORM ELEMENTS ── */
 .form-control, .form-select {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Lato';
   font-size: 13px;
   padding: 8px 11px;
   border-radius: 8px;
@@ -571,11 +571,11 @@ table.data-table tbody tr:hover td { background: var(--surface); }
   border-left: 4px solid var(--theme-accent);
 }
 .project-id { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--theme-logo-color); margin-bottom: 3px; }
-.project-name { font-family: 'Syne', sans-serif; font-size: 19px; font-weight: 800; }
+.project-name { font-family: 'Lato'; font-size: 19px; font-weight: 800; }
 .project-client { font-size: 12.5px; color: rgba(255,255,255,0.50); margin-top: 2px; }
 .project-divider { width: 1px; height: 44px; background: rgba(255,255,255,0.12); flex-shrink: 0; }
 .project-meta-label { font-size: 10px; color: rgba(255,255,255,0.38); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 3px; }
-.project-meta-value { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; }
+.project-meta-value { font-family: 'Lato'; font-size: 15px; font-weight: 700; }
 .project-status-chip {
   margin-left: auto;
   background: var(--theme-accent-pale);
@@ -633,7 +633,7 @@ table.data-table tbody tr:hover td { background: var(--surface); }
   padding: 13px 18px;
 }
 .s-label { color: var(--ink-soft); }
-.s-value { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; text-align: right; }
+.s-value { font-family: 'Lato'; font-size: 13px; font-weight: 700; text-align: right; }
 .s-value.green { color: var(--green); }
 .s-value.orange { color: var(--theme-accent); }
 .summary-line.total .s-label { color: rgba(255,255,255,0.55); }
@@ -672,14 +672,14 @@ table.data-table tbody tr:hover td { background: var(--surface); }
 .qty-field {
   width: 80px; padding: 5px 7px;
   border: 1.5px solid var(--border); border-radius: 6px;
-  font-size: 12.5px; text-align: right; font-family: 'DM Sans', sans-serif;
+  font-size: 12.5px; text-align: right; font-family: 'Lato';
   background: var(--surface); color: var(--ink);
 }
 .qty-field:focus { outline: none; border-color: var(--theme-accent); background: #fff; }
 .qty-field.calculated { background: var(--surface-2); color: rgba(14,17,23,0.45); }
 .dep-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; background: var(--surface-2); color: rgba(14,17,23,0.5); }
 .dep-badge.derived { background: var(--theme-accent-pale); color: var(--theme-accent); }
-.price-cell { font-family: 'Syne', sans-serif; font-size: 12.5px; font-weight: 600; text-align: right !important; color: var(--ink); }
+.price-cell { font-family: 'Lato'; font-size: 12.5px; font-weight: 600; text-align: right !important; color: var(--ink); }
 .subtotal-row td { background: var(--surface-2) !important; font-weight: 600; border-top: 2px solid var(--theme-accent-border); }
 
 /* ── VALIDATION BANNER ── */
@@ -726,7 +726,7 @@ table.data-table tbody tr:hover td { background: var(--surface); }
   background: var(--card);
 }
 .modal-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Lato';
   font-size: 14px;
   font-weight: 700;
   color: var(--ink);
@@ -751,7 +751,7 @@ table.data-table tbody tr:hover td { background: var(--surface); }
   justify-content: space-between;
 }
 .form-page-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Lato';
   font-size: 15px;
   font-weight: 700;
   color: var(--theme-accent);
@@ -774,7 +774,7 @@ table.data-table tbody tr:hover td { background: var(--surface); }
 
 /* ── SECTION HEADING ── */
 .section-heading {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Lato';
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.10em;
@@ -853,7 +853,7 @@ table.data-table tbody tr:hover td { background: var(--surface); }
 .text-red { color: var(--brand-red);    }
 .text-green { color: var(--green);        }
 .text-muted { color: rgba(14,17,23,0.38) !important; }
-.fw-syne { font-family: 'Syne', sans-serif; font-weight: 700; }
+.fw-syne { font-family: 'Lato'; font-weight: 700; }
 .border-top-accent { border-top: 3px solid var(--theme-accent); }
 .bg-theme-soft { background: var(--theme-accent-pale); border-radius: 8px; }
 .bg-violet-soft { background: var(--theme-accent-pale); border-radius: 8px; }

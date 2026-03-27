@@ -60,8 +60,11 @@ class ProyectoSistema(models.Model):
         verbose_name_plural = "Ejecuciones de Sistemas"
 
     def __str__(self):
-        sub = f" / {self.subsistema.nombre}" if self.subsistema else ""
-        return f"{self.proyecto.consecutivo} — {self.sistema.nombre}{sub}"
+        try:
+            sub = f" / {self.subsistema.nombre}" if self.subsistema_id and self.subsistema else ""
+            return f"{self.proyecto.consecutivo} — {self.sistema.nombre}{sub}"
+        except Exception:
+            return f"ProyectoSistema #{self.pk}"
 
     # ── Contexto ──────────────────────────────────────────────────────────────
 
