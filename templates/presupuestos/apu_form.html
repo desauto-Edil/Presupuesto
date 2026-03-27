@@ -1,60 +1,90 @@
 {% extends "base.html" %}
+
 {% block title %}Parámetros APU{% endblock %}
-{% block nav_proyectos %}active{% endblock %}
+{% block nav_apu %}active{% endblock %}
 {% block page_title %}Parámetros APU{% endblock %}
-{% block breadcrumb %}Proyectos → APU → Parámetros{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'presupuestos:apu_detail' object.pk %}" style="color:inherit;text-decoration:none;">APU</a>
+  · Parámetros
+{% endblock %}
 
 {% block content %}
-<div class="panel" style="max-width:560px;">
-  <div class="panel-header">
-    <span>Editar parámetros del APU</span>
-    <a href="{% url 'presupuestos:apu_detail' object.pk %}" class="btn btn-ghost btn-sm">← Volver</a>
-  </div>
-  <div style="padding:20px;">
-    <form method="post">
-      {% csrf_token %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-9 col-lg-7">
 
-      <div class="section-label" style="margin-bottom:12px;">Márgenes y factores</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        {% for field in form %}
-        {% if field.name != 'cuadrilla_personas' and field.name != 'dias_trabajo' and field.name != 'tiempo_estimado_meses' and field.name != 'rendimiento_und_dia' %}
-        <div class="form-group">
-          <label>{{ field.label }}</label>
-          {{ field }}
-          {% if field.errors %}<div style="color:var(--danger);font-size:11px;margin-top:4px;">{{ field.errors }}</div>{% endif %}
-        </div>
-        {% endif %}
-        {% endfor %}
+    <div class="panel fade-up">
+      <div class="panel-header d-flex align-items-center justify-content-between">
+        <span style="font-size:15px;font-weight:700;">Parámetros del APU</span>
+        <a href="{% url 'presupuestos:apu_detail' object.pk %}" class="btn btn-ghost btn-sm">← Volver</a>
       </div>
+      <div style="padding:24px;">
+        <form method="post">
+          {% csrf_token %}
 
-      <div class="section-label" style="margin:20px 0 12px;">Mano de obra</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="form-group">
-          <label>{{ form.cuadrilla_personas.label }}</label>
-          {{ form.cuadrilla_personas }}
-          {% if form.cuadrilla_personas.errors %}<div style="color:var(--danger);font-size:11px;">{{ form.cuadrilla_personas.errors }}</div>{% endif %}
-          <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">Personas en la cuadrilla de instalación</div>
-        </div>
-        <div class="form-group">
-          <label>{{ form.dias_trabajo.label }}</label>
-          {{ form.dias_trabajo }}
-          <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">Se calcula automáticamente al generar APU</div>
-        </div>
-        <div class="form-group">
-          <label>{{ form.tiempo_estimado_meses.label }}</label>
-          {{ form.tiempo_estimado_meses }}
-        </div>
-        <div class="form-group">
-          <label>{{ form.rendimiento_und_dia.label }}</label>
-          {{ form.rendimiento_und_dia }}
-        </div>
-      </div>
+          {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2" style="font-size:12.5px;">{{ form.non_field_errors }}</div>
+          {% endif %}
 
-      <div style="margin-top:24px;display:flex;gap:8px;">
-        <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
-        <a href="{% url 'presupuestos:apu_detail' object.pk %}" class="btn btn-ghost btn-sm">Cancelar</a>
+          <!-- Márgenes y factores -->
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                      color:rgba(14,17,23,0.38);margin-bottom:14px;padding-bottom:6px;
+                      border-bottom:1px solid var(--sidebar-light-border);">
+            Márgenes y factores
+          </div>
+          <div class="row g-3 mb-4">
+            {% for field in form %}
+            {% if field.name != 'cuadrilla_personas' and field.name != 'dias_trabajo' and field.name != 'tiempo_estimado_meses' and field.name != 'rendimiento_und_dia' %}
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ field.label }}</label>
+              {{ field }}
+              {% if field.errors %}
+              <div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ field.errors.0 }}</div>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+
+          <!-- Mano de obra -->
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                      color:rgba(14,17,23,0.38);margin-bottom:14px;padding-bottom:6px;
+                      border-bottom:1px solid var(--sidebar-light-border);">
+            Mano de obra
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.cuadrilla_personas.label }}</label>
+              {{ form.cuadrilla_personas }}
+              <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">
+                Personas en cuadrilla de instalación
+              </div>
+            </div>
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.dias_trabajo.label }}</label>
+              {{ form.dias_trabajo }}
+              <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">
+                Se calcula automáticamente al generar el APU
+              </div>
+            </div>
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.tiempo_estimado_meses.label }}</label>
+              {{ form.tiempo_estimado_meses }}
+            </div>
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.rendimiento_und_dia.label }}</label>
+              {{ form.rendimiento_und_dia }}
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 justify-content-end">
+            <a href="{% url 'presupuestos:apu_detail' object.pk %}" class="btn btn-ghost btn-sm">Cancelar</a>
+            <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
+          </div>
+
+        </form>
       </div>
-    </form>
+    </div>
+
   </div>
 </div>
 {% endblock %}

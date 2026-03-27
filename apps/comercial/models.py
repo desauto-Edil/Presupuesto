@@ -276,6 +276,27 @@ class Proyecto(models.Model):
         num = (int(last.consecutivo.split("-")[-1]) + 1) if last else 1
         return f"{prefix}{num:04d}"
 
+    # ── Transiciones de estado ────────────────────────────────────────────────
+
+    def avanzar_a_despiece(self):
+        """Avanza el estado a DESPIECE si el estado actual lo permite."""
+        from apps.common.choices import EstadoProyecto
+        permitidos = {
+            EstadoProyecto.BORRADOR,
+            EstadoProyecto.SOLICITUD,
+            EstadoProyecto.DESPIECE,
+            EstadoProyecto.EN_REVISION_COMPRAS,
+        }
+        if self.estado in permitidos:
+            self.estado = EstadoProyecto.DESPIECE
+            self.save(update_fields=["estado", "updated_at"])
+
+    def avanzar_a_apu(self):
+        """Avanza el estado a APU en proceso."""
+        from apps.common.choices import EstadoProyecto
+        self.estado = EstadoProyecto.APU
+        self.save(update_fields=["estado", "updated_at"])
+
 
 # ---------------------------------------------------------------------------
 # LOG DEL SISTEMA

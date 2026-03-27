@@ -135,6 +135,15 @@
       <span>Proveedores</span>
     </a>
 
+    <a href="{% url 'presupuestos:apu_list' %}"
+       class="nav-item {% block nav_apu %}{% endblock %}"
+       data-tip="APU">
+      <span class="nav-icon">
+        <i class="bi bi-currency-dollar" style="font-size:18px;line-height:1;"></i>
+      </span>
+      <span>APU</span>
+    </a>
+
     <a href="{% url 'ingenieria:sistema_list' %}"
        class="nav-item {% block nav_ingenieria %}{% endblock %}"
        data-tip="Sistemas">

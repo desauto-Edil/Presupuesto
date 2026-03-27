@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}{% if object %}Editar configuración APU{% else %}Nueva configuración APU{% endif %}{% endblock %}
+{% block nav_apu %}active{% endblock %}
+{% block page_title %}Configuración APU{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'presupuestos:configapu_list' %}" style="color:inherit;text-decoration:none;">APU</a>
+  · {% if object %}Editar{% else %}Nueva{% endif %} configuración
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-8 col-lg-6">
+
+    <div class="panel fade-up">
+      <div class="panel-header d-flex align-items-center justify-content-between">
+        <span style="font-size:15px;font-weight:700;">
+          {% if object %}Editar: {{ object.nombre }}{% else %}Nueva configuración global{% endif %}
+        </span>
+        <a href="{% url 'presupuestos:configapu_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+      </div>
+      <div style="padding:24px;">
+        <form method="post">
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2" style="font-size:12.5px;">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.nombre.label }}</label>
+            {{ form.nombre }}
+            {% if form.nombre.errors %}
+            <div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.nombre.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <!-- Parámetros de cálculo -->
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                      color:rgba(14,17,23,0.38);margin-bottom:14px;padding-bottom:6px;
+                      border-bottom:1px solid var(--sidebar-light-border);">
+            Parámetros de cálculo
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">
+                {{ form.porcentaje_ganancia.label }}
+              </label>
+              <div class="input-group input-group-sm">
+                {{ form.porcentaje_ganancia }}
+                <span class="input-group-text">%</span>
+              </div>
+              <div class="form-text" style="font-size:10.5px;">
+                Markup sobre el costo unitario para calcular el valor de venta
+              </div>
+              {% if form.porcentaje_ganancia.errors %}
+              <div style="color:var(--red,#e62833);font-size:11px;">{{ form.porcentaje_ganancia.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">
+                {{ form.aiu_contratista.label }}
+              </label>
+              <div class="input-group input-group-sm">
+                {{ form.aiu_contratista }}
+                <span class="input-group-text">%</span>
+              </div>
+              <div class="form-text" style="font-size:10.5px;">
+                Administración, imprevistos y utilidad del contratista
+              </div>
+            </div>
+
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">
+                {{ form.desperdicio.label }}
+              </label>
+              <div class="input-group input-group-sm">
+                {{ form.desperdicio }}
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">
+                {{ form.margen_ganancia_contratista.label }}
+              </label>
+              <div class="input-group input-group-sm">
+                {{ form.margen_ganancia_contratista }}
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <div class="form-check">
+              {{ form.activa }}
+              <label class="form-check-label" style="font-size:13px;">
+                Configuración activa (se usa como predeterminada al generar nuevos APU)
+              </label>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 justify-content-end">
+            <a href="{% url 'presupuestos:configapu_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+            <button type="submit" class="btn btn-primary btn-sm">
+              {% if object %}Guardar cambios{% else %}Crear configuración{% endif %}
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

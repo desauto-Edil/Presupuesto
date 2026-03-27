@@ -3,7 +3,7 @@
 import json
 import logging
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Count, Q
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from django.views import View
@@ -247,6 +247,33 @@ class ConfiguracionAPUUpdateView(UpdateView):
 
 
 # ── APU ───────────────────────────────────────────────────────────────────────
+
+class APUListView(ListView):
+    """Lista todos los APUProyecto que tienen al menos una línea registrada."""
+    model = APUProyecto
+    template_name = "presupuestos/apu_list.html"
+    context_object_name = "apus"
+
+    def get_queryset(self):
+        return (
+            APUProyecto.objects
+            .select_related(
+                "proyecto_sistema__proyecto__cliente",
+                "proyecto_sistema__sistema",
+                "proyecto_sistema__subsistema",
+            )
+            .annotate(
+                total_lineas=Count("lineas"),
+                lineas_mat=Count("lineas", filter=Q(lineas__tipo="MATERIALES")),
+                lineas_herr=Count("lineas", filter=Q(lineas__tipo="HERRAMIENTAS_EQUIPOS")),
+                lineas_transp=Count("lineas", filter=Q(lineas__tipo="TRANSPORTE")),
+                lineas_mo=Count("lineas", filter=Q(lineas__tipo="MANO_DE_OBRA")),
+                lineas_admin=Count("lineas", filter=Q(lineas__tipo="ADMINISTRACION")),
+            )
+            .filter(total_lineas__gt=0)
+            .order_by("-updated_at")
+        )
+
 
 class APUProyectoDetailView(DetailView):
     model = APUProyecto

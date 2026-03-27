@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}APU — Presupuestos{% endblock %}
+{% block nav_apu %}active{% endblock %}
+{% block page_title %}APU{% endblock %}
+{% block breadcrumb %}Análisis de Precios Unitarios{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── APU LIST ─────────────────────────────────────────────────── */
+  .apu-list-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+  }
+
+  .apu-card {
+    background: var(--card);
+    border: 1px solid var(--sidebar-light-border);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: box-shadow .18s, transform .18s;
+    display: flex;
+    flex-direction: column;
+  }
+  .apu-card:hover {
+    box-shadow: 0 8px 28px rgba(14,17,23,0.09);
+    transform: translateY(-2px);
+  }
+
+  /* Header card — oscuro con acento */
+  .apu-card__head {
+    background: var(--ink);
+    padding: 16px 20px 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .apu-card__head::after {
+    content: '';
+    position: absolute;
+    right: -20px; top: -20px;
+    width: 90px; height: 90px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.03);
+    pointer-events: none;
+  }
+  .apu-card__proyecto {
+    font-family: 'Lato';
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .10em;
+    text-transform: uppercase;
+    color: var(--theme-accent);
+    margin-bottom: 3px;
+  }
+  .apu-card__sistema {
+    font-family: 'Lato';
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.2;
+  }
+  .apu-card__sub {
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.38);
+    margin-top: 3px;
+  }
+
+  /* Totales financieros */
+  .apu-card__totales {
+    display: flex;
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--sidebar-light-border);
+    background: var(--surface);
+  }
+  .apu-card__total {
+    flex: 1;
+  }
+  .apu-card__total-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: rgba(14,17,23,0.35);
+    margin-bottom: 3px;
+  }
+  .apu-card__total-value {
+    font-family: 'Lato';
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .apu-card__total-value--venta {
+    color: var(--theme-accent);
+  }
+  .apu-card__total-value--costo {
+    color: var(--ink);
+  }
+
+  /* Items por sección */
+  .apu-card__items {
+    padding: 12px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+  }
+  .apu-item-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--surface);
+    border: 1px solid rgba(14,17,23,0.07);
+    color: rgba(14,17,23,0.55);
+  }
+  .apu-item-chip__dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--chip-color, var(--theme-accent));
+    flex-shrink: 0;
+  }
+  .apu-item-chip--zero {
+    opacity: .4;
+  }
+
+  /* Footer */
+  .apu-card__foot {
+    padding: 12px 20px;
+    border-top: 1px solid var(--sidebar-light-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .apu-card__updated {
+    font-size: 10.5px;
+    color: rgba(14,17,23,0.30);
+  }
+
+  /* Stats bar */
+  .apu-stats {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    background: var(--card);
+    border: 1px solid var(--sidebar-light-border);
+    border-radius: 14px;
+    padding: 16px 22px;
+    margin-bottom: 20px;
+  }
+  .apu-stats__num {
+    font-family: 'Lato';
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--theme-accent);
+  }
+  .apu-stats__label {
+    font-size: 11px;
+    color: rgba(14,17,23,0.40);
+    margin-top: 2px;
+  }
+  .apu-stats__divider {
+    width: 1px; height: 36px;
+    background: var(--sidebar-light-border);
+    flex-shrink: 0;
+  }
+  .apu-stats__note {
+    font-size: 12.5px;
+    color: rgba(14,17,23,0.40);
+    flex: 1;
+  }
+
+  @media (max-width: 640px) {
+    .apu-list-grid { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'presupuestos:configapu_list' %}" class="btn btn-ghost btn-sm">
+  <i class="bi bi-sliders" style="margin-right:4px;"></i>Configuración global
+</a>
+{% endblock %}
+
+
+{% block content %}
+
+<!-- Stats bar -->
+{% if apus %}
+<div class="apu-stats fade-up">
+  <div>
+    <div class="apu-stats__num">{{ apus|length }}</div>
+    <div class="apu-stats__label">APU{{ apus|length|pluralize }} activo{{ apus|length|pluralize }}</div>
+  </div>
+  <div class="apu-stats__divider"></div>
+  <div class="apu-stats__note">
+    <i class="bi bi-info-circle" style="margin-right:5px;opacity:.5;"></i>
+    Los APU solo se generan desde el despiece de cada proyecto.
+    Ingresa al proyecto → despiece → y usa "Generar APU".
+  </div>
+</div>
+{% endif %}
+
+
+<!-- Grid de APU cards -->
+{% if apus %}
+<div class="apu-list-grid fade-up-1">
+
+  {% for apu in apus %}
+  <div class="apu-card">
+
+    <!-- Header -->
+    <div class="apu-card__head">
+      <div class="apu-card__proyecto">
+        {{ apu.proyecto_sistema.proyecto.consecutivo }}
+        &nbsp;·&nbsp;
+        {{ apu.proyecto_sistema.proyecto.cliente.razon_social }}
+      </div>
+      <div class="apu-card__sistema">{{ apu.proyecto_sistema.sistema.nombre }}</div>
+      <div class="apu-card__sub">
+        {% if apu.proyecto_sistema.subsistema %}
+          {{ apu.proyecto_sistema.subsistema.nombre }}
+        {% else %}
+          Sin subsistema
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Totales -->
+    <div class="apu-card__totales">
+      <div class="apu-card__total">
+        <div class="apu-card__total-label">Costo total</div>
+        <div class="apu-card__total-value apu-card__total-value--costo">
+          ${{ apu.total_costo|floatformat:0 }}
+        </div>
+      </div>
+      <div style="width:1px;background:var(--sidebar-light-border);flex-shrink:0;"></div>
+      <div class="apu-card__total">
+        <div class="apu-card__total-label">Valor venta</div>
+        <div class="apu-card__total-value apu-card__total-value--venta">
+          ${{ apu.total_valor_venta|floatformat:0 }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Items por sección -->
+    <div class="apu-card__items">
+      <span class="apu-item-chip {% if not apu.lineas_mat %}apu-item-chip--zero{% endif %}"
+            style="--chip-color:#1470e6;">
+        <span class="apu-item-chip__dot"></span>
+        {{ apu.lineas_mat }} material{{ apu.lineas_mat|pluralize:"es" }}
+      </span>
+      <span class="apu-item-chip {% if not apu.lineas_herr %}apu-item-chip--zero{% endif %}"
+            style="--chip-color:#e07d10;">
+        <span class="apu-item-chip__dot"></span>
+        {{ apu.lineas_herr }} herramienta{{ apu.lineas_herr|pluralize:"s" }}
+      </span>
+      <span class="apu-item-chip {% if not apu.lineas_transp %}apu-item-chip--zero{% endif %}"
+            style="--chip-color:#7048d0;">
+        <span class="apu-item-chip__dot"></span>
+        {{ apu.lineas_transp }} transporte{{ apu.lineas_transp|pluralize:"s" }}
+      </span>
+      <span class="apu-item-chip {% if not apu.lineas_mo %}apu-item-chip--zero{% endif %}"
+            style="--chip-color:#17a85e;">
+        <span class="apu-item-chip__dot"></span>
+        {{ apu.lineas_mo }} MO
+      </span>
+      <span class="apu-item-chip {% if not apu.lineas_admin %}apu-item-chip--zero{% endif %}"
+            style="--chip-color:#64748b;">
+        <span class="apu-item-chip__dot"></span>
+        {{ apu.lineas_admin }} admin
+      </span>
+    </div>
+
+    <!-- Footer -->
+    <div class="apu-card__foot">
+      <span class="apu-card__updated">
+        <i class="bi bi-clock" style="margin-right:3px;"></i>
+        {{ apu.updated_at|date:"d M Y" }}
+      </span>
+      <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
+         class="btn btn-ghost btn-sm" style="font-size:12px;">
+        Ver APU <i class="bi bi-arrow-right" style="margin-left:4px;"></i>
+      </a>
+    </div>
+
+  </div>
+  {% endfor %}
+
+</div>
+
+{% else %}
+<!-- Empty state -->
+<div class="panel fade-up" style="text-align:center;padding:64px 24px;">
+  <i class="bi bi-currency-dollar"
+     style="font-size:40px;color:rgba(14,17,23,0.12);display:block;margin-bottom:18px;"></i>
+  <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--ink);">
+    Sin APU generados
+  </div>
+  <div style="font-size:13px;color:rgba(14,17,23,0.40);margin-bottom:6px;max-width:420px;margin-inline:auto;">
+    Los APU se generan directamente desde el despiece de cada proyecto.<br>
+    Accede a un proyecto, completa el despiece y usa la opción <strong>"Generar APU"</strong>.
+  </div>
+  <div style="margin-top:24px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+    <a href="{% url 'comercial:dashboard' %}" class="btn btn-primary btn-sm">
+      <i class="bi bi-grid" style="margin-right:5px;"></i>Ir al dashboard
+    </a>
+    <a href="{% url 'presupuestos:configapu_list' %}" class="btn btn-ghost btn-sm">
+      <i class="bi bi-sliders" style="margin-right:5px;"></i>Configuración APU
+    </a>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

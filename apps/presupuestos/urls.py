@@ -7,6 +7,7 @@ from apps.presupuestos.views import (
     DespieceProyectoView, DespieceEjecutarView, DespieceLineaAjusteView,
     SubsistemaVariablesView, DespieceLineaAjusteAPIView, CalcularDespiecePSView,
     ConfiguracionAPUListView, ConfiguracionAPUCreateView, ConfiguracionAPUUpdateView,
+    APUListView,
     APUProyectoDetailView, APUProyectoUpdateView, APUGenerarView,
     # PowerGrip wizard
     PowerGripWizardView, CalcularPowerGripView,
@@ -52,6 +53,7 @@ urlpatterns = [
     path("config-apu/<int:pk>/editar/", ConfiguracionAPUUpdateView.as_view(), name="configapu_update"),
 
     # ── APU ───────────────────────────────────────────────────────────────────
+    path("apu/", APUListView.as_view(), name="apu_list"),
     path("apu/<int:pk>/", APUProyectoDetailView.as_view(), name="apu_detail"),
     path("apu/<int:pk>/editar/", APUProyectoUpdateView.as_view(), name="apu_update"),
     path("apu/generar/<int:pk>/", APUGenerarView.as_view(), name="apu_generar"),
