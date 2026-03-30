@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block nav_apu %}active{% endblock %}
+{% block title %}{% if form.instance.pk %}Editar ítem{% else %}Nuevo ítem APU{% endif %}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'presupuestos:catalogo_apu' %}">Catálogo APU</a></li>
+      <li class="breadcrumb-item active">
+        {% if form.instance.pk %}Editar «{{ form.instance.nombre }}»{% else %}Nuevo ítem{% endif %}
+      </li>
+    </ol>
+  </nav>
+  <h1 class="page-title">
+    <i class="bi bi-plus-circle me-2"></i>
+    {% if form.instance.pk %}Editar ítem APU{% else %}Nuevo ítem APU{% endif %}
+  </h1>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="row g-3">
+
+            <div class="col-12 col-md-8">
+              <label class="form-label fw-medium">Categoría <span class="text-danger">*</span></label>
+              {{ form.categoria }}
+              {% if form.categoria.errors %}
+                <div class="text-danger small mt-1">{{ form.categoria.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-medium">Código</label>
+              {{ form.codigo }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-medium">Nombre <span class="text-danger">*</span></label>
+              {{ form.nombre }}
+              {% if form.nombre.errors %}
+                <div class="text-danger small mt-1">{{ form.nombre.errors }}</div>{% endif %}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-medium">Descripción</label>
+              {{ form.descripcion }}
+            </div>
+
+            <!-- Precio base -->
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-medium">Precio base</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                {{ form.precio_base }}
+              </div>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-medium">Unidad</label>
+              {{ form.unidad }}
+            </div>
+
+            <!-- Sección personal (salario + prestaciones) -->
+            <div class="col-12">
+              <hr class="my-1">
+              <p class="small text-muted mb-2 fw-semibold">
+                <i class="bi bi-people me-1"></i>Personal (dejar en 0 si no aplica)
+              </p>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-medium">{{ form.salario_base.label }}</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                {{ form.salario_base }}
+              </div>
+              <div class="form-text">Salario mensual base del cargo</div>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-medium">{{ form.prestaciones.label }}</label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                {{ form.prestaciones }}
+              </div>
+              <div class="form-text">Prima, cesantías, vacaciones, etc.</div>
+            </div>
+
+            <!-- Sección herramientas (vida útil) -->
+            <div class="col-12">
+              <hr class="my-1">
+              <p class="small text-muted mb-2 fw-semibold">
+                <i class="bi bi-tools me-1"></i>Herramientas/equipos (dejar vacío si no aplica)
+              </p>
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-medium">{{ form.vida_util_dias.label }}</label>
+              {{ form.vida_util_dias }}
+              <div class="form-text">Permite calcular depreciación diaria automáticamente</div>
+            </div>
+
+            <div class="col-12 col-md-6 d-flex align-items-end pb-1">
+              <div class="form-check">
+                {{ form.activo }}
+                <label class="form-check-label">Ítem activo</label>
+              </div>
+            </div>
+
+          </div><!-- row -->
+
+          <div class="d-flex gap-2 justify-content-end mt-4">
+            <a href="{% url 'presupuestos:catalogo_apu' %}" class="btn btn-outline-secondary">
+              Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-lg me-1"></i>Guardar ítem
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

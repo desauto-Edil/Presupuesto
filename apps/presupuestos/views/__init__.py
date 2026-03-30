@@ -1,7 +1,10 @@
 """apps/presupuestos/views — Vistas del módulo de presupuestos."""
 
+import io
 import json
 import logging
+from datetime import date
+from decimal import Decimal
 
 from django.db.models import Prefetch, Count, Q
 from django.urls import reverse_lazy, reverse
@@ -9,12 +12,24 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from django.views import View
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
+from django.template.loader import render_to_string
 
-from apps.presupuestos.models import ProyectoSistema, DespieceLinea, ConfiguracionAPU, APUProyecto, APULinea
+from apps.presupuestos.models import (
+    ProyectoSistema, DespieceLinea,
+    ConfiguracionAPU,
+    APU, APUProyecto, APULinea,
+    CategoriaItemAPU, CuadrillaPreset, CuadrillaPresetItem, ItemCatalogoAPU,
+)
 from apps.comercial.models import Proyecto
 from apps.ingenieria.models import Sistema, Subsistema
-from apps.presupuestos.forms import ProyectoSistemaForm, DespieceLineaAjusteForm, ConfiguracionAPUForm, APUProyectoForm
+from apps.common.choices import TipoAPU
+from apps.presupuestos.forms import (
+    ProyectoSistemaForm, DespieceLineaAjusteForm,
+    ConfiguracionAPUForm, APUProyectoForm,
+    CategoriaItemAPUForm, ItemCatalogoAPUForm,
+    CuadrillaPresetForm, CuadrillaPresetItemFormSet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +133,9 @@ class CalcularDespiecePSView(View):
         # Soporta tanto JSON body como form POST con campos parametros[variable]
         try:
             body = json.loads(request.body)
-            sistema_id    = body.get("sistema_id")
+            sistema_id = body.get("sistema_id")
             subsistema_id = body.get("subsistema_id") or None
-            parametros    = body.get("parametros", {})
+            parametros = body.get("parametros", {})
         except (json.JSONDecodeError, ValueError):
             post = request.POST
             sistema_id    = post.get("sistema_id")
@@ -185,8 +200,8 @@ class DespieceLineaAjusteAPIView(View):
     def post(self, request, pk):
         linea = get_object_or_404(DespieceLinea, pk=pk)
         try:
-            body   = json.loads(request.body)
-            valor  = body.get("cantidad_ajustada")
+            body = json.loads(request.body)
+            valor = body.get("cantidad_ajustada")
             motivo = body.get("motivo_ajuste", "")
 
             if valor is None:
@@ -203,11 +218,11 @@ class DespieceLineaAjusteAPIView(View):
 
             return JsonResponse({
                 "ok": True,
-                "linea_pk":          linea.pk,
+                "linea_pk": linea.pk,
                 "cantidad_calculada": str(linea.cantidad_calculada),
-                "cantidad_ajustada":  str(linea.cantidad_ajustada),
-                "cantidad_final":     str(linea.cantidad_final),
-                "motivo_ajuste":      linea.motivo_ajuste or "",
+                "cantidad_ajustada": str(linea.cantidad_ajustada),
+                "cantidad_final": str(linea.cantidad_final),
+                "motivo_ajuste": linea.motivo_ajuste or "",
             })
         except Exception as exc:
             return JsonResponse({"error": str(exc)}, status=500)
@@ -283,6 +298,22 @@ class APUProyectoDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["lineas"] = self.object.lineas.order_by("tipo", "descripcion")
+        # Catálogo para los modales de selección
+        ctx["presets"] = (
+            CuadrillaPreset.objects
+            .filter(activo=True)
+            .prefetch_related("items__item")
+        )
+        ctx["items_mo"] = (
+            ItemCatalogoAPU.objects
+            .filter(activo=True, categoria__tipo_apu="MANO_DE_OBRA")
+            .select_related("categoria")
+        )
+        ctx["items_herr"] = (
+            ItemCatalogoAPU.objects
+            .filter(activo=True, categoria__tipo_apu="HERRAMIENTAS_EQUIPOS")
+            .select_related("categoria")
+        )
         return ctx
 
 
@@ -371,11 +402,11 @@ class PowerGripWizardView(View):
                 subsistemas_def[sub.pk] = {
                     "variables": [
                         {
-                            "variable":    v.variable,
-                            "label":       v.label,
-                            "unidad":      v.unidad,
-                            "default":     v.default,
-                            "opciones":    v.opciones,
+                            "variable": v.variable,
+                            "label": v.label,
+                            "unidad": v.unidad,
+                            "default": v.default,
+                            "opciones": v.opciones,
                             "descripcion": v.descripcion,
                         }
                         for v in sub_def.variables
@@ -506,11 +537,11 @@ class SubsistemaDefAPIView(View):
             "subsistema_cod": sub.codigo,
             "variables": [
                 {
-                    "variable":    v.variable,
-                    "label":       v.label,
-                    "unidad":      v.unidad,
-                    "default":     v.default,
-                    "opciones":    v.opciones,
+                    "variable": v.variable,
+                    "label": v.label,
+                    "unidad": v.unidad,
+                    "default": v.default,
+                    "opciones": v.opciones,
                     "descripcion": v.descripcion,
                 }
                 for v in sub_def.variables
@@ -529,37 +560,45 @@ class APUManoObraView(View):
     """
     POST /presupuestos/apu/<pk>/mano-obra/
 
-    Registra las líneas de mano de obra del APU.
-    El usuario ingresa los costos diarios de cada concepto (APE).
-    La cuadrilla tiene 7 personas (predeterminado del modelo APUProyecto).
-
-    IMPORTANTE: La cuadrilla NO se relaciona con el despiece — es un APE independiente.
+    Registra mano de obra desde catálogo.
+    Acepta:
+      - preset_id: carga todos los ítems del preset seleccionado
+      - item_id[] + cantidad[]: selección manual ítem a ítem
+    Borra líneas MANO_DE_OBRA previas antes de guardar (reemplaza).
     """
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
         try:
-            cuadrilla_personas = int(request.POST.get("cuadrilla_personas", 7) or 7)
-            hya_dia        = float(request.POST.get("hya_dia", 0) or 0)
-            cuadrilla_dia  = float(request.POST.get("cuadrilla_dia", 0) or 0)
-            dotacion_dia   = float(request.POST.get("dotacion_dia", 0) or 0)
-            proteccion_dia = float(request.POST.get("proteccion_dia", 0) or 0)
-
-            # Actualizar cuadrilla_personas en el APU si cambió
-            if apu.cuadrilla_personas != cuadrilla_personas:
-                apu.cuadrilla_personas = cuadrilla_personas
-                apu.save(update_fields=["cuadrilla_personas", "updated_at"])
-
             from apps.presupuestos.services.apu_service import APUService
+
+            preset_id = request.POST.get("preset_id", "").strip()
+            if preset_id:
+                preset = get_object_or_404(
+                    CuadrillaPreset.objects.prefetch_related("items__item"),
+                    pk=preset_id, activo=True,
+                )
+                items_data = [
+                    {"item_id": pi.item_id, "cantidad": pi.cantidad}
+                    for pi in preset.items.all()
+                ]
+            else:
+                item_ids  = request.POST.getlist("item_id[]")
+                cantidades = request.POST.getlist("cantidad[]")
+                items_data = [
+                    {"item_id": int(iid), "cantidad": max(int(cant or 1), 1)}
+                    for iid, cant in zip(item_ids, cantidades) if iid
+                ]
+
+            if not items_data:
+                messages.warning(request, "Seleccione al menos un ítem de mano de obra.")
+                return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+            apu.lineas.filter(tipo="MANO_DE_OBRA").delete()
             svc = APUService(apu.proyecto_sistema)
-            svc.apu = apu  # Reusar APU existente sin recrear
-            svc.generar_mano_obra(
-                hya_dia=hya_dia,
-                cuadrilla_dia=cuadrilla_dia,
-                dotacion_dia=dotacion_dia,
-                proteccion_dia=proteccion_dia,
-            )
+            svc.apu = apu
+            svc.generar_mano_obra_desde_catalogo(items_data)
             svc.finalizar()
-            messages.success(request, "Mano de obra registrada y APU actualizado.")
+            messages.success(request, f"Mano de obra registrada: {len(items_data)} cargo(s).")
         except Exception as exc:
             messages.error(request, f"Error al registrar mano de obra: {exc}")
             logger.exception("[APUManoObraView] Error APU %s", pk)
@@ -571,13 +610,51 @@ class APUHerramientasView(View):
     """
     POST /presupuestos/apu/<pk>/herramientas/
 
-    Registra ítems de herramientas/equipos al APU.
-    El form puede enviar múltiples filas: descripcion[] y precio_total[].
+    Registra herramientas/equipos desde catálogo.
+    Acepta item_id[] + cantidad[].
+    Borra líneas HERRAMIENTAS_EQUIPOS previas antes de guardar (reemplaza).
     """
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
         try:
-            descripciones  = request.POST.getlist("descripcion[]")
+            from apps.presupuestos.services.apu_service import APUService
+
+            item_ids   = request.POST.getlist("item_id[]")
+            cantidades = request.POST.getlist("cantidad[]")
+            items_data = [
+                {"item_id": int(iid), "cantidad": max(int(cant or 1), 1)}
+                for iid, cant in zip(item_ids, cantidades) if iid
+            ]
+
+            if not items_data:
+                messages.warning(request, "No se seleccionaron herramientas del catálogo.")
+                return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+            apu.lineas.filter(tipo="HERRAMIENTAS_EQUIPOS").delete()
+            svc = APUService(apu.proyecto_sistema)
+            svc.apu = apu
+            svc.generar_herramientas_desde_catalogo(items_data)
+            svc.finalizar()
+            messages.success(request, f"{len(items_data)} herramienta(s) registrada(s).")
+        except Exception as exc:
+            messages.error(request, f"Error al registrar herramientas: {exc}")
+            logger.exception("[APUHerramientasView] Error APU %s", pk)
+
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
+class APUTransporteView(View):
+    """
+    POST /presupuestos/apu/<pk>/transporte/
+
+    Registra ítems de transporte del APU (retiro, envío, flete, etc.).
+    El form envía múltiples filas: descripcion[] y precio_total[].
+    Borra las líneas TRANSPORTE previas antes de crear las nuevas (reemplaza).
+    """
+    def post(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            descripciones   = request.POST.getlist("descripcion[]")
             precios_totales = request.POST.getlist("precio_total[]")
 
             items = []
@@ -593,20 +670,55 @@ class APUHerramientasView(View):
                     pass
 
             if not items:
-                messages.warning(request, "No se ingresaron ítems de herramientas válidos.")
+                messages.warning(request, "No se ingresaron ítems de transporte válidos.")
                 return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+            # Reemplazar líneas previas de transporte
+            apu.lineas.filter(tipo="TRANSPORTE").delete()
 
             from apps.presupuestos.services.apu_service import APUService
             svc = APUService(apu.proyecto_sistema)
             svc.apu = apu
-            svc.generar_herramientas(items)
+            svc.generar_transporte_items(items)
             svc.finalizar()
-            messages.success(request, f"{len(items)} ítem(s) de herramientas registrados.")
+            messages.success(request, f"{len(items)} ítem(s) de transporte registrados.")
         except Exception as exc:
-            messages.error(request, f"Error al registrar herramientas: {exc}")
-            logger.exception("[APUHerramientasView] Error APU %s", pk)
+            messages.error(request, f"Error al registrar transporte: {exc}")
+            logger.exception("[APUTransporteView] Error APU %s", pk)
 
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
+class APULineaUpdateView(View):
+    """
+    POST /presupuestos/apu/linea/<pk>/editar/
+
+    Actualiza rendimiento y precio_referencia de una APULinea editable,
+    recalcula la línea y los totales del APU padre.
+    Solo acepta líneas marcadas como editable=True.
+    """
+    def post(self, request, pk):
+        from apps.presupuestos.models import APULinea
+        from decimal import Decimal
+        linea = get_object_or_404(APULinea, pk=pk, editable=True)
+        try:
+            rend_str   = request.POST.get("rendimiento", "").strip()
+            precio_str = request.POST.get("precio_referencia", "").strip()
+
+            if rend_str:
+                linea.rendimiento = Decimal(str(float(rend_str)))
+            if precio_str:
+                linea.precio_referencia = Decimal(str(float(precio_str)))
+
+            linea.save(update_fields=["rendimiento", "precio_referencia", "updated_at"])
+            linea.calcular()
+            linea.apu.recalcular()
+            messages.success(request, f"Línea «{linea.descripcion}» actualizada.")
+        except Exception as exc:
+            messages.error(request, f"Error al actualizar línea: {exc}")
+            logger.exception("[APULineaUpdateView] Error línea %s", pk)
+
+        return redirect(reverse("presupuestos:apu_detail", args=[linea.apu.pk]))
 
 
 class APUAdminView(View):
@@ -644,3 +756,275 @@ class APUAdminView(View):
             logger.exception("[APUAdminView] Error APU %s", pk)
 
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CATÁLOGO APU — Vista principal + CRUD
+# ══════════════════════════════════════════════════════════════════════════════
+
+class CatalogoAPUView(ListView):
+    """
+    Página principal del catálogo APU.
+    Muestra las CategoriaItemAPU agrupadas por TipoAPU,
+    cada una con sus ítems. Funciona como la vista de catalogos.
+    """
+    model = CategoriaItemAPU
+    template_name = "presupuestos/catalogo_apu.html"
+    context_object_name = "categorias"
+
+    def get_queryset(self):
+        return (
+            CategoriaItemAPU.objects
+            .prefetch_related("items")
+            .order_by("tipo_apu", "orden", "nombre")
+        )
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        from collections import defaultdict
+        grupos = defaultdict(list)
+        for cat in ctx["categorias"]:
+            grupos[cat.tipo_apu].append(cat)
+        orden_tipos = [
+            TipoAPU.MANO_DE_OBRA,
+            TipoAPU.HERRAMIENTAS_EQUIPOS,
+            TipoAPU.TRANSPORTE,
+            TipoAPU.ADMINISTRACION,
+            TipoAPU.MATERIALES,
+        ]
+        ctx["grupos"] = [
+            {
+                "tipo": tipo,
+                "label": dict(TipoAPU.choices)[tipo],
+                "categorias": grupos.get(tipo, []),
+            }
+            for tipo in orden_tipos
+            if tipo in grupos
+        ]
+        ctx["presets"] = (
+            CuadrillaPreset.objects
+            .filter(activo=True)
+            .prefetch_related("items__item")
+        )
+        ctx["tipo_choices"] = TipoAPU.choices
+        return ctx
+
+
+# ── CategoriaItemAPU CRUD ─────────────────────────────────────────────────────
+
+class CategoriaItemAPUCreateView(CreateView):
+    model = CategoriaItemAPU
+    form_class = CategoriaItemAPUForm
+    template_name = "presupuestos/catalogo_apu_categoria_form.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+
+class CategoriaItemAPUUpdateView(UpdateView):
+    model = CategoriaItemAPU
+    form_class = CategoriaItemAPUForm
+    template_name = "presupuestos/catalogo_apu_categoria_form.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+
+class CategoriaItemAPUDeleteView(DeleteView):
+    model = CategoriaItemAPU
+    template_name = "presupuestos/confirm_delete.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+
+# ── ItemCatalogoAPU CRUD ──────────────────────────────────────────────────────
+
+class ItemCatalogoAPUCreateView(CreateView):
+    model = ItemCatalogoAPU
+    form_class = ItemCatalogoAPUForm
+    template_name = "presupuestos/catalogo_apu_item_form.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+    def get_initial(self):
+        initial = super().get_initial()
+        cat_pk = self.request.GET.get("categoria")
+        if cat_pk:
+            initial["categoria"] = cat_pk
+        return initial
+
+
+class ItemCatalogoAPUUpdateView(UpdateView):
+    model = ItemCatalogoAPU
+    form_class = ItemCatalogoAPUForm
+    template_name = "presupuestos/catalogo_apu_item_form.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+
+class ItemCatalogoAPUDeleteView(DeleteView):
+    model = ItemCatalogoAPU
+    template_name = "presupuestos/confirm_delete.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+
+# ── CuadrillaPreset CRUD ──────────────────────────────────────────────────────
+
+class CuadrillaPresetCreateView(CreateView):
+    model = CuadrillaPreset
+    form_class = CuadrillaPresetForm
+    template_name = "presupuestos/cuadrilla_preset_form.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        if self.request.POST:
+            ctx["formset"] = CuadrillaPresetItemFormSet(self.request.POST)
+        else:
+            ctx["formset"] = CuadrillaPresetItemFormSet()
+        return ctx
+
+    def form_valid(self, form):
+        ctx = self.get_context_data()
+        formset = ctx["formset"]
+        if formset.is_valid():
+            self.object = form.save()
+            formset.instance = self.object
+            formset.save()
+            messages.success(self.request, f"Cuadrilla «{self.object.nombre}» creada.")
+            return redirect(self.success_url)
+        return self.form_invalid(form)
+
+
+class CuadrillaPresetUpdateView(UpdateView):
+    model = CuadrillaPreset
+    form_class = CuadrillaPresetForm
+    template_name = "presupuestos/cuadrilla_preset_form.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        if self.request.POST:
+            ctx["formset"] = CuadrillaPresetItemFormSet(self.request.POST, instance=self.object)
+        else:
+            ctx["formset"] = CuadrillaPresetItemFormSet(instance=self.object)
+        return ctx
+
+    def form_valid(self, form):
+        ctx = self.get_context_data()
+        formset = ctx["formset"]
+        if formset.is_valid():
+            self.object = form.save()
+            formset.instance = self.object
+            formset.save()
+            messages.success(self.request, f"Cuadrilla «{self.object.nombre}» actualizada.")
+            return redirect(self.success_url)
+        return self.form_invalid(form)
+
+
+class CuadrillaPresetDeleteView(DeleteView):
+    model = CuadrillaPreset
+    template_name = "presupuestos/confirm_delete.html"
+    success_url = reverse_lazy("presupuestos:catalogo_apu")
+
+
+# ── API: ítems del catálogo por tipo APU ─────────────────────────────────────
+
+class ItemsCatalogoAPIView(View):
+    """
+    GET /presupuestos/api/catalogo/<tipo_apu>/
+    Devuelve ítems activos del catálogo filtrados por TipoAPU.
+    """
+    def get(self, request, tipo_apu):
+        items = list(
+            ItemCatalogoAPU.objects
+            .filter(activo=True, categoria__tipo_apu=tipo_apu)
+            .select_related("categoria")
+            .values("pk", "nombre", "precio_base", "unidad",
+                    "salario_base", "prestaciones", "vida_util_dias",
+                    "categoria__nombre")
+        )
+        return JsonResponse({"items": items, "tipo_apu": tipo_apu})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# APU — PDF GENERACIÓN (WeasyPrint)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _render_apu_pdf(apu, template_name: str) -> bytes:
+    """Renderiza un template HTML a PDF con WeasyPrint."""
+    from weasyprint import HTML, CSS
+    from django.templatetags.static import static
+
+    lineas = apu.lineas.order_by("tipo", "descripcion")
+    html_str = render_to_string(template_name, {
+        "apu": apu,
+        "lineas": lineas,
+        "fecha_generacion": date.today().strftime("%d/%m/%Y"),
+    })
+    return HTML(string=html_str, base_url="/").write_pdf()
+
+
+class APUPDFInternoView(View):
+    """
+    GET /presupuestos/apu/<pk>/pdf-interno/
+    Descarga el PDF con todos los datos internos (costos, márgenes, etc.).
+    Solo para uso interno de la empresa.
+    """
+    def get(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            pdf_bytes = _render_apu_pdf(apu, "presupuestos/apu_pdf_interno.html")
+            nombre = apu.nombre.replace(" ", "_")[:60]
+            response = HttpResponse(pdf_bytes, content_type="application/pdf")
+            response["Content-Disposition"] = f'inline; filename="APU_Interno_{nombre}.pdf"'
+            return response
+        except Exception as exc:
+            logger.exception("[APUPDFInternoView] Error generando PDF APU %s", pk)
+            messages.error(request, f"Error al generar PDF: {exc}")
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
+
+class APUPDFClienteView(View):
+    """
+    GET /presupuestos/apu/<pk>/pdf-cliente/
+    Descarga el PDF para el cliente (solo valores de venta, sin datos internos).
+    """
+    def get(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            pdf_bytes = _render_apu_pdf(apu, "presupuestos/apu_pdf_cliente.html")
+            nombre = apu.nombre.replace(" ", "_")[:60]
+            response = HttpResponse(pdf_bytes, content_type="application/pdf")
+            response["Content-Disposition"] = f'inline; filename="APU_Cliente_{nombre}.pdf"'
+            return response
+        except Exception as exc:
+            logger.exception("[APUPDFClienteView] Error generando PDF APU %s", pk)
+            messages.error(request, f"Error al generar PDF: {exc}")
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
+
+class APUEnviarRevisionView(View):
+    """
+    POST /presupuestos/apu/<pk>/enviar-revision/
+    Marca el APU (y su proyecto) como enviado a revisión/aprobación.
+    Cambia proyecto.estado → APU_GENERADO si el modelo lo soporta.
+    """
+    def post(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            # Actualizar el estado del proyecto si tiene proyecto_sistema
+            if apu.proyecto_sistema:
+                proyecto = apu.proyecto_sistema.proyecto
+                # Intentar avanzar estado (si el campo existe y el valor es válido)
+                from apps.common.choices import EstadoProyecto
+                if hasattr(EstadoProyecto, "APU_GENERADO"):
+                    proyecto.estado = EstadoProyecto.APU_GENERADO
+                    proyecto.save(update_fields=["estado"])
+                    messages.success(
+                        request,
+                        f"APU «{apu.nombre}» enviado a revisión. "
+                        f"Proyecto {proyecto.consecutivo} marcado como APU_GENERADO."
+                    )
+                else:
+                    messages.success(request, f"APU «{apu.nombre}» marcado para revisión.")
+            else:
+                messages.success(request, f"APU «{apu.nombre}» marcado para revisión.")
+        except Exception as exc:
+            messages.error(request, f"Error al enviar a revisión: {exc}")
+            logger.exception("[APUEnviarRevisionView] Error APU %s", pk)
+
+        return redirect(reverse("presupuestos:apu_detail", args=[pk]))

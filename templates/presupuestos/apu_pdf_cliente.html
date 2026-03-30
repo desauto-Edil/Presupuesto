@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>APU — {{ apu.nombre }}</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 18mm 15mm;
+    @bottom-right { content: "Pág. " counter(page) " / " counter(pages); font-size: 8pt; color: #888; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 9pt; color: #1a1a2e; line-height: 1.4; }
+
+  /* ── CABECERA ── */
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #1470e6; padding-bottom: 10px; margin-bottom: 14px; }
+  .header__brand { font-size: 14pt; font-weight: 800; letter-spacing: -0.03em; color: #0e1117; }
+  .header__brand span { color: #1470e6; }
+  .header__meta { text-align: right; font-size: 7.5pt; color: #666; }
+  .header__meta strong { color: #1a1a2e; }
+
+  /* ── BANNER ── */
+  .banner { background: #0e1117; color: #fff; border-radius: 6px; padding: 14px 18px; margin-bottom: 14px; }
+  .banner .title { font-size: 13pt; font-weight: 700; }
+  .banner .sub { font-size: 8pt; opacity: 0.55; margin-top: 3px; }
+
+  /* ── INFO PROYECTO ── */
+  .project-info { display: flex; gap: 10px; margin-bottom: 14px; }
+  .project-info__card { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 8px 10px; }
+  .project-info__label { font-size: 7pt; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; margin-bottom: 3px; }
+  .project-info__value { font-size: 9pt; font-weight: 600; color: #1a1a2e; }
+
+  /* ── TABLA ── */
+  .section { margin-bottom: 16px; }
+  .section__head { padding: 7px 10px; border-radius: 5px 5px 0 0; color: #fff; font-size: 9pt; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  thead tr { background: #f8fafc; }
+  th { padding: 5px 7px; text-align: right; font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  th:first-child { text-align: left; }
+  td { padding: 5px 7px; border-bottom: 1px solid #f1f5f9; text-align: right; }
+  td:first-child { text-align: left; }
+  tfoot td { font-weight: 700; background: #f8fafc; border-top: 1.5px solid #e2e8f0; }
+
+  .total-box { background: #0e1117; color: #fff; border-radius: 6px; padding: 12px 16px; margin-top: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .total-box .label { font-size: 8pt; opacity: 0.55; text-transform: uppercase; letter-spacing: .06em; }
+  .total-box .value { font-size: 20pt; font-weight: 800; color: #38bdf8; }
+
+  .footer-note { margin-top: 20px; font-size: 7pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
+  .disclaimer { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 6px 10px; font-size: 7.5pt; color: #0369a1; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<!-- Cabecera -->
+<div class="header">
+  <div>
+    <div class="header__brand">Impe<span>randina</span></div>
+    <div style="font-size:8pt;color:#666;margin-top:2px;">Análisis de Precios Unitarios</div>
+  </div>
+  <div class="header__meta">
+    <div>Fecha: <strong>{{ fecha_generacion }}</strong></div>
+    {% if apu.proyecto_sistema %}
+    <div>Proyecto: <strong>{{ apu.proyecto_sistema.proyecto.consecutivo }}</strong></div>
+    <div>Cliente: <strong>{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}</strong></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Banner -->
+<div class="banner">
+  <div class="title">{{ apu.nombre }}</div>
+  <div class="sub">
+    {% if apu.proyecto_sistema %}
+      {{ apu.proyecto_sistema.sistema.nombre }}
+      {% if apu.proyecto_sistema.subsistema %} / {{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
+    {% endif %}
+    {% if apu.descripcion %} — {{ apu.descripcion }}{% endif %}
+  </div>
+</div>
+
+{% if apu.proyecto_sistema %}
+<!-- Info proyecto -->
+<div class="project-info">
+  <div class="project-info__card">
+    <div class="project-info__label">Cliente</div>
+    <div class="project-info__value">{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}</div>
+  </div>
+  <div class="project-info__card">
+    <div class="project-info__label">Proyecto</div>
+    <div class="project-info__value">{{ apu.proyecto_sistema.proyecto.nombre }}</div>
+  </div>
+  <div class="project-info__card">
+    <div class="project-info__label">Sistema</div>
+    <div class="project-info__value">{{ apu.proyecto_sistema.sistema.nombre }}</div>
+  </div>
+</div>
+{% endif %}
+
+{% regroup lineas by tipo as lineas_por_tipo %}
+
+{% for grupo in lineas_por_tipo %}
+{% if grupo.list %}
+
+{% if grupo.grouper == "MATERIALES" %}
+<div class="section">
+  <div class="section__head" style="background:#1470e6;">Materiales</div>
+{% elif grupo.grouper == "HERRAMIENTAS_EQUIPOS" %}
+<div class="section">
+  <div class="section__head" style="background:#e07d10;">Herramientas y Equipos</div>
+{% elif grupo.grouper == "TRANSPORTE" %}
+<div class="section">
+  <div class="section__head" style="background:#7048d0;">Transporte</div>
+{% elif grupo.grouper == "MANO_DE_OBRA" %}
+<div class="section">
+  <div class="section__head" style="background:#17a85e;">Mano de Obra</div>
+{% elif grupo.grouper == "ADMINISTRACION" %}
+<div class="section">
+  <div class="section__head" style="background:#64748b;">Administración</div>
+{% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left;">Descripción</th>
+        <th>Rendimiento</th>
+        <th>Valor unitario</th>
+        <th>Valor total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for linea in grupo.list %}
+      <tr>
+        <td>{{ linea.descripcion }}</td>
+        <td>{{ linea.rendimiento|floatformat:4 }}</td>
+        <td>${{ linea.valor_unitario|floatformat:2 }}</td>
+        <td>${{ linea.valor_total|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3">Subtotal</td>
+        <td>
+          {% if grupo.grouper == "MATERIALES" %}${{ apu.subtotal_materiales|floatformat:0 }}
+          {% elif grupo.grouper == "HERRAMIENTAS_EQUIPOS" %}${{ apu.subtotal_herramientas|floatformat:0 }}
+          {% elif grupo.grouper == "TRANSPORTE" %}${{ apu.subtotal_transporte|floatformat:0 }}
+          {% elif grupo.grouper == "MANO_DE_OBRA" %}${{ apu.subtotal_mano_obra|floatformat:0 }}
+          {% elif grupo.grouper == "ADMINISTRACION" %}${{ apu.subtotal_administracion|floatformat:0 }}
+          {% endif %}
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+{% endif %}
+{% endfor %}
+
+<!-- Total final -->
+<div class="total-box">
+  <div>
+    <div class="label">Valor total de venta</div>
+    <div style="font-size:8pt;opacity:.45;margin-top:2px;">
+      Incluye {% if apu.aplica_iva %}IVA {{ apu.iva_pct }}% y {% endif %}factor de venta {{ apu.factor_venta_pct }}%
+    </div>
+  </div>
+  <div class="value">${{ apu.total_valor_venta|floatformat:0 }}</div>
+</div>
+
+<div class="disclaimer">
+  Los precios presentados en este documento corresponden a la oferta comercial.
+  Vigencia: 30 días a partir de la fecha de generación. Sujeto a disponibilidad de materiales.
+</div>
+
+<div class="footer-note">
+  <span>IMPERANDINA S.A.S. — Cubiertos y Fachadas</span>
+  <span>Generado: {{ fecha_generacion }}</span>
+</div>
+
+</body>
+</html>

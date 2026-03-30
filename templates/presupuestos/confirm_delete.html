@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Confirmar eliminación{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center" style="margin-top:40px;">
+  <div class="col-12 col-md-6 col-lg-5">
+    <div class="card shadow-sm border-0">
+      <div class="card-header fw-semibold bg-danger bg-opacity-10 text-danger">
+        <i class="bi bi-exclamation-triangle me-2"></i>Confirmar eliminación
+      </div>
+      <div class="card-body p-4">
+        <p class="mb-3">
+          ¿Está seguro que desea eliminar el registro
+          <strong>«{{ object }}»</strong>?
+        </p>
+        <p class="text-danger small">Esta acción no se puede deshacer.</p>
+
+        <form method="post" class="d-flex gap-2 justify-content-end mt-4">
+          {% csrf_token %}
+          <a href="javascript:history.back()" class="btn btn-outline-secondary">
+            Cancelar
+          </a>
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-trash me-1"></i>Eliminar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

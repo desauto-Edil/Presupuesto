@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block nav_apu %}active{% endblock %}
+{% block title %}{% if form.instance.pk %}Editar cuadrilla{% else %}Nueva cuadrilla{% endif %}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'presupuestos:catalogo_apu' %}">Catálogo APU</a></li>
+      <li class="breadcrumb-item active">
+        {% if form.instance.pk %}Editar «{{ form.instance.nombre }}»{% else %}Nueva cuadrilla preset{% endif %}
+      </li>
+    </ol>
+  </nav>
+  <h1 class="page-title">
+    <i class="bi bi-people me-2"></i>
+    {% if form.instance.pk %}Editar cuadrilla{% else %}Nueva cuadrilla preset{% endif %}
+  </h1>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <!-- Datos del preset -->
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header fw-semibold bg-success bg-opacity-10">
+          <i class="bi bi-diagram-3 me-1"></i>Datos de la cuadrilla
+        </div>
+        <div class="card-body p-4">
+          <div class="row g-3">
+            <div class="col-12 col-md-8">
+              <label class="form-label fw-medium">Nombre <span class="text-danger">*</span></label>
+              {{ form.nombre }}
+              {% if form.nombre.errors %}
+                <div class="text-danger small mt-1">{{ form.nombre.errors }}</div>{% endif %}
+            </div>
+            <div class="col-12 col-md-4 d-flex align-items-end pb-1">
+              <div class="form-check">
+                {{ form.activo }}
+                <label class="form-check-label">Activa</label>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-medium">Descripción</label>
+              {{ form.descripcion }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Composición (formset) -->
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header fw-semibold bg-primary bg-opacity-10 d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-people-fill me-1"></i>Composición de la cuadrilla</span>
+          <button type="button" class="btn btn-xs btn-outline-primary" id="btn-add-item">
+            <i class="bi bi-plus"></i> Agregar cargo
+          </button>
+        </div>
+        <div class="card-body p-0">
+          {{ formset.management_form }}
+          <table class="table table-sm mb-0 align-middle" id="formset-table">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-3">Cargo / ítem</th>
+                <th style="width:120px">Cantidad</th>
+                <th style="width:60px">Quitar</th>
+              </tr>
+            </thead>
+            <tbody id="formset-body">
+              {% for form_item in formset %}
+              <tr class="formset-row {% if form_item.instance.pk %}has-data{% endif %}">
+                <td class="ps-3">
+                  {{ form_item.id }}
+                  {{ form_item.item }}
+                  {% if form_item.item.errors %}
+                    <div class="text-danger small">{{ form_item.item.errors }}</div>{% endif %}
+                </td>
+                <td>{{ form_item.cantidad }}</td>
+                <td class="text-center">
+                  {% if form_item.instance.pk %}
+                    <div class="form-check d-inline-block">
+                      {{ form_item.DELETE }}
+                    </div>
+                  {% else %}
+                    <button type="button" class="btn btn-xs btn-outline-danger btn-remove-row">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 justify-content-end">
+        <a href="{% url 'presupuestos:catalogo_apu' %}" class="btn btn-outline-secondary">Cancelar</a>
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-check-lg me-1"></i>Guardar cuadrilla
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  const body = document.getElementById('formset-body');
+  const totalForms = document.getElementById('id_cuadrillapresetitem_set-TOTAL_FORMS');
+
+  document.getElementById('btn-add-item').addEventListener('click', function () {
+    const idx = parseInt(totalForms.value);
+    // Clonar la primera fila vacía como plantilla
+    const rows = body.querySelectorAll('.formset-row');
+    const emptyRow = rows[rows.length - 1].cloneNode(true);
+
+    // Reemplazar índices
+    emptyRow.innerHTML = emptyRow.innerHTML
+      .replace(/cuadrillapresetitem_set-\d+-/g, `cuadrillapresetitem_set-${idx}-`);
+
+    // Limpiar valores
+    emptyRow.querySelectorAll('input:not([type=hidden]), select').forEach(el => {
+      if (el.type !== 'checkbox') el.value = el.tagName === 'SELECT' ? '' : '';
+    });
+
+    body.appendChild(emptyRow);
+    totalForms.value = idx + 1;
+
+    // Botón quitar
+    emptyRow.querySelector('.btn-remove-row')?.addEventListener('click', function () {
+      emptyRow.remove();
+      totalForms.value = parseInt(totalForms.value) - 1;
+    });
+  });
+
+  // Botones quitar en filas existentes (sin pk)
+  body.querySelectorAll('.btn-remove-row').forEach(btn => {
+    btn.addEventListener('click', function () {
+      btn.closest('tr').remove();
+      totalForms.value = parseInt(totalForms.value) - 1;
+    });
+  });
+})();
+</script>
+{% endblock %}

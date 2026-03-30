@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block nav_apu %}active{% endblock %}
+{% block title %}Catálogo APU{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h1 class="page-title mb-0">
+      <i class="bi bi-currency-dollar me-2"></i>Catálogo APU
+    </h1>
+    <p class="text-muted small mb-0 mt-1">
+      Ítems reutilizables organizados por tipo de análisis de precios unitarios
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'presupuestos:catalogo_categoria_create' %}"
+       class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-folder-plus me-1"></i>Nueva categoría
+    </a>
+    <a href="{% url 'presupuestos:catalogo_item_create' %}"
+       class="btn btn-sm btn-primary">
+      <i class="bi bi-plus-circle me-1"></i>Nuevo ítem
+    </a>
+    <a href="{% url 'presupuestos:catalogo_cuadrilla_create' %}"
+       class="btn btn-sm btn-outline-success">
+      <i class="bi bi-people me-1"></i>Nueva cuadrilla
+    </a>
+    <a href="{% url 'presupuestos:apu_list' %}"
+       class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-list-ul me-1"></i>APUs de proyectos
+    </a>
+  </div>
+</div>
+
+{% if messages %}
+  {% for msg in messages %}
+    <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
+      {{ msg }} <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════
+     SECCIONES POR TIPO APU
+     ══════════════════════════════════════════════════════════ -->
+
+{% if not grupos and not presets %}
+  <div class="empty-state text-center py-5">
+    <i class="bi bi-inbox display-4 text-muted d-block mb-3"></i>
+    <h5 class="text-muted">El catálogo está vacío</h5>
+    <p class="text-muted small">Cree categorías e ítems para empezar a construir APUs.</p>
+    <a href="{% url 'presupuestos:catalogo_categoria_create' %}" class="btn btn-primary mt-2">
+      <i class="bi bi-folder-plus me-1"></i>Crear primera categoría
+    </a>
+  </div>
+{% else %}
+
+  <!-- Iconos y colores por tipo -->
+  {% with tipo_icons="MANO_DE_OBRA:people-fill,HERRAMIENTAS_EQUIPOS:tools,TRANSPORTE:truck,ADMINISTRACION:briefcase,MATERIALES:boxes" %}
+  {% with tipo_colors="MANO_DE_OBRA:primary,HERRAMIENTAS_EQUIPOS:warning,TRANSPORTE:info,ADMINISTRACION:secondary,MATERIALES:success" %}
+
+  {% for grupo in grupos %}
+    {% with tipo=grupo.tipo label=grupo.label %}
+
+    <!-- Encabezado de sección tipo APU -->
+    <div class="d-flex align-items-center gap-2 mb-3 mt-{% if forloop.first %}0{% else %}4{% endif %}">
+      <span class="badge rounded-pill bg-opacity-15
+        {% if tipo == 'MANO_DE_OBRA' %}text-bg-primary
+        {% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}text-bg-warning
+        {% elif tipo == 'TRANSPORTE' %}text-bg-info
+        {% elif tipo == 'ADMINISTRACION' %}text-bg-secondary
+        {% else %}text-bg-success{% endif %}
+        px-3 py-2 fs-6">
+        <i class="bi bi-{% if tipo == 'MANO_DE_OBRA' %}people-fill{% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}tools{% elif tipo == 'TRANSPORTE' %}truck{% elif tipo == 'ADMINISTRACION' %}briefcase{% else %}boxes{% endif %} me-1"></i>
+        {{ label }}
+      </span>
+      <a href="{% url 'presupuestos:catalogo_categoria_create' %}?tipo={{ tipo }}"
+         class="btn btn-xs btn-outline-secondary ms-auto"
+         title="Nueva categoría de {{ label }}">
+        <i class="bi bi-plus"></i> Categoría
+      </a>
+    </div>
+
+    <!-- Grid de tarjetas de categoría -->
+    {% if grupo.categorias %}
+    <div class="row g-3 mb-2">
+      {% for cat in grupo.categorias %}
+      <div class="col-12 col-md-6 col-xl-4">
+        <div class="card h-100 shadow-sm border-0 {% if not cat.activa %}opacity-50{% endif %}">
+
+          <!-- Cabecera de la tarjeta (categoría) -->
+          <div class="card-header d-flex align-items-center justify-content-between py-2
+            {% if tipo == 'MANO_DE_OBRA' %}bg-primary bg-opacity-10
+            {% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}bg-warning bg-opacity-10
+            {% elif tipo == 'TRANSPORTE' %}bg-info bg-opacity-10
+            {% elif tipo == 'ADMINISTRACION' %}bg-secondary bg-opacity-10
+            {% else %}bg-success bg-opacity-10{% endif %}">
+            <div>
+              <span class="fw-semibold">{{ cat.nombre }}</span>
+              {% if not cat.activa %}
+                <span class="badge bg-secondary ms-2 small">inactiva</span>
+              {% endif %}
+              {% if cat.descripcion %}
+                <div class="text-muted small mt-1">{{ cat.descripcion }}</div>
+              {% endif %}
+            </div>
+            <div class="d-flex gap-1">
+              <a href="{% url 'presupuestos:catalogo_item_create' %}?categoria={{ cat.pk }}"
+                 class="btn btn-xs btn-outline-primary" title="Agregar ítem">
+                <i class="bi bi-plus-lg"></i>
+              </a>
+              <a href="{% url 'presupuestos:catalogo_categoria_update' cat.pk %}"
+                 class="btn btn-xs btn-outline-secondary" title="Editar categoría">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </div>
+          </div>
+
+          <!-- Lista de ítems -->
+          <div class="card-body p-0">
+            {% if cat.items.all %}
+            <ul class="list-group list-group-flush">
+              {% for item in cat.items.all %}
+              <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3
+                          {% if not item.activo %}text-muted{% endif %}">
+                <div class="flex-grow-1 me-2" style="min-width:0;">
+                  <div class="fw-medium text-truncate">
+                    {% if item.codigo %}<code class="small text-muted me-1">{{ item.codigo }}</code>{% endif %}
+                    {{ item.nombre }}
+                  </div>
+                  <div class="small text-muted">
+                    <!-- Precio base -->
+                    <span class="me-2">
+                      <i class="bi bi-tag-fill me-1 opacity-50"></i>
+                      ${{ item.precio_base|floatformat:0 }} / {{ item.get_unidad_display }}
+                    </span>
+                    <!-- Salario (personal) -->
+                    {% if item.salario_base %}
+                      <span class="me-2 text-primary">
+                        <i class="bi bi-wallet2 me-1 opacity-50"></i>
+                        Sal. ${{ item.salario_base|floatformat:0 }}
+                      </span>
+                    {% endif %}
+                    <!-- Vida útil (herramientas) -->
+                    {% if item.vida_util_dias %}
+                      <span class="text-warning">
+                        <i class="bi bi-clock me-1 opacity-50"></i>
+                        {{ item.vida_util_dias }} días
+                      </span>
+                    {% endif %}
+                    {% if not item.activo %}
+                      <span class="badge bg-secondary ms-1">inactivo</span>
+                    {% endif %}
+                  </div>
+                </div>
+                <div class="d-flex gap-1 flex-shrink-0">
+                  <a href="{% url 'presupuestos:catalogo_item_update' item.pk %}"
+                     class="btn btn-xs btn-outline-secondary" title="Editar">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <a href="{% url 'presupuestos:catalogo_item_delete' item.pk %}"
+                     class="btn btn-xs btn-outline-danger" title="Eliminar">
+                    <i class="bi bi-trash"></i>
+                  </a>
+                </div>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <div class="text-center py-3 text-muted small">
+              <i class="bi bi-inbox me-1"></i>Sin ítems —
+              <a href="{% url 'presupuestos:catalogo_item_create' %}?categoria={{ cat.pk }}">agregar</a>
+            </div>
+            {% endif %}
+          </div>
+
+          <!-- Footer de la tarjeta -->
+          <div class="card-footer bg-transparent d-flex justify-content-between align-items-center py-2 px-3">
+            <span class="text-muted small">
+              {{ cat.items.count }} ítem{{ cat.items.count|pluralize }}
+            </span>
+            <a href="{% url 'presupuestos:catalogo_categoria_delete' cat.pk %}"
+               class="btn btn-xs btn-link text-danger p-0"
+               onclick="return confirm('¿Eliminar la categoría «{{ cat.nombre }}»?')">
+              <i class="bi bi-trash3 small"></i>
+            </a>
+          </div>
+
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-muted small mb-2 ps-1">
+      <i class="bi bi-info-circle me-1"></i>No hay categorías de este tipo todavía.
+    </div>
+    {% endif %}
+
+    {% endwith %}
+  {% endfor %}
+
+  {% endwith %}{% endwith %}
+
+  <!-- ══════════════════════════════════════════════════════════
+       CUADRILLAS PRESET (sección aparte)
+       ══════════════════════════════════════════════════════════ -->
+  <div class="d-flex align-items-center gap-2 mb-3 mt-4">
+    <span class="badge rounded-pill text-bg-success px-3 py-2 fs-6">
+      <i class="bi bi-diagram-3-fill me-1"></i>Cuadrillas preset
+    </span>
+    <a href="{% url 'presupuestos:catalogo_cuadrilla_create' %}"
+       class="btn btn-xs btn-outline-success ms-auto">
+      <i class="bi bi-plus"></i> Nueva cuadrilla
+    </a>
+  </div>
+
+  {% if presets %}
+  <div class="row g-3">
+    {% for preset in presets %}
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="card h-100 shadow-sm border-0 {% if not preset.activo %}opacity-50{% endif %}">
+
+        <div class="card-header d-flex align-items-center justify-content-between py-2 bg-success bg-opacity-10">
+          <div>
+            <span class="fw-semibold">{{ preset.nombre }}</span>
+            {% if not preset.activo %}
+              <span class="badge bg-secondary ms-2 small">inactivo</span>
+            {% endif %}
+            {% if preset.descripcion %}
+              <div class="text-muted small mt-1">{{ preset.descripcion }}</div>
+            {% endif %}
+          </div>
+          <div class="d-flex gap-1">
+            <a href="{% url 'presupuestos:catalogo_cuadrilla_update' preset.pk %}"
+               class="btn btn-xs btn-outline-secondary" title="Editar">
+              <i class="bi bi-pencil"></i>
+            </a>
+          </div>
+        </div>
+
+        <div class="card-body p-0">
+          {% if preset.items.all %}
+          <ul class="list-group list-group-flush">
+            {% for pi in preset.items.all %}
+            <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3">
+              <div>
+                <div class="fw-medium">{{ pi.item.nombre }}</div>
+                <div class="small text-muted">
+                  ${{ pi.item.total_mes_personal|floatformat:0 }}/mes
+                </div>
+              </div>
+              <span class="badge bg-primary rounded-pill">×{{ pi.cantidad }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <div class="text-center py-3 text-muted small">Sin ítems configurados.</div>
+          {% endif %}
+        </div>
+
+        <div class="card-footer bg-transparent d-flex justify-content-between align-items-center py-2 px-3">
+          <span class="text-muted small">
+            {{ preset.total_personas }} persona{{ preset.total_personas|pluralize }}
+          </span>
+          <a href="{% url 'presupuestos:catalogo_cuadrilla_delete' preset.pk %}"
+             class="btn btn-xs btn-link text-danger p-0"
+             onclick="return confirm('¿Eliminar la cuadrilla «{{ preset.nombre }}»?')">
+            <i class="bi bi-trash3 small"></i>
+          </a>
+        </div>
+
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-muted small ps-1">
+    <i class="bi bi-info-circle me-1"></i>No hay cuadrillas configuradas todavía.
+  </div>
+  {% endif %}
+
+{% endif %}
+{% endblock %}

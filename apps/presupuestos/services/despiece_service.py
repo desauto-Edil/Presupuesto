@@ -123,9 +123,9 @@ class DespieceService:
                 proyecto_sistema=ps,
                 componente_codigo=comp.codigo,
                 defaults={
-                    "proyecto":               ps.proyecto,
-                    "cantidad_calculada":     cantidad_decimal,
-                    "categoria_producto":     categoria,
+                    "proyecto": ps.proyecto,
+                    "cantidad_calculada":cantidad_decimal,
+                    "categoria_producto":categoria,
                     "es_dependencia_automatica": False,
                     # producto se conserva si ya fue resuelto (update_or_create no lo toca)
                 },
@@ -145,12 +145,12 @@ class DespieceService:
 
             resultados.append({
                 "componente_codigo": comp.codigo,
-                "nombre":            comp.nombre,
-                "cantidad":          float(cantidad_decimal),
-                "unidad":            comp.unidad,
-                "categoria":         comp.categoria_slug,
-                "pendiente":         linea.pendiente_seleccion,
-                "estado":            linea.estado_tecnico,
+                "nombre": comp.nombre,
+                "cantidad": float(cantidad_decimal),
+                "unidad": comp.unidad,
+                "categoria": comp.categoria_slug,
+                "pendiente": linea.pendiente_seleccion,
+                "estado": linea.estado_tecnico,
             })
 
         logger.info(

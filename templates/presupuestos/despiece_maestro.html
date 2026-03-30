@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load catalogo_tags %}
 {% block title %}Despiece — {{ proyecto.consecutivo }}{% endblock %}
 {% block nav_proyectos %}active{% endblock %}
 {% block page_title %}Despiece{% endblock %}
@@ -127,47 +128,72 @@
 
         {% with lineas=ps.despiece_lineas.all %}
         {% if lineas %}
-        <table class="data-table">
+        <table class="data-table" style="font-size:12px;">
           <thead>
-            <tr>
-              <th>Producto / Categoría</th>
-              <th style="text-align:right;">Calculado</th>
-              <th style="text-align:right;">Ajustado</th>
-              <th style="text-align:right;">Final</th>
-              <th style="text-align:right;">Precio unit.</th>
-              <th></th>
+            <tr style="background:var(--surface-alt,#f8f9fa);">
+              <th style="min-width:180px;">Producto / Categoría</th>
+              <th style="text-align:center;width:70px;">Unidad</th>
+              <th style="text-align:right;width:90px;">Calculado</th>
+              <th style="text-align:right;width:90px;">Ajustado</th>
+              <th style="text-align:right;width:90px;font-weight:700;">Final</th>
+              <th style="text-align:right;width:110px;">Precio unit.</th>
+              <th style="text-align:right;width:110px;font-weight:700;">Total</th>
+              <th style="width:56px;"></th>
             </tr>
           </thead>
           <tbody>
             {% for dl in lineas %}
+            {% with moneda=dl.producto.moneda|default:"COP" %}
             <tr id="linea-row-{{ dl.pk }}"
-                class="{% if dl.pendiente_seleccion %}row-warn{% elif dl.estado_tecnico == 'ERROR_CONFIGURACION' %}row-error{% endif %}">
-              <td>
+                class="{% if dl.pendiente_seleccion %}row-warn{% elif dl.estado_tecnico == 'ERROR_CONFIGURACION' %}row-error{% endif %}"
+                style="border-bottom:1px solid var(--border);">
+              <td style="padding:8px 6px;">
                 {% if dl.producto %}
-                  {{ dl.producto.nombre }}
-                  {% if dl.es_dependencia_automatica %}
-                    <span class="badge-status bs-info" style="font-size:9px;">auto</span>
-                  {% endif %}
+                  <div style="font-weight:500;line-height:1.3;">{{ dl.producto.nombre }}</div>
+                  <div style="font-size:10px;color:var(--muted);margin-top:1px;">
+                    {{ dl.producto.codigo }}
+                    {% if dl.es_dependencia_automatica %}
+                      <span class="badge-status bs-info" style="font-size:9px;margin-left:4px;">auto</span>
+                    {% endif %}
+                    {% if moneda != "COP" %}
+                      <span style="background:#e0f0ff;color:#1470e6;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:600;margin-left:3px;">{{ moneda }}</span>
+                    {% endif %}
+                  </div>
                 {% elif dl.categoria_producto %}
-                  <span style="color:var(--warning);">[{{ dl.categoria_producto }}]</span>
+                  <span style="color:var(--warning);font-weight:500;">[{{ dl.categoria_producto }}]</span>
+                  <div style="font-size:10px;color:var(--warning);margin-top:1px;">Pendiente selección</div>
                 {% else %}
-                  <span style="color:var(--danger);">Sin producto</span>
+                  <span style="color:var(--danger);font-weight:500;">Sin producto asignado</span>
                 {% endif %}
               </td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums;">
+              <td style="text-align:center;color:var(--muted);font-size:11px;">
+                {% if dl.producto %}{{ dl.producto.unidad }}{% else %}—{% endif %}
+              </td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">
                 {{ dl.cantidad_calculada|floatformat:2 }}
               </td>
               <td style="text-align:right;font-variant-numeric:tabular-nums;" id="qty-ajustada-{{ dl.pk }}">
-                {% if dl.cantidad_ajustada is not None %}{{ dl.cantidad_ajustada|floatformat:2 }}{% else %}—{% endif %}
+                {% if dl.cantidad_ajustada is not None %}
+                  <span style="color:var(--accent);">{{ dl.cantidad_ajustada|floatformat:2 }}</span>
+                {% else %}—{% endif %}
               </td>
-              <td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums;" id="qty-final-{{ dl.pk }}">
+              <td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums;" id="qty-final-{{ dl.pk }}">
                 {{ dl.cantidad_final|floatformat:2 }}
               </td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums;">
-                {% if dl.precio_snapshot %}{{ dl.precio_snapshot|floatformat:2 }}{% else %}—{% endif %}
+              <td style="text-align:right;font-variant-numeric:tabular-nums;font-size:11.5px;">
+                {% if dl.precio_snapshot %}
+                  {{ dl.precio_snapshot|currency:moneda }}
+                {% else %}—{% endif %}
               </td>
-              <td style="text-align:right;white-space:nowrap;">
+              <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:11.5px;">
+                {% if dl.precio_snapshot %}
+                  {{ dl.precio_snapshot|floatformat:2|add:"0" }}
+                  {# show total: cantidad_final × precio_snapshot #}
+                {% else %}—{% endif %}
+              </td>
+              <td style="text-align:right;white-space:nowrap;padding:4px 6px;">
                 <button type="button" class="btn btn-ghost btn-sm"
+                        style="font-size:11px;padding:3px 8px;"
                         data-bs-toggle="modal" data-bs-target="#modalAjuste"
                         data-linea-pk="{{ dl.pk }}"
                         data-cantidad-actual="{{ dl.cantidad_final }}"
@@ -176,8 +202,22 @@
                 </button>
               </td>
             </tr>
+            {% endwith %}
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr style="background:var(--surface-alt,#f5f7fa);font-weight:600;font-size:11.5px;">
+              <td colspan="4" style="padding:8px 6px;color:var(--muted);">{{ lineas|length }} línea{{ lineas|length|pluralize }}</td>
+              <td colspan="4" style="text-align:right;padding:8px 6px;">
+                {% with apu=ps.apu %}
+                {% if apu %}
+                  Costo total: <strong>{{ apu.total_costo|currency:"COP" }}</strong>
+                  &nbsp;&nbsp;Venta: <strong style="color:var(--accent);">{{ apu.total_valor_venta|currency:"COP" }}</strong>
+                {% endif %}
+                {% endwith %}
+              </td>
+            </tr>
+          </tfoot>
         </table>
         {% else %}
         <div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12px;">
@@ -192,42 +232,42 @@
         <div class="section-label" style="margin-bottom:12px;">Resumen APU</div>
         {% with apu=ps.apu %}
         {% if apu %}
-        <div style="font-size:11px;line-height:1.9;">
+        <div style="font-size:11px;line-height:2;">
           <div style="display:flex;justify-content:space-between;">
             <span style="color:var(--muted);">Materiales</span>
-            <span>{{ apu.subtotal_materiales|floatformat:0 }}</span>
+            <span>{{ apu.subtotal_materiales|currency:"COP" }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;">
             <span style="color:var(--muted);">Herramientas</span>
-            <span>{{ apu.subtotal_herramientas|floatformat:0 }}</span>
+            <span>{{ apu.subtotal_herramientas|currency:"COP" }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;">
             <span style="color:var(--muted);">Mano de obra</span>
-            <span>{{ apu.subtotal_mano_obra|floatformat:0 }}</span>
+            <span>{{ apu.subtotal_mano_obra|currency:"COP" }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;">
             <span style="color:var(--muted);">Transporte</span>
-            <span>{{ apu.subtotal_transporte|floatformat:0 }}</span>
+            <span>{{ apu.subtotal_transporte|currency:"COP" }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;">
             <span style="color:var(--muted);">Admón.</span>
-            <span>{{ apu.subtotal_administracion|floatformat:0 }}</span>
+            <span>{{ apu.subtotal_administracion|currency:"COP" }}</span>
           </div>
           <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700;">
             <span>Total costo</span>
-            <span>{{ apu.total_costo|floatformat:0 }}</span>
+            <span>{{ apu.total_costo|currency:"COP" }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-weight:700;color:var(--accent);">
             <span>Venta</span>
-            <span>{{ apu.total_valor_venta|floatformat:0 }}</span>
+            <span>{{ apu.total_valor_venta|currency:"COP" }}</span>
           </div>
         </div>
-        <a href="{% url 'presupuestos:apu_detail' apu.pk %}" class="btn btn-ghost btn-sm w-100" style="margin-top:14px;">
-          Ver APU completo →
+        <a href="{% url 'presupuestos:apu_detail' apu.pk %}" class="btn btn-primary btn-sm w-100" style="margin-top:14px;">
+          <i class="bi bi-graph-up me-1"></i>Ver APU completo →
         </a>
         {% else %}
         <p style="font-size:11px;color:var(--muted);margin-top:8px;">
-          APU no generado aún.
+          APU no generado aún. Use el botón <strong>Generar APU</strong> para crearlo.
         </p>
         {% endif %}
         {% endwith %}

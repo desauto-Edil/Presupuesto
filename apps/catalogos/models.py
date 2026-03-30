@@ -60,18 +60,6 @@ class CategoriaProducto(models.Model):
 # ---------------------------------------------------------------------------
 
 class Producto(models.Model):
-    """
-    Producto del catálogo técnico.
-
-    El precio se gestiona DIRECTAMENTE en este modelo:
-      · proveedor              → FK al proveedor principal
-      · precio_actual          → precio vigente (obligatorio vía form)
-      · fecha_actualizacion_precio → se actualiza automáticamente al cambiar precio
-
-    ProductoProveedor sigue existiendo como tabla técnica usada por DespieceService.
-    Al guardar el precio aquí, se sincroniza automáticamente allá.
-    """
-
     codigo = models.CharField(max_length=50, unique=True)
     nombre = models.CharField(max_length=300)
     categoria = models.ForeignKey(

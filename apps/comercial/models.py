@@ -1,18 +1,5 @@
 """
 apps/comercial/models.py
-
-Dominio: gestión de la relación con el cliente desde el primer contacto
-hasta el seguimiento de solicitudes y proyectos de presupuesto.
-
-  Cliente → ContactoCliente
-  Cliente → Solicitud → SolicitudArchivo
-  Solicitud → Proyecto (ForeignKey, versionado: N versiones por solicitud)
-
-Flujo: Solicitud → crear Proyecto (versión) → seleccionar Sistema → Despiece
-
-Dependencias:
-  - apps.common.choices (EstadoSolicitud, EstadoProyecto, Moneda)
-  - apps.usuarios (UsuarioSistema, vía FK de auditoría)
 """
 
 from django.db import models
@@ -180,12 +167,6 @@ class SolicitudArchivo(models.Model):
 # ---------------------------------------------------------------------------
 
 class Proyecto(models.Model):
-    """
-    Versión de presupuesto para una Solicitud.
-    Una Solicitud puede tener N Proyectos (versiones); solo uno es el actual.
-
-    Flujo: Solicitud → Proyecto → ProyectoSistema → Despiece → APU
-    """
     from apps.common.choices import EstadoProyecto, Moneda
 
     consecutivo = models.CharField(max_length=30, unique=True)
@@ -196,7 +177,7 @@ class Proyecto(models.Model):
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        related_name="proyectos",          # solicitud.proyectos.all()
+        related_name="proyectos",       
     )
     version = models.PositiveIntegerField(
         default=1,
@@ -279,7 +260,6 @@ class Proyecto(models.Model):
     # ── Transiciones de estado ────────────────────────────────────────────────
 
     def avanzar_a_despiece(self):
-        """Avanza el estado a DESPIECE si el estado actual lo permite."""
         from apps.common.choices import EstadoProyecto
         permitidos = {
             EstadoProyecto.BORRADOR,

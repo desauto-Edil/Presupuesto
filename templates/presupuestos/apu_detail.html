@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
+{% load catalogo_tags %}
 
-{% block title %}APU — {{ apu.proyecto_sistema }}{% endblock %}
+{% block title %}APU — {{ apu.nombre }}{% endblock %}
 {% block nav_apu %}active{% endblock %}
 {% block page_title %}APU{% endblock %}
 {% block breadcrumb %}
-  <a href="{% url 'presupuestos:configapu_list' %}" style="color:inherit;text-decoration:none;">APU</a>
-  · {{ apu.proyecto_sistema.proyecto.consecutivo }}
+  <a href="{% url 'presupuestos:apu_list' %}" style="color:inherit;text-decoration:none;">APU</a>
+  {% if apu.proyecto_sistema %}· {{ apu.proyecto_sistema.proyecto.consecutivo }}{% endif %}
 {% endblock %}
 
 {% block extra_head %}
@@ -308,12 +309,28 @@
      class="btn btn-ghost btn-sm">
     <i class="bi bi-sliders" style="margin-right:4px;"></i>Parámetros
   </a>
+  {% if apu.proyecto_sistema %}
   <form method="post"
-        action="{% url 'presupuestos:apu_generar' apu.proyecto_sistema_id %}"
+        action="{% url 'presupuestos:apu_generar' apu.proyecto_sistema.pk %}"
         class="d-inline" style="margin:0;">
     {% csrf_token %}
     <button type="submit" class="btn btn-ghost btn-sm">
       <i class="bi bi-arrow-clockwise" style="margin-right:4px;"></i>Regenerar materiales
+    </button>
+  </form>
+  {% endif %}
+  <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}" class="btn btn-ghost btn-sm" target="_blank">
+    <i class="bi bi-file-earmark-pdf" style="margin-right:4px;"></i>PDF Interno
+  </a>
+  <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}" class="btn btn-ghost btn-sm" target="_blank">
+    <i class="bi bi-file-earmark-person" style="margin-right:4px;"></i>PDF Cliente
+  </a>
+  <form method="post"
+        action="{% url 'presupuestos:apu_enviar_revision' apu.pk %}"
+        class="d-inline" style="margin:0;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary btn-sm">
+      <i class="bi bi-send-check" style="margin-right:4px;"></i>Enviar a revisión
     </button>
   </form>
 {% endblock %}
@@ -324,17 +341,24 @@
 <!-- ── CABECERA ──────────────────────────────────────────────────────────── -->
 <div class="apu-header fade-up">
   <div>
+    {% if apu.proyecto_sistema %}
     <div class="apu-header__code">APU · {{ apu.proyecto_sistema.proyecto.consecutivo }}</div>
-    <div class="apu-header__name">{{ apu.proyecto_sistema.sistema.nombre }}</div>
+    <div class="apu-header__name">{{ apu.nombre }}</div>
     <div class="apu-header__sub">
-      {% if apu.proyecto_sistema.subsistema %}{{ apu.proyecto_sistema.subsistema.nombre }} &nbsp;·&nbsp; {% endif %}
-      {{ apu.proyecto_sistema.proyecto.cliente.razon_social }}
+      {{ apu.proyecto_sistema.sistema.nombre }}
+      {% if apu.proyecto_sistema.subsistema %}&nbsp;·&nbsp;{{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
+      &nbsp;·&nbsp;{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}
     </div>
+    {% else %}
+    <div class="apu-header__code">APU</div>
+    <div class="apu-header__name">{{ apu.nombre }}</div>
+    {% if apu.descripcion %}<div class="apu-header__sub">{{ apu.descripcion }}</div>{% endif %}
+    {% endif %}
   </div>
   <div>
     <div class="apu-header__total-label">Total venta</div>
-    <div class="apu-header__total-value">${{ apu.total_valor_venta|floatformat:0 }}</div>
-    <div class="apu-header__cost-value">Costo: ${{ apu.total_costo|floatformat:0 }}</div>
+    <div class="apu-header__total-value">{{ apu.total_valor_venta|currency:"COP" }}</div>
+    <div class="apu-header__cost-value">Costo: {{ apu.total_costo|currency:"COP" }}</div>
   </div>
 </div>
 
@@ -344,34 +368,31 @@
 
   <div class="apu-kpi" style="--kpi-accent:#1470e6;">
     <div class="apu-kpi__label">Materiales</div>
-    <div class="apu-kpi__value">${{ apu.subtotal_materiales|floatformat:0 }}</div>
+    <div class="apu-kpi__value">{{ apu.subtotal_materiales|currency:"COP" }}</div>
     <div class="apu-kpi__sub">Por unidad de referencia</div>
   </div>
 
   <div class="apu-kpi" style="--kpi-accent:#e07d10;">
     <div class="apu-kpi__label">Herramientas</div>
-    <div class="apu-kpi__value">${{ apu.subtotal_herramientas|floatformat:0 }}</div>
+    <div class="apu-kpi__value">{{ apu.subtotal_herramientas|currency:"COP" }}</div>
     <div class="apu-kpi__sub">Equipos y eléctricos</div>
   </div>
 
   <div class="apu-kpi" style="--kpi-accent:#7048d0;">
     <div class="apu-kpi__label">Transporte</div>
-    <div class="apu-kpi__value">${{ apu.subtotal_transporte|floatformat:0 }}</div>
+    <div class="apu-kpi__value">{{ apu.subtotal_transporte|currency:"COP" }}</div>
     <div class="apu-kpi__sub">Retiro y envío</div>
   </div>
 
   <div class="apu-kpi" style="--kpi-accent:#17a85e;">
     <div class="apu-kpi__label">Mano de obra</div>
-    <div class="apu-kpi__value">${{ apu.subtotal_mano_obra|floatformat:0 }}</div>
-    <div class="apu-kpi__sub">
-      {{ apu.cuadrilla_personas }} pers.
-      {% if apu.dias_trabajo %}&nbsp;· {{ apu.dias_trabajo|floatformat:1 }} días{% endif %}
-    </div>
+    <div class="apu-kpi__value">{{ apu.subtotal_mano_obra|currency:"COP" }}</div>
+    <div class="apu-kpi__sub">Personal y cuadrillas</div>
   </div>
 
   <div class="apu-kpi" style="--kpi-accent:#64748b;">
     <div class="apu-kpi__label">Administración</div>
-    <div class="apu-kpi__value">${{ apu.subtotal_administracion|floatformat:0 }}</div>
+    <div class="apu-kpi__value">{{ apu.subtotal_administracion|currency:"COP" }}</div>
     <div class="apu-kpi__sub">Gastos generales</div>
   </div>
 
@@ -380,9 +401,8 @@
     <div class="apu-kpi__label" style="margin-bottom:8px;">Parámetros</div>
     <div class="apu-param-row"><span>Factor venta</span><strong>{{ apu.factor_venta_pct }}%</strong></div>
     <div class="apu-param-row"><span>IVA</span><strong>{% if apu.aplica_iva %}{{ apu.iva_pct }}%{% else %}—{% endif %}</strong></div>
-    <div class="apu-param-row"><span>AIU</span><strong>{{ apu.aiu_contratista_pct }}%</strong></div>
-    <div class="apu-param-row"><span>Margen</span><strong>{{ apu.margen_contratista_pct }}%</strong></div>
-    <div class="apu-param-row"><span>Cuadrilla</span><strong>{{ apu.cuadrilla_personas }} pers.</strong></div>
+    <div class="apu-param-row"><span>Total costo</span><strong>{{ apu.total_costo|currency:"COP" }}</strong></div>
+    <div class="apu-param-row"><span>Total venta</span><strong>{{ apu.total_valor_venta|currency:"COP" }}</strong></div>
   </div>
 
 </div><!-- /.apu-kpi-row -->
@@ -393,18 +413,6 @@
 ══════════════════════════════════════════════════════════════════════════ -->
 
 {% regroup lineas by tipo as lineas_por_tipo %}
-
-{% with
-  tipos_cfg="MATERIALES:#1470e6:Materiales:bi-box-seam|HERRAMIENTAS_EQUIPOS:#e07d10:Herramientas y Equipos:bi-tools|TRANSPORTE:#7048d0:Transporte:bi-truck|MANO_DE_OBRA:#17a85e:Mano de Obra:bi-people|ADMINISTRACION:#64748b:Administración:bi-briefcase"
-%}
-
-{% comment %}Render each section in canonical order{% endcomment %}
-
-{% for tipo_key, tipo_color, tipo_label, tipo_icon in "MATERIALES,#1470e6,Materiales,bi-box-seam|HERRAMIENTAS_EQUIPOS,#e07d10,Herramientas y Equipos,bi-tools|TRANSPORTE,#7048d0,Transporte,bi-truck|MANO_DE_OBRA,#17a85e,Mano de Obra,bi-people|ADMINISTRACION,#64748b,Administración,bi-briefcase"|split:"|"|unpack:"," %}
-{# Django templates don't support this syntax — see JS-free approach below #}
-{% endfor %}
-
-{% endwith %}
 
 {# ── Sección MATERIALES ─────────────────────────────────────────── #}
 {% with color="#1470e6" subtotal=apu.subtotal_materiales %}
@@ -891,7 +899,7 @@
 <div class="modal fade" id="modalTransporte" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form method="post" action="{% url 'presupuestos:apu_herramientas' apu.pk %}">
+      <form method="post" action="{% url 'presupuestos:apu_transporte' apu.pk %}">
         {% csrf_token %}
         <div class="modal-header cat-modal-header">
           <h5 class="modal-title">
@@ -1084,8 +1092,8 @@ function toggleSection(el) {
     document.getElementById('editLineaTitulo').textContent = btn.dataset.descripcion;
     document.getElementById('editRendimiento').value = btn.dataset.rendimiento;
     document.getElementById('editPrecio').value = btn.dataset.precio;
-    document.getElementById('formEditarLinea').action =
-      `/presupuestos/apu/linea/${btn.dataset.lineaPk}/editar/`;
+    const base = "{% url 'presupuestos:apu_linea_update' 0 %}".slice(0, -2);
+    document.getElementById('formEditarLinea').action = base + btn.dataset.lineaPk + '/';
   });
 })();
 

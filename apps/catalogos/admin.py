@@ -21,7 +21,7 @@ class ProductoAdmin(admin.ModelAdmin):
                      "fecha_actualizacion_precio", "activo")
     list_filter   = ("categoria", "origen", "activo", "proveedor")
     search_fields = ("codigo", "nombre", "marca")
-    ordering      = ("-fecha_actualizacion_precio",)
+    ordering = ("-fecha_actualizacion_precio",)
     readonly_fields = ("codigo", "fecha_actualizacion_precio", "created_at", "updated_at")
 
     fieldsets = (
@@ -45,8 +45,8 @@ class ProductoAdmin(admin.ModelAdmin):
 
 @admin.register(Proveedor)
 class ProveedorAdmin(admin.ModelAdmin):
-    list_display  = ("nit", "nombre", "ciudad", "activo")
-    list_filter   = ("activo",)
+    list_display = ("nit", "nombre", "ciudad", "activo")
+    list_filter = ("activo",)
     search_fields = ("nit", "nombre")
     readonly_fields = ("created_at", "updated_at")
 
@@ -54,8 +54,8 @@ class ProveedorAdmin(admin.ModelAdmin):
 # ProductoProveedor: tabla técnica interna, solo visible en admin para diagnóstico
 @admin.register(ProductoProveedor)
 class ProductoProveedorAdmin(admin.ModelAdmin):
-    list_display  = ("producto", "proveedor", "precio_unitario", "moneda", "activo", "updated_at")
-    list_filter   = ("moneda", "activo")
+    list_display = ("producto", "proveedor", "precio_unitario", "moneda", "activo", "updated_at")
+    list_filter = ("moneda", "activo")
     search_fields = ("producto__nombre", "proveedor__nombre")
     readonly_fields = ("created_at", "updated_at")
-    ordering      = ("-updated_at",)
+    ordering = ("-updated_at",)

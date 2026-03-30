@@ -41,7 +41,8 @@ class ProductoForm(forms.ModelForm):
         fields = [
             "codigo", "nombre", "categoria", "unidad",
             "proveedor", "precio_actual", "moneda",
-            "origen", "marca", "linea", "rendimiento", "activo",
+            "origen", "marca", "linea", "rendimiento",
+            "ficha_tecnica", "activo",
         ]
         widgets = {
             "codigo": forms.TextInput(attrs={"class": "form-control",
@@ -57,7 +58,11 @@ class ProductoForm(forms.ModelForm):
             "marca": forms.TextInput(attrs={"class": "form-control"}),
             "linea": forms.TextInput(attrs={"class": "form-control"}),
             "rendimiento": forms.NumberInput(attrs={"class": "form-control", "step": "0.000001"}),
+            "ficha_tecnica": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "ficha_tecnica": "Ficha técnica (PDF / imagen, opcional)",
         }
 
     def clean_precio_actual(self):

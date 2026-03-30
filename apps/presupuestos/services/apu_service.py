@@ -1,16 +1,11 @@
 """
-apps/presupuestos/services/apu_service.py — Motor de APU automatico (Nivel 4).
+apps/presupuestos/services/apu_service.py — Motor de APU automático.
 
-Genera APUProyecto + APULineas a partir de:
-  - DespieceLineas del ProyectoSistema (materiales)
-  - Variables de entrada del proyecto (mano de obra, equipos, transporte)
-  - ConfiguracionAPU activa como valores predeterminados
-
-Arquitectura agnostica:
-  - No hay referencias a sistemas concretos (PowerGrip, Fachada, etc.)
-  - _get_total_unidades() busca la cantidad de referencia en parametros_entrada
-    usando una lista de claves por prioridad.
-  - cuadrilla_personas se lee desde APUProyecto (editable por el usuario).
+Genera APU + APULineas a partir de:
+  - DespieceLineas del ProyectoSistema  (materiales)
+  - Catálogo de ítems                   (mano de obra, herramientas)
+  - Entradas manuales                   (transporte, administración)
+  - ConfiguracionAPU activa             (valores predeterminados)
 """
 
 from __future__ import annotations
@@ -23,8 +18,7 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-# Claves buscadas en parametros_entrada para determinar la cantidad de referencia
-# del sistema (p. ej. total de unidades a instalar). Se usan en orden de prioridad.
+# Claves buscadas en parametros_entrada para la cantidad de referencia del sistema.
 _CLAVES_UNIDAD_REFERENCIA = (
     "total_powergrip",
     "total_unidades",
@@ -37,39 +31,45 @@ _CLAVES_UNIDAD_REFERENCIA = (
 
 
 class APUService:
-    """Motor de APU automatico (Nivel 4)."""
+    """Motor de APU automático."""
 
     # ── Constructor ───────────────────────────────────────────────────────────
 
     def __init__(self, proyecto_sistema):
-        from apps.presupuestos.models import APUProyecto, ConfiguracionAPU
+        from apps.presupuestos.models import APU, ConfiguracionAPU
 
         self.ps  = proyecto_sistema
         self.cfg = ConfiguracionAPU.activa_o_default()
 
-        self.apu, created = APUProyecto.objects.get_or_create(
+        # Nombre y descripción predeterminados derivados del proyecto sistema
+        nombre_default = (
+            f"APU {proyecto_sistema.sistema} — "
+            f"{proyecto_sistema.proyecto}"
+        )
+
+        self.apu, created = APU.objects.get_or_create(
             proyecto_sistema=proyecto_sistema,
             defaults={
-                "factor_venta_pct":       self.cfg.porcentaje_ganancia,
-                "aiu_contratista_pct":    self.cfg.aiu_contratista,
-                "margen_contratista_pct": self.cfg.margen_ganancia_contratista,
-                "iva_pct":                proyecto_sistema.proyecto.iva_pct,
-                "aplica_iva":             not proyecto_sistema.proyecto.aplica_exencion_iva,
+                "nombre": nombre_default,
+                "descripcion": "",
+                "factor_venta_pct": self.cfg.factor_venta_pct,
+                "iva_pct": getattr(proyecto_sistema.proyecto, "iva_pct", self.cfg.iva_pct),
+                "aplica_iva": not getattr(proyecto_sistema.proyecto, "aplica_exencion_iva", False),
             },
         )
         logger.info(
             "[APUService] APU %s (%s) para PS %s | config='%s'.",
-            self.apu.pk, "nuevo" if created else "existente", proyecto_sistema.pk,
-            self.cfg.nombre,
+            self.apu.pk, "nuevo" if created else "existente",
+            proyecto_sistema.pk, self.cfg.nombre,
         )
 
     # ── Classmethod de entrada ────────────────────────────────────────────────
 
     @classmethod
-    def generar(cls, proyecto_sistema) -> "APUProyecto":
+    def generar(cls, proyecto_sistema) -> "APU":
         """
         Punto de entrada principal.
-        Genera materiales, finaliza y devuelve el APUProyecto actualizado.
+        Genera líneas de materiales, finaliza y devuelve el APU.
         """
         svc = cls(proyecto_sistema)
         svc.generar_materiales()
@@ -80,11 +80,9 @@ class APUService:
 
     def _get_total_unidades(self) -> float:
         """
-        Determina la cantidad de referencia del sistema para calcular rendimientos.
-
-        Busca en parametros_entrada usando _CLAVES_UNIDAD_REFERENCIA en orden.
-        Si ninguna clave tiene valor positivo, cae back al area_total_m2 del proyecto.
-        Nunca devuelve 0 ni negativo (minimo 1.0).
+        Determina la cantidad de referencia del sistema.
+        Busca en parametros_entrada con prioridad definida en _CLAVES_UNIDAD_REFERENCIA.
+        Fallback: area_total_m2 del proyecto. Mínimo devuelto: 1.0.
         """
         params = self.ps.parametros_entrada or {}
         for clave in _CLAVES_UNIDAD_REFERENCIA:
@@ -107,14 +105,14 @@ class APUService:
         )
         return fallback
 
-    # ── Generadores de lineas ─────────────────────────────────────────────────
+    # ── Generadores de líneas ─────────────────────────────────────────────────
 
     @transaction.atomic
     def generar_materiales(self) -> List[dict]:
         """
         Genera APULineas tipo MATERIALES desde las DespieceLineas resueltas.
-        Omite lineas pendientes_seleccion con advertencia.
         rendimiento = total_unidades / cantidad_final
+        Omite líneas pendientes_seleccion o sin producto.
         """
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
@@ -128,15 +126,13 @@ class APUService:
         for dl in lineas_despiece:
             if dl.pendiente_seleccion:
                 logger.warning(
-                    "[APUService] Linea %s omitida: pendiente de seleccion "
-                    "(categoria=%s, PS=%s).",
-                    dl.pk, dl.categoria_producto, self.ps.pk,
+                    "[APUService] Línea %s omitida: pendiente de selección (PS=%s).",
+                    dl.pk, self.ps.pk,
                 )
                 continue
-
             if not dl.producto_id:
                 logger.warning(
-                    "[APUService] Linea %s omitida: sin producto ni categoria (PS=%s).",
+                    "[APUService] Línea %s omitida: sin producto (PS=%s).",
                     dl.pk, self.ps.pk,
                 )
                 continue
@@ -146,201 +142,278 @@ class APUService:
             cantidad    = float(dl.cantidad_final)
             rendimiento = (tp / cantidad) if cantidad > 0 else 1.0
 
-            logger.debug(
-                "[APUService] Material '%s' | cantidad=%.4f | precio=%.4f | rend=%.6f",
-                nombre, cantidad, precio, rendimiento,
-            )
-
-            apu_linea, _ = APULinea.objects.update_or_create(
+            linea, _ = APULinea.objects.update_or_create(
                 apu=self.apu,
                 tipo=TipoAPU.MATERIALES,
                 despiece_linea=dl,
                 defaults={
-                    "descripcion":       nombre,
-                    "rendimiento":       Decimal(str(round(rendimiento, 6))),
+                    "descripcion": nombre,
+                    "rendimiento": Decimal(str(round(rendimiento, 6))),
+                    "unidad": getattr(dl.producto.unidad, "codigo", "und"),
                     "precio_referencia": Decimal(str(precio)),
-                    "iva_aplicado":      self.apu.aplica_iva,
-                    "editable":          False,
+                    "iva_aplicado": self.apu.aplica_iva,
+                    "editable": False,
                 },
             )
-            apu_linea.calcular()
+            linea.calcular()
             creadas.append({
-                "descripcion":    nombre,
-                "rendimiento":    round(rendimiento, 4),
-                "precio":         precio,
-                "costo_unitario": float(apu_linea.costo_unitario),
-                "valor_unitario": float(apu_linea.valor_unitario),
-                "costo_total":    float(apu_linea.costo_total),
-                "valor_total":    float(apu_linea.valor_total),
+                "descripcion": nombre,
+                "rendimiento": round(rendimiento, 4),
+                "precio": precio,
+                "costo_unitario": float(linea.costo_unitario),
+                "valor_unitario": float(linea.valor_unitario),
+                "costo_total": float(linea.costo_total),
+                "valor_total": float(linea.valor_total),
             })
+            logger.debug(
+                "[APUService] Material '%s' | cantidad=%.4f | rend=%.6f | cu=%.4f",
+                nombre, cantidad, rendimiento, float(linea.costo_unitario),
+            )
 
         logger.info(
-            "[APUService] %d lineas de materiales generadas para APU %s.",
+            "[APUService] %d líneas de materiales generadas para APU %s.",
             len(creadas), self.apu.pk,
         )
         return creadas
 
     @transaction.atomic
-    def generar_mano_obra(
-        self,
-        hya_dia: float = 0,
-        cuadrilla_dia: float = 0,
-        dotacion_dia: float = 0,
-        proteccion_dia: float = 0,
-    ) -> dict:
+    def generar_mano_obra_desde_catalogo(self, items_data: List[Dict]) -> List[dict]:
         """
-        Genera APULineas de tipo MANO_DE_OBRA.
-        dias_trabajo = total_unidades / (personas * 40) — calculado por calcular_tiempo().
-        cuadrilla_personas se lee desde self.apu (campo editable en APUProyecto).
+        Genera APULineas MANO_DE_OBRA desde ítems del catálogo.
+        items_data: [{"item_id": int, "cantidad": int}]
+
+        Fórmula:
+          días_trabajo = total_unidades / (total_personas × 40)
+          CU_persona   = (precio_día × cantidad × días × AIU × margen) / total_unidades
+
+        Conversión de unidad:
+          mes  → precio_día = precio_base / 22 días hábiles
+          hora → precio_día = precio_base × 8
+          día  → precio_día = precio_base
         """
-        from apps.presupuestos.models import APULinea
+        from apps.presupuestos.models import APULinea, ItemCatalogoAPU
         from apps.common.choices import TipoAPU
 
-        # calcular_tiempo() guarda dias_trabajo en DB; luego refrescamos.
-        self.apu.calcular_tiempo()
-        self.apu.refresh_from_db(fields=["dias_trabajo", "tiempo_estimado_meses", "rendimiento_und_dia"])
-
-        tp      = self._get_total_unidades()
-        personas = float(self.apu.cuadrilla_personas or 1) or 1
-        dias    = float(self.apu.dias_trabajo or (tp / (personas * 40)))
-        rend    = float(self.apu.rendimiento_und_dia or 0)
-        aiu     = 1 + float(self.apu.aiu_contratista_pct) / 100
-        mg      = 1 + float(self.apu.margen_contratista_pct) / 100
-
-        logger.info(
-            "[APUService] MO APU %s | dias=%.2f | rend=%.4f | personas=%.0f | "
-            "aiu=%.3f | mg=%.3f",
-            self.apu.pk, dias, rend, personas, aiu, mg,
-        )
-
-        items_mo = [
-            ("HYA — Herramientas y andamios", hya_dia,
-             (hya_dia * (rend + personas) * dias * aiu * mg) / tp),
-            ("Cuadrilla de instalacion",      cuadrilla_dia,
-             (cuadrilla_dia * personas * aiu * mg) / tp),
-            ("Dotacion",                      dotacion_dia,
-             (dotacion_dia * (rend + personas) * dias * aiu * mg) / tp),
-            ("Proteccion",                    proteccion_dia,
-             (proteccion_dia * (rend + personas) * dias * aiu * mg) / tp),
-        ]
+        tp = self._get_total_unidades()
+        total_pers = max(sum(int(d.get("cantidad", 1)) for d in items_data), 1)
+        aiu = 1 + float(self.cfg.aiu_contratista_pct) / 100
+        mg = 1 + float(self.cfg.margen_ganancia_pct) / 100
+        dias = tp / (total_pers * 40) if total_pers > 0 else 1.0
 
         creadas = []
-        for desc, precio_base, cu in items_mo:
-            if precio_base <= 0:
-                continue
-            apu_linea, _ = APULinea.objects.update_or_create(
+        for d in items_data:
+            item     = ItemCatalogoAPU.objects.get(pk=d["item_id"])
+            cantidad = max(int(d.get("cantidad", 1)), 1)
+
+            # Usar total_mes_personal si está definido, si no precio_base
+            if item.salario_base or item.prestaciones:
+                precio_mes = float(item.total_mes_personal)
+            else:
+                precio_mes = float(item.precio_base)
+
+            if item.unidad == "mes":
+                precio_dia = precio_mes / 22
+            elif item.unidad == "hora":
+                precio_dia = float(item.precio_base) * 8
+            else:
+                precio_dia = float(item.precio_base)
+
+            cu = (precio_dia * cantidad * dias * aiu * mg) / tp if tp else 0
+
+            linea, _ = APULinea.objects.update_or_create(
                 apu=self.apu,
                 tipo=TipoAPU.MANO_DE_OBRA,
-                descripcion=desc,
+                descripcion=f"{item.nombre} ×{cantidad}",
                 defaults={
-                    "rendimiento":       Decimal("1"),
+                    "item_catalogo": item,
+                    "rendimiento": Decimal("1"),
+                    "unidad": item.unidad,
                     "precio_referencia": Decimal(str(round(cu, 6))),
-                    "iva_aplicado":      False,
-                    "editable":          True,
+                    "salario_base": item.salario_base,
+                    "prestaciones": item.prestaciones,
+                    "iva_aplicado": False,
+                    "editable": True,
                 },
             )
-            apu_linea.calcular()
+            linea.calcular()
             creadas.append({
-                "descripcion":    desc,
-                "costo_unitario": float(apu_linea.costo_unitario),
+                "descripcion": linea.descripcion,
+                "costo_unitario": float(linea.costo_unitario),
             })
-            logger.debug("[APUService] MO '%s' | cu=%.6f", desc, cu)
+            logger.debug(
+                "[APUService] MO catálogo '%s' ×%d | días=%.2f | cu=%.6f",
+                item.nombre, cantidad, dias, cu,
+            )
 
-        return {
-            "mano_obra":   creadas,
-            "dias":         dias,
-            "tiempo_meses": float(self.apu.tiempo_estimado_meses or 0),
-        }
+        logger.info(
+            "[APUService] %d líneas MO (catálogo) para APU %s.", len(creadas), self.apu.pk,
+        )
+        return creadas
 
     @transaction.atomic
-    def generar_herramientas(self, items: List[Dict]) -> List[dict]:
-        """items: [{"descripcion": str, "precio_total": float}]"""
+    def generar_herramientas_desde_catalogo(self, items_data: List[Dict]) -> List[dict]:
+        """
+        Genera APULineas HERRAMIENTAS_EQUIPOS desde ítems del catálogo.
+        items_data: [{"item_id": int, "cantidad": int}]
+
+        Con vida útil (herramientas):
+          costo_total = (precio_base × cantidad / vida_util_dias) × días_trabajo
+        Sin vida útil (fungibles: cables, consumibles):
+          costo_total = precio_base × cantidad
+        CU = costo_total / total_unidades
+        """
+        from apps.presupuestos.models import APULinea, ItemCatalogoAPU
+        from apps.common.choices import TipoAPU
+
+        tp   = self._get_total_unidades()
+        # Estimar días de trabajo desde mano de obra ya registrada, o fallback
+        dias = self._estimar_dias()
+
+        creadas = []
+        for d in items_data:
+            item     = ItemCatalogoAPU.objects.get(pk=d["item_id"])
+            cantidad = max(int(d.get("cantidad", 1)), 1)
+            precio   = float(item.precio_base)
+
+            if item.vida_util_dias and item.vida_util_dias > 0:
+                costo_total_item = (precio * cantidad / item.vida_util_dias) * dias
+            else:
+                costo_total_item = precio * cantidad
+
+            cu = costo_total_item / tp if tp else 0
+
+            linea, _ = APULinea.objects.update_or_create(
+                apu=self.apu,
+                tipo=TipoAPU.HERRAMIENTAS_EQUIPOS,
+                descripcion=f"{item.nombre} ×{cantidad}",
+                defaults={
+                    "item_catalogo": item,
+                    "rendimiento": Decimal("1"),
+                    "unidad": item.unidad,
+                    "precio_referencia": Decimal(str(round(cu, 6))),
+                    "vida_util_dias": item.vida_util_dias,
+                    "iva_aplicado": False,
+                    "editable": True,
+                },
+            )
+            linea.calcular()
+            creadas.append({
+                "descripcion": linea.descripcion,
+                "costo_unitario": float(linea.costo_unitario),
+            })
+            logger.debug(
+                "[APUService] Herr '%s' ×%d | dias=%.2f | cu=%.6f",
+                item.nombre, cantidad, dias, cu,
+            )
+
+        logger.info(
+            "[APUService] %d herramientas (catálogo) para APU %s.", len(creadas), self.apu.pk,
+        )
+        return creadas
+
+    @transaction.atomic
+    def generar_transporte_items(self, items: List[Dict]) -> List[dict]:
+        """
+        Genera APULineas TRANSPORTE a partir de una lista de ítems libres.
+        items: [{"descripcion": str, "precio_total": float}]
+
+        CU = precio_total / total_unidades
+        """
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
         tp      = self._get_total_unidades()
         creadas = []
+
         for item in items:
-            precio = float(item.get("precio_total", 0))
-            cu     = precio / tp
-            apu_linea, _ = APULinea.objects.update_or_create(
+            desc = item["descripcion"].strip()
+            precio_total = float(item["precio_total"])
+            cu = precio_total / tp if tp else 0
+
+            linea, _ = APULinea.objects.update_or_create(
                 apu=self.apu,
-                tipo=TipoAPU.HERRAMIENTAS_EQUIPOS,
-                descripcion=item["descripcion"],
+                tipo=TipoAPU.TRANSPORTE,
+                descripcion=desc,
                 defaults={
-                    "rendimiento":       Decimal("1"),
+                    "rendimiento": Decimal("1"),
+                    "unidad": "global",
                     "precio_referencia": Decimal(str(round(cu, 6))),
-                    "iva_aplicado":      False,
-                    "editable":          True,
+                    "iva_aplicado": False,
+                    "editable": True,
                 },
             )
-            apu_linea.calcular()
+            linea.calcular()
             creadas.append({
-                "descripcion":    item["descripcion"],
-                "costo_unitario": float(apu_linea.costo_unitario),
+                "descripcion": linea.descripcion,
+                "costo_unitario": float(linea.costo_unitario),
             })
+            logger.debug(
+                "[APUService] Transporte '%s' | total=%.2f | cu=%.6f", desc, precio_total, cu,
+            )
+
         logger.info(
-            "[APUService] %d lineas de herramientas generadas para APU %s.",
-            len(creadas), self.apu.pk,
+            "[APUService] %d líneas transporte para APU %s.", len(creadas), self.apu.pk,
         )
         return creadas
-
-    @transaction.atomic
-    def generar_transporte(self, costo_total_transporte: float) -> dict:
-        """CU_transporte = costo_total / total_unidades"""
-        from apps.presupuestos.models import APULinea
-        from apps.common.choices import TipoAPU
-
-        tp  = self._get_total_unidades()
-        cu  = costo_total_transporte / tp
-        apu_linea, _ = APULinea.objects.update_or_create(
-            apu=self.apu,
-            tipo=TipoAPU.TRANSPORTE,
-            descripcion="Transporte",
-            defaults={
-                "rendimiento":       Decimal("1"),
-                "precio_referencia": Decimal(str(round(cu, 6))),
-                "iva_aplicado":      False,
-                "editable":          True,
-            },
-        )
-        apu_linea.calcular()
-        logger.debug(
-            "[APUService] Transporte APU %s | costo_total=%.2f | cu=%.6f",
-            self.apu.pk, costo_total_transporte, cu,
-        )
-        return {"descripcion": "Transporte", "costo_unitario": float(apu_linea.costo_unitario)}
 
     @transaction.atomic
     def generar_administracion(self, costo_total_admin: float) -> dict:
-        """CU_admin = costo_total / total_unidades"""
+        """
+        Genera una APULinea ADMINISTRACION.
+        CU = costo_total_admin / total_unidades
+        """
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
-        tp  = self._get_total_unidades()
-        cu  = costo_total_admin / tp
-        apu_linea, _ = APULinea.objects.update_or_create(
+        tp = self._get_total_unidades()
+        cu = costo_total_admin / tp if tp else 0
+
+        linea, _ = APULinea.objects.update_or_create(
             apu=self.apu,
             tipo=TipoAPU.ADMINISTRACION,
-            descripcion="Administracion",
+            descripcion="Administración",
             defaults={
-                "rendimiento":       Decimal("1"),
+                "rendimiento": Decimal("1"),
+                "unidad": "global",
                 "precio_referencia": Decimal(str(round(cu, 6))),
-                "iva_aplicado":      False,
-                "editable":          True,
+                "iva_aplicado": False,
+                "editable": True,
             },
         )
-        apu_linea.calcular()
+        linea.calcular()
         logger.debug(
             "[APUService] Admin APU %s | costo_total=%.2f | cu=%.6f",
             self.apu.pk, costo_total_admin, cu,
         )
-        return {"descripcion": "Administracion", "costo_unitario": float(apu_linea.costo_unitario)}
+        return {"descripcion": "Administración", "costo_unitario": float(linea.costo_unitario)}
+
+    # ── Helper: estimar días de trabajo ───────────────────────────────────────
+
+    def _estimar_dias(self) -> float:
+        """
+        Estima los días de trabajo necesarios.
+        Si ya hay líneas MO registradas, infiere personas desde su cantidad.
+        Fallback: total_unidades / (7 personas estándar × 40).
+        """
+        from apps.common.choices import TipoAPU
+
+        total_personas = (
+            self.apu.lineas
+            .filter(tipo=TipoAPU.MANO_DE_OBRA)
+            .count()
+        ) or 7  # cuadrilla estándar
+
+        tp   = self._get_total_unidades()
+        dias = tp / (total_personas * 40)
+        return max(dias, 1.0)
 
     # ── Cierre ────────────────────────────────────────────────────────────────
 
     def finalizar(self) -> dict:
-        """Recalcula totales del APU y avanza estado del proyecto a APU en proceso."""
+        """
+        Recalcula totales del APU y avanza el estado del proyecto a APU en proceso.
+        Devuelve un resumen de totales.
+        """
         from apps.common.choices import EstadoProyecto
 
         self.apu.recalcular()
@@ -350,8 +423,7 @@ class APUService:
             proyecto.avanzar_a_apu()
 
         logger.info(
-            "[APUService] APU %s finalizado | costo=%.2f | venta=%.2f | "
-            "estado_proyecto='%s'.",
+            "[APUService] APU %s finalizado | costo=%.2f | venta=%.2f | estado='%s'.",
             self.apu.pk,
             float(self.apu.total_costo),
             float(self.apu.total_valor_venta),
@@ -359,13 +431,14 @@ class APUService:
         )
 
         return {
-            "total_costo":       float(self.apu.total_costo),
+            "total_costo": float(self.apu.total_costo),
             "total_valor_venta": float(self.apu.total_valor_venta),
             "subtotales": {
-                "materiales":     float(self.apu.subtotal_materiales),
-                "herramientas":   float(self.apu.subtotal_herramientas),
-                "transporte":     float(self.apu.subtotal_transporte),
-                "mano_obra":      float(self.apu.subtotal_mano_obra),
+                "materiales": float(self.apu.subtotal_materiales),
+                "herramientas": float(self.apu.subtotal_herramientas),
+                "transporte": float(self.apu.subtotal_transporte),
+                "mano_obra": float(self.apu.subtotal_mano_obra),
                 "administracion": float(self.apu.subtotal_administracion),
             },
         }
+    

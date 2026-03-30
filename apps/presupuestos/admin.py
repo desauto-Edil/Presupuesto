@@ -25,7 +25,7 @@ class DespieceLineaAdmin(admin.ModelAdmin):
 
 @admin.register(ConfiguracionAPU)
 class ConfiguracionAPUAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "porcentaje_ganancia", "aiu_contratista", "activa")
+    list_display = ("nombre", "factor_venta_pct", "aiu_contratista_pct", "activa")
     list_filter = ("activa",)
     readonly_fields = ("created_at", "updated_at")
 

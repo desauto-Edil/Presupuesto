@@ -43,15 +43,15 @@ class CatalogoView(ListView):
         ctx = super().get_context_data(**kwargs)
         qs  = self.get_queryset()
 
-        ctx["unidades"]          = UnidadMedida.objects.order_by("nombre")
-        ctx["total_categorias"]  = qs.count()
+        ctx["unidades"] = UnidadMedida.objects.order_by("nombre")
+        ctx["total_categorias"] = qs.count()
         ctx["categorias_activas"]= qs.filter(activa=True).count()
-        ctx["total_productos"]   = Producto.objects.filter(activo=True).count()
+        ctx["total_productos"] = Producto.objects.filter(activo=True).count()
 
         # Formularios para los modales de creación
         ctx["modal_categoria_form"] = CategoriaForm()
-        ctx["modal_producto_form"]  = ProductoForm()
-        ctx["modal_unidad_form"]    = UnidadMedidaForm()
+        ctx["modal_producto_form"] = ProductoForm()
+        ctx["modal_unidad_form"] = UnidadMedidaForm()
 
         return ctx
 
@@ -188,21 +188,21 @@ class ProductoDetailView(DetailView):
 # UNIDADES DE MEDIDA
 # ─────────────────────────────────────────────────────────────────
 class UnidadCreateView(CreateView):
-    model         = UnidadMedida
-    form_class    = UnidadMedidaForm
+    model = UnidadMedida
+    form_class = UnidadMedidaForm
     template_name = "catalogos/unidad_form.html"
-    success_url   = reverse_lazy("catalogos:catalogo")
+    success_url = reverse_lazy("catalogos:catalogo")
 
 
 class UnidadUpdateView(UpdateView):
-    model         = UnidadMedida
-    form_class    = UnidadMedidaForm
+    model = UnidadMedida
+    form_class = UnidadMedidaForm
     template_name = "catalogos/unidad_form.html"
-    success_url   = reverse_lazy("catalogos:catalogo")
+    success_url = reverse_lazy("catalogos:catalogo")
 
 
 class UnidadDeleteView(DeleteView):
-    model       = UnidadMedida
+    model = UnidadMedida
     template_name = "catalogos/confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
 
@@ -218,23 +218,23 @@ class ProveedorListView(ListView):
 
 
 class ProveedorCreateView(CreateView):
-    model         = Proveedor
+    model = Proveedor
     template_name = "catalogos/proveedor_form.html"
-    fields        = "__all__"
-    success_url   = reverse_lazy("catalogos:proveedor_list")
+    fields = "__all__"
+    success_url = reverse_lazy("catalogos:proveedor_list")
 
 
 class ProveedorUpdateView(UpdateView):
-    model         = Proveedor
+    model = Proveedor
     template_name = "catalogos/proveedor_form.html"
-    fields        = "__all__"
-    success_url   = reverse_lazy("catalogos:proveedor_list")
+    fields = "__all__"
+    success_url = reverse_lazy("catalogos:proveedor_list")
 
 
 class ProveedorDeleteView(DeleteView):
-    model         = Proveedor
+    model = Proveedor
     template_name = "catalogos/confirm_delete.html"
-    success_url   = reverse_lazy("catalogos:proveedor_list")
+    success_url = reverse_lazy("catalogos:proveedor_list")
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -253,20 +253,20 @@ class ProductoProveedorListView(ListView):
 
 
 class ProductoProveedorCreateView(CreateView):
-    model         = ProductoProveedor
+    model = ProductoProveedor
     template_name = "catalogos/productoproveedor_form.html"
-    fields        = "__all__"
-    success_url   = reverse_lazy("catalogos:productoproveedor_list")
+    fields = "__all__"
+    success_url = reverse_lazy("catalogos:productoproveedor_list")
 
 
 class ProductoProveedorUpdateView(UpdateView):
-    model         = ProductoProveedor
+    model = ProductoProveedor
     template_name = "catalogos/productoproveedor_form.html"
-    fields        = "__all__"
-    success_url   = reverse_lazy("catalogos:productoproveedor_list")
+    fields = "__all__"
+    success_url = reverse_lazy("catalogos:productoproveedor_list")
 
 
 class ProductoProveedorDeleteView(DeleteView):
-    model         = ProductoProveedor
+    model = ProductoProveedor
     template_name = "catalogos/confirm_delete.html"
-    success_url   = reverse_lazy("catalogos:productoproveedor_list")
+    success_url = reverse_lazy("catalogos:productoproveedor_list")

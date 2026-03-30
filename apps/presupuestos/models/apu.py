@@ -1,35 +1,49 @@
 """
 apps/presupuestos/models/apu.py — Análisis de Precios Unitarios (APU).
 
-ConfiguracionAPU: valores predeterminados globales del APU.
-APUProyecto:      cabecera del APU para un ProyectoSistema.
-APULinea:         ítem individual de costo dentro del APU.
-
-Fórmula central (Nivel 4):
-  costo_unitario = precio_referencia * IVA_factor
-  costo_total    = rendimiento * costo_unitario
-  valor_unitario = costo_unitario * (1 + factor_venta/100)
-  valor_total    = rendimiento * valor_unitario
 """
 
+from decimal import Decimal, ROUND_HALF_UP
+
 from django.db import models
+from django.db.models import Sum
+
 from apps.common.choices import TipoAPU
 
 
 class ConfiguracionAPU(models.Model):
     """
     Valores predeterminados del APU, configurables por Administrador.
-    Solo debe existir un registro activo.
+    Solo debe existir un registro activo (se crea automáticamente si no existe).
     """
+
     nombre = models.CharField(max_length=100, default="Configuración global")
-    porcentaje_ganancia = models.DecimalField(max_digits=8, decimal_places=4, default=20)
-    aiu_contratista = models.DecimalField(max_digits=8, decimal_places=4, default=30)
-    desperdicio = models.DecimalField(max_digits=8, decimal_places=4, default=3)
-    margen_ganancia_contratista = models.DecimalField(max_digits=8, decimal_places=4, default=30)
+    factor_venta_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("20"),
+        help_text="% de margen sobre costo unitario para obtener valor unitario.",
+    )
+    iva_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("19"),
+        help_text="Porcentaje de IVA aplicado a materiales cuando corresponda.",
+    )
+    aiu_contratista_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("30"),
+        help_text="AIU del contratista (%).",
+    )
+    margen_ganancia_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("20"),
+        help_text="Margen de ganancia general (%).",
+    )
+    desperdicio_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("3"),
+        help_text="Porcentaje de desperdicio sobre materiales.",
+    )
     activa = models.BooleanField(default=True)
     modificado_por = models.ForeignKey(
-        "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
-        blank=True, null=True, related_name="configs_apu",
+        "usuarios.UsuarioSistema",
+        on_delete=models.SET_NULL,
+        blank=True, null=True,
+        related_name="configs_apu",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -37,6 +51,8 @@ class ConfiguracionAPU(models.Model):
     class Meta:
         app_label = "presupuestos"
         db_table = "configuracion_apu"
+        verbose_name = "Configuración APU"
+        verbose_name_plural = "Configuraciones APU"
 
     def __str__(self):
         return self.nombre
@@ -49,141 +65,466 @@ class ConfiguracionAPU(models.Model):
         return cfg
 
 
-class APUProyecto(models.Model):
-    """
-    Cabecera del APU para un ProyectoSistema.
-    Almacena las variables de entrada del cálculo de mano de obra y los totales.
-    """
-    proyecto_sistema = models.OneToOneField(
-        "presupuestos.ProyectoSistema", on_delete=models.CASCADE, related_name="apu"
-    )
-    factor_venta_pct = models.DecimalField(max_digits=8, decimal_places=4, default=20,
-                                           help_text="% margen sobre costo unitario → valor unitario")
-    iva_pct = models.DecimalField(max_digits=8, decimal_places=4, default=19)
-    aplica_iva = models.BooleanField(default=True)
-    aiu_contratista_pct = models.DecimalField(max_digits=8, decimal_places=4, default=30)
-    margen_contratista_pct = models.DecimalField(max_digits=8, decimal_places=4, default=30)
+# ---------------------------------------------------------------------------
+# 2. Catálogo de ítems APU
+# ---------------------------------------------------------------------------
 
-    # Parámetros de mano de obra
-    cuadrilla_personas = models.IntegerField(
-        default=7,
-        help_text="Número de personas en la cuadrilla de instalación (cuadrilla estándar = 7)",
-    )
-    dias_trabajo = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
-    tiempo_estimado_meses = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True)
-    rendimiento_und_dia = models.DecimalField(max_digits=14, decimal_places=6, blank=True, null=True)
+class CategoriaItemAPU(models.Model):
+    """
+    Categoría del catálogo APU: agrupa ítems por TipoAPU.
+    Permite organizar la UI del catálogo (p. ej. "Herramienta eléctrica",
+    "Herramienta soldadura TPO", "Personal", "Cuadrilla cubierta"…).
+    """
 
-    # Totales calculados (se actualizan al recalcular)
-    subtotal_materiales = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    subtotal_herramientas = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    subtotal_transporte = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    subtotal_mano_obra = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    subtotal_administracion = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    total_costo = models.DecimalField(max_digits=18, decimal_places=4, default=0)
-    total_valor_venta = models.DecimalField(max_digits=18, decimal_places=4, default=0)
+    tipo_apu = models.CharField(
+        max_length=30, choices=TipoAPU.choices,
+        help_text="Tipo de APU al que pertenecen los ítems de esta categoría.",
+    )
+    nombre = models.CharField(max_length=100)
+    descripcion = models.TextField(blank=True)
+    activa = models.BooleanField(default=True)
+    orden = models.PositiveIntegerField(default=0, help_text="Orden en la UI.")
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "catalogo_apu_categorias"
+        ordering = ["orden", "nombre"]
+        verbose_name = "Categoría de ítem APU"
+        verbose_name_plural = "Categorías de ítems APU"
+
+    def __str__(self):
+        return f"{self.nombre} [{self.get_tipo_apu_display()}]"
+
+
+class ItemCatalogoAPU(models.Model):
+    """
+    Ítem reutilizable del catálogo APU.
+
+    Representa cualquier recurso que compone un APU:
+      - Personal       (Oficial de obra, Ayudante práctico, Ayudante razo…)
+      - Herramienta    (Atornilladora inalámbrica, Taladro percutor, Triac Leister…)
+      - Dotación       (Jean, Chaleco reflectivo, Botas de seguridad…)
+      - Transporte     (Flete, Viáticos…)
+      - Administración (Gerente de proyecto, Residente, Secretaria…)
+
+    Campos adicionales para personal:
+      salario_base y prestaciones_pct permiten calcular el costo mensual real.
+
+    Campos adicionales para herramientas:
+      vida_util_dias permite derivar el costo por jornada (depreciación).
+    """
+
+    UNIDAD_CHOICES = [
+        ("dia",    "Día"),
+        ("mes",    "Mes"),
+        ("hora",   "Hora"),
+        ("und",    "Unidad"),
+        ("mts",    "Metros"),
+        ("global", "Global"),
+    ]
+
+    categoria = models.ForeignKey(
+        CategoriaItemAPU,
+        on_delete=models.PROTECT,
+        related_name="items",
+    )
+    codigo = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    nombre = models.CharField(max_length=200)
+    descripcion = models.TextField(blank=True)
+
+    # Precio base: interpreta según la unidad
+    precio_base = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="Precio/salario base del ítem por unidad ($/und, $/día, $/mes…).",
+    )
+    unidad = models.CharField(max_length=20, choices=UNIDAD_CHOICES, default="und")
+
+    # Solo para personal: prestaciones sociales
+    salario_base = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
+        help_text="Salario base mensual del cargo (solo personal).",
+    )
+    prestaciones = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
+        help_text="Valor de prestaciones sociales mensuales (solo personal).",
+    )
+
+    # Solo para herramientas/dotación: vida útil para calcular depreciación
+    vida_util_dias = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Vida útil en días. Permite calcular costo por jornada.",
+    )
+
+    activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         app_label = "presupuestos"
-        db_table = "apu_proyectos"
+        db_table = "catalogo_apu_items"
+        ordering = ["categoria", "nombre"]
+        verbose_name = "Ítem de catálogo APU"
+        verbose_name_plural = "Ítems de catálogo APU"
 
     def __str__(self):
-        return f"APU {self.proyecto_sistema}"
+        return f"{self.nombre} — ${self.precio_base:,.0f}/{self.get_unidad_display()}"
+
+    @property
+    def total_mes_personal(self) -> Decimal:
+        """Salario base + prestaciones (solo aplica a personal)."""
+        return self.salario_base + self.prestaciones
+
+    @property
+    def costo_por_dia_herramienta(self) -> Decimal:
+        """
+        Depreciación diaria de una herramienta.
+        costo_por_dia = precio_base / vida_util_dias
+        Retorna 0 si no aplica.
+        """
+        if self.vida_util_dias and self.vida_util_dias > 0:
+            return (self.precio_base / Decimal(self.vida_util_dias)).quantize(
+                Decimal("0.0001"), rounding=ROUND_HALF_UP
+            )
+        return Decimal("0")
+
+
+# ---------------------------------------------------------------------------
+# 3. Cuadrillas preset
+# ---------------------------------------------------------------------------
+
+class CuadrillaPreset(models.Model):
+    """
+    Plantilla de cuadrilla reutilizable.
+
+    Ejemplos:
+        - "Cuadrilla básica"   (Oficial ×1, Ayudante práctico ×1, Ayudante razo ×1)
+        - "Cuadrilla cubierta" (Oficial ×1, Ayudante práctico ×2, Ayudante razo ×4)
+    """
+
+    nombre = models.CharField(max_length=100)
+    descripcion = models.TextField(blank=True)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "cuadrilla_presets"
+        ordering = ["nombre"]
+        verbose_name = "Preset de cuadrilla"
+        verbose_name_plural = "Presets de cuadrilla"
+
+    def __str__(self):
+        return self.nombre
+
+    @property
+    def total_personas(self) -> int:
+        return sum(i.cantidad for i in self.items.all())
+
+    @property
+    def costo_mes_total(self) -> Decimal:
+        """Suma de (salario_base + prestaciones) × cantidad de cada cargo."""
+        return sum(
+            i.item.total_mes_personal * i.cantidad
+            for i in self.items.select_related("item").all()
+        )
+
+
+class CuadrillaPresetItem(models.Model):
+    """Línea de composición de una cuadrilla preset (un cargo × cantidad)."""
+
+    preset = models.ForeignKey(
+        CuadrillaPreset, on_delete=models.CASCADE, related_name="items"
+    )
+    item = models.ForeignKey(
+        ItemCatalogoAPU,
+        on_delete=models.PROTECT,
+        related_name="cuadrilla_uses",
+    )
+    cantidad = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "cuadrilla_preset_items"
+        unique_together = [["preset", "item"]]
+        verbose_name = "Ítem de cuadrilla preset"
+        verbose_name_plural = "Ítems de cuadrilla preset"
+
+    def __str__(self):
+        return f"{self.preset.nombre} / {self.item.nombre} ×{self.cantidad}"
+
+
+# ---------------------------------------------------------------------------
+# 4. APU (cabecera)
+# ---------------------------------------------------------------------------
+
+class APUProyecto(models.Model):
+    """
+    Cabecera del Análisis de Precios Unitarios (APUProyecto).
+
+    Contiene:
+      - Identificación (nombre, descripción).
+      - Vínculo opcional a un ProyectoSistema.
+      - Parámetros de cálculo (IVA, factor de venta, AIU…).
+      - Subtotales y totales calculados desde las APULineas.
+
+    El recálculo se lanza con APUProyecto.recalcular() o automáticamente
+    desde las señales post_save / post_delete de APULinea.
+    """
+
+    # -- Identificación --
+    nombre = models.CharField(
+        max_length=200,
+        help_text="Nombre del APU, p. ej. 'APU Cubierta TPO — Edificio Central'.",
+    )
+    descripcion = models.TextField(
+        blank=True,
+        help_text="Descripción detallada del alcance y condiciones del APU.",
+    )
+
+    # -- Vínculo al proyecto (opcional para APUs genéricos del catálogo) --
+    proyecto_sistema = models.OneToOneField(
+        "presupuestos.ProyectoSistema",
+        on_delete=models.CASCADE,
+        related_name="apu",
+        null=True, blank=True,
+        help_text="ProyectoSistema al que pertenece este APU (si aplica).",
+    )
+
+    # -- Parámetros de cálculo --
+    factor_venta_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("20"),
+        help_text="% margen sobre costo unitario → valor unitario.",
+    )
+    iva_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("19"),
+    )
+    aplica_iva = models.BooleanField(default=True)
+
+    # -- Subtotales por categoría (calculados) --
+    subtotal_materiales = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="Suma de costo_total de todas las líneas de MATERIALES.",
+    )
+    subtotal_herramientas = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="Suma de costo_total de todas las líneas de HERRAMIENTAS_EQUIPOS.",
+    )
+    subtotal_transporte = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+    )
+    subtotal_mano_obra = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+    )
+    subtotal_administracion = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+    )
+
+    # -- Totales generales (calculados) --
+    total_costo = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="Suma de todos los costo_total (sin margen de venta).",
+    )
+    total_valor_venta = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="Suma de todos los valor_total (con margen de venta).",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "apus"
+        verbose_name = "APU"
+        verbose_name_plural = "APUs"
+
+    def __str__(self):
+        return self.nombre
+
+    # ------------------------------------------------------------------
+    # Recálculo
+    # ------------------------------------------------------------------
 
     def recalcular(self):
-        """Recalcula todos los subtotales a partir de las APULineas."""
-        from django.db.models import Sum
-        totales = {}
-        for tipo in TipoAPU.values:
+        """
+        Recalcula todos los subtotales y totales a partir de las APULineas.
+        Llama también a linea.calcular() en cada línea para garantizar
+        que los campos calculados estén actualizados antes de agregar.
+        """
+        # Paso 1: recalcular cada línea
+        for linea in self.lineas.all():
+            linea.calcular()
+
+        # Paso 2: agregar por tipo
+        _TIPO_CAMPO = {
+            TipoAPU.MATERIALES:          "subtotal_materiales",
+            TipoAPU.HERRAMIENTAS_EQUIPOS: "subtotal_herramientas",
+            TipoAPU.TRANSPORTE:          "subtotal_transporte",
+            TipoAPU.MANO_DE_OBRA:        "subtotal_mano_obra",
+            TipoAPU.ADMINISTRACION:      "subtotal_administracion",
+        }
+
+        total_costo = Decimal("0")
+        total_valor = Decimal("0")
+
+        for tipo, campo in _TIPO_CAMPO.items():
             agg = self.lineas.filter(tipo=tipo).aggregate(
                 costo=Sum("costo_total"),
                 valor=Sum("valor_total"),
             )
-            totales[tipo] = {
-                "costo": float(agg["costo"] or 0),
-                "valor": float(agg["valor"] or 0),
-            }
+            costo = Decimal(str(agg["costo"] or 0))
+            valor = Decimal(str(agg["valor"] or 0))
+            setattr(self, campo, costo)
+            total_costo += costo
+            total_valor += valor
 
-        self.subtotal_materiales = totales[TipoAPU.MATERIALES]["costo"]
-        self.subtotal_herramientas = totales[TipoAPU.HERRAMIENTAS_EQUIPOS]["costo"]
-        self.subtotal_transporte = totales[TipoAPU.TRANSPORTE]["costo"]
-        self.subtotal_mano_obra = totales[TipoAPU.MANO_DE_OBRA]["costo"]
-        self.subtotal_administracion = totales[TipoAPU.ADMINISTRACION]["costo"]
-        self.total_costo = (
-            self.subtotal_materiales + self.subtotal_herramientas
-            + self.subtotal_transporte + self.subtotal_mano_obra
-            + self.subtotal_administracion
-        )
-        self.total_valor_venta = sum(v["valor"] for v in totales.values())
+        self.total_costo = total_costo
+        self.total_valor_venta = total_valor
+
         self.save(update_fields=[
-            "subtotal_materiales", "subtotal_herramientas", "subtotal_transporte",
-            "subtotal_mano_obra", "subtotal_administracion",
-            "total_costo", "total_valor_venta", "updated_at",
+            "subtotal_materiales", "subtotal_herramientas",
+            "subtotal_transporte", "subtotal_mano_obra",
+            "subtotal_administracion", "total_costo",
+            "total_valor_venta", "updated_at",
         ])
 
-    def calcular_tiempo(self):
-        """
-        Calcula días y tiempo estimado desde el total de unidades del sistema.
-        Usa la misma lógica genérica que APUService._get_total_unidades():
-        busca en parametros_entrada con lista de claves por prioridad,
-        con fallback a area_total_m2 del proyecto.
-        """
-        from apps.presupuestos.services.apu_service import _CLAVES_UNIDAD_REFERENCIA
 
-        ps     = self.proyecto_sistema
-        params = ps.parametros_entrada or {}
+# backward compatibility alias
+APU = APUProyecto
 
-        total_unidades = 0.0
-        for clave in _CLAVES_UNIDAD_REFERENCIA:
-            val = params.get(clave)
-            if val:
-                try:
-                    total_unidades = float(val)
-                    if total_unidades > 0:
-                        break
-                except (ValueError, TypeError):
-                    pass
-        if total_unidades <= 0:
-            total_unidades = float(ps.proyecto.area_total_m2 or 0)
-
-        personas = float(self.cuadrilla_personas or 1)
-        if total_unidades > 0 and personas > 0:
-            self.dias_trabajo = total_unidades / (personas * 40)
-            self.tiempo_estimado_meses = 0.0333 * float(self.dias_trabajo)
-            self.rendimiento_und_dia = (
-                total_unidades / float(self.dias_trabajo) if self.dias_trabajo else 0
-            )
-            self.save(update_fields=[
-                "dias_trabajo", "tiempo_estimado_meses", "rendimiento_und_dia", "updated_at"
-            ])
-
+# ---------------------------------------------------------------------------
+# 5. APULinea (ítems individuales)
+# ---------------------------------------------------------------------------
 
 class APULinea(models.Model):
     """
-    Línea individual del APU: un ítem de costo dentro de una categoría.
-    """
-    apu = models.ForeignKey(APUProyecto, on_delete=models.CASCADE, related_name="lineas")
-    tipo = models.CharField(max_length=30, choices=TipoAPU.choices)
-    descripcion = models.CharField(max_length=300)
-    despiece_linea = models.ForeignKey(
-        "presupuestos.DespieceLinea", on_delete=models.SET_NULL,
-        blank=True, null=True, related_name="apu_lineas",
-        help_text="Referencia al ítem de despiece origen (solo materiales)",
-    )
-    rendimiento = models.DecimalField(max_digits=14, decimal_places=6, default=1,
-                                      help_text="Cantidad de producto que rinde por unidad de APU")
-    precio_referencia = models.DecimalField(max_digits=18, decimal_places=6, default=0,
-                                            help_text="Precio unitario del insumo/recurso")
-    iva_aplicado = models.BooleanField(default=True)
+    Línea individual del APU: un recurso con su rendimiento y precios.
 
-    # Calculados automáticamente
-    costo_unitario = models.DecimalField(max_digits=18, decimal_places=6, default=0)
-    costo_total = models.DecimalField(max_digits=18, decimal_places=6, default=0)
-    valor_unitario = models.DecimalField(max_digits=18, decimal_places=6, default=0)
-    valor_total = models.DecimalField(max_digits=18, decimal_places=6, default=0)
-    editable = models.BooleanField(default=False,
-                                   help_text="Si True, el usuario puede modificar precio_referencia/rendimiento")
+    Tipos posibles (TipoAPU):
+        MATERIALES          — componentes seleccionados del despiece
+        HERRAMIENTAS_EQUIPOS — herramientas, dotación, equipos
+        TRANSPORTE          — fletes, viáticos
+        MANO_DE_OBRA        — personal / cuadrilla
+        ADMINISTRACION      — costos administrativos
+
+    Fórmulas:
+        costo_unitario = precio_referencia × IVA_factor
+        costo_total    = rendimiento × costo_unitario
+        valor_unitario = costo_unitario × (1 + factor_venta_pct / 100)
+        valor_total    = rendimiento × valor_unitario
+    """
+
+    UNIDAD_CHOICES = [
+        ("und",    "Unidad"),
+        ("m2",     "Metro cuadrado"),
+        ("ml",     "Metro lineal"),
+        ("mts",    "Metros"),
+        ("kg",     "Kilogramo"),
+        ("galon",  "Galón"),
+        ("kilo",   "Kilo"),
+        ("cartucho", "Cartucho"),
+        ("dia",    "Día"),
+        ("mes",    "Mes"),
+        ("hora",   "Hora"),
+        ("global", "Global"),
+    ]
+
+    apu = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.CASCADE,
+        related_name="lineas",
+    )
+    tipo = models.CharField(
+        max_length=30,
+        choices=TipoAPU.choices,
+        db_index=True,
+    )
+
+    # -- Origen del ítem --
+    item_catalogo = models.ForeignKey(
+        ItemCatalogoAPU,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="apu_lineas",
+        help_text="Ítem del catálogo APU del que proviene esta línea.",
+    )
+    despiece_linea = models.ForeignKey(
+        "presupuestos.DespieceLinea",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="apu_lineas",
+        help_text="Ítem del despiece de materiales (solo para tipo MATERIALES).",
+    )
+
+    # -- Descripción editable (se copia del catálogo pero puede ajustarse) --
+    descripcion = models.CharField(max_length=300)
+
+    # -- Entradas del cálculo --
+    rendimiento = models.DecimalField(
+        max_digits=14, decimal_places=6, default=Decimal("1"),
+        help_text="Cantidad del recurso necesaria por unidad de APU.",
+    )
+    unidad = models.CharField(
+        max_length=20,
+        choices=UNIDAD_CHOICES,
+        default="und",
+        help_text="Unidad de medida del rendimiento.",
+    )
+    precio_referencia = models.DecimalField(
+        max_digits=18, decimal_places=6, default=Decimal("0"),
+        help_text="Precio unitario del insumo/recurso (sin IVA).",
+    )
+    iva_aplicado = models.BooleanField(
+        default=True,
+        help_text="Si True, se multiplica precio_referencia por el factor IVA del APU.",
+    )
+
+    # -- Campos adicionales para herramientas (depreciación) --
+    vida_util_dias = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Vida útil en días (herramientas/dotación). "
+                  "Permite mostrar el costo por jornada en reportes.",
+    )
+    costo_por_dia = models.DecimalField(
+        max_digits=18, decimal_places=6, default=Decimal("0"),
+        help_text="Precio_referencia / vida_util_dias. Calculado automáticamente.",
+    )
+
+    # -- Campos adicionales para personal --
+    salario_base = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
+        help_text="Salario base mensual (solo personal).",
+    )
+    prestaciones = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
+        help_text="Prestaciones sociales mensuales (solo personal).",
+    )
+
+    # -- Resultados calculados --
+    costo_unitario = models.DecimalField(
+        max_digits=18, decimal_places=6, default=Decimal("0"),
+        help_text="precio_referencia × IVA_factor.",
+    )
+    costo_total = models.DecimalField(
+        max_digits=18, decimal_places=6, default=Decimal("0"),
+        help_text="rendimiento × costo_unitario.",
+    )
+    valor_unitario = models.DecimalField(
+        max_digits=18, decimal_places=6, default=Decimal("0"),
+        help_text="costo_unitario × (1 + factor_venta_pct / 100).",
+    )
+    valor_total = models.DecimalField(
+        max_digits=18, decimal_places=6, default=Decimal("0"),
+        help_text="rendimiento × valor_unitario.",
+    )
+
+    # -- Control de edición manual --
+    editable = models.BooleanField(
+        default=False,
+        help_text="Si True, el usuario puede modificar precio_referencia y rendimiento.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -191,23 +532,80 @@ class APULinea(models.Model):
         app_label = "presupuestos"
         db_table = "apu_lineas"
         ordering = ["tipo", "descripcion"]
+        verbose_name = "Línea APU"
+        verbose_name_plural = "Líneas APU"
 
     def __str__(self):
-        return f"{self.tipo} / {self.descripcion}"
+        return f"[{self.get_tipo_display()}] {self.descripcion}"
+
+  
 
     def calcular(self):
-        """
-        Recalcula costo_unitario, costo_total, valor_unitario, valor_total
-        usando los parámetros del APUProyecto padre.
-        """
-        apu = self.apu
-        iva_factor = (1 + float(apu.iva_pct) / 100) if (self.iva_aplicado and apu.aplica_iva) else 1.0
-        factor_venta = 1 + float(apu.factor_venta_pct) / 100
-        rend = float(self.rendimiento) or 1.0
-        precio = float(self.precio_referencia)
 
-        self.costo_unitario = precio * iva_factor
-        self.costo_total = rend * float(self.costo_unitario)
-        self.valor_unitario = float(self.costo_unitario) * factor_venta
-        self.valor_total = rend * float(self.valor_unitario)
-        self.save(update_fields=["costo_unitario", "costo_total", "valor_unitario", "valor_total", "updated_at"])
+        apu = self.apu
+
+        if (
+            self.tipo == TipoAPU.MANO_DE_OBRA
+            and self.item_catalogo_id
+            and self.salario_base == 0
+        ):
+            self.salario_base = self.item_catalogo.salario_base
+            self.prestaciones = self.item_catalogo.prestaciones
+
+        vu = self.vida_util_dias or (
+            self.item_catalogo.vida_util_dias if self.item_catalogo_id else None
+        )
+        if vu and vu > 0 and self.precio_referencia:
+            self.costo_por_dia = (
+                Decimal(str(self.precio_referencia)) / Decimal(str(vu))
+            ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+        else:
+            self.costo_por_dia = Decimal("0")
+
+        iva_factor = (
+            Decimal("1") + Decimal(str(apu.iva_pct)) / Decimal("100")
+            if (self.iva_aplicado and apu.aplica_iva)
+            else Decimal("1")
+        )
+        factor_venta = Decimal("1") + Decimal(str(apu.factor_venta_pct)) / Decimal("100")
+        rendimiento  = Decimal(str(self.rendimiento)) if self.rendimiento else Decimal("1")
+        precio       = Decimal(str(self.precio_referencia))
+
+        self.costo_unitario = (precio * iva_factor).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
+        self.costo_total = (rendimiento * self.costo_unitario).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
+        self.valor_unitario = (self.costo_unitario * factor_venta).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
+        self.valor_total = (rendimiento * self.valor_unitario).quantize(
+            Decimal("0.000001"), rounding=ROUND_HALF_UP
+        )
+
+        self.save(update_fields=[
+            "salario_base", "prestaciones",
+            "costo_por_dia",
+            "costo_unitario", "costo_total",
+            "valor_unitario", "valor_total",
+            "updated_at",
+        ])
+
+
+
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
+
+
+@receiver(post_save, sender=APULinea)
+def _linea_post_save(sender, instance, **kwargs):
+    """Recalcula los totales del APU padre cuando se guarda una línea."""
+    if kwargs.get("update_fields") and "costo_total" in (kwargs["update_fields"] or []):
+        instance.apu.recalcular()
+
+
+@receiver(post_delete, sender=APULinea)
+def _linea_post_delete(sender, instance, **kwargs):
+    """Recalcula los totales del APU padre cuando se elimina una línea."""
+    instance.apu.recalcular()

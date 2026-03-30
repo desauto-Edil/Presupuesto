@@ -1,21 +1,6 @@
 """
 apps/presupuestos/models/despiece.py — Ejecución del despiece por proyecto.
 
-ProyectoSistema: vincula un proyecto con el sistema/subsistema elegido
-                  y almacena las variables de entrada del cálculo via JSONField.
-DespieceLinea:   resultado de evaluar los componentes del sistema sobre el proyecto.
-
-Arquitectura basada en system_defs:
-  - Los sistemas tienen sus recetas definidas en apps/ingenieria/system_defs/
-  - parametros_entrada guarda las variables que el presupuestador ingresa.
-  - get_contexto() combina datos del proyecto con esos parámetros.
-  - get_variables_requeridas() lee la definición backend del subsistema.
-  - DespieceService lee system_defs en lugar de ReglaCalculo de la DB.
-
-Dependencias cruzadas:
-  - comercial.Proyecto
-  - ingenieria.Sistema, Subsistema
-  - catalogos.Producto, CategoriaProducto
 """
 
 from __future__ import annotations
@@ -118,10 +103,10 @@ class ProyectoSistema(models.Model):
         return [
             {
                 "variable": v.variable,
-                "label":    v.label,
-                "unidad":   v.unidad,
+                "label": v.label,
+                "unidad":v.unidad,
                 "default":  v.default,
-                "valor":    params.get(v.variable, v.default if v.default is not None else ""),
+                "valor": params.get(v.variable, v.default if v.default is not None else ""),
             }
             for v in sub_def.variables
             if v.variable not in VARS_PROYECTO
@@ -129,18 +114,7 @@ class ProyectoSistema(models.Model):
 
 
 class DespieceLinea(models.Model):
-    """
-    Línea de despiece: un componente con su cantidad calculada/ajustada
-    para un proyecto y sistema específico.
 
-    componente_codigo: identifica el componente del sistema (de la system_def).
-    Reemplaza a 'regla' como clave de update_or_create para cálculos reanudables.
-
-    Estado del producto:
-      - Resuelto:          producto_id IS NOT NULL → tiene precio, listo para APU.
-      - Pendiente selección: producto_id IS NULL & categoria_producto_id IS NOT NULL
-      - Error config:      ambos NULL.
-    """
     proyecto = models.ForeignKey(
         "comercial.Proyecto", on_delete=models.CASCADE, related_name="despiece_lineas"
     )
@@ -183,8 +157,8 @@ class DespieceLinea(models.Model):
         max_digits=18, decimal_places=6, blank=True, null=True,
         help_text="Valor manual que reemplaza al calculado si el usuario lo ajusta.",
     )
-    motivo_ajuste      = models.TextField(blank=True, null=True)
-    precio_snapshot    = models.DecimalField(
+    motivo_ajuste = models.TextField(blank=True, null=True)
+    precio_snapshot = models.DecimalField(
         max_digits=18, decimal_places=6, blank=True, null=True,
         help_text="Precio unitario capturado al momento de calcular el despiece.",
     )
