@@ -77,35 +77,49 @@ class ProyectoSistema(models.Model):
 
     def get_variables_requeridas(self) -> list[dict]:
         """
-        Devuelve las variables de entrada que este subsistema necesita,
-        leyendo la definición backend desde system_defs/registry.py.
+        Devuelve las variables de entrada que este subsistema necesita.
+        Prioridad: variables en DB (VariableSubsistema) > system_defs registry.
 
         Retorna: [{variable, label, valor, unidad, default}]
         para que la UI las renderice como formulario dinámico.
-
         Excluye las variables del proyecto (area_m2, perimetro_ml).
         """
         if not self.sistema_id or not self.subsistema_id:
             return []
 
-        from apps.ingenieria.system_defs.registry import get_subsistema_def
-
-        sub_def = get_subsistema_def(
-            self.sistema.codigo,
-            self.subsistema.codigo,
-        )
-        if not sub_def:
-            return []
-
         VARS_PROYECTO = {"area_m2", "perimetro_ml"}
         params = self.parametros_entrada or {}
+
+        # ── Prioridad 1: variables DB ─────────────────────────────────────────
+        from apps.ingenieria.models import VariableSubsistema
+        vars_db = list(
+            VariableSubsistema.objects.filter(subsistema=self.subsistema).order_by("orden")
+        )
+        if vars_db:
+            return [
+                {
+                    "variable": v.variable,
+                    "label": v.label,
+                    "unidad": v.unidad,
+                    "default": float(v.valor_default),
+                    "valor": params.get(v.variable, float(v.valor_default)),
+                }
+                for v in vars_db
+                if v.variable not in VARS_PROYECTO
+            ]
+
+        # ── Prioridad 2: registry Python ──────────────────────────────────────
+        from apps.ingenieria.system_defs.registry import get_subsistema_def
+        sub_def = get_subsistema_def(self.sistema.codigo, self.subsistema.codigo)
+        if not sub_def:
+            return []
 
         return [
             {
                 "variable": v.variable,
                 "label": v.label,
-                "unidad":v.unidad,
-                "default":  v.default,
+                "unidad": v.unidad,
+                "default": v.default,
                 "valor": params.get(v.variable, v.default if v.default is not None else ""),
             }
             for v in sub_def.variables

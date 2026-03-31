@@ -28,33 +28,90 @@
       </table>
     </div>
 
-    {# Estado de la definición backend #}
+    {# Estado de la definición #}
     <div>
-      <div class="section-label">Definición backend</div>
-      {% if sub_def %}
+      <div class="section-label">Definición técnica</div>
+      {% if componentes_db %}
       <div style="margin-top:8px;padding:12px;background:#e8f5e9;border-radius:6px;border-left:3px solid #4caf50;">
-        <div style="font-size:11.5px;font-weight:700;color:#2e7d32;">✓ Receta técnica definida</div>
+        <div style="font-size:11.5px;font-weight:700;color:#2e7d32;">✓ Receta definida en base de datos</div>
         <div style="font-size:11px;color:#388e3c;margin-top:4px;">
-          {{ sub_def.componentes|length }} componentes · {{ sub_def.variables|length }} variables de entrada
+          {{ componentes_db|length }} componentes · {{ variables_db|length }} variables de entrada
+        </div>
+      </div>
+      {% elif sub_def %}
+      <div style="margin-top:8px;padding:12px;background:#e3f2fd;border-radius:6px;border-left:3px solid #1565c0;">
+        <div style="font-size:11.5px;font-weight:700;color:#1565c0;">◎ Receta definida en código Python</div>
+        <div style="font-size:11px;color:#1976d2;margin-top:4px;">
+          {{ sub_def.componentes|length }} componentes · {{ sub_def.variables|length }} variables.
+          Edita el subsistema para migrar a base de datos.
         </div>
       </div>
       {% else %}
       <div style="margin-top:8px;padding:12px;background:#fff8e1;border-radius:6px;border-left:3px solid #ff9800;">
-        <div style="font-size:11.5px;font-weight:700;color:#e65100;">⚠ Sin definición backend</div>
+        <div style="font-size:11.5px;font-weight:700;color:#e65100;">⚠ Sin receta definida</div>
         <div style="font-size:11px;color:#bf360c;margin-top:4px;">
-          El código <code>{{ subsistema.codigo }}</code> no está registrado en
-          <code>system_defs/registry.py</code>.
-          El despiece no podrá calcularse hasta que se defina.
+          Define los componentes desde el botón <strong>Editar</strong>.
         </div>
       </div>
       {% endif %}
     </div>
   </div>
 
-  {# Componentes de la receta #}
-  {% if sub_def %}
+  {# Componentes en DB #}
+  {% if componentes_db %}
   <div style="padding:0 20px 20px;">
     <div class="section-label" style="margin-bottom:10px;">Componentes del conjunto</div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Categoría de producto</th>
+          <th>Fórmula</th>
+          <th>Variable salida</th>
+          <th>Unidad</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for comp in componentes_db %}
+        <tr>
+          <td style="color:var(--muted);">{{ comp.orden }}</td>
+          <td><code style="font-size:11px;">{{ comp.codigo }}</code></td>
+          <td>{{ comp.nombre }}</td>
+          <td>{% if comp.categoria %}<span class="badge-status bs-info">{{ comp.categoria.nombre }}</span>{% else %}<span style="color:var(--muted);">—</span>{% endif %}</td>
+          <td><code style="font-size:10.5px;word-break:break-all;">{{ comp.formula_texto }}</code></td>
+          <td>{% if comp.variable_salida %}<code style="font-size:11px;color:var(--theme-accent);">→ {{ comp.variable_salida }}</code>{% else %}—{% endif %}</td>
+          <td style="color:var(--muted);">{{ comp.unidad|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if variables_db %}
+    <div class="section-label" style="margin:16px 0 10px;">Variables de entrada</div>
+    <table class="data-table">
+      <thead>
+        <tr><th>Variable</th><th>Etiqueta</th><th>Unidad</th><th>Default</th></tr>
+      </thead>
+      <tbody>
+        {% for v in variables_db %}
+        <tr>
+          <td><code style="font-size:11px;">{{ v.variable }}</code></td>
+          <td>{{ v.label }}</td>
+          <td style="color:var(--muted);">{{ v.unidad|default:"—" }}</td>
+          <td style="font-variant-numeric:tabular-nums;">{{ v.valor_default }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+
+  {# Componentes del registry Python (fallback) #}
+  {% elif sub_def %}
+  <div style="padding:0 20px 20px;">
+    <div class="section-label" style="margin-bottom:10px;">Componentes (desde código Python)</div>
     <table class="data-table">
       <thead>
         <tr>
@@ -75,24 +132,6 @@
           <td><span class="badge-status bs-info">{{ comp.categoria_slug }}</span></td>
           <td style="color:var(--muted);">{{ comp.unidad }}</td>
           <td>{% if comp.variable_salida %}<code style="font-size:11px;color:var(--accent);">→ {{ comp.variable_salida }}</code>{% else %}—{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    <div class="section-label" style="margin:16px 0 10px;">Variables de entrada</div>
-    <table class="data-table">
-      <thead>
-        <tr><th>Variable</th><th>Etiqueta</th><th>Unidad</th><th>Default</th><th>Descripción</th></tr>
-      </thead>
-      <tbody>
-        {% for v in sub_def.variables %}
-        <tr>
-          <td><code style="font-size:11px;">{{ v.variable }}</code></td>
-          <td>{{ v.label }}</td>
-          <td style="color:var(--muted);">{{ v.unidad|default:"—" }}</td>
-          <td style="font-variant-numeric:tabular-nums;">{{ v.default|default:"—" }}</td>
-          <td style="font-size:11px;color:var(--muted);">{{ v.descripcion|default:"—" }}</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -1,18 +1,21 @@
 """
 apps/presupuestos/services/despiece_service.py — Motor de cálculo de despiece.
 
-Lee la receta técnica del sistema desde apps/ingenieria/system_defs/registry.py
-(NO desde ReglaCalculo en DB). El presupuestador solo ingresa variables de entrada;
-las fórmulas y componentes están definidos en Python por el backend.
+Prioridad de receta técnica:
+  1. Componentes definidos en DB (ComponenteSubsistema) — preferidos, editables desde UI.
+  2. Registro Python en system_defs/registry.py — fallback para sistemas hardcodeados.
 
 Flujo:
-  1. Obtener SubsistemaDef del registro backend.
+  1. Verificar si el subsistema tiene ComponenteSubsistema en DB.
+     · Si sí → usar componentes DB.
+     · Si no → leer SubsistemaDef del registro Python.
   2. Construir contexto: datos del proyecto + parametros_entrada del PS.
+     · Si DB: inyectar también los defaults de VariableSubsistema para variables no provistas.
   3. Ejecutar componentes en orden ascendente.
   4. Para cada componente:
      a. Evaluar la fórmula con el contexto acumulado.
      b. Si tiene variable_salida, inyectarla al contexto (cascada).
-     c. Buscar CategoriaProducto en DB por categoria_slug.
+     c. Obtener CategoriaProducto (desde FK en DB o por nombre en registry).
      d. Crear/actualizar DespieceLinea identificada por componente_codigo.
      e. Capturar precio snapshot si el producto ya está resuelto.
 """
@@ -40,35 +43,107 @@ class DespieceService:
         """
         Calcula todas las líneas de despiece para el ProyectoSistema.
 
+        Prioridad: componentes en DB (ComponenteSubsistema) > registry Python.
         Devuelve lista de dicts con el resumen de líneas procesadas.
-        Las líneas existentes identificadas por componente_codigo se actualizan;
-        las nuevas se crean. Los ajustes manuales (cantidad_ajustada) se conservan.
         """
-        from apps.ingenieria.system_defs.registry import get_subsistema_def
         from apps.catalogos.models import CategoriaProducto
         from apps.presupuestos.models import DespieceLinea
+        from apps.ingenieria.models import ComponenteSubsistema, VariableSubsistema
 
         ps = self.ps
 
         if not ps.sistema_id or not ps.subsistema_id:
-            logger.warning(
-                "[DespieceService] PS %s sin sistema/subsistema definido.", ps.pk
-            )
+            logger.warning("[DespieceService] PS %s sin sistema/subsistema definido.", ps.pk)
             return []
+
+        # ── Elegir fuente de componentes ──────────────────────────────────────
+        componentes_db = list(
+            ComponenteSubsistema.objects.filter(subsistema=ps.subsistema)
+            .select_related("categoria")
+            .order_by("orden")
+        )
+
+        if componentes_db:
+            return self._ejecutar_desde_db(ps, componentes_db, DespieceLinea)
+        else:
+            return self._ejecutar_desde_registry(ps, CategoriaProducto, DespieceLinea)
+
+    def _ejecutar_desde_db(self, ps, componentes_db, DespieceLinea) -> list[dict]:
+        """Ejecuta el despiece usando componentes definidos en ComponenteSubsistema."""
+        from apps.ingenieria.models import VariableSubsistema
+
+        contexto = ps.get_contexto()
+
+        # Inyectar defaults de variables DB para las que el usuario no proporcionó valor
+        for var in VariableSubsistema.objects.filter(subsistema=ps.subsistema).order_by("orden"):
+            if var.variable not in contexto:
+                contexto[var.variable] = float(var.valor_default)
+
+        logger.debug("[DespieceService][DB] Contexto PS %s: %s", ps.pk, contexto)
+        resultados = []
+
+        for comp in componentes_db:
+            try:
+                cantidad_float = comp.evaluar(contexto)
+            except (KeyError, ValueError) as exc:
+                logger.error(
+                    "[DespieceService][DB] Error en componente '%s' (PS %s): %s",
+                    comp.codigo, ps.pk, exc,
+                )
+                continue
+
+            if comp.variable_salida:
+                contexto[comp.variable_salida] = cantidad_float
+
+            cantidad_decimal = Decimal(str(cantidad_float)).quantize(
+                Decimal("0.000001"), rounding=ROUND_HALF_UP
+            )
+
+            categoria = comp.categoria  # ya FK directo
+
+            linea, created = DespieceLinea.objects.update_or_create(
+                proyecto_sistema=ps,
+                componente_codigo=comp.codigo,
+                defaults={
+                    "proyecto": ps.proyecto,
+                    "cantidad_calculada": cantidad_decimal,
+                    "categoria_producto": categoria,
+                    "es_dependencia_automatica": False,
+                },
+            )
+            linea.capturar_precio()
+
+            resultados.append({
+                "componente_codigo": comp.codigo,
+                "nombre": comp.nombre,
+                "cantidad": float(cantidad_decimal),
+                "unidad": comp.unidad,
+                "categoria": categoria.nombre if categoria else "",
+                "pendiente": linea.pendiente_seleccion,
+                "estado": linea.estado_tecnico,
+            })
+
+        logger.info(
+            "[DespieceService][DB] PS %s → %d líneas procesadas.", ps.pk, len(resultados)
+        )
+        return resultados
+
+    def _ejecutar_desde_registry(self, ps, CategoriaProducto, DespieceLinea) -> list[dict]:
+        """Fallback: ejecuta el despiece usando system_defs Python registry."""
+        from apps.ingenieria.system_defs.registry import get_subsistema_def
 
         sub_def = get_subsistema_def(ps.sistema.codigo, ps.subsistema.codigo)
         if not sub_def:
             logger.warning(
-                "[DespieceService] Sin definición backend para %s/%s (PS %s). "
-                "Verifica que el código del sistema/subsistema coincida con system_defs.",
+                "[DespieceService] Sin definición para %s/%s (PS %s). "
+                "Define los componentes en DB o en system_defs/.",
                 ps.sistema.codigo, ps.subsistema.codigo, ps.pk,
             )
             return []
 
         contexto = ps.get_contexto()
-        logger.debug("[DespieceService] Contexto inicial PS %s: %s", ps.pk, contexto)
+        logger.debug("[DespieceService][Registry] Contexto PS %s: %s", ps.pk, contexto)
 
-        # Cache de categorías para no consultar la DB en cada iteración
         _cat_cache: dict[str, object] = {}
 
         def _get_categoria(slug: str):
@@ -76,7 +151,7 @@ class DespieceService:
                 cat = CategoriaProducto.objects.filter(nombre__iexact=slug).first()
                 if not cat:
                     logger.warning(
-                        "[DespieceService] CategoriaProducto '%s' no encontrada en DB (PS %s).",
+                        "[DespieceService] CategoriaProducto '%s' no encontrada (PS %s).",
                         slug, ps.pk,
                     )
                 _cat_cache[slug] = cat
@@ -86,62 +161,41 @@ class DespieceService:
         resultados = []
 
         for comp in componentes_ordenados:
-            # 1. Evaluar fórmula
             try:
                 cantidad_float = float(comp.formula(contexto))
             except KeyError as exc:
                 logger.error(
-                    "[DespieceService] Variable %s no encontrada en contexto "
-                    "al evaluar '%s' (PS %s). Verifica los parametros_entrada.",
+                    "[DespieceService] Variable %s no en contexto al evaluar '%s' (PS %s).",
                     exc, comp.codigo, ps.pk,
                 )
                 continue
             except Exception as exc:
                 logger.error(
-                    "[DespieceService] Error evaluando componente '%s' (PS %s): %s",
+                    "[DespieceService] Error evaluando '%s' (PS %s): %s",
                     comp.codigo, ps.pk, exc,
                 )
                 continue
 
-            # 2. Cascada: inyectar resultado al contexto si tiene variable_salida
             if comp.variable_salida:
                 contexto[comp.variable_salida] = cantidad_float
-                logger.debug(
-                    "[DespieceService] Contexto actualizado: %s = %.6f",
-                    comp.variable_salida, cantidad_float,
-                )
 
             cantidad_decimal = Decimal(str(cantidad_float)).quantize(
                 Decimal("0.000001"), rounding=ROUND_HALF_UP
             )
 
-            # 3. Buscar categoría en DB
             categoria = _get_categoria(comp.categoria_slug) if comp.categoria_slug else None
 
-            # 4. Crear/actualizar DespieceLinea (clave: proyecto_sistema + componente_codigo)
             linea, created = DespieceLinea.objects.update_or_create(
                 proyecto_sistema=ps,
                 componente_codigo=comp.codigo,
                 defaults={
                     "proyecto": ps.proyecto,
-                    "cantidad_calculada":cantidad_decimal,
-                    "categoria_producto":categoria,
+                    "cantidad_calculada": cantidad_decimal,
+                    "categoria_producto": categoria,
                     "es_dependencia_automatica": False,
-                    # producto se conserva si ya fue resuelto (update_or_create no lo toca)
                 },
             )
-
-            # Si ya tenía producto resuelto, conservarlo (no sobreescribir con None)
-            # update_or_create solo pisa los campos en defaults, así que producto queda intacto
-
-            # 5. Capturar precio snapshot si el producto ya está asignado
             linea.capturar_precio()
-
-            logger.debug(
-                "[DespieceService] %s componente '%s' | cantidad=%.4f | cat='%s'",
-                "Creada" if created else "Actualizada", comp.codigo,
-                float(cantidad_decimal), comp.categoria_slug,
-            )
 
             resultados.append({
                 "componente_codigo": comp.codigo,

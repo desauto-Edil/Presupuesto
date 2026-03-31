@@ -860,30 +860,45 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p style="font-size:12.5px;color:rgba(14,17,23,0.5);margin-bottom:16px;">
-            Ingresa el costo total de cada herramienta/equipo para el proyecto.
-            El costo unitario se calculará dividiendo por el total de unidades de referencia.
+          {% if items_herr %}
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+            Seleccione los ítems a incluir y ajuste la cantidad. Los ítems ya activos en este APU aparecen marcados.
           </p>
-          <div id="herrRows">
-            <div class="herr-row">
-              <input type="text" name="descripcion[]" class="form-control form-control-sm"
-                     placeholder="Descripción (ej. Herramienta Eléctrica)">
-              <div class="input-group input-group-sm" style="width:160px;">
-                <span class="input-group-text" style="font-size:11.5px;">$</span>
-                <input type="number" name="precio_total[]" class="form-control"
-                       placeholder="Costo total" min="0" step="0.01">
-              </div>
-              <button type="button" class="btn btn-ghost btn-xs"
-                      onclick="this.closest('.herr-row').remove()"
-                      style="color:rgba(14,17,23,0.3);padding:0 6px;">✕</button>
+          {% regroup items_herr by categoria as herr_por_cat %}
+          {% for cat_group in herr_por_cat %}
+          <div style="margin-bottom:14px;">
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#e07d10;margin-bottom:8px;">
+              {{ cat_group.grouper.nombre }}
             </div>
+            {% for item in cat_group.list %}
+            <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
+              <input type="checkbox" name="item_id[]" value="{{ item.pk }}"
+                     id="herr-{{ item.pk }}"
+                     {% if item.pk in lineas_item_ids %}checked{% endif %}
+                     style="width:16px;height:16px;cursor:pointer;">
+              <label for="herr-{{ item.pk }}" style="flex:1;font-size:12.5px;cursor:pointer;margin:0;">
+                {{ item.nombre }}
+                {% if item.vida_util_dias %}
+                  <span style="font-size:10px;color:var(--muted);">— vida útil {{ item.vida_util_dias }} días</span>
+                {% endif %}
+              </label>
+              <span style="font-size:11.5px;color:var(--muted);width:100px;text-align:right;">
+                ${{ item.precio_base|floatformat:0 }}
+              </span>
+              <div style="width:80px;">
+                <input type="number" name="cantidad[]" value="1" min="1"
+                       class="form-control form-control-sm" style="text-align:center;">
+              </div>
+            </div>
+            {% endfor %}
           </div>
-          <button type="button"
-                  class="btn btn-ghost btn-sm mt-2"
-                  onclick="addHerrRow()"
-                  style="font-size:12px;">
-            <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Agregar fila
-          </button>
+          {% endfor %}
+          {% else %}
+          <div style="text-align:center;padding:24px 0;color:var(--muted);">
+            No hay herramientas en el catálogo.
+            <a href="{% url 'presupuestos:catalogo_apu' %}">Ir al catálogo APU</a>
+          </div>
+          {% endif %}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -897,7 +912,7 @@
 
 {# ── Modal: Configurar Transporte ───────────────────────────────── #}
 <div class="modal fade" id="modalTransporte" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form method="post" action="{% url 'presupuestos:apu_transporte' apu.pk %}">
         {% csrf_token %}
@@ -908,32 +923,50 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <div class="cat-modal-section">
-            <div class="cat-modal-section-label">Retiro y disposición de materiales</div>
-            <div class="herr-row">
-              <input type="text" name="descripcion[]" class="form-control form-control-sm"
-                     value="Retiro y disposición de materiales">
-              <div class="input-group input-group-sm" style="width:170px;">
-                <span class="input-group-text">$</span>
-                <input type="number" name="precio_total[]" class="form-control"
-                       placeholder="Costo total" min="0" step="0.01">
-              </div>
-              <span style="width:28px;"></span>
+          {% if items_transp %}
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+            Ingrese el costo total por ítem. El costo unitario se calcula dividiendo por las unidades de referencia del proyecto.
+          </p>
+          {% for item in items_transp %}
+          <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
+            <i class="bi bi-truck" style="color:#7048d0;opacity:0.5;"></i>
+            <input type="hidden" name="descripcion[]" value="{{ item.nombre }}">
+            <span style="flex:1;font-size:12.5px;">{{ item.nombre }}</span>
+            <div class="input-group input-group-sm" style="width:180px;">
+              <span class="input-group-text">$</span>
+              <input type="number" name="precio_total[]"
+                     value="{{ item.precio_base|floatformat:0 }}"
+                     class="form-control" min="0" step="1000" placeholder="Costo total">
             </div>
           </div>
-          <div class="cat-modal-section mt-2">
-            <div class="cat-modal-section-label">Envío de materiales</div>
-            <div class="herr-row">
-              <input type="text" name="descripcion[]" class="form-control form-control-sm"
-                     value="Envío de materiales">
-              <div class="input-group input-group-sm" style="width:170px;">
+          {% endfor %}
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+            <div style="font-size:10.5px;font-weight:600;color:var(--muted);margin-bottom:8px;">ÍTEMS ADICIONALES</div>
+            <div id="transpRows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addTranspRow()"
+                    style="font-size:12px;margin-top:6px;">
+              <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Agregar ítem
+            </button>
+          </div>
+          {% else %}
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+            Ingrese los ítems de transporte manualmente.
+          </p>
+          <div id="transpRows">
+            <div class="herr-row" style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="text" name="descripcion[]" class="form-control form-control-sm" placeholder="Descripción">
+              <div class="input-group input-group-sm" style="width:180px;">
                 <span class="input-group-text">$</span>
-                <input type="number" name="precio_total[]" class="form-control"
-                       placeholder="Costo total" min="0" step="0.01">
+                <input type="number" name="precio_total[]" class="form-control" placeholder="Costo total" min="0">
               </div>
-              <span style="width:28px;"></span>
+              <button type="button" onclick="this.closest('.herr-row').remove()"
+                      class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.3);">✕</button>
             </div>
           </div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="addTranspRow()" style="font-size:12px;">
+            <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Agregar ítem
+          </button>
+          {% endif %}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -959,57 +992,64 @@
         </div>
         <div class="modal-body">
 
-          <div class="cat-modal-section mb-3">
-            <div class="cat-modal-section-label">Cuadrilla</div>
-            <div class="row g-2">
-              <div class="col-4">
-                <label class="form-label" style="font-size:12px;font-weight:600;">Personas en cuadrilla</label>
-                <input type="number" name="cuadrilla_personas" class="form-control form-control-sm"
-                       value="{{ apu.cuadrilla_personas }}" min="1">
-              </div>
+          {% if presets %}
+          <div style="margin-bottom:16px;padding:12px;background:rgba(23,168,94,0.07);border-radius:8px;">
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#17a85e;margin-bottom:8px;">
+              Cuadrillas preset
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              {% for preset in presets %}
+              <button type="submit" name="preset_id" value="{{ preset.pk }}"
+                      class="btn btn-ghost btn-sm"
+                      style="font-size:11.5px;border:1px solid rgba(23,168,94,0.3);">
+                <i class="bi bi-people-fill" style="margin-right:4px;color:#17a85e;"></i>
+                {{ preset.nombre }}
+                <span style="color:var(--muted);font-size:10px;">({{ preset.items.count }} pers.)</span>
+              </button>
+              {% endfor %}
             </div>
           </div>
+          {% endif %}
 
-          <div class="cat-modal-section">
-            <div class="cat-modal-section-label">Costos diarios por persona ($/día)</div>
-            <div class="row g-3">
-              <div class="col-6">
-                <label class="form-label" style="font-size:12px;font-weight:600;">HYA — Herramientas y andamios</label>
-                <div class="input-group input-group-sm">
-                  <span class="input-group-text">$</span>
-                  <input type="number" name="hya_dia" class="form-control"
-                         placeholder="Ej: 25000" min="0" step="0.01">
-                </div>
-              </div>
-              <div class="col-6">
-                <label class="form-label" style="font-size:12px;font-weight:600;">Cuadrilla de instalación</label>
-                <div class="input-group input-group-sm">
-                  <span class="input-group-text">$</span>
-                  <input type="number" name="cuadrilla_dia" class="form-control"
-                         placeholder="Ej: 24000000" min="0" step="0.01">
-                </div>
-                <div class="form-text" style="font-size:10.5px;">Salario total mensual de la cuadrilla</div>
-              </div>
-              <div class="col-6">
-                <label class="form-label" style="font-size:12px;font-weight:600;">Dotación ($/día)</label>
-                <div class="input-group input-group-sm">
-                  <span class="input-group-text">$</span>
-                  <input type="number" name="dotacion_dia" class="form-control"
-                         placeholder="Ej: 9514" min="0" step="0.01">
-                </div>
-                <div class="form-text" style="font-size:10.5px;">De la tabla de precios dotación + EPP</div>
-              </div>
-              <div class="col-6">
-                <label class="form-label" style="font-size:12px;font-weight:600;">Protección contra caída ($/día)</label>
-                <div class="input-group input-group-sm">
-                  <span class="input-group-text">$</span>
-                  <input type="number" name="proteccion_dia" class="form-control"
-                         placeholder="Ej: 5818" min="0" step="0.01">
-                </div>
-                <div class="form-text" style="font-size:10.5px;">EPP alturas</div>
+          {% if items_mo %}
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+            Seleccione el personal a incluir y ajuste la cantidad. El costo se calcula por días de trabajo estimados.
+          </p>
+          {% regroup items_mo by categoria as mo_por_cat %}
+          {% for cat_group in mo_por_cat %}
+          <div style="margin-bottom:14px;">
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#17a85e;margin-bottom:8px;">
+              {{ cat_group.grouper.nombre }}
+            </div>
+            {% for item in cat_group.list %}
+            <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
+              <input type="checkbox" name="item_id[]" value="{{ item.pk }}"
+                     id="mo-{{ item.pk }}"
+                     {% if item.pk in lineas_item_ids %}checked{% endif %}
+                     style="width:16px;height:16px;cursor:pointer;">
+              <label for="mo-{{ item.pk }}" style="flex:1;font-size:12.5px;cursor:pointer;margin:0;">
+                {{ item.nombre }}
+                {% if item.salario_base %}
+                  <span style="font-size:10px;color:var(--muted);">— salario ${{ item.salario_base|floatformat:0 }}</span>
+                {% endif %}
+              </label>
+              <span style="font-size:11.5px;color:var(--muted);width:100px;text-align:right;">
+                ${{ item.precio_base|floatformat:0 }}/{{ item.unidad }}
+              </span>
+              <div style="width:80px;">
+                <input type="number" name="cantidad[]" value="1" min="1"
+                       class="form-control form-control-sm" style="text-align:center;">
               </div>
             </div>
+            {% endfor %}
           </div>
+          {% endfor %}
+          {% else %}
+          <div style="text-align:center;padding:24px 0;color:var(--muted);">
+            No hay personal en el catálogo.
+            <a href="{% url 'presupuestos:catalogo_apu' %}">Ir al catálogo APU</a>
+          </div>
+          {% endif %}
 
         </div>
         <div class="modal-footer">
@@ -1024,7 +1064,7 @@
 
 {# ── Modal: Configurar Administración ───────────────────────────── #}
 <div class="modal fade" id="modalAdmin" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form method="post" action="{% url 'presupuestos:apu_admin' apu.pk %}">
         {% csrf_token %}
@@ -1035,34 +1075,44 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-
-          <p style="font-size:12.5px;color:rgba(14,17,23,0.5);margin-bottom:16px;">
-            Incluye: personal administrativo, gastos generales, RRHH, pólizas y costos financieros.
+          {% if items_admin %}
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+            Ingrese el costo total por ítem administrativo. Se generará una línea APU por cada uno.
           </p>
-
-          <div class="mb-3">
-            <label class="form-label" style="font-size:12px;font-weight:600;">Modo de ingreso</label>
-            <select name="modo" class="form-select form-select-sm" id="adminModo"
-                    onchange="toggleAdminHelp(this.value)">
-              <option value="valor">Valor total en pesos ($)</option>
-              <option value="porcentaje">Porcentaje sobre costo base (%)</option>
-            </select>
-          </div>
-
-          <div>
-            <label class="form-label" style="font-size:12px;font-weight:600;" id="adminValorLabel">
-              Valor total administración ($)
-            </label>
-            <div class="input-group input-group-sm">
-              <span class="input-group-text" id="adminPrefix">$</span>
-              <input type="number" name="valor" class="form-control"
-                     placeholder="0" min="0" step="0.01" id="adminValorInput">
+          {% regroup items_admin by categoria as admin_por_cat %}
+          {% for cat_group in admin_por_cat %}
+          <div style="margin-bottom:14px;">
+            <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px;">
+              {{ cat_group.grouper.nombre }}
             </div>
-            <div class="form-text" style="font-size:10.5px;" id="adminHelp">
-              Suma de: Personal admin + Gastos generales + RRHH + Pólizas
+            {% for item in cat_group.list %}
+            <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
+              <input type="hidden" name="descripcion[]" value="{{ item.nombre }}">
+              <span style="flex:1;font-size:12.5px;">{{ item.nombre }}</span>
+              <div class="input-group input-group-sm" style="width:180px;">
+                <span class="input-group-text">$</span>
+                <input type="number" name="precio_total[]"
+                       value="{{ item.precio_base|floatformat:0 }}"
+                       class="form-control" min="0" step="1000">
+              </div>
             </div>
+            {% endfor %}
           </div>
-
+          {% endfor %}
+          {% else %}
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+            No hay ítems de administración en el catálogo.
+            <a href="{% url 'presupuestos:catalogo_apu' %}">Ir al catálogo APU</a>
+          </p>
+          {% endif %}
+          <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:12px;">
+            <div style="font-size:10.5px;font-weight:600;color:var(--muted);margin-bottom:8px;">ÍTEMS ADICIONALES</div>
+            <div id="adminRows"></div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addAdminRow()"
+                    style="font-size:12px;margin-top:6px;">
+              <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Agregar ítem
+            </button>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -1097,39 +1147,53 @@ function toggleSection(el) {
   });
 })();
 
-/* ── Herramientas: añadir fila ────────────────────────────────────── */
-function addHerrRow() {
-  const container = document.getElementById('herrRows');
+/* ── Herramientas/MO: sincronizar cantidad[] con checkboxes ───────────
+   Cuando un checkbox no está marcado, su input cantidad[] se deshabilita
+   para que no se envíe, manteniendo el zip item_id[] ↔ cantidad[] en sync. */
+document.querySelectorAll('#modalHerramientas input[type=checkbox], #modalManoObra input[type=checkbox]')
+  .forEach(function(cb) {
+    const row    = cb.closest('div[style]');
+    const qty    = row && row.querySelector('input[name="cantidad[]"]');
+    if (qty) qty.disabled = !cb.checked;
+    cb.addEventListener('change', function() {
+      if (qty) qty.disabled = !this.checked;
+    });
+  });
+
+/* ── Transporte: añadir fila adicional ───────────────────────────── */
+function addTranspRow() {
+  const container = document.getElementById('transpRows');
+  if (!container) return;
   const row = document.createElement('div');
   row.className = 'herr-row';
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
   row.innerHTML = `
-    <input type="text" name="descripcion[]" class="form-control form-control-sm"
-           placeholder="Descripción">
-    <div class="input-group input-group-sm" style="width:160px;">
-      <span class="input-group-text" style="font-size:11.5px;">$</span>
-      <input type="number" name="precio_total[]" class="form-control"
-             placeholder="Costo total" min="0" step="0.01">
+    <input type="text" name="descripcion[]" class="form-control form-control-sm" placeholder="Descripción">
+    <div class="input-group input-group-sm" style="width:180px;">
+      <span class="input-group-text">$</span>
+      <input type="number" name="precio_total[]" class="form-control" placeholder="Costo total" min="0">
     </div>
-    <button type="button" class="btn btn-ghost btn-xs"
-            onclick="this.closest('.herr-row').remove()"
-            style="color:rgba(14,17,23,0.3);padding:0 6px;">✕</button>`;
+    <button type="button" onclick="this.closest('.herr-row').remove()"
+            class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.3);">✕</button>`;
   container.appendChild(row);
 }
 
-/* ── Admin: modo toggle ───────────────────────────────────────────── */
-function toggleAdminHelp(val) {
-  const prefix = document.getElementById('adminPrefix');
-  const label  = document.getElementById('adminValorLabel');
-  const help   = document.getElementById('adminHelp');
-  if (val === 'porcentaje') {
-    prefix.textContent = '%';
-    label.textContent  = 'Porcentaje sobre el costo base (%)';
-    help.textContent   = 'Ej: 15 → 15% del subtotal de materiales + herramientas + transporte + MO';
-  } else {
-    prefix.textContent = '$';
-    label.textContent  = 'Valor total administración ($)';
-    help.textContent   = 'Suma de: Personal admin + Gastos generales + RRHH + Pólizas';
-  }
+/* ── Admin: añadir ítem adicional ────────────────────────────────── */
+function addAdminRow() {
+  const container = document.getElementById('adminRows');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'herr-row';
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
+  row.innerHTML = `
+    <input type="text" name="descripcion[]" class="form-control form-control-sm" placeholder="Descripción">
+    <div class="input-group input-group-sm" style="width:180px;">
+      <span class="input-group-text">$</span>
+      <input type="number" name="precio_total[]" class="form-control" placeholder="Costo total" min="0">
+    </div>
+    <button type="button" onclick="this.closest('.herr-row').remove()"
+            class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.3);">✕</button>`;
+  container.appendChild(row);
 }
 </script>
 {% endblock %}

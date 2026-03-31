@@ -391,15 +391,46 @@
   selSubsistema.addEventListener('change', cargarVariables);
 
   /* ── Carga dinámica de variables del subsistema via AJAX ─────────────── */
-  // Para un subsistema ya existente (PS creado), pedimos sus variables al server.
-  // Para el modal de "nuevo", renderizamos campos si hay PS con ese subsistema.
   function cargarVariables() {
     const container = document.getElementById('containerVariablesNuevo');
     const campos    = document.getElementById('camposVariablesNuevo');
-    // Por ahora muestra el contenedor vacío listo para escribir manualmente.
-    // Una mejora posterior puede hacer fetch al endpoint /api/variables/<ps_pk>/
-    container.style.display = 'none';
-    campos.innerHTML = '';
+    const subPk     = selSubsistema.value;
+
+    if (!subPk) {
+      container.style.display = 'none';
+      campos.innerHTML = '';
+      return;
+    }
+
+    fetch(`/presupuestos/api/subsistema-def/${subPk}/`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error || !data.variables || data.variables.length === 0) {
+          container.style.display = 'none';
+          campos.innerHTML = '';
+          return;
+        }
+        campos.innerHTML = data.variables.map(v => `
+          <div class="form-group" style="margin-bottom:10px;">
+            <label style="font-size:10.5px;">${v.label}${v.unidad ? ' (' + v.unidad + ')' : ''}</label>
+            ${v.opciones && v.opciones.length > 0
+              ? `<select name="parametros[${v.variable}]" class="form-select form-select-sm">
+                  ${v.opciones.map(o => `<option value="${o[0]}" ${o[0] == v.default ? 'selected' : ''}>${o[1]}</option>`).join('')}
+                 </select>`
+              : `<input type="number" step="any" class="form-control form-control-sm"
+                        name="parametros[${v.variable}]"
+                        value="${v.default !== null ? v.default : ''}"
+                        placeholder="${v.variable}">`
+            }
+            ${v.descripcion ? `<small style="color:var(--ink-soft);font-size:10px;">${v.descripcion}</small>` : ''}
+          </div>
+        `).join('');
+        container.style.display = 'block';
+      })
+      .catch(() => {
+        container.style.display = 'none';
+        campos.innerHTML = '';
+      });
   }
 })();
 

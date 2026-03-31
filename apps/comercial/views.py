@@ -30,6 +30,13 @@ def _usuario_sistema(request):
         return request.usuario_sistema
     if getattr(request, "user", None) and request.user.is_authenticated:
         return UsuarioSistema.objects.filter(email=request.user.email).first()
+    # Fallback: autenticación por sesión personalizada
+    try:
+        usuario_id = request.session.get("usuario_id")
+        if usuario_id:
+            return UsuarioSistema.objects.filter(pk=usuario_id).first()
+    except Exception:
+        pass
     return None
 
 
@@ -37,16 +44,21 @@ def registrar_log(request, accion, descripcion="", modelo_afectado="", objeto_id
     """Registra una acción en LogSistema. Silencia errores para no interrumpir el flujo."""
     try:
         usuario = _usuario_sistema(request)
-        unidad = request.session.get("unidad_negocio", "")
-        if usuario and unidad:
-            LogSistema.objects.create(
-                usuario=usuario,
-                unidad_negocio=unidad,
-                accion=accion,
-                descripcion=descripcion,
-                modelo_afectado=modelo_afectado,
-                objeto_id=objeto_id,
-            )
+        if not usuario:
+            return
+        unidad = ""
+        try:
+            unidad = request.session.get("unidad_negocio", "") or ""
+        except Exception:
+            pass
+        LogSistema.objects.create(
+            usuario=usuario,
+            unidad_negocio=unidad,
+            accion=accion,
+            descripcion=descripcion,
+            modelo_afectado=modelo_afectado,
+            objeto_id=objeto_id,
+        )
     except Exception:
         pass
 
@@ -138,6 +150,13 @@ class ClienteCreateView(CreateView):
             es_principal=True,
             activo=True,
         )
+        registrar_log(
+            self.request,
+            accion="CREAR_CLIENTE",
+            descripcion=f"Cliente {self.object.razon_social} creado",
+            modelo_afectado="Cliente",
+            objeto_id=self.object.pk,
+        )
         messages.success(
             self.request,
             f"Cliente {self.object.razon_social} creado correctamente.",
@@ -179,6 +198,13 @@ class ClienteUpdateView(UpdateView):
                 activo=True,
                 **datos_contacto,
             )
+        registrar_log(
+            self.request,
+            accion="EDITAR_CLIENTE",
+            descripcion=f"Cliente {self.object.razon_social} actualizado",
+            modelo_afectado="Cliente",
+            objeto_id=self.object.pk,
+        )
         messages.success(
             self.request,
             f"Cliente {self.object.razon_social} actualizado correctamente.",
@@ -197,6 +223,16 @@ class ClienteDeleteView(DeleteView):
     model = Cliente
     template_name = "comercial/confirm_delete.html"
     success_url = reverse_lazy("comercial:cliente_list")
+
+    def form_valid(self, form):
+        registrar_log(
+            self.request,
+            accion="ELIMINAR_CLIENTE",
+            descripcion=f"Cliente {self.object.razon_social} eliminado",
+            modelo_afectado="Cliente",
+            objeto_id=self.object.pk,
+        )
+        return super().form_valid(form)
 
 
 # ---------------------------------------------------------------------------
@@ -304,29 +340,31 @@ class SolicitudUpdateView(UpdateView):
         self.object.creado_por_id = original.creado_por_id
         self.object.save()
         form.save_m2m()
+        registrar_log(
+            self.request,
+            accion="EDITAR_SOLICITUD",
+            descripcion=f"Solicitud {self.object.consecutivo} actualizada",
+            modelo_afectado="Solicitud",
+            objeto_id=self.object.pk,
+        )
         messages.success(self.request, "Solicitud actualizada correctamente.")
         return HttpResponseRedirect(self.get_success_url())
 
 
 class SolicitudDeleteView(View):
-    """Las solicitudes NO se eliminan — son registros permanentes."""
-
-    def get(self, request, pk, *args, **kwargs):
-        solicitud = get_object_or_404(Solicitud, pk=pk)
-        messages.warning(
-            request,
-            f"La solicitud {solicitud.consecutivo} no puede eliminarse. "
-            "Es un registro permanente del sistema.",
-        )
-        return redirect("comercial:solicitud_detail", pk=pk)
-
     def post(self, request, pk, *args, **kwargs):
         solicitud = get_object_or_404(Solicitud, pk=pk)
-        messages.error(
+        consecutivo = solicitud.consecutivo
+        registrar_log(
             request,
-            f"La solicitud {solicitud.consecutivo} no puede eliminarse.",
+            accion="ELIMINAR_SOLICITUD",
+            descripcion=f"Solicitud {consecutivo} eliminada",
+            modelo_afectado="Solicitud",
+            objeto_id=pk,
         )
-        return redirect("comercial:solicitud_detail", pk=pk)
+        solicitud.delete()
+        messages.success(request, f"Solicitud {consecutivo} eliminada.")
+        return redirect("comercial:solicitud_list")
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +506,13 @@ class ProyectoCreateView(CreateView):
         self.object.creado_por = _usuario_sistema(self.request)
         self.object.save()
         form.save_m2m()
+        registrar_log(
+            self.request,
+            accion="CREAR_PROYECTO",
+            descripcion=f"Proyecto {self.object.consecutivo} — {self.object.nombre} creado",
+            modelo_afectado="Proyecto",
+            objeto_id=self.object.pk,
+        )
         return HttpResponseRedirect(self.get_success_url())
 
 
@@ -485,6 +530,13 @@ class ProyectoUpdateView(UpdateView):
         self.object.creado_por_id = original.creado_por_id
         self.object.save()
         form.save_m2m()
+        registrar_log(
+            self.request,
+            accion="EDITAR_PROYECTO",
+            descripcion=f"Proyecto {self.object.consecutivo} — {self.object.nombre} actualizado",
+            modelo_afectado="Proyecto",
+            objeto_id=self.object.pk,
+        )
         messages.success(self.request, "Proyecto actualizado correctamente.")
         return HttpResponseRedirect(self.get_success_url())
 

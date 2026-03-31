@@ -66,15 +66,71 @@ class APUService:
     # ── Classmethod de entrada ────────────────────────────────────────────────
 
     @classmethod
+    def for_apu(cls, apu) -> "APUService":
+        """Crea un APUService adjunto a un APU existente (sin get_or_create)."""
+        instance = object.__new__(cls)
+        from apps.presupuestos.models import ConfiguracionAPU
+        instance.ps  = apu.proyecto_sistema
+        instance.cfg = ConfiguracionAPU.activa_o_default()
+        instance.apu = apu
+        return instance
+
+    @classmethod
     def generar(cls, proyecto_sistema) -> "APU":
         """
         Punto de entrada principal.
-        Genera líneas de materiales, finaliza y devuelve el APU.
+        Genera líneas de materiales + auto-puebla desde catálogo activo, finaliza.
         """
         svc = cls(proyecto_sistema)
         svc.generar_materiales()
+        svc._auto_generar_desde_catalogo()
         svc.finalizar()
         return svc.apu
+
+    def _auto_generar_desde_catalogo(self) -> None:
+        """
+        Auto-puebla el APU con todos los ítems activos del catálogo,
+        por cada tipo que aún no tenga líneas generadas.
+        """
+        from apps.presupuestos.models import ItemCatalogoAPU
+        from apps.common.choices import TipoAPU
+
+        tipos_existentes = set(self.apu.lineas.values_list("tipo", flat=True))
+
+        if TipoAPU.MANO_DE_OBRA not in tipos_existentes:
+            items = list(ItemCatalogoAPU.objects.filter(
+                activo=True, categoria__tipo_apu=TipoAPU.MANO_DE_OBRA
+            ))
+            if items:
+                self.generar_mano_obra_desde_catalogo(
+                    [{"item_id": i.pk, "cantidad": 1} for i in items]
+                )
+
+        if TipoAPU.HERRAMIENTAS_EQUIPOS not in tipos_existentes:
+            items = list(ItemCatalogoAPU.objects.filter(
+                activo=True, categoria__tipo_apu=TipoAPU.HERRAMIENTAS_EQUIPOS
+            ))
+            if items:
+                self.generar_herramientas_desde_catalogo(
+                    [{"item_id": i.pk, "cantidad": 1} for i in items]
+                )
+
+        if TipoAPU.TRANSPORTE not in tipos_existentes:
+            items = list(ItemCatalogoAPU.objects.filter(
+                activo=True, categoria__tipo_apu=TipoAPU.TRANSPORTE
+            ))
+            if items:
+                self.generar_transporte_items(
+                    [{"descripcion": i.nombre, "precio_total": float(i.precio_base)} for i in items]
+                )
+
+        if TipoAPU.ADMINISTRACION not in tipos_existentes:
+            items = list(ItemCatalogoAPU.objects.filter(
+                activo=True, categoria__tipo_apu=TipoAPU.ADMINISTRACION
+            ))
+            if items:
+                for i in items:
+                    self.generar_administracion_item(i.nombre, float(i.precio_base))
 
     # ── Helper: cantidad de referencia ────────────────────────────────────────
 
@@ -359,19 +415,27 @@ class APUService:
     @transaction.atomic
     def generar_administracion(self, costo_total_admin: float) -> dict:
         """
-        Genera una APULinea ADMINISTRACION.
+        Genera o actualiza una única APULinea ADMINISTRACION con descripción genérica.
         CU = costo_total_admin / total_unidades
+        """
+        return self.generar_administracion_item("Administración", costo_total_admin)
+
+    @transaction.atomic
+    def generar_administracion_item(self, descripcion: str, costo_total: float) -> dict:
+        """
+        Genera/actualiza una APULinea ADMINISTRACION con descripción específica.
+        CU = costo_total / total_unidades
         """
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
         tp = self._get_total_unidades()
-        cu = costo_total_admin / tp if tp else 0
+        cu = costo_total / tp if tp else 0
 
         linea, _ = APULinea.objects.update_or_create(
             apu=self.apu,
             tipo=TipoAPU.ADMINISTRACION,
-            descripcion="Administración",
+            descripcion=descripcion,
             defaults={
                 "rendimiento": Decimal("1"),
                 "unidad": "global",
@@ -382,10 +446,10 @@ class APUService:
         )
         linea.calcular()
         logger.debug(
-            "[APUService] Admin APU %s | costo_total=%.2f | cu=%.6f",
-            self.apu.pk, costo_total_admin, cu,
+            "[APUService] Admin '%s' APU %s | costo_total=%.2f | cu=%.6f",
+            descripcion, self.apu.pk, costo_total, cu,
         )
-        return {"descripcion": "Administración", "costo_unitario": float(linea.costo_unitario)}
+        return {"descripcion": descripcion, "costo_unitario": float(linea.costo_unitario)}
 
     # ── Helper: estimar días de trabajo ───────────────────────────────────────
 

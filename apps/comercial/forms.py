@@ -168,7 +168,7 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
     class Meta:
         model = Proyecto
         fields = [
-            "tipo_proyecto", "nombre", "descripcion",
+            "nombre", "descripcion",
             "area_total_m2", "perimetro_ml",
             "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
             "moneda", "aplica_exencion_iva", "observaciones",

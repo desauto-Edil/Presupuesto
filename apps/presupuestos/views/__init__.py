@@ -307,12 +307,28 @@ class APUProyectoDetailView(DetailView):
         ctx["items_mo"] = (
             ItemCatalogoAPU.objects
             .filter(activo=True, categoria__tipo_apu="MANO_DE_OBRA")
-            .select_related("categoria")
+            .select_related("categoria").order_by("categoria__nombre", "nombre")
         )
         ctx["items_herr"] = (
             ItemCatalogoAPU.objects
             .filter(activo=True, categoria__tipo_apu="HERRAMIENTAS_EQUIPOS")
-            .select_related("categoria")
+            .select_related("categoria").order_by("categoria__nombre", "nombre")
+        )
+        ctx["items_transp"] = (
+            ItemCatalogoAPU.objects
+            .filter(activo=True, categoria__tipo_apu="TRANSPORTE")
+            .select_related("categoria").order_by("categoria__nombre", "nombre")
+        )
+        ctx["items_admin"] = (
+            ItemCatalogoAPU.objects
+            .filter(activo=True, categoria__tipo_apu="ADMINISTRACION")
+            .select_related("categoria").order_by("categoria__nombre", "nombre")
+        )
+        # PKs de ítems ya usados en este APU (para pre-marcar checkboxes)
+        ctx["lineas_item_ids"] = set(
+            self.object.lineas
+            .exclude(item_catalogo=None)
+            .values_list("item_catalogo_id", flat=True)
         )
         return ctx
 
@@ -380,40 +396,82 @@ class PowerGripWizardView(View):
             .select_related("subsistema")
         )
 
-        # Productos disponibles por categoría (para los selects del wizard)
         from apps.catalogos.models import CategoriaProducto, Producto
-        CATEGORIAS_PG = ["PowerGrip", "Fijaciones", "Accesorios", "Estopa", "Sellador"]
-        productos_por_categoria = {}
-        for slug in CATEGORIAS_PG:
-            prods = list(
-                Producto.objects.filter(
-                    categoria__nombre__iexact=slug, activo=True
-                ).values("pk", "nombre", "codigo")
-            )
-            productos_por_categoria[slug] = prods
-
-        # Variables de cada subsistema (para el JS dinámico)
+        from apps.ingenieria.models import VariableSubsistema, ComponenteSubsistema
         from apps.ingenieria.system_defs.registry import get_subsistema_def
+
+        VARS_PROYECTO = {"area_m2", "perimetro_ml"}
+
+        # Variables y categorías de cada subsistema (para el JS dinámico)
+        # Prioridad: DB > registry Python
         subsistemas_def = {}
+        categorias_slugs = set()
+
         for sub in subsistemas:
-            sub_def = get_subsistema_def(sistema_pg.codigo, sub.codigo)
-            if sub_def:
-                VARS_PROYECTO = {"area_m2", "perimetro_ml"}
+            vars_db = list(
+                VariableSubsistema.objects.filter(subsistema=sub).order_by("orden")
+            )
+            comps_db = list(
+                ComponenteSubsistema.objects.filter(subsistema=sub)
+                .select_related("categoria").order_by("orden")
+            )
+
+            if vars_db or comps_db:
+                # Definición desde DB
+                cats = [
+                    c.categoria.nombre for c in comps_db if c.categoria
+                ]
                 subsistemas_def[sub.pk] = {
                     "variables": [
                         {
                             "variable": v.variable,
                             "label": v.label,
                             "unidad": v.unidad,
-                            "default": v.default,
-                            "opciones": v.opciones,
-                            "descripcion": v.descripcion,
+                            "default": float(v.valor_default),
+                            "opciones": [],
+                            "descripcion": "",
                         }
-                        for v in sub_def.variables
+                        for v in vars_db
                         if v.variable not in VARS_PROYECTO
                     ],
-                    "categorias": [c.categoria_slug for c in sub_def.componentes],
+                    "categorias": cats,
                 }
+                categorias_slugs.update(cats)
+            else:
+                # Fallback registry Python
+                sub_def = get_subsistema_def(sistema_pg.codigo, sub.codigo)
+                if sub_def:
+                    cats = [c.categoria_slug for c in sub_def.componentes]
+                    subsistemas_def[sub.pk] = {
+                        "variables": [
+                            {
+                                "variable": v.variable,
+                                "label": v.label,
+                                "unidad": v.unidad,
+                                "default": v.default,
+                                "opciones": v.opciones,
+                                "descripcion": v.descripcion,
+                            }
+                            for v in sub_def.variables
+                            if v.variable not in VARS_PROYECTO
+                        ],
+                        "categorias": cats,
+                    }
+                    categorias_slugs.update(cats)
+
+        # Productos disponibles por categoría (dinámico según las categorías registradas)
+        if not categorias_slugs:
+            # fallback si ningún subsistema tiene definición
+            categorias_slugs = {"PowerGrip", "Fijaciones", "Accesorios", "Estopa", "Sellador"}
+
+        productos_por_categoria = {}
+        for slug in categorias_slugs:
+            prods = list(
+                Producto.objects.filter(
+                    categoria__nombre__iexact=slug, activo=True
+                ).values("pk", "nombre", "codigo")
+            )
+            productos_por_categoria[slug] = prods
 
         ctx = {
             "proyecto":                proyecto,
@@ -522,16 +580,59 @@ class SubsistemaDefAPIView(View):
     """
     GET /presupuestos/api/subsistema-def/<subsistema_pk>/
     Devuelve las variables y categorías requeridas para el subsistema.
-    Usado por el wizard cuando el usuario cambia el subsistema (JS fetch).
+    Prioridad: variables DB > registry Python.
+    Usado por el despiece modal cuando el usuario selecciona un subsistema.
     """
     def get(self, request, pk):
         sub = get_object_or_404(Subsistema, pk=pk)
+        VARS_PROYECTO = {"area_m2", "perimetro_ml"}
+
+        # ── Prioridad 1: variables definidas en DB ────────────────────────────
+        from apps.ingenieria.models import VariableSubsistema, ComponenteSubsistema
+        vars_db = list(
+            VariableSubsistema.objects.filter(subsistema=sub).order_by("orden")
+        )
+        comps_db = list(
+            ComponenteSubsistema.objects.filter(subsistema=sub)
+            .select_related("categoria").order_by("orden")
+        )
+        if vars_db or comps_db:
+            return JsonResponse({
+                "subsistema_pk":  sub.pk,
+                "subsistema_cod": sub.codigo,
+                "variables": [
+                    {
+                        "variable": v.variable,
+                        "label": v.label,
+                        "unidad": v.unidad,
+                        "default": float(v.valor_default),
+                        "opciones": [],
+                        "descripcion": "",
+                    }
+                    for v in vars_db
+                    if v.variable not in VARS_PROYECTO
+                ],
+                "categorias": [
+                    {
+                        "codigo": c.codigo,
+                        "nombre": c.nombre,
+                        "categoria_slug": c.categoria.nombre if c.categoria else "",
+                    }
+                    for c in comps_db
+                ],
+            })
+
+        # ── Prioridad 2: registry Python ──────────────────────────────────────
         from apps.ingenieria.system_defs.registry import get_subsistema_def
         sub_def = get_subsistema_def(sub.sistema.codigo, sub.codigo)
         if not sub_def:
-            return JsonResponse({"error": "Sin definición backend para este subsistema."}, status=404)
+            return JsonResponse({
+                "subsistema_pk": sub.pk,
+                "subsistema_cod": sub.codigo,
+                "variables": [],
+                "categorias": [],
+            })
 
-        VARS_PROYECTO = {"area_m2", "perimetro_ml"}
         return JsonResponse({
             "subsistema_pk":  sub.pk,
             "subsistema_cod": sub.codigo,
@@ -594,8 +695,7 @@ class APUManoObraView(View):
                 return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
             apu.lineas.filter(tipo="MANO_DE_OBRA").delete()
-            svc = APUService(apu.proyecto_sistema)
-            svc.apu = apu
+            svc = APUService.for_apu(apu)
             svc.generar_mano_obra_desde_catalogo(items_data)
             svc.finalizar()
             messages.success(request, f"Mano de obra registrada: {len(items_data)} cargo(s).")
@@ -631,8 +731,7 @@ class APUHerramientasView(View):
                 return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
             apu.lineas.filter(tipo="HERRAMIENTAS_EQUIPOS").delete()
-            svc = APUService(apu.proyecto_sistema)
-            svc.apu = apu
+            svc = APUService.for_apu(apu)
             svc.generar_herramientas_desde_catalogo(items_data)
             svc.finalizar()
             messages.success(request, f"{len(items_data)} herramienta(s) registrada(s).")
@@ -677,8 +776,7 @@ class APUTransporteView(View):
             apu.lineas.filter(tipo="TRANSPORTE").delete()
 
             from apps.presupuestos.services.apu_service import APUService
-            svc = APUService(apu.proyecto_sistema)
-            svc.apu = apu
+            svc = APUService.for_apu(apu)
             svc.generar_transporte_items(items)
             svc.finalizar()
             messages.success(request, f"{len(items)} ítem(s) de transporte registrados.")
@@ -725,32 +823,39 @@ class APUAdminView(View):
     """
     POST /presupuestos/apu/<pk>/administrativo/
 
-    Registra el costo administrativo del APU como porcentaje sobre la base
-    (materiales + mano de obra + herramientas) o como valor directo.
+    Acepta ítems del catálogo como descripcion[] + precio_total[].
+    Reemplaza todas las líneas ADMINISTRACION previas.
     """
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
         try:
-            modo = request.POST.get("modo", "porcentaje")  # "porcentaje" | "valor"
-            valor_str = request.POST.get("valor", "0") or "0"
-            valor = float(valor_str)
-
-            if modo == "porcentaje":
-                base = float(
-                    apu.subtotal_materiales
-                    + apu.subtotal_mano_obra
-                    + apu.subtotal_herramientas
-                )
-                costo_admin = base * (valor / 100)
-            else:
-                costo_admin = valor
-
             from apps.presupuestos.services.apu_service import APUService
-            svc = APUService(apu.proyecto_sistema)
-            svc.apu = apu
-            svc.generar_administracion(costo_admin)
+
+            descripciones   = request.POST.getlist("descripcion[]")
+            precios_totales = request.POST.getlist("precio_total[]")
+
+            items = []
+            for desc, precio_str in zip(descripciones, precios_totales):
+                desc = (desc or "").strip()
+                if not desc or not precio_str:
+                    continue
+                try:
+                    precio = float(precio_str)
+                    if precio >= 0:
+                        items.append({"descripcion": desc, "precio_total": precio})
+                except (ValueError, TypeError):
+                    pass
+
+            if not items:
+                messages.warning(request, "No se ingresaron ítems de administración válidos.")
+                return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+            apu.lineas.filter(tipo="ADMINISTRACION").delete()
+            svc = APUService.for_apu(apu)
+            for item in items:
+                svc.generar_administracion_item(item["descripcion"], item["precio_total"])
             svc.finalizar()
-            messages.success(request, f"Administrativo registrado: ${costo_admin:,.2f}.")
+            messages.success(request, f"{len(items)} ítem(s) de administración registrados.")
         except Exception as exc:
             messages.error(request, f"Error al registrar administrativo: {exc}")
             logger.exception("[APUAdminView] Error APU %s", pk)
@@ -961,40 +1066,52 @@ def _render_apu_pdf(apu, template_name: str) -> bytes:
 class APUPDFInternoView(View):
     """
     GET /presupuestos/apu/<pk>/pdf-interno/
-    Descarga el PDF con todos los datos internos (costos, márgenes, etc.).
+    Renderiza una página HTML imprimible con todos los datos internos (costos, márgenes, etc.).
     Solo para uso interno de la empresa.
     """
     def get(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
-        try:
-            pdf_bytes = _render_apu_pdf(apu, "presupuestos/apu_pdf_interno.html")
-            nombre = apu.nombre.replace(" ", "_")[:60]
-            response = HttpResponse(pdf_bytes, content_type="application/pdf")
-            response["Content-Disposition"] = f'inline; filename="APU_Interno_{nombre}.pdf"'
-            return response
-        except Exception as exc:
-            logger.exception("[APUPDFInternoView] Error generando PDF APU %s", pk)
-            messages.error(request, f"Error al generar PDF: {exc}")
-            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+        lineas = apu.lineas.order_by("tipo", "descripcion").select_related(
+            "despiece_linea__producto", "item_catalogo",
+        )
+        html = render_to_string("presupuestos/apu_pdf_interno.html", {
+            "apu": apu,
+            "lineas": lineas,
+            "fecha_generacion": date.today().strftime("%d/%m/%Y"),
+            "request": request,
+        })
+        return HttpResponse(html)
 
 
 class APUPDFClienteView(View):
     """
     GET /presupuestos/apu/<pk>/pdf-cliente/
-    Descarga el PDF para el cliente (solo valores de venta, sin datos internos).
+    Renderiza una página HTML imprimible para el cliente.
+    Solo muestra valores de venta. Incluye fichas técnicas de productos si las tienen.
     """
     def get(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
-        try:
-            pdf_bytes = _render_apu_pdf(apu, "presupuestos/apu_pdf_cliente.html")
-            nombre = apu.nombre.replace(" ", "_")[:60]
-            response = HttpResponse(pdf_bytes, content_type="application/pdf")
-            response["Content-Disposition"] = f'inline; filename="APU_Cliente_{nombre}.pdf"'
-            return response
-        except Exception as exc:
-            logger.exception("[APUPDFClienteView] Error generando PDF APU %s", pk)
-            messages.error(request, f"Error al generar PDF: {exc}")
-            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+        lineas = apu.lineas.order_by("tipo", "descripcion").select_related(
+            "despiece_linea__producto", "item_catalogo",
+        )
+        # Recopilar productos con ficha técnica desde líneas MATERIALES
+        productos_con_ficha = []
+        vistos = set()
+        for linea in lineas:
+            if linea.despiece_linea and linea.despiece_linea.producto:
+                prod = linea.despiece_linea.producto
+                if prod.pk not in vistos and prod.ficha_tecnica:
+                    productos_con_ficha.append(prod)
+                    vistos.add(prod.pk)
+
+        html = render_to_string("presupuestos/apu_pdf_cliente.html", {
+            "apu": apu,
+            "lineas": lineas,
+            "productos_con_ficha": productos_con_ficha,
+            "fecha_generacion": date.today().strftime("%d/%m/%Y"),
+            "request": request,
+        })
+        return HttpResponse(html, content_type="text/html; charset=utf-8")
 
 
 class APUEnviarRevisionView(View):

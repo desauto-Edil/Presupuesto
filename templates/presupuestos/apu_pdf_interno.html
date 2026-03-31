@@ -51,9 +51,46 @@
 
   .confidencial { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 4px; padding: 4px 10px; font-size: 7.5pt; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: .05em; }
   .footer-note { margin-top: 18px; font-size: 7pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
+
+  /* ── Barra de impresión (no se imprime) ── */
+  .print-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: #0e1117; color: #fff; padding: 10px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+  }
+  .print-bar a { color: #94a3b8; text-decoration: none; font-size: 12px; }
+  .print-bar a:hover { color: #fff; }
+  .btn-print {
+    background: #1470e6; color: #fff; border: none; padding: 7px 18px;
+    border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  @page { size: A4 landscape; margin: 18mm 15mm; }
+  @media print {
+    .print-bar { display: none; }
+    body { background: #fff; }
+    .page { padding: 0; }
+  }
+  .page { max-width: 1100px; margin: 0 auto; padding: 32px 40px; margin-top: 48px; }
 </style>
 </head>
 <body>
+
+<!-- Barra de impresión -->
+<div class="print-bar">
+  <div>
+    <strong style="color:#fef3c7;">CONFIDENCIAL — Uso Interno</strong>
+    <span style="margin-left:12px;color:#64748b;">{{ apu.nombre }}</span>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;">
+    {% if apu.proyecto_sistema %}
+    <a href="/presupuestos/apu/{{ apu.pk }}/">← Volver al APU</a>
+    {% endif %}
+    <button class="btn-print" onclick="window.print()">⎙ Imprimir / Guardar PDF</button>
+  </div>
+</div>
+
+<div class="page">
 
 <!-- Cabecera -->
 <div class="header">
@@ -231,5 +268,6 @@
   <span>Generado: {{ fecha_generacion }}</span>
 </div>
 
+</div>{# /page #}
 </body>
 </html>

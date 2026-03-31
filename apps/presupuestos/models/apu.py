@@ -348,15 +348,10 @@ class APUProyecto(models.Model):
 
     def recalcular(self):
         """
-        Recalcula todos los subtotales y totales a partir de las APULineas.
-        Llama también a linea.calcular() en cada línea para garantizar
-        que los campos calculados estén actualizados antes de agregar.
+        Recalcula los subtotales y totales del APU agregando desde la BD.
+        NO vuelve a llamar linea.calcular() para evitar recursión en signals.
         """
-        # Paso 1: recalcular cada línea
-        for linea in self.lineas.all():
-            linea.calcular()
-
-        # Paso 2: agregar por tipo
+        # Agregar por tipo
         _TIPO_CAMPO = {
             TipoAPU.MATERIALES:          "subtotal_materiales",
             TipoAPU.HERRAMIENTAS_EQUIPOS: "subtotal_herramientas",

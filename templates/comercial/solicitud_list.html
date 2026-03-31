@@ -131,6 +131,13 @@
                 <td class="text-end">
                     <a href="{% url 'comercial:solicitud_detail' s.pk %}" class="btn btn-ghost btn-xs">Ver</a>
                     <a href="{% url 'comercial:solicitud_update' s.pk %}" class="btn btn-ghost btn-xs">Editar</a>
+                    <button type="button" class="btn btn-ghost btn-xs"
+                            style="color:var(--danger);"
+                            data-bs-toggle="modal" data-bs-target="#modalDeleteSolicitud"
+                            data-sol-pk="{{ s.pk }}"
+                            data-sol-nombre="{{ s.consecutivo }} — {{ s.cliente.razon_social }}">
+                        Eliminar
+                    </button>
                 </td>
             </tr>
             {% endfor %}
@@ -237,4 +244,42 @@
     </div>
 </div>
 
+{# ── Modal: Confirmar eliminación de solicitud ─────────────────── #}
+<div class="modal fade" id="modalDeleteSolicitud" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form id="formDeleteSolicitud" method="post" action="">
+        {% csrf_token %}
+        <div class="modal-header" style="border-bottom:1px solid var(--border);">
+          <h5 class="modal-title" style="font-size:14px;">Eliminar solicitud</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" style="font-size:13px;">
+          ¿Eliminar <strong id="deleteSolNombre"></strong>? Esta acción no se puede deshacer.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-sm" style="background:var(--danger);color:#fff;">Eliminar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const modal = document.getElementById('modalDeleteSolicitud');
+  if (!modal) return;
+  modal.addEventListener('show.bs.modal', function (e) {
+    const btn  = e.relatedTarget;
+    const pk   = btn.dataset.solPk;
+    const url  = "{% url 'comercial:solicitud_delete' 0 %}".replace('/0/', '/' + pk + '/');
+    document.getElementById('formDeleteSolicitud').action = url;
+    document.getElementById('deleteSolNombre').textContent = btn.dataset.solNombre;
+  });
+})();
+</script>
 {% endblock %}

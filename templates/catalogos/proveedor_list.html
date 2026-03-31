@@ -100,14 +100,14 @@
                 <td class="text-end">
                     <button class="btn btn-sm btn-ghost"
                             onclick="prepareForm('edit', {
-                                id:        '{{ p.pk }}',
-                                nit:       '{{ p.nit|escapejs }}',
-                                nombre:    '{{ p.nombre|escapejs }}',
-                                ciudad:    '{{ p.ciudad|default:''|escapejs }}',
+                                id: '{{ p.pk }}',
+                                nit: '{{ p.nit|escapejs }}',
+                                nombre: '{{ p.nombre|escapejs }}',
+                                ciudad: '{{ p.ciudad|default:''|escapejs }}',
                                 direccion: '{{ p.direccion|default:''|escapejs }}',
-                                telefono:  '{{ p.telefono|default:''|escapejs }}',
-                                email:     '{{ p.email|default:''|escapejs }}',
-                                activo:    '{{ p.activo|yesno:'true,false' }}'
+                                telefono: '{{ p.telefono|default:''|escapejs }}',
+                                email: '{{ p.email|default:''|escapejs }}',
+                                activo: '{{ p.activo|yesno:'true,false' }}'
                             })"
                             data-bs-toggle="offcanvas" data-bs-target="#offcanvasProv">✎</button>
                     <button class="btn btn-sm btn-ghost text-danger"
@@ -208,13 +208,13 @@ function prepareForm(mode, data) {
     } else {
         title.textContent = 'Editar: ' + data.nombre;
         form.action = '/catalogos/proveedores/' + data.id + '/editar/';
-        document.getElementById('prov_nit').value       = data.nit       || '';
-        document.getElementById('prov_nombre').value    = data.nombre    || '';
-        document.getElementById('prov_ciudad').value    = data.ciudad    || '';
+        document.getElementById('prov_nit').value = data.nit || '';
+        document.getElementById('prov_nombre').value = data.nombre || '';
+        document.getElementById('prov_ciudad').value = data.ciudad || '';
         document.getElementById('prov_direccion').value = data.direccion || '';
-        document.getElementById('prov_telefono').value  = data.telefono  || '';
-        document.getElementById('prov_email').value     = data.email     || '';
-        document.getElementById('prov_activo').checked  = (data.activo === 'true');
+        document.getElementById('prov_telefono').value = data.telefono || '';
+        document.getElementById('prov_email').value = data.email || '';
+        document.getElementById('prov_activo').checked = (data.activo === 'true');
     }
 }
 </script>

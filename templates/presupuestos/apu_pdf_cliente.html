@@ -2,60 +2,112 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>APU — {{ apu.nombre }}</title>
 <style>
-  @page {
-    size: A4 portrait;
-    margin: 18mm 15mm;
-    @bottom-right { content: "Pág. " counter(page) " / " counter(pages); font-size: 8pt; color: #888; }
-  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 9pt; color: #1a1a2e; line-height: 1.4; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; color: #1a1a2e; line-height: 1.5; background: #f8fafc; }
 
-  /* ── CABECERA ── */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #1470e6; padding-bottom: 10px; margin-bottom: 14px; }
-  .header__brand { font-size: 14pt; font-weight: 800; letter-spacing: -0.03em; color: #0e1117; }
+  .page { max-width: 900px; margin: 0 auto; background: #fff; padding: 32px 40px; }
+
+  /* ── Barra de acciones (no se imprime) ── */
+  .print-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: #0e1117; color: #fff; padding: 10px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+  }
+  .print-bar a { color: #94a3b8; text-decoration: none; font-size: 12px; }
+  .print-bar a:hover { color: #fff; }
+  .btn-print {
+    background: #1470e6; color: #fff; border: none; padding: 7px 18px;
+    border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  @media print {
+    .print-bar { display: none; }
+    body { background: #fff; }
+    .page { padding: 0; }
+    .ficha-embed { page-break-before: always; }
+  }
+
+  /* ── Cabecera ── */
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #1470e6; padding-bottom: 12px; margin-bottom: 16px; margin-top: 48px; }
+  .header__brand { font-size: 18pt; font-weight: 800; letter-spacing: -0.03em; color: #0e1117; }
   .header__brand span { color: #1470e6; }
-  .header__meta { text-align: right; font-size: 7.5pt; color: #666; }
+  .header__sub { font-size: 8pt; color: #94a3b8; margin-top: 2px; }
+  .header__meta { text-align: right; font-size: 8pt; color: #64748b; }
   .header__meta strong { color: #1a1a2e; }
 
-  /* ── BANNER ── */
-  .banner { background: #0e1117; color: #fff; border-radius: 6px; padding: 14px 18px; margin-bottom: 14px; }
-  .banner .title { font-size: 13pt; font-weight: 700; }
-  .banner .sub { font-size: 8pt; opacity: 0.55; margin-top: 3px; }
+  /* ── Banner ── */
+  .banner { background: #0e1117; color: #fff; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+  .banner .title { font-size: 14pt; font-weight: 700; }
+  .banner .sub { font-size: 8.5pt; opacity: 0.5; margin-top: 4px; }
 
-  /* ── INFO PROYECTO ── */
-  .project-info { display: flex; gap: 10px; margin-bottom: 14px; }
-  .project-info__card { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 8px 10px; }
-  .project-info__label { font-size: 7pt; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; margin-bottom: 3px; }
-  .project-info__value { font-size: 9pt; font-weight: 600; color: #1a1a2e; }
+  /* ── Info cards ── */
+  .info-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .info-card { flex: 1; min-width: 140px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 9px 12px; }
+  .info-card__label { font-size: 7pt; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; margin-bottom: 3px; }
+  .info-card__value { font-size: 10pt; font-weight: 600; color: #1a1a2e; }
 
-  /* ── TABLA ── */
-  .section { margin-bottom: 16px; }
-  .section__head { padding: 7px 10px; border-radius: 5px 5px 0 0; color: #fff; font-size: 9pt; font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  /* ── Secciones ── */
+  .section { margin-bottom: 18px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
+  .section__head { padding: 8px 12px; color: #fff; font-size: 9.5pt; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
   thead tr { background: #f8fafc; }
-  th { padding: 5px 7px; text-align: right; font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+  th { padding: 6px 8px; text-align: right; font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
   th:first-child { text-align: left; }
-  td { padding: 5px 7px; border-bottom: 1px solid #f1f5f9; text-align: right; }
+  td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; }
   td:first-child { text-align: left; }
+  tr:last-child td { border-bottom: none; }
   tfoot td { font-weight: 700; background: #f8fafc; border-top: 1.5px solid #e2e8f0; }
 
-  .total-box { background: #0e1117; color: #fff; border-radius: 6px; padding: 12px 16px; margin-top: 16px; display: flex; justify-content: space-between; align-items: center; }
-  .total-box .label { font-size: 8pt; opacity: 0.55; text-transform: uppercase; letter-spacing: .06em; }
-  .total-box .value { font-size: 20pt; font-weight: 800; color: #38bdf8; }
+  /* ── Total ── */
+  .total-box { background: #0e1117; color: #fff; border-radius: 8px; padding: 16px 20px; margin-top: 18px; display: flex; justify-content: space-between; align-items: center; }
+  .total-box .label { font-size: 8.5pt; opacity: 0.55; text-transform: uppercase; letter-spacing: .07em; }
+  .total-box .value { font-size: 22pt; font-weight: 800; color: #38bdf8; font-variant-numeric: tabular-nums; }
+  .total-box .sub { font-size: 7.5pt; opacity: 0.4; margin-top: 3px; }
 
-  .footer-note { margin-top: 20px; font-size: 7pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
-  .disclaimer { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 6px 10px; font-size: 7.5pt; color: #0369a1; margin-top: 10px; }
+  /* ── Disclaimer ── */
+  .disclaimer { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 5px; padding: 8px 12px; font-size: 8pt; color: #0369a1; margin-top: 12px; }
+  .footer-note { margin-top: 16px; font-size: 7.5pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
+
+  /* ── Fichas técnicas ── */
+  .fichas-section { margin-top: 32px; }
+  .fichas-section__title { font-size: 11pt; font-weight: 700; color: #1a1a2e; border-bottom: 2px solid #1470e6; padding-bottom: 6px; margin-bottom: 16px; }
+  .ficha-embed { margin-bottom: 24px; }
+  .ficha-embed__label { font-size: 9pt; font-weight: 600; color: #1470e6; margin-bottom: 6px; }
+  .ficha-embed img { max-width: 100%; border: 1px solid #e2e8f0; border-radius: 4px; }
+  .ficha-embed .pdf-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px; background: #f8fafc; border: 1px solid #e2e8f0;
+    border-radius: 6px; color: #1470e6; text-decoration: none; font-size: 9pt; font-weight: 600;
+  }
+  .ficha-embed .pdf-link:hover { background: #eff6ff; }
 </style>
 </head>
 <body>
+
+<!-- Barra de impresión -->
+<div class="print-bar">
+  <div>
+    <strong style="color:#fff;">APU Cliente</strong>
+    <span style="margin-left:12px;color:#64748b;">{{ apu.nombre }}</span>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;">
+    {% if apu.proyecto_sistema %}
+    <a href="/presupuestos/apu/{{ apu.pk }}/">← Volver al APU</a>
+    {% endif %}
+    <button class="btn-print" onclick="window.print()">⎙ Imprimir / Guardar PDF</button>
+  </div>
+</div>
+
+<div class="page">
 
 <!-- Cabecera -->
 <div class="header">
   <div>
     <div class="header__brand">Impe<span>randina</span></div>
-    <div style="font-size:8pt;color:#666;margin-top:2px;">Análisis de Precios Unitarios</div>
+    <div class="header__sub">Cubiertos · Fachadas · Soluciones Constructivas</div>
   </div>
   <div class="header__meta">
     <div>Fecha: <strong>{{ fecha_generacion }}</strong></div>
@@ -73,33 +125,39 @@
     {% if apu.proyecto_sistema %}
       {{ apu.proyecto_sistema.sistema.nombre }}
       {% if apu.proyecto_sistema.subsistema %} / {{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
+      &nbsp;—&nbsp;
     {% endif %}
-    {% if apu.descripcion %} — {{ apu.descripcion }}{% endif %}
+    Análisis de Precios Unitarios
+    {% if apu.descripcion %} · {{ apu.descripcion }}{% endif %}
   </div>
 </div>
 
 {% if apu.proyecto_sistema %}
 <!-- Info proyecto -->
-<div class="project-info">
-  <div class="project-info__card">
-    <div class="project-info__label">Cliente</div>
-    <div class="project-info__value">{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}</div>
+<div class="info-row">
+  <div class="info-card">
+    <div class="info-card__label">Cliente</div>
+    <div class="info-card__value">{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}</div>
   </div>
-  <div class="project-info__card">
-    <div class="project-info__label">Proyecto</div>
-    <div class="project-info__value">{{ apu.proyecto_sistema.proyecto.nombre }}</div>
+  <div class="info-card">
+    <div class="info-card__label">Proyecto</div>
+    <div class="info-card__value">{{ apu.proyecto_sistema.proyecto.nombre }}</div>
   </div>
-  <div class="project-info__card">
-    <div class="project-info__label">Sistema</div>
-    <div class="project-info__value">{{ apu.proyecto_sistema.sistema.nombre }}</div>
+  <div class="info-card">
+    <div class="info-card__label">Sistema</div>
+    <div class="info-card__value">{{ apu.proyecto_sistema.sistema.nombre }}</div>
+  </div>
+  <div class="info-card">
+    <div class="info-card__label">Área total</div>
+    <div class="info-card__value">{{ apu.proyecto_sistema.proyecto.area_total_m2|default:"—" }} m²</div>
   </div>
 </div>
 {% endif %}
 
+<!-- Líneas por tipo (solo valores de venta) -->
 {% regroup lineas by tipo as lineas_por_tipo %}
 
-{% for grupo in lineas_por_tipo %}
-{% if grupo.list %}
+{% for grupo in lineas_por_tipo %}{% if grupo.list %}
 
 {% if grupo.grouper == "MATERIALES" %}
 <div class="section">
@@ -116,12 +174,15 @@
 {% elif grupo.grouper == "ADMINISTRACION" %}
 <div class="section">
   <div class="section__head" style="background:#64748b;">Administración</div>
+{% else %}
+<div class="section">
+  <div class="section__head" style="background:#334155;">{{ grupo.grouper }}</div>
 {% endif %}
-
   <table>
     <thead>
       <tr>
         <th style="text-align:left;">Descripción</th>
+        <th>Und.</th>
         <th>Rendimiento</th>
         <th>Valor unitario</th>
         <th>Valor total</th>
@@ -131,15 +192,16 @@
       {% for linea in grupo.list %}
       <tr>
         <td>{{ linea.descripcion }}</td>
+        <td style="color:#64748b;">{{ linea.unidad|default:"—" }}</td>
         <td>{{ linea.rendimiento|floatformat:4 }}</td>
         <td>${{ linea.valor_unitario|floatformat:2 }}</td>
-        <td>${{ linea.valor_total|floatformat:2 }}</td>
+        <td style="font-weight:600;">${{ linea.valor_total|floatformat:2 }}</td>
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="3">Subtotal</td>
+        <td colspan="4" style="text-align:right;color:#64748b;">Subtotal</td>
         <td>
           {% if grupo.grouper == "MATERIALES" %}${{ apu.subtotal_materiales|floatformat:0 }}
           {% elif grupo.grouper == "HERRAMIENTAS_EQUIPOS" %}${{ apu.subtotal_herramientas|floatformat:0 }}
@@ -153,23 +215,23 @@
   </table>
 </div>
 
-{% endif %}
-{% endfor %}
+{% endif %}{% endfor %}
 
 <!-- Total final -->
 <div class="total-box">
   <div>
     <div class="label">Valor total de venta</div>
-    <div style="font-size:8pt;opacity:.45;margin-top:2px;">
-      Incluye {% if apu.aplica_iva %}IVA {{ apu.iva_pct }}% y {% endif %}factor de venta {{ apu.factor_venta_pct }}%
+    <div class="sub">
+      {% if apu.aplica_iva %}IVA {{ apu.iva_pct }}% incluido · {% endif %}
+      Factor de venta {{ apu.factor_venta_pct }}%
     </div>
   </div>
   <div class="value">${{ apu.total_valor_venta|floatformat:0 }}</div>
 </div>
 
 <div class="disclaimer">
-  Los precios presentados en este documento corresponden a la oferta comercial.
-  Vigencia: 30 días a partir de la fecha de generación. Sujeto a disponibilidad de materiales.
+  Los precios presentados corresponden a la oferta comercial. Vigencia: 30 días desde la fecha de generación.
+  Sujeto a disponibilidad de materiales y condiciones del contrato.
 </div>
 
 <div class="footer-note">
@@ -177,5 +239,41 @@
   <span>Generado: {{ fecha_generacion }}</span>
 </div>
 
+<!-- ══════════════════════════════════════════
+     FICHAS TÉCNICAS
+══════════════════════════════════════════ -->
+{% if productos_con_ficha %}
+<div class="fichas-section">
+  <div class="fichas-section__title">Fichas Técnicas de Productos</div>
+
+  {% for producto in productos_con_ficha %}
+  <div class="ficha-embed">
+    <div class="ficha-embed__label">{{ producto.nombre }}{% if producto.codigo %} — {{ producto.codigo }}{% endif %}</div>
+
+    {% with ext=producto.ficha_tecnica.name|lower %}
+    {% if ".jpg" in ext or ".jpeg" in ext or ".png" in ext or ".webp" in ext %}
+      <img src="{{ request.scheme }}://{{ request.get_host }}{{ producto.ficha_tecnica.url }}"
+           alt="Ficha técnica {{ producto.nombre }}"
+           style="max-height:500px;">
+    {% else %}
+      {# PDF u otro formato: mostrar enlace de descarga #}
+      <a class="pdf-link" href="{{ producto.ficha_tecnica.url }}" target="_blank">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+          <path d="M4 0h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H4z"/>
+          <path d="M4.603 14.087a.81.81 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.68 7.68 0 0 1 1.482-.645 19.697 19.697 0 0 0 1.062-2.227 7.269 7.269 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.077a.7.7 0 0 1 .477.365c.088.164.12.356.127.538.007.188-.012.396-.047.614-.084.51-.27 1.134-.52 1.794a10.954 10.954 0 0 0 .98 1.686 5.753 5.753 0 0 1 1.334.05c.364.066.734.195.96.465.12.144.193.32.2.518.007.192-.047.382-.138.563a1.04 1.04 0 0 1-.354.416.856.856 0 0 1-.51.138c-.331-.014-.654-.196-.933-.417a5.712 5.712 0 0 1-.911-.95 11.651 11.651 0 0 0-1.997.406 11.307 11.307 0 0 1-1.02 1.51c-.292.35-.609.656-.927.787a.793.793 0 0 1-.58.029z"/>
+        </svg>
+        Ver ficha técnica — {{ producto.nombre }}
+        <span style="font-size:8pt;color:#94a3b8;font-weight:400;">
+          ({{ producto.ficha_tecnica.name|cut:"fichas_tecnicas/" }})
+        </span>
+      </a>
+    {% endif %}
+    {% endwith %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+</div>{# /page #}
 </body>
 </html>

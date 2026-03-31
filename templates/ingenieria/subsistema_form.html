@@ -9,51 +9,221 @@
   · {% if form.instance.pk %}Editar subsistema{% else %}Nuevo subsistema{% endif %}
 {% endblock %}
 
+{% block extra_head %}
+<style>
+  .sub-section {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .sub-section__head {
+    background: var(--surface);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sub-section__title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-soft);
+  }
+  .sub-section__body { padding: 16px; }
+
+  /* Tabla de filas */
+  .rows-table { width: 100%; border-collapse: collapse; }
+  .rows-table th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    text-align: left;
+  }
+  .rows-table td { padding: 5px 6px; vertical-align: middle; }
+  .rows-table tr:not(:last-child) td { border-bottom: 1px solid rgba(14,17,23,0.05); }
+  .rows-table input, .rows-table select {
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+  }
+  .hint-code {
+    font-size: 10px;
+    color: var(--ink-soft);
+    font-family: monospace;
+    background: var(--surface);
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-top: 10px;
+    line-height: 1.6;
+  }
+  .formula-help {
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+    font-style: italic;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-12 col-md-8 col-lg-6">
+  <div class="col-12 col-lg-10 col-xl-9">
     <div class="panel fade-up">
-      <div class="panel-header d-flex align-items-center gap-2">
+      <div class="panel-header d-flex align-items-center justify-content-between">
         <span style="font-size:16px; font-weight:700; color:var(--ink);">
           {% if form.instance.pk %}Editar: {{ form.instance.nombre }}{% else %}Nuevo subsistema{% endif %}
         </span>
+        <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
       </div>
       <div style="padding:24px;">
-        <form method="post">
+        <form method="post" id="formSubsistema">
           {% csrf_token %}
 
           {% if form.non_field_errors %}
           <div class="msg-bar msg-error mb-3">{{ form.non_field_errors }}</div>
           {% endif %}
 
-          <div class="mb-3">
-            <label class="form-label" style="font-size:12.5px;font-weight:600;">Sistema *</label>
-            {{ form.sistema }}
-            {% if form.sistema.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.sistema.errors.0 }}</div>{% endif %}
-          </div>
-
-          <div class="row g-3 mb-3">
-            <div class="col-4">
-              <label class="form-label" style="font-size:12.5px;font-weight:600;">Código *</label>
-              {{ form.codigo }}
-              {% if form.codigo.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.codigo.errors.0 }}</div>{% endif %}
+          {# ── Datos básicos ── #}
+          <div class="sub-section">
+            <div class="sub-section__head">
+              <span class="sub-section__title">Datos del subsistema</span>
             </div>
-            <div class="col-8">
-              <label class="form-label" style="font-size:12.5px;font-weight:600;">Nombre *</label>
-              {{ form.nombre }}
-              {% if form.nombre.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.nombre.errors.0 }}</div>{% endif %}
+            <div class="sub-section__body">
+              <div class="mb-3">
+                <label class="form-label" style="font-size:12.5px;font-weight:600;">Sistema *</label>
+                {{ form.sistema }}
+                {% if form.sistema.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.sistema.errors.0 }}</div>{% endif %}
+              </div>
+              <div class="row g-3 mb-3">
+                <div class="col-4">
+                  <label class="form-label" style="font-size:12.5px;font-weight:600;">Código *</label>
+                  {{ form.codigo }}
+                  {% if form.codigo.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.codigo.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="col-8">
+                  <label class="form-label" style="font-size:12.5px;font-weight:600;">Nombre *</label>
+                  {{ form.nombre }}
+                  {% if form.nombre.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.nombre.errors.0 }}</div>{% endif %}
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" style="font-size:12.5px;font-weight:600;">Descripción</label>
+                {{ form.descripcion }}
+              </div>
+              <div class="form-check">
+                {{ form.activo }}
+                <label class="form-check-label" style="font-size:13px;">Subsistema activo</label>
+              </div>
             </div>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label" style="font-size:12.5px;font-weight:600;">Descripción</label>
-            {{ form.descripcion }}
+          {# ── Variables de entrada ── #}
+          <div class="sub-section">
+            <div class="sub-section__head">
+              <span class="sub-section__title">Variables de entrada</span>
+              <button type="button" class="btn btn-ghost btn-xs" id="btnAddVar">+ Variable</button>
+            </div>
+            <div class="sub-section__body">
+              <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
+                Define qué datos ingresará el usuario al calcular el despiece.
+                Ej: <code>total_powergrip</code>, <code>desperdicio</code>.
+              </p>
+              <table class="rows-table" id="tbVars">
+                <thead>
+                  <tr>
+                    <th style="width:150px;">Variable <span style="color:var(--red)">*</span></th>
+                    <th>Etiqueta <span style="color:var(--red)">*</span></th>
+                    <th style="width:80px;">Unidad</th>
+                    <th style="width:90px;">Valor por defecto</th>
+                    <th style="width:36px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="varRows">
+                  {% for v in variables_existentes %}
+                  <tr class="var-row">
+                    <td><input type="text" name="var_variable[]" class="form-control form-control-sm" value="{{ v.variable }}" placeholder="mi_variable" style="font-family:monospace;" required></td>
+                    <td><input type="text" name="var_label[]" class="form-control form-control-sm" value="{{ v.label }}" placeholder="Etiqueta legible" required></td>
+                    <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" value="{{ v.unidad }}" placeholder="und"></td>
+                    <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="{{ v.valor_default }}"></td>
+                    <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% if not variables_existentes %}
+              <p id="noVarsMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;">
+                Sin variables definidas. Usa "+ Variable" para agregar.
+              </p>
+              {% endif %}
+            </div>
           </div>
 
-          <div class="mb-4">
-            <div class="form-check">
-              {{ form.activo }}
-              <label class="form-check-label" style="font-size:13px;">Subsistema activo</label>
+          {# ── Componentes de la receta ── #}
+          <div class="sub-section">
+            <div class="sub-section__head">
+              <span class="sub-section__title">Componentes del conjunto (receta técnica)</span>
+              <button type="button" class="btn btn-ghost btn-xs" id="btnAddComp">+ Componente</button>
+            </div>
+            <div class="sub-section__body">
+
+              <div class="hint-code">
+                <strong>Fórmulas de ejemplo</strong><br>
+                · <code>total_powergrip * tornilleria * desperdicio</code><br>
+                · <code>((total_powergrip * 0.09) / 20) * desperdicio</code><br>
+                · <code>limpiador / 2</code> &nbsp;← usa variable de cascada de fila anterior<br>
+                · <code>area_m2 * 1.05</code> &nbsp;← <code>area_m2</code> y <code>perimetro_ml</code> siempre disponibles
+              </div>
+
+              <div style="overflow-x:auto;margin-top:14px;">
+              <table class="rows-table" id="tbComps">
+                <thead>
+                  <tr>
+                    <th style="width:30px;">#</th>
+                    <th style="width:140px;">Código <span style="color:var(--red)">*</span></th>
+                    <th style="min-width:150px;">Nombre <span style="color:var(--red)">*</span></th>
+                    <th style="width:160px;">Categoría producto</th>
+                    <th style="min-width:220px;">Fórmula <span style="color:var(--red)">*</span></th>
+                    <th style="width:120px;">Variable salida</th>
+                    <th style="width:70px;">Unidad</th>
+                    <th style="width:36px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="compRows">
+                  {% for c in componentes_existentes %}
+                  <tr class="comp-row" draggable="true">
+                    <td style="color:var(--ink-soft);font-size:11px;text-align:center;">{{ forloop.counter }}</td>
+                    <td><input type="text" name="comp_codigo[]" class="form-control form-control-sm" value="{{ c.codigo }}" placeholder="fijaciones_plus" style="font-family:monospace;" required></td>
+                    <td><input type="text" name="comp_nombre[]" class="form-control form-control-sm" value="{{ c.nombre }}" placeholder="Nombre del componente" required></td>
+                    <td>
+                      <select name="comp_categoria[]" class="form-select form-select-sm">
+                        <option value="">— Sin categoría —</option>
+                        {% for cat in categorias_producto %}
+                        <option value="{{ cat.pk }}" {% if cat.pk == c.categoria_id %}selected{% endif %}>{{ cat.nombre }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td><input type="text" name="comp_formula[]" class="form-control form-control-sm" value="{{ c.formula_texto }}" placeholder="total * factor * desperdicio" required style="font-family:monospace;font-size:11px;"></td>
+                    <td><input type="text" name="comp_variable_salida[]" class="form-control form-control-sm" value="{{ c.variable_salida }}" placeholder="limpiador" style="font-family:monospace;"></td>
+                    <td><input type="text" name="comp_unidad[]" class="form-control form-control-sm" value="{{ c.unidad }}" placeholder="und"></td>
+                    <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              </div>
+
+              {% if not componentes_existentes %}
+              <p id="noCompsMsg" style="font-size:12px;color:var(--ink-soft);margin-top:12px;font-style:italic;">
+                Sin componentes definidos. Usa "+ Componente" para agregar las líneas del despiece.
+              </p>
+              {% endif %}
+
             </div>
           </div>
 
@@ -69,4 +239,72 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  // ── Eliminar filas ────────────────────────────────────────────────────────
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.del-row');
+    if (btn) {
+      btn.closest('tr').remove();
+      renumerar();
+    }
+  });
+
+  // ── Renumerar filas de componentes ────────────────────────────────────────
+  function renumerar() {
+    document.querySelectorAll('#compRows tr').forEach(function (tr, i) {
+      const numCell = tr.querySelector('td:first-child');
+      if (numCell) numCell.textContent = i + 1;
+    });
+  }
+
+  // ── Plantilla de fila Variable ────────────────────────────────────────────
+  document.getElementById('btnAddVar').addEventListener('click', function () {
+    document.getElementById('noVarsMsg') && (document.getElementById('noVarsMsg').style.display = 'none');
+    const tbody = document.getElementById('varRows');
+    const tr = document.createElement('tr');
+    tr.className = 'var-row';
+    tr.innerHTML = `
+      <td><input type="text" name="var_variable[]" class="form-control form-control-sm" placeholder="mi_variable" style="font-family:monospace;" required></td>
+      <td><input type="text" name="var_label[]" class="form-control form-control-sm" placeholder="Etiqueta legible" required></td>
+      <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" placeholder="und"></td>
+      <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="0"></td>
+      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector('input').focus();
+  });
+
+  // ── Plantilla de fila Componente ──────────────────────────────────────────
+  const categoriasOpts = `<option value="">— Sin categoría —</option>` + [
+    {% for cat in categorias_producto %}
+    `<option value="{{ cat.pk }}">{{ cat.nombre }}</option>`,
+    {% endfor %}
+  ].join('');
+
+  document.getElementById('btnAddComp').addEventListener('click', function () {
+    document.getElementById('noCompsMsg') && (document.getElementById('noCompsMsg').style.display = 'none');
+    const tbody = document.getElementById('compRows');
+    const n = tbody.querySelectorAll('tr').length + 1;
+    const tr = document.createElement('tr');
+    tr.className = 'comp-row';
+    tr.draggable = true;
+    tr.innerHTML = `
+      <td style="color:var(--ink-soft);font-size:11px;text-align:center;">${n}</td>
+      <td><input type="text" name="comp_codigo[]" class="form-control form-control-sm" placeholder="componente_codigo" style="font-family:monospace;" required></td>
+      <td><input type="text" name="comp_nombre[]" class="form-control form-control-sm" placeholder="Nombre del componente" required></td>
+      <td><select name="comp_categoria[]" class="form-select form-select-sm">${categoriasOpts}</select></td>
+      <td><input type="text" name="comp_formula[]" class="form-control form-control-sm" placeholder="variable_a * variable_b" required style="font-family:monospace;font-size:11px;"></td>
+      <td><input type="text" name="comp_variable_salida[]" class="form-control form-control-sm" placeholder="nombre_salida" style="font-family:monospace;"></td>
+      <td><input type="text" name="comp_unidad[]" class="form-control form-control-sm" placeholder="und"></td>
+      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector('input').focus();
+  });
+})();
+</script>
 {% endblock %}

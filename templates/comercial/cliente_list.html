@@ -150,14 +150,14 @@
                     <button class="btn btn-sm btn-ghost"
                             data-bs-toggle="offcanvas" data-bs-target="#offcanvasCli"
                             onclick="prepareForm('edit', {
-                                id:                 {{ c.pk }},
-                                nit:                '{{ c.nit|escapejs }}',
-                                razon_social:       '{{ c.razon_social|escapejs }}',
-                                activo:             {{ c.activo|yesno:'true,false' }},
-                                contacto_nombre:    '{{ cp.nombre|default:''|escapejs }}',
-                                contacto_cargo:     '{{ cp.cargo|default:''|escapejs }}',
-                                contacto_email:     '{{ cp.email|default:''|escapejs }}',
-                                contacto_telefono:  '{{ cp.telefono|default:''|escapejs }}'
+                                id: {{ c.pk }},
+                                nit: '{{ c.nit|escapejs }}',
+                                razon_social: '{{ c.razon_social|escapejs }}',
+                                activo: {{ c.activo|yesno:'true,false' }},
+                                contacto_nombre: '{{ cp.nombre|default:''|escapejs }}',
+                                contacto_cargo: '{{ cp.cargo|default:''|escapejs }}',
+                                contacto_email: '{{ cp.email|default:''|escapejs }}',
+                                contacto_telefono: '{{ cp.telefono|default:''|escapejs }}'
                             })">
                         ✎
                     </button>
@@ -267,25 +267,25 @@ function prepareForm(mode, data) {
 
     if (mode === 'create') {
         title.textContent = 'Nuevo cliente';
-        form.action       = "{% url 'comercial:cliente_create' %}";
-        btn.textContent   = 'Guardar cliente';
+        form.action = "{% url 'comercial:cliente_create' %}";
+        btn.textContent = 'Guardar cliente';
         // Marcar activo por defecto
         document.getElementById('{{ create_form.activo.id_for_label }}').checked = true;
 
     } else if (mode === 'edit' && data) {
         title.textContent = 'Editar: ' + data.razon_social;
-        form.action       = '/comercial/clientes/' + data.id + '/editar/';
-        btn.textContent   = 'Actualizar cliente';
+        form.action = '/comercial/clientes/' + data.id + '/editar/';
+        btn.textContent = 'Actualizar cliente';
 
         // Poblar campos de empresa
-        document.getElementById('{{ create_form.nit.id_for_label }}').value         = data.nit          || '';
+        document.getElementById('{{ create_form.nit.id_for_label }}').value = data.nit || '';
         document.getElementById('{{ create_form.razon_social.id_for_label }}').value = data.razon_social || '';
-        document.getElementById('{{ create_form.activo.id_for_label }}').checked     = data.activo;
+        document.getElementById('{{ create_form.activo.id_for_label }}').checked = data.activo;
 
         // Poblar campos de contacto
-        document.getElementById('{{ create_form.contacto_nombre.id_for_label }}').value   = data.contacto_nombre   || '';
-        document.getElementById('{{ create_form.contacto_cargo.id_for_label }}').value    = data.contacto_cargo    || '';
-        document.getElementById('{{ create_form.contacto_email.id_for_label }}').value    = data.contacto_email    || '';
+        document.getElementById('{{ create_form.contacto_nombre.id_for_label }}').value = data.contacto_nombre || '';
+        document.getElementById('{{ create_form.contacto_cargo.id_for_label }}').value = data.contacto_cargo || '';
+        document.getElementById('{{ create_form.contacto_email.id_for_label }}').value = data.contacto_email || '';
         document.getElementById('{{ create_form.contacto_telefono.id_for_label }}').value = data.contacto_telefono || '';
     }
 }

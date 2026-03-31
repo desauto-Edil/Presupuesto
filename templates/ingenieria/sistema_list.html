@@ -276,6 +276,22 @@
             </div>
           </div>
 
+          <!-- Subsistemas inline -->
+          <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <span style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">
+                Subsistemas (recetas técnicas)
+              </span>
+              <button type="button" class="btn btn-ghost btn-xs" id="btnAddSubRow">+ Agregar</button>
+            </div>
+            <div id="subRowsContainer">
+              <!-- filas dinámicas -->
+            </div>
+            <p style="font-size:11px;color:var(--ink-soft);margin-top:6px;">
+              Opcional. El código debe coincidir con la definición backend en <code>system_defs/</code>.
+            </p>
+          </div>
+
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -353,5 +369,43 @@ document.addEventListener('click', function(e) {
   const select = document.querySelector('#modalSubsistema select[name="sistema"]');
   if (select && pk) select.value = pk;
 });
+
+// ── Filas inline de subsistemas en modal "Nuevo sistema" ──────────────────
+(function () {
+  const container = document.getElementById('subRowsContainer');
+  const btnAdd    = document.getElementById('btnAddSubRow');
+  if (!btnAdd || !container) return;
+
+  let rowCount = 0;
+
+  function addRow() {
+    rowCount++;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:start;';
+    row.innerHTML = `
+      <div>
+        <input type="text" name="sub_codigo[]" class="form-control form-control-sm"
+               placeholder="Código (ej: PG_PLUS_TPO)" required style="font-family:monospace;">
+      </div>
+      <div>
+        <input type="text" name="sub_nombre[]" class="form-control form-control-sm"
+               placeholder="Nombre del subsistema" required>
+      </div>
+      <button type="button" class="btn btn-ghost btn-xs"
+              style="color:rgba(14,17,23,0.35);padding:4px 8px;margin-top:2px;"
+              onclick="this.closest('div[style]').remove()">✕</button>
+    `;
+    container.appendChild(row);
+    row.querySelector('input').focus();
+  }
+
+  btnAdd.addEventListener('click', addRow);
+
+  // Limpiar filas al cerrar el modal
+  document.getElementById('modalSistema').addEventListener('hidden.bs.modal', function () {
+    container.innerHTML = '';
+    rowCount = 0;
+  });
+})();
 </script>
 {% endblock %}

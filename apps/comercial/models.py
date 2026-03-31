@@ -174,10 +174,10 @@ class Proyecto(models.Model):
     # ── Relación con solicitud (versionado) ──────────────────────────────────
     solicitud = models.ForeignKey(
         Solicitud,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         blank=True,
         null=True,
-        related_name="proyectos",       
+        related_name="proyectos",
     )
     version = models.PositiveIntegerField(
         default=1,

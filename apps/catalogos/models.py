@@ -91,6 +91,13 @@ class Producto(models.Model):
     marca = models.CharField(max_length=150, blank=True, null=True)
     linea = models.CharField(max_length=150, blank=True, null=True)
     rendimiento = models.DecimalField(max_digits=14, decimal_places=6, blank=True, null=True)
+    ficha_tecnica = models.FileField(
+        upload_to='fichas_tecnicas/',
+        blank=True,
+        null=True,
+        verbose_name='Ficha técnica',
+        help_text='PDF o imagen con las especificaciones técnicas del producto (opcional).',
+    )
     activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
