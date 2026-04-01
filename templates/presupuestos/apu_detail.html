@@ -436,7 +436,7 @@
         <tr>
           <th>Descripción</th>
           <th>Rendimiento</th>
-          <th>Precio ref.</th>
+          <th>Unidad</th>
           <th>Costo unit.</th>
           <th>Costo total</th>
           <th>Valor unit.</th>
@@ -452,11 +452,11 @@
             {% if linea.iva_aplicado %}<span class="badge-iva">+IVA</span>{% endif %}
           </td>
           <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td>${{ linea.precio_referencia|floatformat:2 }}</td>
-          <td>${{ linea.costo_unitario|floatformat:2 }}</td>
-          <td>${{ linea.costo_total|floatformat:2 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:2 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:2 }}</td>
+          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
+          <td>${{ linea.costo_total|floatformat:0 }}</td>
+          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
+          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
           <td>{% if linea.editable %}
             <button class="btn btn-ghost btn-xs"
                     data-bs-toggle="modal"
@@ -511,7 +511,7 @@
         <tr>
           <th>Descripción</th>
           <th>Rendimiento</th>
-          <th>Precio ref.</th>
+          <th>Unidad</th>
           <th>Costo unit.</th>
           <th>Costo total</th>
           <th>Valor unit.</th>
@@ -524,11 +524,11 @@
         <tr id="apu-linea-{{ linea.pk }}">
           <td class="apu-desc">{{ linea.descripcion }}</td>
           <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td>${{ linea.precio_referencia|floatformat:2 }}</td>
-          <td>${{ linea.costo_unitario|floatformat:2 }}</td>
-          <td>${{ linea.costo_total|floatformat:2 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:2 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:2 }}</td>
+          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
+          <td>${{ linea.costo_total|floatformat:0 }}</td>
+          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
+          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
           <td>{% if linea.editable %}
             <button class="btn btn-ghost btn-xs"
                     data-bs-toggle="modal"
@@ -590,7 +590,7 @@
         <tr>
           <th>Descripción</th>
           <th>Rendimiento</th>
-          <th>Precio ref.</th>
+          <th>Unidad</th>
           <th>Costo unit.</th>
           <th>Costo total</th>
           <th>Valor unit.</th>
@@ -603,11 +603,11 @@
         <tr id="apu-linea-{{ linea.pk }}">
           <td class="apu-desc">{{ linea.descripcion }}</td>
           <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td>${{ linea.precio_referencia|floatformat:2 }}</td>
-          <td>${{ linea.costo_unitario|floatformat:2 }}</td>
-          <td>${{ linea.costo_total|floatformat:2 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:2 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:2 }}</td>
+          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
+          <td>${{ linea.costo_total|floatformat:0 }}</td>
+          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
+          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
           <td>{% if linea.editable %}
             <button class="btn btn-ghost btn-xs"
                     data-bs-toggle="modal"
@@ -669,7 +669,7 @@
         <tr>
           <th>Descripción</th>
           <th>Rendimiento</th>
-          <th>Precio ref.</th>
+          <th>Unidad</th>
           <th>Costo unit.</th>
           <th>Costo total</th>
           <th>Valor unit.</th>
@@ -682,11 +682,11 @@
         <tr id="apu-linea-{{ linea.pk }}">
           <td class="apu-desc">{{ linea.descripcion }}</td>
           <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td>${{ linea.precio_referencia|floatformat:2 }}</td>
-          <td>${{ linea.costo_unitario|floatformat:2 }}</td>
-          <td>${{ linea.costo_total|floatformat:2 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:2 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:2 }}</td>
+          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
+          <td>${{ linea.costo_total|floatformat:0 }}</td>
+          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
+          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
           <td>{% if linea.editable %}
             <button class="btn btn-ghost btn-xs"
                     data-bs-toggle="modal"
@@ -748,7 +748,7 @@
         <tr>
           <th>Descripción</th>
           <th>Rendimiento</th>
-          <th>Precio ref.</th>
+          <th>Unidad</th>
           <th>Costo unit.</th>
           <th>Costo total</th>
           <th>Valor unit.</th>
@@ -761,11 +761,11 @@
         <tr id="apu-linea-{{ linea.pk }}">
           <td class="apu-desc">{{ linea.descripcion }}</td>
           <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td>${{ linea.precio_referencia|floatformat:2 }}</td>
-          <td>${{ linea.costo_unitario|floatformat:2 }}</td>
-          <td>${{ linea.costo_total|floatformat:2 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:2 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:2 }}</td>
+          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
+          <td>${{ linea.costo_total|floatformat:0 }}</td>
+          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
+          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
           <td>{% if linea.editable %}
             <button class="btn btn-ghost btn-xs"
                     data-bs-toggle="modal"

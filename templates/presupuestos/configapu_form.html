@@ -43,54 +43,69 @@
           </div>
 
           <div class="row g-3 mb-4">
+
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">
-                {{ form.porcentaje_ganancia.label }}
-              </label>
+              <label class="form-label" style="font-size:12px;font-weight:600;">Factor de venta</label>
               <div class="input-group input-group-sm">
-                {{ form.porcentaje_ganancia }}
+                {{ form.factor_venta_pct }}
                 <span class="input-group-text">%</span>
               </div>
               <div class="form-text" style="font-size:10.5px;">
-                Markup sobre el costo unitario para calcular el valor de venta
+                Valor unit = Costo total × (Factor / 100). Predeterminado: 121% → ×1.21
               </div>
-              {% if form.porcentaje_ganancia.errors %}
-              <div style="color:var(--red,#e62833);font-size:11px;">{{ form.porcentaje_ganancia.errors.0 }}</div>
+              {% if form.factor_venta_pct.errors %}
+              <div style="color:var(--red,#e62833);font-size:11px;">{{ form.factor_venta_pct.errors.0 }}</div>
               {% endif %}
             </div>
 
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">
-                {{ form.aiu_contratista.label }}
-              </label>
+              <label class="form-label" style="font-size:12px;font-weight:600;">IVA</label>
               <div class="input-group input-group-sm">
-                {{ form.aiu_contratista }}
+                {{ form.iva_pct }}
                 <span class="input-group-text">%</span>
               </div>
               <div class="form-text" style="font-size:10.5px;">
-                Administración, imprevistos y utilidad del contratista
+                Costo unit = Precio ref × (1 + IVA / 100)
               </div>
+              {% if form.iva_pct.errors %}
+              <div style="color:var(--red,#e62833);font-size:11px;">{{ form.iva_pct.errors.0 }}</div>
+              {% endif %}
             </div>
 
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">
-                {{ form.desperdicio.label }}
-              </label>
+              <label class="form-label" style="font-size:12px;font-weight:600;">AIU Contratista</label>
               <div class="input-group input-group-sm">
-                {{ form.desperdicio }}
+                {{ form.aiu_contratista_pct }}
                 <span class="input-group-text">%</span>
               </div>
+              <div class="form-text" style="font-size:10.5px;">Administración, imprevistos y utilidad del contratista</div>
+              {% if form.aiu_contratista_pct.errors %}
+              <div style="color:var(--red,#e62833);font-size:11px;">{{ form.aiu_contratista_pct.errors.0 }}</div>
+              {% endif %}
             </div>
 
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">
-                {{ form.margen_ganancia_contratista.label }}
-              </label>
+              <label class="form-label" style="font-size:12px;font-weight:600;">Desperdicio</label>
               <div class="input-group input-group-sm">
-                {{ form.margen_ganancia_contratista }}
+                {{ form.desperdicio_pct }}
                 <span class="input-group-text">%</span>
               </div>
+              {% if form.desperdicio_pct.errors %}
+              <div style="color:var(--red,#e62833);font-size:11px;">{{ form.desperdicio_pct.errors.0 }}</div>
+              {% endif %}
             </div>
+
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">Margen de ganancia general</label>
+              <div class="input-group input-group-sm">
+                {{ form.margen_ganancia_pct }}
+                <span class="input-group-text">%</span>
+              </div>
+              {% if form.margen_ganancia_pct.errors %}
+              <div style="color:var(--red,#e62833);font-size:11px;">{{ form.margen_ganancia_pct.errors.0 }}</div>
+              {% endif %}
+            </div>
+
           </div>
 
           <div class="mb-4">

@@ -157,6 +157,8 @@ def _guardar_componentes_variables(subsistema, post):
     comp_formulas    = post.getlist("comp_formula[]")
     comp_v_salidas   = post.getlist("comp_variable_salida[]")
     comp_unidades    = post.getlist("comp_unidad[]")
+    comp_ref_apu     = post.getlist("comp_variable_referencia_apu[]")
+    comp_unidad_apu  = post.getlist("comp_unidad_apu[]")
 
     ComponenteSubsistema.objects.filter(subsistema=subsistema).delete()
     for idx, (codigo, nombre, formula) in enumerate(zip(comp_codigos, comp_nombres, comp_formulas)):
@@ -179,6 +181,8 @@ def _guardar_componentes_variables(subsistema, post):
                 formula_texto=formula,
                 variable_salida=comp_v_salidas[idx].strip() if idx < len(comp_v_salidas) else "",
                 unidad=comp_unidades[idx].strip() if idx < len(comp_unidades) else "",
+                variable_referencia_apu=comp_ref_apu[idx].strip() if idx < len(comp_ref_apu) else "",
+                unidad_apu=comp_unidad_apu[idx].strip() if idx < len(comp_unidad_apu) else "",
                 orden=idx + 1,
             )
 
@@ -219,7 +223,7 @@ class SubsistemaUpdateView(UpdateView):
             .select_related("categoria")
             .order_by("orden")
             .values("id", "codigo", "nombre", "categoria_id", "formula_texto",
-                    "variable_salida", "unidad", "orden")
+                    "variable_salida", "unidad", "variable_referencia_apu", "unidad_apu", "orden")
         )
         return ctx
 

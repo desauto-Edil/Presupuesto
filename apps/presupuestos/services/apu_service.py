@@ -186,6 +186,35 @@ class APUService:
 
     # ── Generadores de líneas ─────────────────────────────────────────────────
 
+    def _get_total_unidades_componente(self, componente_codigo: str, comp_cache: dict) -> float:
+        """
+        Devuelve el total de referencia para calcular el rendimiento de un componente específico.
+        Prioridad:
+          1. variable_referencia_apu del componente (ComponenteSubsistema)
+          2. variable_referencia_apu del subsistema (fallback global)
+          3. Búsqueda genérica + área del proyecto
+        """
+        params = self.ps.parametros_entrada or {}
+
+        # 1. Referencia definida en el componente
+        comp = comp_cache.get(componente_codigo)
+        if comp and comp.variable_referencia_apu:
+            val = params.get(comp.variable_referencia_apu)
+            if val:
+                try:
+                    total = float(val)
+                    if total > 0:
+                        logger.debug(
+                            "[APUService] ref componente '%s' var='%s' total=%.4f (PS %s)",
+                            componente_codigo, comp.variable_referencia_apu, total, self.ps.pk,
+                        )
+                        return total
+                except (ValueError, TypeError):
+                    pass
+
+        # 2. Fallback al método global del subsistema
+        return self._get_total_unidades()
+
     @transaction.atomic
     def generar_materiales(self) -> List[dict]:
         """
@@ -196,10 +225,18 @@ class APUService:
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
+        from apps.ingenieria.models import ComponenteSubsistema
+
         lineas_despiece = self.ps.despiece_lineas.select_related(
             "producto", "producto__unidad", "categoria_producto",
         )
-        tp      = self._get_total_unidades()
+
+        # Cache de componentes para no hacer N queries
+        _comp_cache: dict = {}
+        if self.ps.subsistema_id:
+            for c in ComponenteSubsistema.objects.filter(subsistema=self.ps.subsistema):
+                _comp_cache[c.codigo] = c
+
         creadas = []
 
         for dl in lineas_despiece:
@@ -216,9 +253,14 @@ class APUService:
                 )
                 continue
 
-            nombre      = dl.producto.nombre
-            precio      = float(dl.precio_snapshot or 0)
-            cantidad    = float(dl.cantidad_final)
+            nombre   = dl.producto.nombre
+            precio   = float(dl.precio_snapshot or 0)
+            cantidad = float(dl.cantidad_final)
+
+            # ── Obtener el total de referencia para ESTE componente ──────────
+            # Prioridad: ref. del componente → ref. del subsistema → fallback área
+            tp = self._get_total_unidades_componente(dl.componente_codigo, _comp_cache)
+
             # rendimiento = cuántas unidades de material por 1 unidad del sistema
             # Ej: 25947 fijaciones / 2883 soportes = 9 fijaciones/soporte
             rendimiento = (cantidad / tp) if tp > 0 else 1.0

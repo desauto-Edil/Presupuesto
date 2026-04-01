@@ -19,8 +19,8 @@ class ConfiguracionAPU(models.Model):
 
     nombre = models.CharField(max_length=100, default="Configuración global")
     factor_venta_pct = models.DecimalField(
-        max_digits=8, decimal_places=4, default=Decimal("20"),
-        help_text="% de margen sobre costo unitario para obtener valor unitario.",
+        max_digits=8, decimal_places=4, default=Decimal("121"),
+        help_text="Factor de venta aplicado al costo total para obtener el valor unitario. Ej: 121 → multiplica × 1.21.",
     )
     iva_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("19"),
@@ -293,8 +293,8 @@ class APUProyecto(models.Model):
 
     # -- Parámetros de cálculo --
     factor_venta_pct = models.DecimalField(
-        max_digits=8, decimal_places=4, default=Decimal("20"),
-        help_text="% margen sobre costo unitario → valor unitario.",
+        max_digits=8, decimal_places=4, default=Decimal("121"),
+        help_text="Factor de venta: Valor unit = Costo total × (factor/100). Ej: 121 → × 1.21.",
     )
     iva_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("19"),
@@ -562,19 +562,24 @@ class APULinea(models.Model):
             if (self.iva_aplicado and apu.aplica_iva)
             else Decimal("1")
         )
-        factor_venta = Decimal("1") + Decimal(str(apu.factor_venta_pct)) / Decimal("100")
+        # factor_venta: divisor 100 → 121% = ×1.21
+        factor_venta = Decimal(str(apu.factor_venta_pct)) / Decimal("100")
         rendimiento  = Decimal(str(self.rendimiento)) if self.rendimiento else Decimal("1")
         precio       = Decimal(str(self.precio_referencia))
 
+        # Costo unit  = precio_ref × IVA
         self.costo_unitario = (precio * iva_factor).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
+        # Costo total = Costo unit × rendimiento
         self.costo_total = (rendimiento * self.costo_unitario).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
-        self.valor_unitario = (self.costo_unitario * factor_venta).quantize(
+        # Valor unit  = Costo total × factor_venta   (Ej: ×1.21)
+        self.valor_unitario = (self.costo_total * factor_venta).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
+        # Valor total = Valor unit × rendimiento
         self.valor_total = (rendimiento * self.valor_unitario).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )

@@ -162,6 +162,21 @@ class ComponenteSubsistema(models.Model):
     unidad = models.CharField(max_length=40, blank=True, default="")
     orden = models.PositiveIntegerField(default=1)
 
+    # ── APU por componente ────────────────────────────────────────────────────
+    variable_referencia_apu = models.CharField(
+        max_length=80, blank=True, default="",
+        verbose_name="Variable de referencia APU",
+        help_text=(
+            "Variable de entrada que actúa como denominador del rendimiento. "
+            "Ej: 'total_powergrip'. Si se deja vacío, usa la configuración del subsistema."
+        ),
+    )
+    unidad_apu = models.CharField(
+        max_length=40, blank=True, default="",
+        verbose_name="Unidad APU",
+        help_text="Unidad de la referencia. Ej: 'soporte', 'm²', 'ml'.",
+    )
+
     class Meta:
         app_label = "ingenieria"
         db_table = "componentes_subsistema"

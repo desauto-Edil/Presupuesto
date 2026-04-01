@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "Django Dev Server",
-      "runtimeExecutable": "/usr/bin/env",
-      "runtimeArgs": ["bash", "-c", "cd /Users/u18810/Documents/Automatizacion/Presupuestos/imperandina && exec /Users/u18810/Documents/Automatizacion/Presupuestos/venv/bin/python manage.py runserver 0.0.0.0:8000"],
+      "runtimeExecutable": "/Users/u18810/Documents/Automatizacion/Presupuestos/imperandina/start_dev.sh",
+      "runtimeArgs": [],
       "port": 8000
     }
   ]
