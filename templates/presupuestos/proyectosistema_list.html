@@ -35,7 +35,7 @@
         <td style="text-align:center;">{{ ps.despiece_lineas.count }}</td>
         <td>
           {% if ps.sistema.codigo == "POWERGRIP" %}
-          <a href="{% url 'presupuestos:powergrip_wizard' ps.proyecto_id %}"
+          <a href="{% url 'presupuestos:despiece_proyecto' ps.proyecto_id %}"
              class="btn btn-primary btn-xs">Despiece</a>
           {% else %}
           <a href="{% url 'presupuestos:despiece_proyecto' ps.proyecto_id %}"
@@ -53,12 +53,6 @@
     </tbody>
   </table>
 </div>
-{% else %}
-<div class="panel fade-up">
-  <div class="empty-state" style="padding:48px;">
-    <div class="empty-state-icon">⊞</div>
-    <div class="empty-state-text">Sin ejecuciones de sistemas. Abra un proyecto y use el Wizard PowerGrip.</div>
-  </div>
-</div>
+
 {% endif %}
 {% endblock %}

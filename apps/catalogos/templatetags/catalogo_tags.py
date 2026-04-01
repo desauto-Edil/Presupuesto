@@ -72,6 +72,15 @@ def currency(value, moneda_code="COP"):
         return f"{symbol}{formatted}"
 
 
+@register.filter(name="multiply")
+def multiply(value, arg):
+    """Multiplica value por arg. Útil para calcular totales en plantillas."""
+    try:
+        return float(value) * float(arg)
+    except (TypeError, ValueError):
+        return ""
+
+
 @register.filter(name="currency_nodec")
 def currency_nodec(value, moneda_code="COP"):
     """Same as currency but always 0 decimal places (for totals)."""

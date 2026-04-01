@@ -227,6 +227,69 @@
             </div>
           </div>
 
+          {# ── Formulación APU ── #}
+          <div class="sub-section">
+            <div class="sub-section__head">
+              <span class="sub-section__title">📊 Formulación APU — Materiales</span>
+            </div>
+            <div class="sub-section__body">
+              <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:16px;line-height:1.6;">
+                Define cómo se calculan los <strong>rendimientos de materiales</strong> en el APU.
+                El sistema toma cada componente y calcula cuántas unidades de ese material se necesitan
+                por cada unidad del sistema (rendimiento).
+              </p>
+
+              <div class="hint-code" style="margin-bottom:16px;">
+                <strong>Fórmula del rendimiento:</strong><br>
+                <code>rendimiento = cantidad_total_material / variable_referencia</code><br><br>
+                <strong>Ejemplo PowerGrip:</strong><br>
+                · <code>variable_referencia = total_powergrip</code> → 2 883 soportes<br>
+                · <code>fijaciones_plus</code> calculadas = 25 947 und<br>
+                · <code>rendimiento = 25 947 / 2 883 = 9 fijaciones por soporte</code>
+              </div>
+
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label" style="font-size:12.5px;font-weight:600;">
+                    Variable de referencia APU
+                  </label>
+                  {{ form.variable_referencia_apu }}
+                  <div class="formula-help">
+                    Nombre exacto de la variable de entrada que representa la cantidad principal
+                    del sistema (divisor del rendimiento).
+                    Si se deja vacío, se usará el área del proyecto (m²).
+                  </div>
+                  {% if form.variable_referencia_apu.errors %}
+                  <div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.variable_referencia_apu.errors.0 }}</div>
+                  {% endif %}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label" style="font-size:12.5px;font-weight:600;">
+                    Unidad del sistema
+                  </label>
+                  {{ form.unidad_apu }}
+                  <div class="formula-help">Ej: <code>soporte</code>, <code>m²</code>, <code>ml</code></div>
+                  {% if form.unidad_apu.errors %}
+                  <div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.unidad_apu.errors.0 }}</div>
+                  {% endif %}
+                </div>
+              </div>
+
+              {% if form.instance.pk and form.instance.variable_referencia_apu %}
+              <div class="hint-code" style="margin-top:14px;background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);">
+                <strong>Configuración actual:</strong><br>
+                Referencia: <code>{{ form.instance.variable_referencia_apu }}</code>
+                ({{ form.instance.unidad_apu|default:"und" }})<br>
+                Rendimiento de cada componente = <code>cantidad_componente / {{ form.instance.variable_referencia_apu }}</code>
+              </div>
+              {% elif form.instance.pk %}
+              <div class="hint-code" style="margin-top:14px;background:rgba(251,191,36,0.08);border-color:rgba(251,191,36,0.3);">
+                ⚠️ Sin variable de referencia configurada — el APU usará el <strong>área del proyecto (m²)</strong> como denominador.
+              </div>
+              {% endif %}
+            </div>
+          </div>
+
           <div class="d-flex gap-2 justify-content-end">
             <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
             <button type="submit" class="btn btn-primary btn-sm">

@@ -3,98 +3,99 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>APU — {{ apu.nombre }}</title>
+<title>Oferta Comercial — {{ apu.nombre }}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; color: #1a1a2e; line-height: 1.5; background: #f8fafc; }
 
-  .page { max-width: 900px; margin: 0 auto; background: #fff; padding: 32px 40px; }
+  .page { max-width: 860px; margin: 0 auto; background: #fff; padding: 32px 40px; }
 
-  /* ── Barra de acciones (no se imprime) ── */
+  /* ── Barra de acciones ── */
   .print-bar {
     position: fixed; top: 0; left: 0; right: 0; z-index: 100;
     background: #0e1117; color: #fff; padding: 10px 24px;
-    display: flex; align-items: center; justify-content: space-between;
-    font-size: 12px;
+    display: flex; align-items: center; justify-content: space-between; font-size: 12px;
   }
-  .print-bar a { color: #94a3b8; text-decoration: none; font-size: 12px; }
+  .print-bar a { color: #94a3b8; text-decoration: none; }
   .print-bar a:hover { color: #fff; }
-  .btn-print {
-    background: #1470e6; color: #fff; border: none; padding: 7px 18px;
-    border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
-  }
+  .btn-print { background: #1470e6; color: #fff; border: none; padding: 7px 18px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
   @media print {
     .print-bar { display: none; }
     body { background: #fff; }
     .page { padding: 0; }
-    .ficha-embed { page-break-before: always; }
   }
 
   /* ── Cabecera ── */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5px solid #1470e6; padding-bottom: 12px; margin-bottom: 16px; margin-top: 48px; }
-  .header__brand { font-size: 18pt; font-weight: 800; letter-spacing: -0.03em; color: #0e1117; }
-  .header__brand span { color: #1470e6; }
-  .header__sub { font-size: 8pt; color: #94a3b8; margin-top: 2px; }
-  .header__meta { text-align: right; font-size: 8pt; color: #64748b; }
-  .header__meta strong { color: #1a1a2e; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 48px; margin-bottom: 18px; }
+  .header__logo { font-size: 20pt; font-weight: 800; letter-spacing: -0.03em; color: #0e1117; }
+  .header__logo span { color: #e09b10; }
+  .header__tagline { font-size: 7.5pt; color: #94a3b8; margin-top: 2px; }
+  .header__meta { text-align: right; font-size: 8pt; color: #64748b; line-height: 1.8; }
+  .header__meta strong { color: #1a1a2e; font-size: 9pt; }
 
-  /* ── Banner ── */
-  .banner { background: #0e1117; color: #fff; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
-  .banner .title { font-size: 14pt; font-weight: 700; }
-  .banner .sub { font-size: 8.5pt; opacity: 0.5; margin-top: 4px; }
+  /* ── Banner obra ── */
+  .banner-obra { border-top: 3px solid #e09b10; padding-top: 10px; margin-bottom: 22px; }
+  .banner-obra__title { font-size: 12pt; font-weight: 800; color: #0e1117; text-transform: uppercase; letter-spacing: 0.03em; }
+  .banner-obra__sub { font-size: 8.5pt; color: #64748b; margin-top: 3px; }
 
-  /* ── Info cards ── */
-  .info-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-  .info-card { flex: 1; min-width: 140px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 9px 12px; }
-  .info-card__label { font-size: 7pt; color: #94a3b8; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; margin-bottom: 3px; }
-  .info-card__value { font-size: 10pt; font-weight: 600; color: #1a1a2e; }
+  /* ── Tabla principal ── */
+  .offer-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 20px; border: 1.5px solid #cbd5e1; }
+  .offer-table th { background: #e09b10; color: #fff; padding: 7px 10px; text-align: center; font-weight: 700; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid rgba(255,255,255,0.25); }
+  .offer-table th:first-child { text-align: left; }
 
-  /* ── Secciones ── */
-  .section { margin-bottom: 18px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
-  .section__head { padding: 8px 12px; color: #fff; font-size: 9.5pt; font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
-  thead tr { background: #f8fafc; }
-  th { padding: 6px 8px; text-align: right; font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
-  th:first-child { text-align: left; }
-  td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; }
-  td:first-child { text-align: left; }
-  tr:last-child td { border-bottom: none; }
-  tfoot td { font-weight: 700; background: #f8fafc; border-top: 1.5px solid #e2e8f0; }
+  /* Fila de sección (cabecera coloreada) */
+  .row-section { background: #f1f5f9; }
+  .row-section td { padding: 7px 10px; font-weight: 700; color: #0e1117; font-size: 9pt; border-bottom: 1px solid #cbd5e1; }
 
-  /* ── Total ── */
-  .total-box { background: #0e1117; color: #fff; border-radius: 8px; padding: 16px 20px; margin-top: 18px; display: flex; justify-content: space-between; align-items: center; }
-  .total-box .label { font-size: 8.5pt; opacity: 0.55; text-transform: uppercase; letter-spacing: .07em; }
-  .total-box .value { font-size: 22pt; font-weight: 800; color: #38bdf8; font-variant-numeric: tabular-nums; }
-  .total-box .sub { font-size: 7.5pt; opacity: 0.4; margin-top: 3px; }
+  /* Fila de ítem */
+  .row-item td { padding: 9px 10px; vertical-align: top; border-bottom: 1px solid #e2e8f0; }
+  .row-item td.num { text-align: center; color: #64748b; width: 36px; }
+  .row-item td.desc { text-align: left; min-width: 240px; line-height: 1.5; }
+  .row-item td.center { text-align: center; width: 56px; }
+  .row-item td.right { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row-item td.right strong { font-weight: 700; }
 
-  /* ── Disclaimer ── */
-  .disclaimer { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 5px; padding: 8px 12px; font-size: 8pt; color: #0369a1; margin-top: 12px; }
-  .footer-note { margin-top: 16px; font-size: 7.5pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
+  /* Filas de subtotal / IVA / total */
+  .row-sub { background: #f8fafc; }
+  .row-sub td { padding: 5px 10px; border-bottom: 1px solid #e2e8f0; font-size: 8pt; }
+  .row-sub td.label { text-align: right; color: #64748b; font-weight: 600; padding-right: 14px; }
+  .row-sub td.value { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+
+  .row-total { background: #f1f5f9; }
+  .row-total td { padding: 7px 10px; border-bottom: 2px solid #cbd5e1; font-weight: 700; font-size: 9pt; }
+  .row-total td.label { text-align: right; padding-right: 14px; color: #0e1117; }
+  .row-total td.value { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: #0e1117; }
+
+  /* ── Total final ── */
+  .total-final { background: #0e1117; color: #fff; border-radius: 8px; padding: 16px 22px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
+  .total-final .lbl { font-size: 8pt; opacity: 0.55; text-transform: uppercase; letter-spacing: .07em; }
+  .total-final .val { font-size: 22pt; font-weight: 800; color: #fbbf24; font-variant-numeric: tabular-nums; }
+  .total-final .sub { font-size: 7.5pt; opacity: 0.4; margin-top: 3px; }
+
+  /* ── Nota / Disclaimer ── */
+  .nota { background: #fffbeb; border: 1px solid #fde68a; border-radius: 5px; padding: 8px 12px; font-size: 7.5pt; color: #92400e; margin-top: 14px; line-height: 1.5; }
+  .footer { margin-top: 16px; font-size: 7pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
 
   /* ── Fichas técnicas ── */
-  .fichas-section { margin-top: 32px; }
-  .fichas-section__title { font-size: 11pt; font-weight: 700; color: #1a1a2e; border-bottom: 2px solid #1470e6; padding-bottom: 6px; margin-bottom: 16px; }
-  .ficha-embed { margin-bottom: 24px; }
-  .ficha-embed__label { font-size: 9pt; font-weight: 600; color: #1470e6; margin-bottom: 6px; }
+  .fichas-section { margin-top: 32px; page-break-before: always; }
+  .fichas-section__title { font-size: 10pt; font-weight: 700; border-bottom: 2px solid #e09b10; padding-bottom: 6px; margin-bottom: 16px; }
+  .ficha-embed { margin-bottom: 20px; }
+  .ficha-embed__label { font-size: 8.5pt; font-weight: 600; color: #1470e6; margin-bottom: 6px; }
   .ficha-embed img { max-width: 100%; border: 1px solid #e2e8f0; border-radius: 4px; }
-  .ficha-embed .pdf-link {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 10px 16px; background: #f8fafc; border: 1px solid #e2e8f0;
-    border-radius: 6px; color: #1470e6; text-decoration: none; font-size: 9pt; font-weight: 600;
-  }
-  .ficha-embed .pdf-link:hover { background: #eff6ff; }
+  .pdf-link { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; color: #1470e6; text-decoration: none; font-size: 8.5pt; font-weight: 600; }
 </style>
 </head>
 <body>
+{% load catalogo_tags %}
 
 <!-- Barra de impresión -->
 <div class="print-bar">
   <div>
-    <strong style="color:#fff;">APU Cliente</strong>
+    <strong>Oferta Comercial</strong>
     <span style="margin-left:12px;color:#64748b;">{{ apu.nombre }}</span>
   </div>
   <div style="display:flex;gap:12px;align-items:center;">
-    {% if apu.proyecto_sistema %}
+    {% if apu %}
     <a href="/presupuestos/apu/{{ apu.pk }}/">← Volver al APU</a>
     {% endif %}
     <button class="btn-print" onclick="window.print()">⎙ Imprimir / Guardar PDF</button>
@@ -106,166 +107,176 @@
 <!-- Cabecera -->
 <div class="header">
   <div>
-    <div class="header__brand">Impe<span>randina</span></div>
-    <div class="header__sub">Cubiertos · Fachadas · Soluciones Constructivas</div>
+    <div class="header__logo">Impe<span>randina</span></div>
+    <div class="header__tagline">Cubiertas · Fachadas · Soluciones Constructivas</div>
+    {% if ps %}
+    <div style="margin-top:6px;font-size:7.5pt;color:#64748b;">
+      NIT: &nbsp;<strong style="color:#1a1a2e;">Edil Andina SAS · 805.015.703-5</strong>
+    </div>
+    {% endif %}
   </div>
   <div class="header__meta">
     <div>Fecha: <strong>{{ fecha_generacion }}</strong></div>
-    {% if apu.proyecto_sistema %}
-    <div>Proyecto: <strong>{{ apu.proyecto_sistema.proyecto.consecutivo }}</strong></div>
-    <div>Cliente: <strong>{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}</strong></div>
+    {% if ps %}
+    <div>Proyecto: <strong>{{ ps.proyecto.consecutivo }}</strong></div>
+    <div>Cliente: <strong>{{ ps.proyecto.cliente.razon_social }}</strong></div>
+    {% if ps.proyecto.moneda != "COP" %}
+    <div>Moneda: <strong>{{ ps.proyecto.moneda }} · TRM {{ ps.proyecto.trm }}</strong></div>
+    {% endif %}
     {% endif %}
   </div>
 </div>
 
-<!-- Banner -->
-<div class="banner">
-  <div class="title">{{ apu.nombre }}</div>
-  <div class="sub">
-    {% if apu.proyecto_sistema %}
-      {{ apu.proyecto_sistema.sistema.nombre }}
-      {% if apu.proyecto_sistema.subsistema %} / {{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
-      &nbsp;—&nbsp;
-    {% endif %}
-    Análisis de Precios Unitarios
-    {% if apu.descripcion %} · {{ apu.descripcion }}{% endif %}
+<!-- Banner obra -->
+<div class="banner-obra">
+  <div class="banner-obra__title">
+    {% if ps %}{{ ps.proyecto.nombre|upper }}{% else %}{{ apu.nombre|upper }}{% endif %}
+  </div>
+  <div class="banner-obra__sub">
+    FORMULARIO DE ÍTEMS, CANTIDADES Y PRECIOS
+    {% if ps %}&nbsp;—&nbsp;{{ ps.sistema.nombre }}{% if ps.subsistema %} / {{ ps.subsistema.nombre }}{% endif %}{% endif %}
   </div>
 </div>
 
-{% if apu.proyecto_sistema %}
-<!-- Info proyecto -->
-<div class="info-row">
-  <div class="info-card">
-    <div class="info-card__label">Cliente</div>
-    <div class="info-card__value">{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}</div>
-  </div>
-  <div class="info-card">
-    <div class="info-card__label">Proyecto</div>
-    <div class="info-card__value">{{ apu.proyecto_sistema.proyecto.nombre }}</div>
-  </div>
-  <div class="info-card">
-    <div class="info-card__label">Sistema</div>
-    <div class="info-card__value">{{ apu.proyecto_sistema.sistema.nombre }}</div>
-  </div>
-  <div class="info-card">
-    <div class="info-card__label">Área total</div>
-    <div class="info-card__value">{{ apu.proyecto_sistema.proyecto.area_total_m2|default:"—" }} m²</div>
-  </div>
-</div>
-{% endif %}
+<!-- Tabla de ítems -->
+<table class="offer-table">
+  <thead>
+    <tr>
+      <th style="width:36px;">Ítem</th>
+      <th>Descripción</th>
+      <th style="width:56px;">Unidad</th>
+      <th style="width:80px;">Cantidad</th>
+      <th style="width:110px;">Vr. Unitario</th>
+      <th style="width:120px;">Subtotal</th>
+    </tr>
+  </thead>
+  <tbody>
 
-<!-- Líneas por tipo (solo valores de venta) -->
-{% regroup lineas by tipo as lineas_por_tipo %}
+  {% for sec in secciones %}
+  {# ── Fila de ítem principal ── #}
+  <tr class="row-item">
+    <td class="num">{{ forloop.counter }},0</td>
+    <td class="desc">
+      <strong>{{ sec.descripcion }}</strong>
+      {% if sec.tipo == "MATERIALES" %}
+      <br><span style="font-size:7.5pt;color:#64748b;">Incluye todos los materiales e insumos para su correcta instalación.</span>
+      {% elif sec.tipo == "MANO_DE_OBRA" %}
+      <br><span style="font-size:7.5pt;color:#64748b;">Incluye cuadrilla especializada, montaje y puesta en marcha.</span>
+      {% endif %}
+    </td>
+    <td class="center">{{ sec.unidad }}</td>
+    <td class="right">{{ sec.cantidad|floatformat:0 }}</td>
+    <td class="right">
+      {% if sec.moneda == "COP" %}
+        ${{ sec.valor_unitario|floatformat:1 }}
+      {% else %}
+        {{ sec.moneda }} {{ sec.valor_unitario|floatformat:1 }}
+      {% endif %}
+    </td>
+    <td class="right">
+      <strong>
+      {% if sec.moneda == "COP" %}
+        ${{ sec.subtotal|floatformat:0 }}
+      {% else %}
+        {{ sec.moneda }} {{ sec.subtotal|floatformat:1 }}
+      {% endif %}
+      </strong>
+    </td>
+  </tr>
 
-{% for grupo in lineas_por_tipo %}{% if grupo.list %}
+  {# ── Subtotal ── #}
+  <tr class="row-sub">
+    <td colspan="4"></td>
+    <td class="label">Subtotal {{ sec.label }}</td>
+    <td class="value">
+      {% if sec.moneda == "COP" %}
+        ${{ sec.subtotal|floatformat:0 }}
+      {% else %}
+        {{ sec.moneda }} {{ sec.subtotal|floatformat:1 }}
+      {% endif %}
+    </td>
+  </tr>
 
-{% if grupo.grouper == "MATERIALES" %}
-<div class="section">
-  <div class="section__head" style="background:#1470e6;">Materiales</div>
-{% elif grupo.grouper == "HERRAMIENTAS_EQUIPOS" %}
-<div class="section">
-  <div class="section__head" style="background:#e07d10;">Herramientas y Equipos</div>
-{% elif grupo.grouper == "TRANSPORTE" %}
-<div class="section">
-  <div class="section__head" style="background:#7048d0;">Transporte</div>
-{% elif grupo.grouper == "MANO_DE_OBRA" %}
-<div class="section">
-  <div class="section__head" style="background:#17a85e;">Mano de Obra</div>
-{% elif grupo.grouper == "ADMINISTRACION" %}
-<div class="section">
-  <div class="section__head" style="background:#64748b;">Administración</div>
-{% else %}
-<div class="section">
-  <div class="section__head" style="background:#334155;">{{ grupo.grouper }}</div>
-{% endif %}
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:left;">Descripción</th>
-        <th>Und.</th>
-        <th>Rendimiento</th>
-        <th>Valor unitario</th>
-        <th>Valor total</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for linea in grupo.list %}
-      <tr>
-        <td>{{ linea.descripcion }}</td>
-        <td style="color:#64748b;">{{ linea.unidad|default:"—" }}</td>
-        <td>{{ linea.rendimiento|floatformat:4 }}</td>
-        <td>${{ linea.valor_unitario|floatformat:2 }}</td>
-        <td style="font-weight:600;">${{ linea.valor_total|floatformat:2 }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="4" style="text-align:right;color:#64748b;">Subtotal</td>
-        <td>
-          {% if grupo.grouper == "MATERIALES" %}${{ apu.subtotal_materiales|floatformat:0 }}
-          {% elif grupo.grouper == "HERRAMIENTAS_EQUIPOS" %}${{ apu.subtotal_herramientas|floatformat:0 }}
-          {% elif grupo.grouper == "TRANSPORTE" %}${{ apu.subtotal_transporte|floatformat:0 }}
-          {% elif grupo.grouper == "MANO_DE_OBRA" %}${{ apu.subtotal_mano_obra|floatformat:0 }}
-          {% elif grupo.grouper == "ADMINISTRACION" %}${{ apu.subtotal_administracion|floatformat:0 }}
-          {% endif %}
-        </td>
-      </tr>
-    </tfoot>
-  </table>
-</div>
+  {% if sec.aplica_iva and sec.iva_monto > 0 %}
+  {# ── IVA ── #}
+  <tr class="row-sub">
+    <td colspan="4"></td>
+    <td class="label">IVA {{ sec.iva_pct }}%</td>
+    <td class="value">
+      {% if sec.moneda == "COP" %}
+        ${{ sec.iva_monto|floatformat:0 }}
+      {% else %}
+        {{ sec.moneda }} {{ sec.iva_monto|floatformat:1 }}
+      {% endif %}
+    </td>
+  </tr>
 
-{% endif %}{% endfor %}
+  {# ── Total con IVA ── #}
+  <tr class="row-total">
+    <td colspan="4"></td>
+    <td class="label">Total {{ sec.label }} con IVA</td>
+    <td class="value">
+      {% if sec.moneda == "COP" %}
+        ${{ sec.total_con_iva|floatformat:0 }}
+      {% else %}
+        {{ sec.moneda }} {{ sec.total_con_iva|floatformat:1 }}
+      {% endif %}
+    </td>
+  </tr>
+  {% endif %}
+
+  {% empty %}
+  <tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8;">Sin ítems calculados.</td></tr>
+  {% endfor %}
+
+  </tbody>
+</table>
 
 <!-- Total final -->
-<div class="total-box">
+<div class="total-final">
   <div>
-    <div class="label">Valor total de venta</div>
+    <div class="lbl">Valor total de la oferta</div>
     <div class="sub">
       {% if apu.aplica_iva %}IVA {{ apu.iva_pct }}% incluido · {% endif %}
-      Factor de venta {{ apu.factor_venta_pct }}%
+      Oferta vigente 30 días
     </div>
   </div>
-  <div class="value">${{ apu.total_valor_venta|floatformat:0 }}</div>
+  <div class="val">
+    ${{ apu.total_valor_venta|floatformat:0 }}
+  </div>
 </div>
 
-<div class="disclaimer">
-  Los precios presentados corresponden a la oferta comercial. Vigencia: 30 días desde la fecha de generación.
-  Sujeto a disponibilidad de materiales y condiciones del contrato.
+<!-- Nota -->
+{% if ps and ps.proyecto.observaciones %}
+<div class="nota">
+  <strong>Nota:</strong> {{ ps.proyecto.observaciones }}
 </div>
+{% else %}
+<div class="nota">
+  Los precios presentados corresponden a la oferta comercial.
+  Vigencia: 30 días desde la fecha de generación. Sujeto a disponibilidad de materiales y condiciones del contrato.
+</div>
+{% endif %}
 
-<div class="footer-note">
-  <span>IMPERANDINA S.A.S. — Cubiertos y Fachadas</span>
+<div class="footer">
+  <span>IMPERANDINA S.A.S. — Cubiertas y Fachadas Industriales</span>
   <span>Generado: {{ fecha_generacion }}</span>
 </div>
 
-<!-- ══════════════════════════════════════════
-     FICHAS TÉCNICAS
-══════════════════════════════════════════ -->
+<!-- Fichas técnicas -->
 {% if productos_con_ficha %}
 <div class="fichas-section">
   <div class="fichas-section__title">Fichas Técnicas de Productos</div>
-
   {% for producto in productos_con_ficha %}
   <div class="ficha-embed">
     <div class="ficha-embed__label">{{ producto.nombre }}{% if producto.codigo %} — {{ producto.codigo }}{% endif %}</div>
-
     {% with ext=producto.ficha_tecnica.name|lower %}
     {% if ".jpg" in ext or ".jpeg" in ext or ".png" in ext or ".webp" in ext %}
       <img src="{{ request.scheme }}://{{ request.get_host }}{{ producto.ficha_tecnica.url }}"
-           alt="Ficha técnica {{ producto.nombre }}"
-           style="max-height:500px;">
+           alt="Ficha técnica {{ producto.nombre }}" style="max-height:500px;">
     {% else %}
-      {# PDF u otro formato: mostrar enlace de descarga #}
       <a class="pdf-link" href="{{ producto.ficha_tecnica.url }}" target="_blank">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
-          <path d="M4 0h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H4z"/>
-          <path d="M4.603 14.087a.81.81 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.68 7.68 0 0 1 1.482-.645 19.697 19.697 0 0 0 1.062-2.227 7.269 7.269 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.077a.7.7 0 0 1 .477.365c.088.164.12.356.127.538.007.188-.012.396-.047.614-.084.51-.27 1.134-.52 1.794a10.954 10.954 0 0 0 .98 1.686 5.753 5.753 0 0 1 1.334.05c.364.066.734.195.96.465.12.144.193.32.2.518.007.192-.047.382-.138.563a1.04 1.04 0 0 1-.354.416.856.856 0 0 1-.51.138c-.331-.014-.654-.196-.933-.417a5.712 5.712 0 0 1-.911-.95 11.651 11.651 0 0 0-1.997.406 11.307 11.307 0 0 1-1.02 1.51c-.292.35-.609.656-.927.787a.793.793 0 0 1-.58.029z"/>
-        </svg>
-        Ver ficha técnica — {{ producto.nombre }}
-        <span style="font-size:8pt;color:#94a3b8;font-weight:400;">
-          ({{ producto.ficha_tecnica.name|cut:"fichas_tecnicas/" }})
-        </span>
+        📄 Ver ficha técnica — {{ producto.nombre }}
       </a>
     {% endif %}
     {% endwith %}

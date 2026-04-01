@@ -8,8 +8,7 @@ from apps.presupuestos.views import (
     # Despiece
     DespieceProyectoView, DespieceEjecutarView, DespieceLineaAjusteView,
     SubsistemaVariablesView, DespieceLineaAjusteAPIView, CalcularDespiecePSView,
-    # PowerGrip wizard
-    PowerGripWizardView, CalcularPowerGripView,
+    AsignarProductoLineaAPIView, ProductosPorCategoriaLineaAPIView,
     # APIs helpers
     ProductosPorCategoriaAPIView, SubsistemaDefAPIView,
     # Config APU
@@ -38,17 +37,15 @@ urlpatterns = [
     path("sistemas/<int:pk>/editar/",    ProyectoSistemaUpdateView.as_view(), name="proyectosistema_update"),
     path("sistemas/<int:pk>/eliminar/",  ProyectoSistemaDeleteView.as_view(), name="proyectosistema_delete"),
 
-    # ── PowerGrip Wizard ─────────────────────────────────────────────────────
-    path("powergrip/<int:pk>/",          PowerGripWizardView.as_view(),   name="powergrip_wizard"),
-    path("powergrip/calcular/<int:pk>/", CalcularPowerGripView.as_view(), name="powergrip_calcular"),
-
     # ── Despiece ─────────────────────────────────────────────────────────────
     path("despiece/proyecto/<int:pk>/",      DespieceProyectoView.as_view(),       name="despiece_proyecto"),
     path("despiece/calcular/<int:pk>/",      CalcularDespiecePSView.as_view(),     name="despiece_calcular"),
     path("despiece/ejecutar/<int:pk>/",      DespieceEjecutarView.as_view(),       name="despiece_ejecutar"),
     path("despiece/ajuste/<int:pk>/",        DespieceLineaAjusteView.as_view(),    name="despiece_ajuste"),
-    path("despiece/api/variables/<int:pk>/", SubsistemaVariablesView.as_view(),    name="despiece_api_variables"),
-    path("despiece/api/ajuste/<int:pk>/",    DespieceLineaAjusteAPIView.as_view(), name="despiece_api_ajuste"),
+    path("despiece/api/variables/<int:pk>/",          SubsistemaVariablesView.as_view(),          name="despiece_api_variables"),
+    path("despiece/api/ajuste/<int:pk>/",             DespieceLineaAjusteAPIView.as_view(),       name="despiece_api_ajuste"),
+    path("despiece/api/asignar-producto/<int:pk>/",   AsignarProductoLineaAPIView.as_view(),      name="despiece_api_asignar_producto"),
+    path("despiece/api/productos-linea/<int:pk>/",    ProductosPorCategoriaLineaAPIView.as_view(), name="despiece_api_productos_linea"),
 
     # ── APIs helpers ──────────────────────────────────────────────────────────
     path("api/productos-categoria/<slug:slug>/", ProductosPorCategoriaAPIView.as_view(), name="api_productos_categoria"),

@@ -206,6 +206,11 @@ class Proyecto(models.Model):
     fecha_proyecto = models.DateField(auto_now_add=True)
     area_total_m2 = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)
     perimetro_ml = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)
+    dias_duracion = models.PositiveIntegerField(
+        blank=True, null=True,
+        verbose_name="Días de duración",
+        help_text="Duración estimada del proyecto en días calendario",
+    )
 
     # ── Parámetros financieros ───────────────────────────────────────────────
     trm = models.DecimalField(max_digits=14, decimal_places=4, default=4200)

@@ -136,11 +136,32 @@ class APUService:
 
     def _get_total_unidades(self) -> float:
         """
-        Determina la cantidad de referencia del sistema.
-        Busca en parametros_entrada con prioridad definida en _CLAVES_UNIDAD_REFERENCIA.
-        Fallback: area_total_m2 del proyecto. Mínimo devuelto: 1.0.
+        Determina la cantidad de referencia del sistema (denominador del APU por unidad).
+        Prioridad:
+          1. variable_referencia_apu del subsistema (si está definida en parametros_entrada)
+          2. Búsqueda genérica por _CLAVES_UNIDAD_REFERENCIA
+          3. Fallback: area_total_m2 del proyecto
+        Mínimo devuelto: 1.0
         """
         params = self.ps.parametros_entrada or {}
+
+        # 1. Variable explícita definida en el subsistema
+        sub = self.ps.subsistema
+        if sub and getattr(sub, "variable_referencia_apu", ""):
+            val = params.get(sub.variable_referencia_apu)
+            if val:
+                try:
+                    total = float(val)
+                    if total > 0:
+                        logger.debug(
+                            "[APUService] _get_total_unidades: subsistema var='%s' valor=%.4f (PS %s)",
+                            sub.variable_referencia_apu, total, self.ps.pk,
+                        )
+                        return total
+                except (ValueError, TypeError):
+                    pass
+
+        # 2. Búsqueda estándar
         for clave in _CLAVES_UNIDAD_REFERENCIA:
             val = params.get(clave)
             if val:
@@ -154,6 +175,8 @@ class APUService:
                         return total
                 except (ValueError, TypeError):
                     pass
+
+        # 3. Fallback área
         fallback = float(self.ps.proyecto.area_total_m2 or 1) or 1.0
         logger.debug(
             "[APUService] _get_total_unidades: fallback area_m2=%.4f (PS %s)",
@@ -196,7 +219,9 @@ class APUService:
             nombre      = dl.producto.nombre
             precio      = float(dl.precio_snapshot or 0)
             cantidad    = float(dl.cantidad_final)
-            rendimiento = (tp / cantidad) if cantidad > 0 else 1.0
+            # rendimiento = cuántas unidades de material por 1 unidad del sistema
+            # Ej: 25947 fijaciones / 2883 soportes = 9 fijaciones/soporte
+            rendimiento = (cantidad / tp) if tp > 0 else 1.0
 
             linea, _ = APULinea.objects.update_or_create(
                 apu=self.apu,

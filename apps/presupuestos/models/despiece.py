@@ -219,7 +219,7 @@ class DespieceLinea(models.Model):
     # ── Operaciones ───────────────────────────────────────────────────────────
 
     def capturar_precio(self):
-        """Toma snapshot del mejor precio activo del producto (solo si está resuelto)."""
+        """Toma snapshot del mejor precio activo del producto dividido por unidades_por_presentacion."""
         if not self.producto_id:
             return
         pp = (
@@ -228,8 +228,16 @@ class DespieceLinea(models.Model):
             .order_by("precio_unitario")
             .first()
         )
+        precio_base = None
         if pp:
-            self.precio_snapshot = pp.precio_unitario
+            precio_base = pp.precio_unitario
+        elif self.producto.precio_actual:
+            precio_base = self.producto.precio_actual
+
+        if precio_base is not None:
+            from decimal import Decimal
+            divisor = self.producto.unidades_por_presentacion or 1
+            self.precio_snapshot = Decimal(str(precio_base)) / Decimal(str(divisor))
             self.save(update_fields=["precio_snapshot", "updated_at"])
 
     def resolver_producto(self, producto_seleccionado):

@@ -40,7 +40,7 @@ class ProductoForm(forms.ModelForm):
         model = Producto
         fields = [
             "codigo", "nombre", "categoria", "unidad",
-            "proveedor", "precio_actual", "moneda",
+            "proveedor", "precio_actual", "moneda", "unidades_por_presentacion",
             "origen", "marca", "linea", "rendimiento",
             "ficha_tecnica", "activo",
         ]
@@ -54,6 +54,10 @@ class ProductoForm(forms.ModelForm):
             "precio_actual": forms.NumberInput(attrs={"class": "form-control", "step": "0.01",
                                                       "placeholder": "Ej: 8500"}),
             "moneda": forms.Select(attrs={"class": "form-select"}),
+            "unidades_por_presentacion": forms.NumberInput(attrs={
+                "class": "form-control", "min": "1",
+                "placeholder": "Ej: 1000 si el precio es por bolsa de 1000 und",
+            }),
             "origen": forms.Select(attrs={"class": "form-select"}),
             "marca": forms.TextInput(attrs={"class": "form-control"}),
             "linea": forms.TextInput(attrs={"class": "form-control"}),

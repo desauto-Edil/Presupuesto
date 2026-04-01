@@ -9,7 +9,7 @@
 
 {% block topbar_actions %}
   {% if proyecto_actual %}
-    <a href="{% url 'presupuestos:powergrip_wizard' proyecto_actual.pk %}"
+    <a href="{% url 'presupuestos:despiece_proyecto' proyecto_actual.pk %}"
        class="btn btn-primary btn-sm d-inline-flex align-items-center">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-stack" viewBox="0 0 16 16">
             <path d="m14.12 10.163 1.715.858c.22.11.22.424 0 .534L8.267 15.34a.6.6 0 0 1-.534 0L.165 11.555a.299.299 0 0 1 0-.534l1.716-.858 5.317 2.659c.505.252 1.1.252 1.604 0l5.317-2.66zM7.733.063a.6.6 0 0 1 .534 0l7.568 3.784a.3.3 0 0 1 0 .535L8.267 8.165a.6.6 0 0 1-.534 0L.165 4.382a.299.299 0 0 1 0-.535z"/>
@@ -17,12 +17,41 @@
         </svg>
         Despiece
     </a>
-    <a href="{% url 'comercial:proyecto_detail' proyecto_actual.pk %}" class="btn btn-ghost btn-sm">◫ Proyecto</a>
+    <div class="d-flex flex-wrap gap-1">
+        <a href="{% url 'comercial:proyecto_detail' proyecto_actual.pk %}" 
+            class="btn btn-ghost btn-sm d-inline-flex align-items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-folder2-open me-2" viewBox="0 0 16 16">
+                <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h2.764c.958 0 1.76.56 2.311 1.184C7.985 3.648 8.48 4 9 4h4.5A1.5 1.5 0 0 1 15 5.5v.64c.57.265.94.876.856 1.546l-.64 5.124A2.5 2.5 0 0 1 12.733 15H3.266a2.5 2.5 0 0 1-2.481-2.19l-.64-5.124A1.5 1.5 0 0 1 1 6.14zM2 6h12v-.5a.5.5 0 0 0-.5-.5H9c-.964 0-1.71-.629-2.174-1.154C6.374 3.334 5.82 3 5.264 3H2.5a.5.5 0 0 0-.5.5zm-.367 1a.5.5 0 0 0-.496.562l.64 5.124A1.5 1.5 0 0 0 3.266 14h9.468a1.5 1.5 0 0 0 1.489-1.314l.64-5.124A.5.5 0 0 0 14.367 7z"/>
+            </svg>
+    Proyecto
+  </a>
   {% endif %}
-  <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}" class="btn btn-ghost btn-sm">+ Versión</a>
-  <a href="{% url 'comercial:solicitud_update' solicitud.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
-  <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger);"
-          data-bs-toggle="modal" data-bs-target="#modalDeleteSolicitud">Eliminar</button>
+  <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}" 
+     class="btn btn-ghost btn-sm d-inline-flex align-items-center">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus" viewBox="0 0 16 16">
+      <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+    </svg>
+    Versión
+  </a>
+
+  <a href="{% url 'comercial:solicitud_update' solicitud.pk %}" 
+     class="btn btn-ghost btn-sm d-inline-flex align-items-center">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil-fill me-2" viewBox="0 0 16 16">
+      <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/>
+    </svg>
+Editar
+  </a>
+  <button type="button" 
+          class="btn btn-ghost btn-sm d-inline-flex align-items-center" 
+          style="color:var(--danger);"
+          data-bs-toggle="modal" 
+          data-bs-target="#modalDeleteSolicitud">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash me-2" viewBox="0 0 16 16">
+      <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+      <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+    </svg>
+Eliminar
+  </button>
 {% endblock %}
 
 {% block extra_head %}
@@ -126,7 +155,12 @@
         </div>
     </div>
 
-    <div class="project-status-chip">🔒 {{ solicitud.consecutivo }}</div>
+    <div class="project-status-chip" style="display: inline-flex; align-items: center; gap: 4px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-lock-fill" viewBox="0 0 16 16">
+            <path fill-rule="evenodd" d="M8 0a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 2 13.5v-5a2.5 2.5 0 0 1 2-2.45V4a4 4 0 0 1 4-4m0 1a3 3 0 0 0-3 3v2h6V4a3 3 0 0 0-3-3"/>
+    </svg>
+        {{ solicitud.consecutivo }}
+    </div>
 </div>
 
 
@@ -201,7 +235,13 @@
                 {% csrf_token %}
                 {{ archivo_form.archivo }}
                 {{ archivo_form.nombre }}
-                <button type="submit" class="btn btn-ghost btn-sm">↑ Subir</button>
+                <button type="submit" class="btn btn-ghost btn-sm d-inline-flex align-items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-box-arrow-in-down me-2" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M3.5 6a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 1 0-1h2A1.5 1.5 0 0 1 14 6.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5v-8A1.5 1.5 0 0 1 3.5 5h2a.5.5 0 0 1 0 1z"/>
+                        <path fill-rule="evenodd" d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+                    </svg>
+                    Subir
+                </button>
             </form>
         </div>
 
@@ -258,7 +298,12 @@
             <div class="panel-header accent-top-theme"
                  style="border-radius:var(--radius) var(--radius) 0 0;">
                 <span class="panel-title">Datos del sistema</span>
-                <span style="font-size:10px;color:rgba(14,17,23,0.35);">🔒 Solo lectura</span>
+                <span style="font-size:10px;color:rgba(14,17,23,0.35);display:inline-flex;align-items:center;gap:3px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="currentColor" class="bi bi-lock-fill" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M8 0a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 2 13.5v-5a2.5 2.5 0 0 1 2-2.45V4a4 4 0 0 1 4-4m0 1a3 3 0 0 0-3 3v2h6V4a3 3 0 0 0-3-3"/>
+                    </svg>
+                    Solo lectura
+                </span>
             </div>
             <div class="summary-line">
                 <span class="s-label">Consecutivo</span>
@@ -337,9 +382,16 @@
 
                         <!-- botones de acción -->
                         <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;">
-                            <a href="{% url 'comercial:proyecto_detail' proy.pk %}"
-                               class="btn btn-ghost btn-xs">◫ Ver</a>
-                            <a href="{% url 'presupuestos:powergrip_wizard' proy.pk %}" 
+                            <a href="{% url 'comercial:proyecto_detail' proy.pk %}" 
+                                class="btn btn-ghost btn-xs d-inline-flex align-items-center"
+                                title="Ver detalles">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-eye-fill me-1" viewBox="0 0 16 16">
+                                    <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0"/>
+                                    <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8m8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7"/>
+                                </svg>
+                                Ver
+                            </a>
+                            <a href="{% url 'presupuestos:despiece_proyecto' proy.pk %}" 
                                 class="btn btn-primary btn-xs d-inline-flex align-items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-stack" viewBox="0 0 16 16">
                                     <path d="m14.12 10.163 1.715.858c.22.11.22.424 0 .534L8.267 15.34a.6.6 0 0 1-.534 0L.165 11.555a.299.299 0 0 1 0-.534l1.716-.858 5.317 2.659c.505.252 1.1.252 1.604 0l5.317-2.66zM7.733.063a.6.6 0 0 1 .534 0l7.568 3.784a.3.3 0 0 1 0 .535L8.267 8.165a.6.6 0 0 1-.534 0L.165 4.382a.299.299 0 0 1 0-.535z"/>
@@ -353,9 +405,15 @@
                 {% endfor %}
             </div>
             {% else %}
-            <div class="empty-state" style="padding:20px 16px;">
-                <div class="empty-state-icon" style="font-size:20px;">◫</div>
-                <div class="empty-state-text" style="font-size:12px;">Sin versiones de proyecto.</div>
+            <div class="empty-state" style="padding:20px 16px; text-align:center;">
+                <div class="empty-state-icon" style="margin-bottom: 8px; color: rgba(14,17,23,0.2);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-folder" viewBox="0 0 16 16">
+                        <path d="M.54 3.87.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3h3.982a2 2 0 0 1 1.992 2.181l-.637 7A2 2 0 0 1 13.174 14H2.826a2 2 0 0 1-1.991-1.819l-.637-7a2 2 0 0 1 .342-1.31zM2.19 4a1 1 0 0 0-.996 1.09l.637 7a1 1 0 0 0 .995.91h10.348a1 1 0 0 0 .995-.91l.637-7A1 1 0 0 0 13.81 4zm4.69-1.707A1 1 0 0 0 6.172 2H2.5a1 1 0 0 0-1 .981l.006.139q.323-.119.684-.12h5.396z"/>
+                    </svg>
+                </div>
+                <div class="empty-state-text" style="font-size:12px; color:rgba(14,17,23,0.5);">
+                Sin versiones de proyecto.
+                </div>
             </div>
             {% endif %}
 

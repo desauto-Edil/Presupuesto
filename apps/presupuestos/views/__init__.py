@@ -73,7 +73,9 @@ class ProyectoSistemaUpdateView(UpdateView):
 class ProyectoSistemaDeleteView(DeleteView):
     model = ProyectoSistema
     template_name = "presupuestos/confirm_delete.html"
-    success_url = reverse_lazy("presupuestos:proyectosistema_list")
+
+    def get_success_url(self):
+        return reverse("presupuestos:despiece_proyecto", args=[self.object.proyecto_id])
 
 
 # ── Despiece — Vista principal ─────────────────────────────────────────────────
@@ -238,6 +240,61 @@ class DespieceLineaAjusteView(UpdateView):
         return reverse("presupuestos:despiece_proyecto", args=[self.object.proyecto_id])
 
 
+class AsignarProductoLineaAPIView(View):
+    """
+    POST /presupuestos/despiece/api/asignar-producto/<linea_pk>/
+    Body JSON: {"producto_id": int}
+    Asigna un producto concreto a una línea de despiece y captura el precio.
+    """
+    def post(self, request, pk):
+        linea = get_object_or_404(DespieceLinea, pk=pk)
+        try:
+            data = json.loads(request.body)
+            producto_id = int(data.get("producto_id", 0))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"error": "Datos inválidos."}, status=400)
+
+        if not producto_id:
+            return JsonResponse({"error": "Debe indicar un producto."}, status=400)
+
+        from apps.catalogos.models import Producto
+        producto = get_object_or_404(Producto, pk=producto_id, activo=True)
+
+        linea.producto = producto
+        linea.categoria_producto = producto.categoria
+        linea.save(update_fields=["producto", "categoria_producto"])
+        linea.capturar_precio()
+        linea.refresh_from_db()
+
+        moneda = producto.moneda or "COP"
+        return JsonResponse({
+            "ok": True,
+            "producto_nombre": producto.nombre,
+            "producto_codigo": producto.codigo,
+            "moneda": moneda,
+            "precio_snapshot": float(linea.precio_snapshot or 0),
+        })
+
+
+class ProductosPorCategoriaLineaAPIView(View):
+    """
+    GET /presupuestos/despiece/api/productos-linea/<linea_pk>/
+    Devuelve productos activos de la misma categoría que la línea.
+    """
+    def get(self, request, pk):
+        linea = get_object_or_404(DespieceLinea, pk=pk)
+        cat = linea.categoria_producto or (linea.producto.categoria if linea.producto else None)
+        if not cat:
+            return JsonResponse({"productos": [], "categoria": ""})
+        from apps.catalogos.models import Producto
+        productos = list(
+            Producto.objects.filter(categoria=cat, activo=True)
+            .order_by("nombre")
+            .values("pk", "nombre", "codigo", "precio_actual", "moneda", "unidades_por_presentacion")
+        )
+        return JsonResponse({"productos": productos, "categoria": cat.nombre})
+
+
 # ── Configuración APU ─────────────────────────────────────────────────────────
 
 class ConfiguracionAPUListView(ListView):
@@ -356,205 +413,21 @@ class APUGenerarView(View):
             return redirect(reverse("presupuestos:despiece_proyecto", args=[ps.proyecto_id]))
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# WIZARD POWERGRIP — Flujo guiado completo
-# ══════════════════════════════════════════════════════════════════════════════
+# PowerGripWizardView y CalcularPowerGripView eliminados (2026-04).
+# El despiece ahora se maneja directamente en DespieceProyectoView (despiece_maestro.html)
+# con soporte completo de sistemas/subsistemas definidos en DB.
 
+# Stub de compatibilidad para imports históricos que puedan existir
 class PowerGripWizardView(View):
-    """
-    Vista principal del wizard PowerGrip.
-
-    GET  /presupuestos/powergrip/<proyecto_pk>/
-    Muestra en una sola pantalla:
-      1. Selección de subsistema
-      2. Variables de entrada + selección de productos por categoría
-      3. Resultado del despiece (si ya fue calculado)
-      4. APU por secciones (Materiales / Mano de Obra / Herramientas / Admin / Consolidado)
-    """
-    template_name = "presupuestos/powergrip_wizard.html"
-
+    """Redirige al despiece general del proyecto."""
     def get(self, request, pk):
-        proyecto = get_object_or_404(Proyecto, pk=pk)
-
-        try:
-            sistema_pg = Sistema.objects.get(codigo="POWERGRIP")
-        except Sistema.DoesNotExist:
-            messages.error(request, "Sistema POWERGRIP no encontrado. Créelo en Ingeniería → Sistemas.")
-            return redirect(reverse("comercial:proyecto_list"))
-
-        subsistemas = Subsistema.objects.filter(sistema=sistema_pg, activo=True).order_by("nombre")
-
-        # ProyectoSistemas PowerGrip existentes para este proyecto
-        ps_list = (
-            ProyectoSistema.objects
-            .filter(proyecto=proyecto, sistema=sistema_pg)
-            .prefetch_related(
-                Prefetch("despiece_lineas", queryset=DespieceLinea.objects.select_related(
-                    "producto", "producto__unidad", "categoria_producto"
-                ).order_by("id")),
-            )
-            .select_related("subsistema")
-        )
-
-        from apps.catalogos.models import CategoriaProducto, Producto
-        from apps.ingenieria.models import VariableSubsistema, ComponenteSubsistema
-        from apps.ingenieria.system_defs.registry import get_subsistema_def
-
-        VARS_PROYECTO = {"area_m2", "perimetro_ml"}
-
-        # Variables y categorías de cada subsistema (para el JS dinámico)
-        # Prioridad: DB > registry Python
-        subsistemas_def = {}
-        categorias_slugs = set()
-
-        for sub in subsistemas:
-            vars_db = list(
-                VariableSubsistema.objects.filter(subsistema=sub).order_by("orden")
-            )
-            comps_db = list(
-                ComponenteSubsistema.objects.filter(subsistema=sub)
-                .select_related("categoria").order_by("orden")
-            )
-
-            if vars_db or comps_db:
-                # Definición desde DB
-                cats = [
-                    c.categoria.nombre for c in comps_db if c.categoria
-                ]
-                subsistemas_def[sub.pk] = {
-                    "variables": [
-                        {
-                            "variable": v.variable,
-                            "label": v.label,
-                            "unidad": v.unidad,
-                            "default": float(v.valor_default),
-                            "opciones": [],
-                            "descripcion": "",
-                        }
-                        for v in vars_db
-                        if v.variable not in VARS_PROYECTO
-                    ],
-                    "categorias": cats,
-                }
-                categorias_slugs.update(cats)
-            else:
-                # Fallback registry Python
-                sub_def = get_subsistema_def(sistema_pg.codigo, sub.codigo)
-                if sub_def:
-                    cats = [c.categoria_slug for c in sub_def.componentes]
-                    subsistemas_def[sub.pk] = {
-                        "variables": [
-                            {
-                                "variable": v.variable,
-                                "label": v.label,
-                                "unidad": v.unidad,
-                                "default": v.default,
-                                "opciones": v.opciones,
-                                "descripcion": v.descripcion,
-                            }
-                            for v in sub_def.variables
-                            if v.variable not in VARS_PROYECTO
-                        ],
-                        "categorias": cats,
-                    }
-                    categorias_slugs.update(cats)
-
-        # Productos disponibles por categoría (dinámico según las categorías registradas)
-        if not categorias_slugs:
-            # fallback si ningún subsistema tiene definición
-            categorias_slugs = {"PowerGrip", "Fijaciones", "Accesorios", "Estopa", "Sellador"}
-
-        productos_por_categoria = {}
-        for slug in categorias_slugs:
-            prods = list(
-                Producto.objects.filter(
-                    categoria__nombre__iexact=slug, activo=True
-                ).values("pk", "nombre", "codigo")
-            )
-            productos_por_categoria[slug] = prods
-
-        ctx = {
-            "proyecto":                proyecto,
-            "sistema_pg":              sistema_pg,
-            "subsistemas":             subsistemas,
-            "ps_list":                 ps_list,
-            "productos_por_categoria": json.dumps(productos_por_categoria),
-            "subsistemas_def":         json.dumps(subsistemas_def),
-        }
-        return render(request, self.template_name, ctx)
+        return redirect(reverse("presupuestos:despiece_proyecto", args=[pk]))
 
 
 class CalcularPowerGripView(View):
-    """
-    POST /presupuestos/powergrip/calcular/<proyecto_pk>/
-
-    Payload (form POST):
-      subsistema_id
-      parametros[total_powergrip]
-      parametros[tornilleria_u7]   (o tornilleria_plus)
-      parametros[desperdicio]
-      productos[PowerGrip]         → producto_pk
-      productos[Fijaciones]        → producto_pk
-      productos[Accesorios]        → producto_pk
-      productos[Estopa]            → producto_pk
-      productos[Sellador]          → producto_pk
-
-    Valida que todos los productos estén seleccionados ANTES de calcular.
-    Llama a ProyectoService.calcular_powergrip() que orquesta todo.
-    """
+    """Redirige al despiece general del proyecto."""
     def post(self, request, pk):
-        proyecto = get_object_or_404(Proyecto, pk=pk)
-        post = request.POST
-
-        subsistema_id = post.get("subsistema_id")
-        if not subsistema_id:
-            messages.error(request, "Debe seleccionar un subsistema.")
-            return redirect(reverse("presupuestos:powergrip_wizard", args=[pk]))
-
-        # Parsear parametros[variable] → float
-        parametros = {}
-        for key, val in post.items():
-            if key.startswith("parametros[") and key.endswith("]") and val not in ("", None):
-                var_name = key[len("parametros["):-1]
-                try:
-                    parametros[var_name] = float(val)
-                except (ValueError, TypeError):
-                    parametros[var_name] = val
-
-        # Parsear productos[categoria] → int(pk)
-        productos_map = {}
-        for key, val in post.items():
-            if key.startswith("productos[") and key.endswith("]") and val:
-                cat_slug = key[len("productos["):-1]
-                try:
-                    productos_map[cat_slug] = int(val)
-                except (ValueError, TypeError):
-                    pass
-
-        # Validación temprana: todos los productos deben estar seleccionados
-        CATEGORIAS_PG = ["PowerGrip", "Fijaciones", "Accesorios", "Estopa", "Sellador"]
-        faltantes = [c for c in CATEGORIAS_PG if c not in productos_map]
-        if faltantes:
-            messages.error(
-                request,
-                f"Seleccione un producto para cada categoría antes de calcular. "
-                f"Faltan: {', '.join(faltantes)}."
-            )
-            return redirect(reverse("presupuestos:powergrip_wizard", args=[pk]))
-
-        try:
-            from apps.presupuestos.services.proyecto_service import ProyectoService
-            ps = ProyectoService.calcular_powergrip(
-                proyecto_id=proyecto.pk,
-                subsistema_id=int(subsistema_id),
-                parametros=parametros,
-                productos_map=productos_map,
-            )
-            messages.success(request, f"Despiece PowerGrip calculado: {ps.despiece_lineas.count()} líneas.")
-        except Exception as exc:
-            messages.error(request, f"Error al calcular: {exc}")
-
-        return redirect(reverse("presupuestos:powergrip_wizard", args=[pk]))
+        return redirect(reverse("presupuestos:despiece_proyecto", args=[pk]))
 
 
 # ── API: productos por categoría (para el wizard) ──────────────────────────
@@ -1086,18 +959,91 @@ class APUPDFInternoView(View):
 class APUPDFClienteView(View):
     """
     GET /presupuestos/apu/<pk>/pdf-cliente/
-    Renderiza una página HTML imprimible para el cliente.
-    Solo muestra valores de venta. Incluye fichas técnicas de productos si las tienen.
+    Renderiza cotización comercial simplificada para el cliente.
+    Muestra filas consolidadas por sección (Suministro / Instalación / etc.)
+    con cantidad, precio unitario de venta y total. Sin desglose interno de costos.
     """
     def get(self, request, pk):
+        from decimal import Decimal
         apu = get_object_or_404(APUProyecto, pk=pk)
-        lineas = apu.lineas.order_by("tipo", "descripcion").select_related(
-            "despiece_linea__producto", "item_catalogo",
-        )
-        # Recopilar productos con ficha técnica desde líneas MATERIALES
+        ps = apu.proyecto_sistema
+        lineas_qs = list(apu.lineas.order_by("tipo", "descripcion").select_related(
+            "despiece_linea__producto__unidad", "item_catalogo",
+        ))
+
+        # ── Obtener cantidad principal del proyecto ──────────────────────────
+        qty_principal = Decimal("1")
+        unidad_principal = "und"
+        moneda_principal = "COP"
+        desc_sistema = apu.nombre or "Sistema"
+
+        if ps:
+            params = ps.parametros_entrada or {}
+            for key in ("total_powergrip", "cantidad", "area_m2"):
+                if key in params:
+                    try:
+                        qty_principal = Decimal(str(params[key]))
+                    except Exception:
+                        pass
+                    break
+            if qty_principal == Decimal("1") and ps.proyecto:
+                if ps.proyecto.area_total_m2:
+                    qty_principal = Decimal(str(ps.proyecto.area_total_m2))
+                    unidad_principal = "m²"
+            # Detectar moneda y unidad principal desde primera línea de materiales
+            for linea in lineas_qs:
+                if linea.tipo == "MATERIALES" and linea.despiece_linea and linea.despiece_linea.producto:
+                    prod = linea.despiece_linea.producto
+                    moneda_principal = prod.moneda or "COP"
+                    if prod.unidad:
+                        unidad_principal = str(prod.unidad)
+                    break
+            desc_sistema = (
+                f"{ps.sistema.nombre}"
+                + (f" / {ps.subsistema.nombre}" if ps.subsistema else "")
+            )
+
+        # ── Construir secciones consolidadas ─────────────────────────────────
+        SECCIONES_CONFIG = [
+            ("MATERIALES",          "Suministro",                 moneda_principal),
+            ("MANO_DE_OBRA",        "Mano de Obra / Instalación", "COP"),
+            ("HERRAMIENTAS_EQUIPOS","Herramientas y Equipos",      "COP"),
+            ("TRANSPORTE",          "Transporte y Logística",      "COP"),
+            ("ADMINISTRACION",      "Administración",              "COP"),
+        ]
+        secciones = []
+        for tipo_key, tipo_label, moneda_sec in SECCIONES_CONFIG:
+            lineas_tipo = [l for l in lineas_qs if l.tipo == tipo_key]
+            if not lineas_tipo:
+                continue
+            valor_subtotal = sum(Decimal(str(l.valor_total or 0)) for l in lineas_tipo)
+            if valor_subtotal <= 0:
+                continue
+            # Calcular precio unitario de venta como subtotal / qty_principal
+            qty = qty_principal if qty_principal > 0 else Decimal("1")
+            valor_unitario = (valor_subtotal / qty).quantize(Decimal("0.1"))
+            iva_factor = Decimal(str(apu.iva_pct or 0)) / Decimal("100")
+            iva_monto = (valor_subtotal * iva_factor).quantize(Decimal("0.1")) if apu.aplica_iva else Decimal("0")
+            total_con_iva = valor_subtotal + iva_monto
+            secciones.append({
+                "tipo": tipo_key,
+                "label": tipo_label,
+                "descripcion": f"{tipo_label} — {desc_sistema}",
+                "unidad": unidad_principal,
+                "cantidad": qty,
+                "valor_unitario": valor_unitario,
+                "subtotal": valor_subtotal,
+                "iva_monto": iva_monto,
+                "total_con_iva": total_con_iva,
+                "moneda": moneda_sec,
+                "aplica_iva": apu.aplica_iva,
+                "iva_pct": apu.iva_pct,
+            })
+
+        # ── Fichas técnicas ───────────────────────────────────────────────────
         productos_con_ficha = []
         vistos = set()
-        for linea in lineas:
+        for linea in lineas_qs:
             if linea.despiece_linea and linea.despiece_linea.producto:
                 prod = linea.despiece_linea.producto
                 if prod.pk not in vistos and prod.ficha_tecnica:
@@ -1106,7 +1052,8 @@ class APUPDFClienteView(View):
 
         html = render_to_string("presupuestos/apu_pdf_cliente.html", {
             "apu": apu,
-            "lineas": lineas,
+            "ps": ps,
+            "secciones": secciones,
             "productos_con_ficha": productos_con_ficha,
             "fecha_generacion": date.today().strftime("%d/%m/%Y"),
             "request": request,

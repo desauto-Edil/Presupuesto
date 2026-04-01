@@ -60,6 +60,23 @@ class Subsistema(models.Model):
     def __str__(self):
         return f"{self.sistema.nombre} >> {self.nombre}"
 
+    # ── APU: referencia de cantidad ───────────────────────────────────────────
+    variable_referencia_apu = models.CharField(
+        max_length=80, blank=True, default="",
+        verbose_name="Variable de referencia APU",
+        help_text=(
+            "Nombre de la variable de entrada que representa la cantidad principal "
+            "del sistema para el APU. Ej: 'total_powergrip'. "
+            "Se usa como divisor para calcular el rendimiento por unidad. "
+            "Si se deja vacío, se usa el área del proyecto."
+        ),
+    )
+    unidad_apu = models.CharField(
+        max_length=40, blank=True, default="und",
+        verbose_name="Unidad del APU",
+        help_text="Unidad de la referencia. Ej: 'soporte', 'm²', 'ml'.",
+    )
+
     def tiene_componentes_db(self) -> bool:
         return self.componentes_db.exists()
 

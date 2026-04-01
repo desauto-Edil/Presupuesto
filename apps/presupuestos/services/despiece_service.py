@@ -111,6 +111,9 @@ class DespieceService:
                     "es_dependencia_automatica": False,
                 },
             )
+
+            # No auto-asignar producto: el usuario elige manualmente desde el despiece.
+            # Solo capturar precio si ya tiene producto asignado previamente.
             linea.capturar_precio()
 
             resultados.append({

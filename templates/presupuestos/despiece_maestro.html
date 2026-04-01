@@ -3,60 +3,231 @@
 {% block title %}Despiece — {{ proyecto.consecutivo }}{% endblock %}
 {% block nav_proyectos %}active{% endblock %}
 {% block page_title %}Despiece{% endblock %}
-{% block breadcrumb %}Proyectos → {{ proyecto.consecutivo }} → Despiece{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'comercial:solicitud_list' %}" style="color:inherit;text-decoration:none;">Solicitudes</a>
+  {% if proyecto.solicitud %}
+  → <a href="{% url 'comercial:solicitud_detail' proyecto.solicitud.pk %}" style="color:inherit;text-decoration:none;">{{ proyecto.solicitud.consecutivo }}</a>
+  {% endif %}
+  → <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" style="color:inherit;text-decoration:none;">{{ proyecto.consecutivo }}</a>
+  → Despiece
+{% endblock %}
 
 {% block topbar_actions %}
   <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-ghost btn-sm">← Proyecto</a>
+  <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAgregarSistema">
+    + Agregar sistema
+  </button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── Ficha de proyecto ── */
+  .proy-card {
+    display:flex; align-items:center; gap:0;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius,10px); overflow:hidden; margin-bottom:18px;
+  }
+  .proy-card__accent {
+    width:5px; background:var(--theme-accent); align-self:stretch; flex-shrink:0;
+  }
+  .proy-card__body { display:flex; align-items:center; gap:0; flex:1; flex-wrap:wrap; }
+  .proy-card__item {
+    padding:13px 20px; border-right:1px solid var(--border); min-width:120px;
+  }
+  .proy-card__item:last-child { border-right:none; }
+  .proy-card__label { font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; font-weight:600; margin-bottom:2px; }
+  .proy-card__value { font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap; }
+  .proy-card__value.accent { font-family:'Syne',sans-serif; font-size:15px; font-weight:800; color:var(--theme-accent); }
+
+  /* ── Tabs de sistema ── */
+  .sys-tabs { display:flex; gap:4px; margin-bottom:-1px; flex-wrap:wrap; }
+  .sys-tab {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:8px 16px; font-size:12px; font-weight:600;
+    border:1px solid var(--border); border-bottom:none;
+    border-radius:8px 8px 0 0; cursor:pointer;
+    background:var(--surface-alt,#f5f7fa); color:var(--ink-soft);
+    transition:all .15s; user-select:none;
+  }
+  .sys-tab.active {
+    background:var(--surface); color:var(--ink);
+    border-color:var(--border); border-bottom-color:var(--surface);
+    box-shadow:0 -2px 0 0 var(--theme-accent);
+  }
+  .sys-tab .dot {
+    width:7px; height:7px; border-radius:50%; flex-shrink:0;
+    background:var(--ink-soft); transition:background .15s;
+  }
+  .sys-tab.active .dot { background:var(--theme-accent); }
+  .sys-tab .dot.done { background:#22c55e; }
+  .sys-tab .dot.pending { background:#f59e0b; }
+
+  /* ── Panel del sistema activo ── */
+  .sys-banner {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:11px 20px; border-bottom:1px solid var(--border);
+    background:linear-gradient(90deg,var(--theme-accent-pale,#f0f4ff) 0%,var(--surface) 100%);
+  }
+  .sys-banner__name {
+    font-family:'Syne',sans-serif; font-size:15px; font-weight:800; color:var(--theme-accent);
+  }
+  .sys-banner__sub { font-size:12px; color:var(--ink-soft); margin-left:8px; }
+  .sys-banner__chip {
+    font-size:10.5px; background:var(--surface); border:1px solid var(--border);
+    border-radius:20px; padding:2px 10px; color:var(--ink-soft); margin-left:10px;
+  }
+
+  /* ── Columnas internas ── */
+  .despiece-grid { display:grid; grid-template-columns:220px 1fr 200px; min-height:360px; }
+  .despiece-col-params  { border-right:1px solid var(--border); padding:16px 14px; }
+  .despiece-col-table   { padding:16px 18px; overflow-x:auto; }
+  .despiece-col-summary { border-left:1px solid var(--border); padding:16px 14px; }
+
+  /* ── Tabla de líneas ── */
+  .dl-table { width:100%; border-collapse:collapse; font-size:11.5px; }
+  .dl-table th { padding:7px 8px; text-align:right; font-size:10.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; border-bottom:2px solid var(--border); white-space:nowrap; }
+  .dl-table th:first-child { text-align:left; }
+  .dl-table td { padding:8px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .dl-table tbody tr:hover { background:var(--surface-alt,#f9fafb); }
+  .dl-table tfoot td { padding:7px 8px; background:var(--surface-alt,#f5f7fa); font-size:11px; }
+
+  /* ── Estados de fila ── */
+  .row-pendiente td { background:#fffbeb; }
+  .row-error     td { background:#fef2f2; }
+
+  /* ── Chip producto ── */
+  .prod-chip { display:inline-flex; align-items:center; gap:5px; }
+  .prod-chip__name { font-weight:500; }
+  .prod-chip__code { font-size:10px; color:var(--ink-soft); }
+  .prod-chip__moneda { font-size:9px; font-weight:700; padding:1px 5px; border-radius:3px; background:#e0f0ff; color:#1470e6; }
+
+  /* ── Botón seleccionar producto ── */
+  .btn-sel-prod {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:10.5px; padding:3px 9px; border-radius:5px; cursor:pointer;
+    border:1px dashed var(--theme-accent); color:var(--theme-accent);
+    background:var(--theme-accent-pale,#f0f4ff);
+    transition:all .15s;
+  }
+  .btn-sel-prod:hover { background:var(--theme-accent); color:#fff; border-style:solid; }
+
+  /* ── Resumen APU ── */
+  .apu-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:11px; }
+  .apu-row .lbl { color:var(--ink-soft); }
+  .apu-row .val { font-variant-numeric:tabular-nums; }
+  .apu-total { border-top:1px solid var(--border); margin-top:6px; padding-top:8px; font-weight:700; font-size:12px; }
+  .apu-venta  { color:var(--theme-accent); font-weight:800; }
+</style>
 {% endblock %}
 
 {% block content %}
 
-{# ── Cabecera del proyecto ──────────────────────────────────────────────────── #}
-<div style="background:var(--ink);color:#fff;border-radius:10px;padding:18px 24px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;">
-  <div>
-    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:700;letter-spacing:-0.02em;">
-      {{ proyecto.consecutivo }} — {{ proyecto.nombre }}
+{# ── Ficha del proyecto ────────────────────────────────────────────────────── #}
+<div class="proy-card fade-up">
+  <div class="proy-card__accent"></div>
+  <div class="proy-card__body">
+    <div class="proy-card__item">
+      <div class="proy-card__label">Proyecto</div>
+      <div class="proy-card__value accent">{{ proyecto.consecutivo }}</div>
     </div>
-    <div style="font-size:11.5px;opacity:0.55;margin-top:4px;">
-      {{ proyecto.cliente.razon_social }} &nbsp;·&nbsp;
-      {{ proyecto.area_total_m2|default:"—" }} m² &nbsp;·&nbsp;
-      {{ proyecto.perimetro_ml|default:"—" }} ml
+    <div class="proy-card__item" style="min-width:200px;">
+      <div class="proy-card__label">Nombre</div>
+      <div class="proy-card__value">{{ proyecto.nombre }}</div>
+    </div>
+    <div class="proy-card__item">
+      <div class="proy-card__label">Cliente</div>
+      <div class="proy-card__value">{{ proyecto.cliente.razon_social }}</div>
+    </div>
+    {% if proyecto.area_total_m2 %}
+    <div class="proy-card__item">
+      <div class="proy-card__label">Área</div>
+      <div class="proy-card__value">{{ proyecto.area_total_m2 }} m²</div>
+    </div>
+    {% endif %}
+    {% if proyecto.perimetro_ml %}
+    <div class="proy-card__item">
+      <div class="proy-card__label">Perímetro</div>
+      <div class="proy-card__value">{{ proyecto.perimetro_ml }} ml</div>
+    </div>
+    {% endif %}
+    {% if proyecto.dias_duracion %}
+    <div class="proy-card__item">
+      <div class="proy-card__label">Duración</div>
+      <div class="proy-card__value">{{ proyecto.dias_duracion }} días</div>
+    </div>
+    {% endif %}
+    <div class="proy-card__item" style="margin-left:auto;">
+      <span class="badge-status
+        {% if proyecto.estado == 'SOLICITUD' %}bs-pendiente
+        {% elif proyecto.estado == 'DESPIECE' or proyecto.estado == 'EN_REVISION_COMPRAS' %}bs-despiece
+        {% elif proyecto.estado == 'APU' or proyecto.estado == 'APU_GENERADO' %}bs-apu
+        {% elif proyecto.estado == 'CERRADO' %}bs-cerrado
+        {% else %}bs-inactivo{% endif %}">
+        {{ proyecto.get_estado_display }}
+      </span>
     </div>
   </div>
-  <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAgregarSistema">
-    + Agregar sistema
-  </button>
 </div>
 
-{# ── Tabs de sistemas ──────────────────────────────────────────────────────── #}
+{# ── Sistemas ────────────────────────────────────────────────────────────── #}
 {% if sistemas %}
-<ul class="nav nav-tabs mb-0" id="tabSistemas" role="tablist" style="border-bottom:none;gap:4px;">
-  {% for ps in sistemas %}
-  <li class="nav-item" role="presentation">
-    <button class="nav-link {% if forloop.first %}active{% endif %}"
-            id="tab-{{ ps.pk }}"
-            data-bs-toggle="tab"
-            data-bs-target="#panel-{{ ps.pk }}"
-            type="button" role="tab"
-            style="font-size:12px;font-weight:600;padding:7px 16px;border-radius:7px 7px 0 0;">
-      {{ ps.sistema.nombre }}{% if ps.subsistema %} / {{ ps.subsistema.nombre }}{% endif %}
-    </button>
-  </li>
-  {% endfor %}
-</ul>
 
-<div class="tab-content" id="tabSistemasContent"
+{# Tabs #}
+<div class="sys-tabs fade-up-1" id="tabSistemas" role="tablist">
+  {% for ps in sistemas %}
+  {% with cnt=ps.despiece_lineas.count %}
+  <button class="sys-tab {% if forloop.first %}active{% endif %}"
+          id="tab-{{ ps.pk }}"
+          data-bs-toggle="tab"
+          data-bs-target="#panel-{{ ps.pk }}"
+          type="button" role="tab">
+    <span class="dot {% if cnt > 0 %}done{% elif ps.parametros_entrada %}pending{% endif %}"></span>
+    {{ ps.sistema.nombre }}
+    {% if ps.subsistema %}
+      <span style="font-weight:400;opacity:.65;">/ {{ ps.subsistema.nombre }}</span>
+    {% endif %}
+    {% if cnt > 0 %}
+      <span style="font-size:10px;background:var(--theme-accent-pale,#e8efff);color:var(--theme-accent);border-radius:10px;padding:1px 7px;font-weight:700;">{{ cnt }}</span>
+    {% endif %}
+  </button>
+  {% endwith %}
+  {% endfor %}
+</div>
+
+<div class="tab-content fade-up-1"
      style="border:1px solid var(--border);border-radius:0 8px 8px 8px;background:var(--surface);">
+
   {% for ps in sistemas %}
   <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
        id="panel-{{ ps.pk }}" role="tabpanel">
 
-    {# ── 3 columnas: parámetros | tabla | resumen APU ── #}
-    <div style="display:grid;grid-template-columns:240px 1fr 220px;gap:0;min-height:420px;">
+    {# Banda nombre del sistema activo #}
+    <div class="sys-banner">
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span style="font-size:20px;">◱</span>
+        <span class="sys-banner__name">{{ ps.sistema.nombre }}</span>
+        {% if ps.subsistema %}
+          <span class="sys-banner__sub">/ {{ ps.subsistema.nombre }}</span>
+        {% endif %}
+        {% with cnt=ps.despiece_lineas.count %}
+        <span class="sys-banner__chip">{{ cnt }} línea{{ cnt|pluralize }}</span>
+        {% endwith %}
+      </div>
+      <button type="button" class="btn btn-sm"
+              style="background:rgba(220,53,69,0.08);color:#dc3545;border:1px solid rgba(220,53,69,0.25);border-radius:6px;padding:4px 12px;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px;"
+              data-bs-toggle="modal" data-bs-target="#deleteModal"
+              data-delete-url="{% url 'presupuestos:proyectosistema_delete' ps.pk %}"
+              data-delete-name="{{ ps.sistema.nombre }}{% if ps.subsistema %} / {{ ps.subsistema.nombre }}{% endif %}">
+        <i class="bi bi-trash3"></i> Eliminar sistema
+      </button>
+    </div>
 
-      {# Col 1 — Parámetros de entrada #}
-      <div style="border-right:1px solid var(--border);padding:18px 16px;">
-        <div class="section-label" style="margin-bottom:12px;">Parámetros</div>
+    {# 3 columnas #}
+    <div class="despiece-grid">
+
+      {# Col 1 — Parámetros #}
+      <div class="despiece-col-params">
+        <div class="section-label" style="font-size:10px;margin-bottom:10px;">Parámetros</div>
 
         <form method="post" action="{% url 'presupuestos:despiece_calcular' proyecto.pk %}"
               id="form-params-{{ ps.pk }}">
@@ -64,136 +235,143 @@
           <input type="hidden" name="sistema_id"    value="{{ ps.sistema_id }}">
           <input type="hidden" name="subsistema_id" value="{{ ps.subsistema_id|default:'' }}">
 
-          {# Variables fijas del proyecto (solo lectura) #}
-          <div class="form-group" style="margin-bottom:10px;">
-            <label style="font-size:10.5px;">Área total (m²)</label>
-            <input type="text" class="form-control form-control-sm" value="{{ proyecto.area_total_m2|default:'—' }}" disabled>
+          <div class="form-group" style="margin-bottom:7px;">
+            <label style="font-size:10px;color:var(--ink-soft);">Área total (m²)</label>
+            <input type="text" class="form-control form-control-sm"
+                   value="{{ proyecto.area_total_m2|default:'—' }}" disabled
+                   style="font-size:11.5px;background:var(--surface-alt,#f5f7fa);">
           </div>
-          <div class="form-group" style="margin-bottom:14px;">
-            <label style="font-size:10.5px;">Perímetro (ml)</label>
-            <input type="text" class="form-control form-control-sm" value="{{ proyecto.perimetro_ml|default:'—' }}" disabled>
+          <div class="form-group" style="margin-bottom:10px;">
+            <label style="font-size:10px;color:var(--ink-soft);">Perímetro (ml)</label>
+            <input type="text" class="form-control form-control-sm"
+                   value="{{ proyecto.perimetro_ml|default:'—' }}" disabled
+                   style="font-size:11.5px;background:var(--surface-alt,#f5f7fa);">
           </div>
 
-          {# Variables dinámicas del subsistema #}
           {% with vars=ps.get_variables_requeridas %}
           {% if vars %}
-          <div class="section-label" style="margin-bottom:8px;font-size:9.5px;">Variables del sistema</div>
+          <div class="section-label" style="font-size:9px;margin-bottom:6px;">Variables</div>
           {% for v in vars %}
-          <div class="form-group" style="margin-bottom:10px;">
-            <label style="font-size:10.5px;">{{ v.label }}</label>
+          <div class="form-group" style="margin-bottom:7px;">
+            <label style="font-size:10px;">{{ v.label }}</label>
             <input type="number" step="any" class="form-control form-control-sm"
                    name="parametros[{{ v.variable }}]"
                    value="{{ v.valor }}"
-                   placeholder="{{ v.variable }}">
+                   style="font-size:11.5px;">
           </div>
           {% endfor %}
           {% else %}
-          <p style="font-size:11px;color:var(--muted);margin-top:8px;">
-            Sin variables adicionales.
-          </p>
+          <p style="font-size:10.5px;color:var(--muted);margin-top:4px;">Sin variables adicionales.</p>
           {% endif %}
           {% endwith %}
 
-          <button type="submit" class="btn btn-primary btn-sm w-100" style="margin-top:12px;">
+          <button type="submit" class="btn btn-primary btn-sm w-100" style="margin-top:10px;font-size:11.5px;">
             ↺ Recalcular
           </button>
         </form>
 
-        {# Botón generar APU #}
-        <form method="post" action="{% url 'presupuestos:apu_generar' ps.pk %}" style="margin-top:8px;">
+        <form method="post" action="{% url 'presupuestos:apu_generar' ps.pk %}" style="margin-top:5px;">
           {% csrf_token %}
-          <button type="submit" class="btn btn-ghost btn-sm w-100">Generar APU</button>
+          <button type="submit" class="btn btn-ghost btn-sm w-100" style="font-size:11.5px;">
+            ⊞ Generar APU
+          </button>
         </form>
 
-        {# Eliminar PS #}
-        <div style="margin-top:24px;text-align:center;">
-          <button type="button" class="btn-link-danger"
-                  data-bs-toggle="modal" data-bs-target="#deleteModal"
-                  data-delete-url="{% url 'presupuestos:proyectosistema_delete' ps.pk %}"
-                  data-delete-name="{{ ps.sistema.nombre }}{% if ps.subsistema %} / {{ ps.subsistema.nombre }}{% endif %}">
-            Eliminar sistema
+        <form method="post" action="{% url 'presupuestos:despiece_ejecutar' ps.pk %}" style="margin-top:5px;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-ghost btn-sm w-100" style="font-size:11px;color:var(--ink-soft);">
+            ↺ Re-ejecutar cálculo
           </button>
-        </div>
+        </form>
       </div>
 
-      {# Col 2 — Tabla de despiece #}
-      <div style="padding:18px 20px;overflow-x:auto;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div class="section-label">Líneas de despiece</div>
-          <form method="post" action="{% url 'presupuestos:despiece_ejecutar' ps.pk %}" style="margin:0;">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-ghost btn-sm">↺ Re-ejecutar</button>
-          </form>
+      {# Col 2 — Tabla de líneas #}
+      <div class="despiece-col-table">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div class="section-label" style="font-size:10px;">Líneas de despiece</div>
+          {% with pendientes=ps.despiece_lineas.all %}
+          {% with n_pend=0 %}
+          {% endwith %}
+          {% endwith %}
         </div>
 
         {% with lineas=ps.despiece_lineas.all %}
         {% if lineas %}
-        <table class="data-table" style="font-size:12px;">
+        <table class="dl-table">
           <thead>
-            <tr style="background:var(--surface-alt,#f8f9fa);">
-              <th style="min-width:180px;">Producto / Categoría</th>
-              <th style="text-align:center;width:70px;">Unidad</th>
-              <th style="text-align:right;width:90px;">Calculado</th>
-              <th style="text-align:right;width:90px;">Ajustado</th>
-              <th style="text-align:right;width:90px;font-weight:700;">Final</th>
-              <th style="text-align:right;width:110px;">Precio unit.</th>
-              <th style="text-align:right;width:110px;font-weight:700;">Total</th>
-              <th style="width:56px;"></th>
+            <tr>
+              <th style="text-align:left;min-width:180px;">Producto</th>
+              <th style="text-align:center;width:55px;">Unidad</th>
+              <th style="width:80px;">Calculado</th>
+              <th style="width:80px;">Ajustado</th>
+              <th style="width:80px;font-weight:800;color:var(--ink);">Final</th>
+              <th style="width:100px;">Precio unit.</th>
+              <th style="width:110px;font-weight:800;color:var(--ink);">Total</th>
+              <th style="width:48px;"></th>
             </tr>
           </thead>
           <tbody>
             {% for dl in lineas %}
             {% with moneda=dl.producto.moneda|default:"COP" %}
-            <tr id="linea-row-{{ dl.pk }}"
-                class="{% if dl.pendiente_seleccion %}row-warn{% elif dl.estado_tecnico == 'ERROR_CONFIGURACION' %}row-error{% endif %}"
-                style="border-bottom:1px solid var(--border);">
-              <td style="padding:8px 6px;">
+            <tr id="row-{{ dl.pk }}"
+                class="{% if dl.pendiente_seleccion %}row-pendiente{% elif dl.estado_tecnico == 'ERROR_CONFIGURACION' %}row-error{% endif %}">
+              <td>
                 {% if dl.producto %}
-                  <div style="font-weight:500;line-height:1.3;">{{ dl.producto.nombre }}</div>
-                  <div style="font-size:10px;color:var(--muted);margin-top:1px;">
-                    {{ dl.producto.codigo }}
-                    {% if dl.es_dependencia_automatica %}
-                      <span class="badge-status bs-info" style="font-size:9px;margin-left:4px;">auto</span>
-                    {% endif %}
-                    {% if moneda != "COP" %}
-                      <span style="background:#e0f0ff;color:#1470e6;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:600;margin-left:3px;">{{ moneda }}</span>
-                    {% endif %}
+                  <div class="prod-chip">
+                    <div>
+                      <div class="prod-chip__name">{{ dl.producto.nombre }}</div>
+                      <div class="prod-chip__code">
+                        {{ dl.producto.codigo }}
+                        {% if dl.es_dependencia_automatica %}<span class="badge-status bs-info" style="font-size:9px;margin-left:3px;">auto</span>{% endif %}
+                        {% if moneda != "COP" %}<span class="prod-chip__moneda">{{ moneda }}</span>{% endif %}
+                      </div>
+                    </div>
                   </div>
+                  <button type="button"
+                          class="btn-sel-prod" style="margin-top:4px;"
+                          data-linea-pk="{{ dl.pk }}"
+                          onclick="abrirSelectorProducto({{ dl.pk }})">
+                    ✎ Cambiar producto
+                  </button>
                 {% elif dl.categoria_producto %}
-                  <span style="color:var(--warning);font-weight:500;">[{{ dl.categoria_producto }}]</span>
-                  <div style="font-size:10px;color:var(--warning);margin-top:1px;">Pendiente selección</div>
+                  <div style="color:var(--ink-soft);font-size:11px;margin-bottom:4px;">
+                    Categoría: <strong>{{ dl.categoria_producto }}</strong>
+                  </div>
+                  <button type="button"
+                          class="btn-sel-prod"
+                          data-linea-pk="{{ dl.pk }}"
+                          onclick="abrirSelectorProducto({{ dl.pk }})">
+                    + Seleccionar producto
+                  </button>
                 {% else %}
-                  <span style="color:var(--danger);font-weight:500;">Sin producto asignado</span>
+                  <span style="color:var(--danger);font-size:11px;">Sin categoría asignada</span>
                 {% endif %}
               </td>
-              <td style="text-align:center;color:var(--muted);font-size:11px;">
+              <td style="text-align:center;color:var(--ink-soft);" id="col-unidad-{{ dl.pk }}">
                 {% if dl.producto %}{{ dl.producto.unidad }}{% else %}—{% endif %}
               </td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);">
+              <td style="text-align:right;color:var(--ink-soft);">
                 {{ dl.cantidad_calculada|floatformat:2 }}
               </td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums;" id="qty-ajustada-{{ dl.pk }}">
+              <td style="text-align:right;" id="qty-ajustada-{{ dl.pk }}">
                 {% if dl.cantidad_ajustada is not None %}
-                  <span style="color:var(--accent);">{{ dl.cantidad_ajustada|floatformat:2 }}</span>
-                {% else %}—{% endif %}
+                  <span style="color:var(--theme-accent);">{{ dl.cantidad_ajustada|floatformat:2 }}</span>
+                {% else %}<span style="color:var(--muted);">—</span>{% endif %}
               </td>
-              <td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums;" id="qty-final-{{ dl.pk }}">
+              <td style="text-align:right;font-weight:700;" id="qty-final-{{ dl.pk }}">
                 {{ dl.cantidad_final|floatformat:2 }}
               </td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums;font-size:11.5px;">
-                {% if dl.precio_snapshot %}
-                  {{ dl.precio_snapshot|currency:moneda }}
-                {% else %}—{% endif %}
+              <td style="text-align:right;" id="col-precio-{{ dl.pk }}">
+                {% if dl.precio_snapshot %}{{ dl.precio_snapshot|currency:moneda }}{% else %}<span style="color:var(--muted);">—</span>{% endif %}
               </td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;font-size:11.5px;">
+              <td style="text-align:right;font-weight:700;" id="col-total-{{ dl.pk }}">
                 {% if dl.precio_snapshot %}
-                  {{ dl.precio_snapshot|floatformat:2|add:"0" }}
-                  {# show total: cantidad_final × precio_snapshot #}
-                {% else %}—{% endif %}
+                  {{ dl.cantidad_final|multiply:dl.precio_snapshot|currency:moneda }}
+                {% else %}<span style="color:var(--muted);">—</span>{% endif %}
               </td>
-              <td style="text-align:right;white-space:nowrap;padding:4px 6px;">
+              <td style="text-align:right;white-space:nowrap;">
                 <button type="button" class="btn btn-ghost btn-sm"
-                        style="font-size:11px;padding:3px 8px;"
+                        style="font-size:10px;padding:2px 7px;"
                         data-bs-toggle="modal" data-bs-target="#modalAjuste"
                         data-linea-pk="{{ dl.pk }}"
                         data-cantidad-actual="{{ dl.cantidad_final }}"
@@ -206,81 +384,71 @@
             {% endfor %}
           </tbody>
           <tfoot>
-            <tr style="background:var(--surface-alt,#f5f7fa);font-weight:600;font-size:11.5px;">
-              <td colspan="4" style="padding:8px 6px;color:var(--muted);">{{ lineas|length }} línea{{ lineas|length|pluralize }}</td>
-              <td colspan="4" style="text-align:right;padding:8px 6px;">
-                {% with apu=ps.apu %}
-                {% if apu %}
-                  Costo total: <strong>{{ apu.total_costo|currency:"COP" }}</strong>
-                  &nbsp;&nbsp;Venta: <strong style="color:var(--accent);">{{ apu.total_valor_venta|currency:"COP" }}</strong>
-                {% endif %}
-                {% endwith %}
+            <tr>
+              <td colspan="4" style="color:var(--ink-soft);">{{ lineas|length }} línea{{ lineas|length|pluralize }}</td>
+              <td colspan="4" style="text-align:right;">
+                {% with apu=ps.apu %}{% if apu %}
+                  Costo: <strong>{{ apu.total_costo|currency:"COP" }}</strong>
+                  &nbsp;·&nbsp;
+                  Venta: <strong style="color:var(--theme-accent);">{{ apu.total_valor_venta|currency:"COP" }}</strong>
+                {% endif %}{% endwith %}
               </td>
             </tr>
           </tfoot>
         </table>
         {% else %}
-        <div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12px;">
-          Sin líneas calculadas. Ingresa los parámetros y haz clic en <strong>Recalcular</strong>.
+        <div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12.5px;">
+          <div style="font-size:28px;margin-bottom:10px;opacity:.35;">◱</div>
+          Sin líneas calculadas. Ingresa los parámetros y haz clic en <strong>↺ Recalcular</strong>.
         </div>
         {% endif %}
         {% endwith %}
       </div>
 
       {# Col 3 — Resumen APU #}
-      <div style="border-left:1px solid var(--border);padding:18px 16px;">
-        <div class="section-label" style="margin-bottom:12px;">Resumen APU</div>
+      <div class="despiece-col-summary">
+        <div class="section-label" style="font-size:10px;margin-bottom:10px;">Resumen APU</div>
         {% with apu=ps.apu %}
         {% if apu %}
-        <div style="font-size:11px;line-height:2;">
-          <div style="display:flex;justify-content:space-between;">
-            <span style="color:var(--muted);">Materiales</span>
-            <span>{{ apu.subtotal_materiales|currency:"COP" }}</span>
+          <div class="apu-row"><span class="lbl">Materiales</span><span class="val">{{ apu.subtotal_materiales|currency:"COP" }}</span></div>
+          <div class="apu-row"><span class="lbl">Herramientas</span><span class="val">{{ apu.subtotal_herramientas|currency:"COP" }}</span></div>
+          <div class="apu-row"><span class="lbl">Mano de obra</span><span class="val">{{ apu.subtotal_mano_obra|currency:"COP" }}</span></div>
+          <div class="apu-row"><span class="lbl">Transporte</span><span class="val">{{ apu.subtotal_transporte|currency:"COP" }}</span></div>
+          <div class="apu-row"><span class="lbl">Admón.</span><span class="val">{{ apu.subtotal_administracion|currency:"COP" }}</span></div>
+          <div class="apu-row apu-total">
+            <span>Costo total</span>
+            <span class="val">{{ apu.total_costo|currency:"COP" }}</span>
           </div>
-          <div style="display:flex;justify-content:space-between;">
-            <span style="color:var(--muted);">Herramientas</span>
-            <span>{{ apu.subtotal_herramientas|currency:"COP" }}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;">
-            <span style="color:var(--muted);">Mano de obra</span>
-            <span>{{ apu.subtotal_mano_obra|currency:"COP" }}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;">
-            <span style="color:var(--muted);">Transporte</span>
-            <span>{{ apu.subtotal_transporte|currency:"COP" }}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;">
-            <span style="color:var(--muted);">Admón.</span>
-            <span>{{ apu.subtotal_administracion|currency:"COP" }}</span>
-          </div>
-          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700;">
-            <span>Total costo</span>
-            <span>{{ apu.total_costo|currency:"COP" }}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-weight:700;color:var(--accent);">
+          <div class="apu-row apu-total apu-venta">
             <span>Venta</span>
-            <span>{{ apu.total_valor_venta|currency:"COP" }}</span>
+            <span class="val">{{ apu.total_valor_venta|currency:"COP" }}</span>
           </div>
-        </div>
-        <a href="{% url 'presupuestos:apu_detail' apu.pk %}" class="btn btn-primary btn-sm w-100" style="margin-top:14px;">
-          <i class="bi bi-graph-up me-1"></i>Ver APU completo →
-        </a>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:5px;">
+            <a href="{% url 'presupuestos:apu_detail' apu.pk %}" class="btn btn-primary btn-sm w-100" style="font-size:11px;">
+              Ver APU completo →
+            </a>
+            <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}" class="btn btn-ghost btn-sm w-100" style="font-size:11px;" target="_blank">
+              ⎙ PDF cliente
+            </a>
+          </div>
         {% else %}
-        <p style="font-size:11px;color:var(--muted);margin-top:8px;">
-          APU no generado aún. Use el botón <strong>Generar APU</strong> para crearlo.
-        </p>
+          <div style="text-align:center;padding:20px 0;font-size:11px;color:var(--muted);">
+            <div style="font-size:22px;margin-bottom:8px;opacity:.3;">⊞</div>
+            APU no generado.<br>Use <strong>⊞ Generar APU</strong>.
+          </div>
         {% endif %}
         {% endwith %}
       </div>
 
-    </div>{# /3-cols #}
+    </div>{# /despiece-grid #}
   </div>{# /tab-pane #}
   {% endfor %}
 </div>{# /tab-content #}
 
 {% else %}
-<div style="text-align:center;padding:60px 0;color:var(--muted);">
-  <p>Este proyecto no tiene sistemas asignados.</p>
+<div class="panel fade-up" style="text-align:center;padding:60px 0;">
+  <div style="font-size:36px;margin-bottom:14px;opacity:.25;">◱</div>
+  <p style="font-size:13.5px;color:var(--muted);margin-bottom:18px;">Este proyecto no tiene sistemas asignados aún.</p>
   <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalAgregarSistema">
     + Agregar primer sistema
   </button>
@@ -288,9 +456,7 @@
 {% endif %}
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   Modal: Agregar sistema
-══════════════════════════════════════════════════════════════════════════════ #}
+{# ══════ Modal: Agregar sistema ══════ #}
 <div class="modal fade" id="modalAgregarSistema" tabindex="-1">
   <div class="modal-dialog modal-md">
     <div class="modal-content">
@@ -302,7 +468,7 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>Sistema</label>
+            <label style="font-size:12px;font-weight:600;">Sistema</label>
             <select name="sistema_id" class="form-select form-select-sm" id="selectSistema" required>
               <option value="">— Seleccionar —</option>
               {% for s in all_sistemas %}
@@ -310,8 +476,8 @@
               {% endfor %}
             </select>
           </div>
-          <div class="form-group" style="margin-top:12px;">
-            <label>Subsistema <span style="color:var(--muted);font-weight:400;">(opcional)</span></label>
+          <div class="form-group" style="margin-top:10px;">
+            <label style="font-size:12px;font-weight:600;">Subsistema <span style="color:var(--muted);font-weight:400;">(opcional)</span></label>
             <select name="subsistema_id" class="form-select form-select-sm" id="selectSubsistema">
               <option value="">— Ninguno —</option>
               {% for sub in all_subsistemas %}
@@ -321,8 +487,8 @@
               {% endfor %}
             </select>
           </div>
-          <div id="containerVariablesNuevo" style="margin-top:16px;display:none;">
-            <div class="section-label" style="margin-bottom:10px;">Parámetros de entrada</div>
+          <div id="containerVariablesNuevo" style="margin-top:14px;display:none;">
+            <div class="section-label" style="font-size:10px;margin-bottom:8px;">Parámetros de entrada</div>
             <div id="camposVariablesNuevo"></div>
           </div>
         </div>
@@ -336,9 +502,33 @@
 </div>
 
 
-{# ══════════════════════════════════════════════════════════════════════════════
-   Modal: Ajuste de cantidad (AJAX)
-══════════════════════════════════════════════════════════════════════════════ #}
+{# ══════ Modal: Seleccionar producto ══════ #}
+<div class="modal fade" id="modalSelProducto" tabindex="-1">
+  <div class="modal-dialog modal-md">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Seleccionar producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="selProdCategoria" style="font-size:11.5px;color:var(--ink-soft);margin-bottom:10px;"></div>
+        <div id="selProdLoading" style="text-align:center;padding:20px;color:var(--muted);font-size:12px;">Cargando productos…</div>
+        <div id="selProdLista" style="display:none;"></div>
+        <div id="selProdVacio" style="display:none;text-align:center;padding:20px;color:var(--muted);font-size:12px;">
+          No hay productos activos en esta categoría.
+          <a href="/catalogos/productos/nuevo/" class="d-block mt-2" style="font-size:11.5px;">+ Crear producto →</a>
+        </div>
+        <input type="hidden" id="selProdLineaPk">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+{# ══════ Modal: Ajuste de cantidad ══════ #}
 <div class="modal fade" id="modalAjuste" tabindex="-1">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -349,18 +539,42 @@
       <div class="modal-body">
         <input type="hidden" id="ajusteLineaPk">
         <div class="form-group">
-          <label>Nueva cantidad</label>
+          <label style="font-size:12px;">Nueva cantidad</label>
           <input type="number" step="any" class="form-control form-control-sm" id="ajusteCantidad">
         </div>
-        <div class="form-group" style="margin-top:10px;">
-          <label>Motivo del ajuste <span style="color:var(--muted);font-size:10px;">(opcional)</span></label>
+        <div class="form-group" style="margin-top:8px;">
+          <label style="font-size:12px;">Motivo <span style="color:var(--muted);font-size:10px;">(opcional)</span></label>
           <input type="text" class="form-control form-control-sm" id="ajusteMotivo" placeholder="Ej: ajuste por plano rev. 3">
         </div>
-        <div id="ajusteError" class="msg-bar msg-error" style="display:none;margin-top:10px;"></div>
+        <div id="ajusteError" class="msg-bar msg-error" style="display:none;margin-top:8px;"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
         <button type="button" class="btn btn-primary btn-sm" id="btnGuardarAjuste">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+{# ══════ Modal: Confirmar eliminación ══════ #}
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" style="color:#dc3545;">Eliminar sistema</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;">¿Eliminar <strong id="deleteModalName"></strong> del proyecto? Se borrarán todas sus líneas de despiece y APU.</p>
+        <p style="font-size:11px;color:var(--muted);">Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <form id="deleteModalForm" method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm" style="background:#dc3545;color:#fff;border:none;padding:6px 16px;border-radius:6px;">Eliminar</button>
+        </form>
       </div>
     </div>
   </div>
@@ -371,123 +585,206 @@
 
 {% block extra_js %}
 <script>
-/* ── Filtrar subsistemas según sistema seleccionado ──────────────────────── */
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+/* ══════ Filtro subsistemas en modal agregar ══════ */
 (function () {
   const selSistema    = document.getElementById('selectSistema');
   const selSubsistema = document.getElementById('selectSubsistema');
   if (!selSistema) return;
 
-  function filtrarSubsistemas() {
+  function filtrar() {
     const sid = selSistema.value;
-    Array.from(selSubsistema.options).forEach(opt => {
-      if (!opt.value) return; // "— Ninguno —"
-      opt.hidden = opt.dataset.sistema !== sid;
+    Array.from(selSubsistema.options).forEach(o => {
+      if (!o.value) return;
+      o.hidden = o.dataset.sistema !== sid;
     });
     selSubsistema.value = '';
-    cargarVariables();
+    cargarVarsModal();
   }
 
-  selSistema.addEventListener('change', filtrarSubsistemas);
-  selSubsistema.addEventListener('change', cargarVariables);
+  selSistema.addEventListener('change', filtrar);
+  selSubsistema.addEventListener('change', cargarVarsModal);
 
-  /* ── Carga dinámica de variables del subsistema via AJAX ─────────────── */
-  function cargarVariables() {
+  function cargarVarsModal() {
     const container = document.getElementById('containerVariablesNuevo');
     const campos    = document.getElementById('camposVariablesNuevo');
     const subPk     = selSubsistema.value;
-
-    if (!subPk) {
-      container.style.display = 'none';
-      campos.innerHTML = '';
-      return;
-    }
+    if (!subPk) { container.style.display = 'none'; campos.innerHTML = ''; return; }
 
     fetch(`/presupuestos/api/subsistema-def/${subPk}/`)
       .then(r => r.json())
       .then(data => {
-        if (data.error || !data.variables || data.variables.length === 0) {
-          container.style.display = 'none';
-          campos.innerHTML = '';
-          return;
+        if (data.error || !data.variables || !data.variables.length) {
+          container.style.display = 'none'; campos.innerHTML = ''; return;
         }
         campos.innerHTML = data.variables.map(v => `
-          <div class="form-group" style="margin-bottom:10px;">
-            <label style="font-size:10.5px;">${v.label}${v.unidad ? ' (' + v.unidad + ')' : ''}</label>
-            ${v.opciones && v.opciones.length > 0
+          <div class="form-group" style="margin-bottom:8px;">
+            <label style="font-size:11px;">${v.label}${v.unidad ? ' (' + v.unidad + ')' : ''}</label>
+            ${v.opciones && v.opciones.length
               ? `<select name="parametros[${v.variable}]" class="form-select form-select-sm">
-                  ${v.opciones.map(o => `<option value="${o[0]}" ${o[0] == v.default ? 'selected' : ''}>${o[1]}</option>`).join('')}
+                   ${v.opciones.map(o => `<option value="${o[0]}" ${o[0]==v.default?'selected':''}>${o[1]}</option>`).join('')}
                  </select>`
               : `<input type="number" step="any" class="form-control form-control-sm"
-                        name="parametros[${v.variable}]"
-                        value="${v.default !== null ? v.default : ''}"
-                        placeholder="${v.variable}">`
-            }
-            ${v.descripcion ? `<small style="color:var(--ink-soft);font-size:10px;">${v.descripcion}</small>` : ''}
-          </div>
-        `).join('');
+                        name="parametros[${v.variable}]" value="${v.default ?? ''}">`}
+          </div>`).join('');
         container.style.display = 'block';
       })
-      .catch(() => {
-        container.style.display = 'none';
-        campos.innerHTML = '';
-      });
+      .catch(() => { container.style.display = 'none'; campos.innerHTML = ''; });
   }
 })();
 
-/* ── Modal de ajuste de cantidad ─────────────────────────────────────────── */
+/* ══════ Selector de producto para una línea ══════ */
+function abrirSelectorProducto(lineaPk) {
+  const modal    = new bootstrap.Modal(document.getElementById('modalSelProducto'));
+  const catLabel = document.getElementById('selProdCategoria');
+  const loading  = document.getElementById('selProdLoading');
+  const lista    = document.getElementById('selProdLista');
+  const vacio    = document.getElementById('selProdVacio');
+  document.getElementById('selProdLineaPk').value = lineaPk;
+
+  catLabel.textContent = '';
+  loading.style.display = 'block';
+  lista.style.display   = 'none';
+  vacio.style.display   = 'none';
+  modal.show();
+
+  fetch(`/presupuestos/despiece/api/productos-linea/${lineaPk}/`)
+    .then(r => r.json())
+    .then(data => {
+      loading.style.display = 'none';
+      catLabel.innerHTML = `Categoría: <strong>${data.categoria || '—'}</strong>`;
+      if (!data.productos || !data.productos.length) {
+        vacio.style.display = 'block'; return;
+      }
+      lista.innerHTML = data.productos.map(p => {
+        const precioUnit = p.unidades_por_presentacion > 1
+          ? `${fmtNum(p.precio_actual / p.unidades_por_presentacion, p.moneda)} / und`
+          : fmtNum(p.precio_actual, p.moneda);
+        return `
+          <div class="d-flex align-items-center justify-content-between"
+               style="padding:10px 12px;border:1px solid var(--border);border-radius:7px;
+                      margin-bottom:7px;cursor:pointer;transition:background .12s;"
+               onmouseenter="this.style.background='var(--theme-accent-pale,#f0f4ff)'"
+               onmouseleave="this.style.background=''"
+               onclick="asignarProducto(${lineaPk}, ${p.pk}, '${escHtml(p.nombre)}', '${p.moneda}')">
+            <div>
+              <div style="font-size:12.5px;font-weight:600;">${escHtml(p.nombre)}</div>
+              <div style="font-size:10.5px;color:var(--ink-soft);">${p.codigo}
+                ${p.moneda !== 'COP' ? `<span style="background:#e0f0ff;color:#1470e6;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;margin-left:4px;">${p.moneda}</span>` : ''}
+                ${p.unidades_por_presentacion > 1 ? `<span style="font-size:9.5px;color:var(--muted);margin-left:5px;">Presentación: ${p.unidades_por_presentacion} und</span>` : ''}
+              </div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:12px;font-weight:700;">${precioUnit}</div>
+              ${p.unidades_por_presentacion > 1 ? `<div style="font-size:10px;color:var(--muted);">Precio presentación: ${fmtNum(p.precio_actual, p.moneda)}</div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+      lista.style.display = 'block';
+    })
+    .catch(() => { loading.style.display = 'none'; vacio.style.display = 'block'; });
+}
+
+function asignarProducto(lineaPk, productoPk, nombre, moneda) {
+  fetch(`/presupuestos/despiece/api/asignar-producto/${lineaPk}/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+    body: JSON.stringify({ producto_id: productoPk }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (!data.ok) { alert(data.error || 'Error al asignar producto.'); return; }
+    bootstrap.Modal.getInstance(document.getElementById('modalSelProducto')).hide();
+    // Actualizar la fila sin recargar
+    const row = document.getElementById(`row-${lineaPk}`);
+    if (row) {
+      const td = row.querySelector('td:first-child');
+      if (td) {
+        const sym = data.moneda === 'COP' ? '$' : data.moneda + ' ';
+        const precio = data.moneda === 'COP'
+          ? sym + Math.round(data.precio_snapshot).toLocaleString('es-CO')
+          : sym + data.precio_snapshot.toFixed(2);
+        td.innerHTML = `
+          <div class="prod-chip">
+            <div>
+              <div class="prod-chip__name">${escHtml(data.producto_nombre)}</div>
+              <div class="prod-chip__code">${escHtml(data.producto_codigo)}
+                ${data.moneda !== 'COP' ? `<span class="prod-chip__moneda">${data.moneda}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn-sel-prod" style="margin-top:4px;" onclick="abrirSelectorProducto(${lineaPk})">✎ Cambiar producto</button>`;
+      }
+      const precEl = document.getElementById(`col-precio-${lineaPk}`);
+      if (precEl && data.precio_snapshot) {
+        const sym = data.moneda === 'COP' ? '$' : data.moneda + ' ';
+        precEl.textContent = data.moneda === 'COP'
+          ? '$' + Math.round(data.precio_snapshot).toLocaleString('es-CO')
+          : data.moneda + ' ' + data.precio_snapshot.toFixed(2);
+      }
+      row.classList.remove('row-pendiente');
+    }
+  })
+  .catch(() => alert('Error de red al asignar producto.'));
+}
+
+/* ══════ Ajuste de cantidad ══════ */
 (function () {
   const modalEl = document.getElementById('modalAjuste');
   if (!modalEl) return;
-
-  modalEl.addEventListener('show.bs.modal', function (e) {
+  modalEl.addEventListener('show.bs.modal', e => {
     const btn = e.relatedTarget;
-    document.getElementById('ajusteLineaPk').value     = btn.dataset.lineaPk;
-    document.getElementById('ajusteCantidad').value    = btn.dataset.cantidadActual;
-    document.getElementById('ajusteMotivo').value      = btn.dataset.motivoActual || '';
+    document.getElementById('ajusteLineaPk').value  = btn.dataset.lineaPk;
+    document.getElementById('ajusteCantidad').value = btn.dataset.cantidadActual;
+    document.getElementById('ajusteMotivo').value   = btn.dataset.motivoActual || '';
     document.getElementById('ajusteError').style.display = 'none';
   });
+  document.getElementById('btnGuardarAjuste').addEventListener('click', () => {
+    const pk     = document.getElementById('ajusteLineaPk').value;
+    const qty    = document.getElementById('ajusteCantidad').value;
+    const motivo = document.getElementById('ajusteMotivo').value;
+    const errDiv = document.getElementById('ajusteError');
+    if (!pk || qty === '') { errDiv.textContent = 'Ingresa una cantidad.'; errDiv.style.display = 'block'; return; }
 
-  document.getElementById('btnGuardarAjuste').addEventListener('click', function () {
-    const pk      = document.getElementById('ajusteLineaPk').value;
-    const qty     = document.getElementById('ajusteCantidad').value;
-    const motivo  = document.getElementById('ajusteMotivo').value;
-    const errDiv  = document.getElementById('ajusteError');
-
-    if (!pk || qty === '') {
-      errDiv.textContent = 'Ingresa una cantidad.';
-      errDiv.style.display = 'block';
-      return;
-    }
-
-    const url = `/presupuestos/despiece/api/ajuste/${pk}/`;
-
-    fetch(url, {
+    fetch(`/presupuestos/despiece/api/ajuste/${pk}/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
-      },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
       body: JSON.stringify({ cantidad_ajustada: qty, motivo_ajuste: motivo }),
     })
     .then(r => r.json())
     .then(data => {
       if (data.ok) {
-        // Actualizar fila sin recargar
-        const ajEl    = document.getElementById(`qty-ajustada-${pk}`);
-        const finalEl = document.getElementById(`qty-final-${pk}`);
-        if (ajEl)    ajEl.textContent    = parseFloat(data.cantidad_ajustada).toFixed(2);
-        if (finalEl) finalEl.textContent = parseFloat(data.cantidad_final).toFixed(2);
+        const aj = document.getElementById(`qty-ajustada-${pk}`);
+        const fi = document.getElementById(`qty-final-${pk}`);
+        if (aj) aj.innerHTML = `<span style="color:var(--theme-accent);">${parseFloat(data.cantidad_ajustada).toFixed(2)}</span>`;
+        if (fi) fi.textContent = parseFloat(data.cantidad_final).toFixed(2);
         bootstrap.Modal.getInstance(modalEl).hide();
       } else {
-        errDiv.textContent = data.error || 'Error al guardar.';
-        errDiv.style.display = 'block';
+        errDiv.textContent = data.error || 'Error al guardar.'; errDiv.style.display = 'block';
       }
     })
-    .catch(() => {
-      errDiv.textContent = 'Error de red. Inténtalo de nuevo.';
-      errDiv.style.display = 'block';
-    });
+    .catch(() => { errDiv.textContent = 'Error de red.'; errDiv.style.display = 'block'; });
   });
 })();
+
+/* ══════ Modal eliminación ══════ */
+(function () {
+  const delModal = document.getElementById('deleteModal');
+  if (!delModal) return;
+  delModal.addEventListener('show.bs.modal', e => {
+    const btn = e.relatedTarget;
+    document.getElementById('deleteModalName').textContent = btn.dataset.deleteName || '';
+    document.getElementById('deleteModalForm').action = btn.dataset.deleteUrl || '#';
+  });
+})();
+
+/* ══════ Helpers ══════ */
+function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtNum(val, moneda) {
+  const n = parseFloat(val);
+  if (moneda === 'COP') return '$' + Math.round(n).toLocaleString('es-CO');
+  return moneda + ' ' + n.toFixed(2);
+}
 </script>
 {% endblock %}

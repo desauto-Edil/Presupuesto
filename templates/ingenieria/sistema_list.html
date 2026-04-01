@@ -56,28 +56,36 @@
   <div class="cat-dropdown-menu" role="menu">
 
     <button type="button"
-            class="cat-dropdown-item"
+            class="cat-dropdown-item d-flex align-items-start gap-3"
             data-bs-toggle="modal"
             data-bs-target="#modalSistema"
             role="menuitem">
-      <span class="cat-dropdown-icon">◈</span>
-      <span>
-        <strong>Nuevo sistema</strong>
-        <small>Familia técnica de componentes</small>
+      <span class="cat-dropdown-icon" style="color: var(--primary); margin-top: 2px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-bounding-box" viewBox="0 0 16 16">
+          <path d="M5 2V0H0v5h2v6H0v5h5v-2h6v2h5v-5h-2V5h2V0h-5v2zm6 1v2h2v6h-2v2H5v-2H3V5h2V3zm1-2h3v3h-3zm3 11v3h-3v-3zM4 15H1v-3h3zM1 4V1h3v3z"/>
+        </svg>
       </span>
-    </button>
+      <span class="d-flex flex-column text-start">
+        <strong style="line-height: 1.2;">Nuevo sistema</strong>
+        <small class="text-muted" style="font-size: 0.75rem;">Familia técnica de componentes</small>
+      </span>
+    </button>      
 
     <div class="cat-dropdown-divider"></div>
 
     <button type="button"
-            class="cat-dropdown-item"
+            class="cat-dropdown-item d-flex align-items-start gap-3"
             data-bs-toggle="modal"
             data-bs-target="#modalSubsistema"
             role="menuitem">
-      <span class="cat-dropdown-icon">⊞</span>
-      <span>
-        <strong>Nuevo subsistema</strong>
-        <small>Receta técnica dentro de un sistema</small>
+      <span class="cat-dropdown-icon" style="color: var(--primary); margin-top: 2px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-diagram-3-fill" viewBox="0 0 16 16">
+          <path fill-rule="evenodd" d="M6 3.5A1.5 1.5 0 0 1 7.5 2h1A1.5 1.5 0 0 1 10 3.5v1A1.5 1.5 0 0 1 8.5 6v1H14a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 2 7h5.5V6A1.5 1.5 0 0 1 6 4.5zm-6 8A1.5 1.5 0 0 1 1.5 10h1A1.5 1.5 0 0 1 4 11.5v1A1.5 1.5 0 0 1 2.5 14h-1A1.5 1.5 0 0 1 0 12.5zm6 0A1.5 1.5 0 0 1 7.5 10h1a1.5 1.5 0 0 1 1.5 1.5v1A1.5 1.5 0 0 1 8.5 14h-1A1.5 1.5 0 0 1 6 12.5zm6 0a1.5 1.5 0 0 1 1.5-1.5h1a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5z"/>
+        </svg>
+      </span>
+      <span class="d-flex flex-column text-start">
+        <strong style="line-height: 1.2;">Nuevo subsistema</strong>
+        <small class="text-muted" style="font-size: 0.75rem;">Receta técnica dentro de un sistema</small>
       </span>
     </button>
 
@@ -165,16 +173,28 @@
               </div>
             </div>
             <div class="cat-prod-item__right">
-              <a href="{% url 'ingenieria:subsistema_update' sub.pk %}"
-                 class="btn btn-ghost btn-xs"
-                 title="Editar subsistema"
-                 style="font-size:11px;">✎</a>
-              <button class="btn btn-ghost btn-xs"
-                      data-bs-toggle="modal"
-                      data-bs-target="#deleteModal"
-                      data-delete-url="{% url 'ingenieria:subsistema_delete' sub.pk %}"
-                      data-delete-name="{{ sub.nombre }}"
-                      style="color:rgba(14,17,23,0.28);font-size:11px;">✕</button>
+              <div class="d-inline-flex gap-1">
+                <a href="{% url 'ingenieria:subsistema_update' sub.pk %}"
+                  class="btn btn-ghost btn-xs d-inline-flex align-items-center justify-content-center"
+                  title="Editar subsistema"
+                  style="width: 24px; height: 24px; padding: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-pencil-fill" viewBox="0 0 16 16">
+                    <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/>
+                  </svg>
+                </a>
+
+                <button class="btn btn-ghost btn-xs d-inline-flex align-items-center justify-content-center"
+                        data-bs-toggle="modal"
+                        data-bs-target="#deleteModal"
+                        data-delete-url="{% url 'ingenieria:subsistema_delete' sub.pk %}"
+                        data-delete-name="{{ sub.nombre }}"
+                        title="Eliminar subsistema"
+                        style="color:rgba(14,17,23,0.28); width: 24px; height: 24px; padding: 0;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
+                    <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
           {% endfor %}
@@ -197,16 +217,27 @@
               data-sistema-nombre="{{ sis.nombre }}">
         + Subsistema
       </button>
-      <div class="cat-card__actions">
+      <div class="cat-card__actions d-flex gap-1">
         <a href="{% url 'ingenieria:sistema_update' sis.pk %}"
-           class="btn btn-ghost btn-xs" title="Editar sistema">✎ Editar</a>
-        <button class="btn btn-ghost btn-xs"
+           class="btn btn-ghost btn-xs d-inline-flex align-items-center"
+           title="Editar sistema">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-pencil-fill me-1" viewBox="0 0 16 16">
+            <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/>
+          </svg>
+        </a>
+
+        <button class="btn btn-ghost btn-xs d-inline-flex align-items-center"
                 data-bs-toggle="modal"
                 data-bs-target="#deleteModal"
                 data-delete-url="{% url 'ingenieria:sistema_delete' sis.pk %}"
                 data-delete-name="{{ sis.nombre }}"
                 title="Eliminar sistema"
-                style="color:rgba(14,17,23,0.3);">✕</button>
+                style="color:rgba(14,17,23,0.3);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
+            <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
+          </svg>
+        </button>
+      </div>
       </div>
     </div>
 

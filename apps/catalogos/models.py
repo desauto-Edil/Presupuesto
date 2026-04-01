@@ -91,6 +91,15 @@ class Producto(models.Model):
     marca = models.CharField(max_length=150, blank=True, null=True)
     linea = models.CharField(max_length=150, blank=True, null=True)
     rendimiento = models.DecimalField(max_digits=14, decimal_places=6, blank=True, null=True)
+    unidades_por_presentacion = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Unidades por presentación",
+        help_text=(
+            "Cantidad de unidades que trae la presentación de venta "
+            "(ej: 1000 para bolsa de 1000 und, 500 para bolsa de 500). "
+            "El precio se divide entre este valor para obtener el precio unitario real."
+        ),
+    )
     ficha_tecnica = models.FileField(
         upload_to='fichas_tecnicas/',
         blank=True,

@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block topbar_actions %}
-  <a href="{% url 'presupuestos:powergrip_wizard' proyecto.pk %}" class="btn btn-primary btn-sm">⊞ Ir al despiece</a>
+  <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}" class="btn btn-primary btn-sm">⊞ Ir al despiece</a>
   <a href="{% url 'comercial:crear_proyecto_desde_solicitud' proyecto.solicitud.pk %}" class="btn btn-ghost btn-sm">+ Nueva versión</a>
   <a href="{% url 'comercial:proyecto_update' proyecto.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
 {% endblock %}
@@ -93,8 +93,8 @@
     <div class="panel">
       <div class="panel-header"><span class="panel-title">Parámetros técnicos</span></div>
       <div class="summary-line">
-        <span class="s-label">Tipo de proyecto</span>
-        <span class="s-value">{{ proyecto.tipo_proyecto.nombre|default:"—" }}</span>
+        <span class="s-label">Días de duración</span>
+        <span class="s-value">{% if proyecto.dias_duracion %}{{ proyecto.dias_duracion }} días{% else %}—{% endif %}</span>
       </div>
       <div class="summary-line">
         <span class="s-label">Área total (m²)</span>
@@ -147,7 +147,7 @@
         {% if proyecto_sistemas %}
         <span style="font-size:11px;color:var(--ink-soft);">{{ proyecto_sistemas|length }} sistema{{ proyecto_sistemas|length|pluralize }}</span>
         {% endif %}
-        <a href="{% url 'presupuestos:powergrip_wizard' proyecto.pk %}"
+        <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}"
            class="btn btn-primary btn-xs" style="margin-left:auto;">
           ⊞ Abrir despiece
         </a>
@@ -196,7 +196,7 @@
         <div class="empty-state-text" style="font-size:12.5px;margin-bottom:14px;">
           Aún no se ha ejecutado el despiece para este proyecto.
         </div>
-        <a href="{% url 'presupuestos:powergrip_wizard' proyecto.pk %}"
+        <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}"
            class="btn btn-primary btn-sm">
           ⊞ Ejecutar despiece
         </a>

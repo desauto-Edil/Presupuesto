@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block topbar_actions %}
-  <a href="{% url 'comercial:proyecto_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+  <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
 {% endblock %}
 
 {% block content %}
@@ -120,7 +120,7 @@
     </div>
 
     <div class="form-page-footer">
-      <a href="{% url 'comercial:proyecto_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
+      <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
       <button type="submit" class="btn btn-primary btn-sm">
         {% if object %}Guardar cambios{% else %}Crear proyecto{% endif %}
       </button>

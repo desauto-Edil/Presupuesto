@@ -136,11 +136,11 @@ class TipoProyectoForm(forms.ModelForm):
 
 
 _PROYECTO_WIDGETS = {
-    "tipo_proyecto":        forms.Select(attrs={"class": "form-select"}),
     "nombre":               forms.TextInput(attrs={"class": "form-control"}),
     "descripcion":          forms.Textarea(attrs={"class": "form-control", "rows": 3}),
     "area_total_m2":        forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
     "perimetro_ml":         forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
+    "dias_duracion":        forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     "trm":                  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
     "margen_comercial_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
     "iva_pct":              forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
@@ -169,7 +169,7 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
         model = Proyecto
         fields = [
             "nombre", "descripcion",
-            "area_total_m2", "perimetro_ml",
+            "area_total_m2", "perimetro_ml", "dias_duracion",
             "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
