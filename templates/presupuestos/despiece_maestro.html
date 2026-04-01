@@ -306,7 +306,6 @@
               <th style="width:80px;">Ajustado</th>
               <th style="width:80px;font-weight:800;color:var(--ink);">Final</th>
               <th style="width:100px;">Precio unit.</th>
-              <th style="width:110px;font-weight:800;color:var(--ink);">Total</th>
               <th style="width:48px;"></th>
             </tr>
           </thead>
@@ -364,11 +363,6 @@
               <td style="text-align:right;" id="col-precio-{{ dl.pk }}">
                 {% if dl.precio_snapshot %}{{ dl.precio_snapshot|currency:moneda }}{% else %}<span style="color:var(--muted);">—</span>{% endif %}
               </td>
-              <td style="text-align:right;font-weight:700;" id="col-total-{{ dl.pk }}">
-                {% if dl.precio_snapshot %}
-                  {{ dl.cantidad_final|multiply:dl.precio_snapshot|currency:moneda }}
-                {% else %}<span style="color:var(--muted);">—</span>{% endif %}
-              </td>
               <td style="text-align:right;white-space:nowrap;">
                 <button type="button" class="btn btn-ghost btn-sm"
                         style="font-size:10px;padding:2px 7px;"
@@ -385,14 +379,7 @@
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="4" style="color:var(--ink-soft);">{{ lineas|length }} línea{{ lineas|length|pluralize }}</td>
-              <td colspan="4" style="text-align:right;">
-                {% with apu=ps.apu %}{% if apu %}
-                  Costo: <strong>{{ apu.total_costo|currency:"COP" }}</strong>
-                  &nbsp;·&nbsp;
-                  Venta: <strong style="color:var(--theme-accent);">{{ apu.total_valor_venta|currency:"COP" }}</strong>
-                {% endif %}{% endwith %}
-              </td>
+              <td colspan="7" style="color:var(--ink-soft);">{{ lineas|length }} línea{{ lineas|length|pluralize }}</td>
             </tr>
           </tfoot>
         </table>
