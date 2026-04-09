@@ -1,0 +1,721 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración · Andicost{% endblock %}
+{% block nav_configuracion %}active{% endblock %}
+{% block page_title %}Configuración{% endblock %}
+{% block breadcrumb %}Configuración{% endblock %}
+
+{% block extra_head %}
+<style>
+  .cfg-tabs { display:flex; gap:4px; margin-bottom:20px; }
+  .cfg-tab-btn {
+    font-size:12px; font-weight:700; border-radius:8px; padding:6px 18px;
+    border:none; cursor:pointer; background:transparent; color:var(--ink-soft);
+    transition:background .15s,color .15s;
+  }
+  .cfg-tab-btn.active { background:var(--theme-accent); color:#fff; }
+  .cfg-tab-btn:not(.active):hover { background:var(--surface); color:var(--ink); }
+
+  /* ── Tarjeta base ── */
+  .cfg-card {
+    background:white; border-radius:12px; border:1px solid var(--border); overflow:hidden;
+  }
+
+  /* ── Tabla ── */
+  .cfg-card .table thead th {
+    background:#fcfcfd; font-size:11px; text-transform:uppercase;
+    letter-spacing:.05em; padding:15px;
+  }
+
+  /* ── Pills unidad ── */
+  .unit-badge { padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600; }
+  .unit-IMPERANDINA { background:#fff8e0; color:#b07000; }
+  .unit-SOLARANDINA { background:#fde8ea; color:#e62833; }
+  .unit-IMPERTIENDA { background:#e8f5ee; color:#1a7a4a; }
+
+  /* ── Avatar usuario ── */
+  .cfg-avatar {
+    width:36px; height:36px; border-radius:8px;
+    background:var(--theme-accent); color:white;
+    display:flex; align-items:center; justify-content:center; font-weight:700;
+  }
+
+  /* ── Tarjetas unidades ── */
+  .unidad-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+  .unidad-card {
+    background:white; border-radius:14px; border:1px solid var(--border);
+    padding:20px 22px; position:relative;
+  }
+  .unidad-card__badge {
+    display:inline-block; font-size:10px; font-weight:700; letter-spacing:.07em;
+    text-transform:uppercase; padding:3px 10px; border-radius:6px; margin-bottom:12px;
+  }
+  .unidad-card__name {
+    font-family:'Lato'; font-size:16px; font-weight:800; color:var(--ink); margin-bottom:2px;
+  }
+  .unidad-card__nit {
+    font-size:11px; color:var(--ink-soft); font-family:monospace; margin-bottom:14px;
+  }
+  .unidad-card__row {
+    display:flex; gap:6px; align-items:baseline;
+    font-size:12px; color:var(--ink-soft); margin-bottom:5px;
+  }
+  .unidad-card__label { font-weight:700; color:var(--ink); min-width:70px; font-size:11px; text-transform:uppercase; }
+  .unidad-card__actions { position:absolute; top:14px; right:14px; display:flex; gap:4px; }
+
+  .unidad-empty {
+    border:2px dashed var(--border); border-radius:14px; padding:32px 24px;
+    text-align:center; color:var(--ink-soft);
+  }
+</style>
+{% endblock %}
+
+
+{% block topbar_actions %}
+<div id="topbarAcciones">
+  <!-- Se muestra dinámicamente según el tab activo -->
+  <button id="btnNuevoUsuario"
+          class="btn btn-primary btn-sm"
+          onclick="prepareUserForm('create')"
+          data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsuario">
+    + Nuevo usuario
+  </button>
+  <button id="btnNuevaUnidad"
+          class="btn btn-primary btn-sm"
+          style="display:none;"
+          onclick="prepareUnidadForm('create')"
+          data-bs-toggle="offcanvas" data-bs-target="#offcanvasUnidad">
+    + Nueva unidad
+  </button>
+</div>
+{% endblock %}
+
+
+{% block content %}
+
+<!-- ── Tabs ───────────────────────────────────────────────────────────────── -->
+<div class="cfg-tabs fade-up">
+  <button id="tabBtnUsuarios"  class="cfg-tab-btn active" onclick="switchCfgTab('usuarios')">
+    <i class="bi bi-people me-1"></i> Usuarios
+    <span style="background:rgba(255,255,255,0.25);border-radius:8px;padding:1px 7px;margin-left:4px;font-size:11px;">{{ configuraciones|length }}</span>
+  </button>
+  <button id="tabBtnUnidades" class="cfg-tab-btn" onclick="switchCfgTab('unidades')">
+    <i class="bi bi-building me-1"></i> Unidades de negocio
+    <span style="background:rgba(0,0,0,0.08);border-radius:8px;padding:1px 7px;margin-left:4px;font-size:11px;">{{ unidades|length }}</span>
+  </button>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     PANEL USUARIOS
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="panelUsuarios">
+<div class="cfg-card fade-up">
+  <table class="table mb-0">
+    <thead>
+      <tr>
+        <th>Usuario</th>
+        <th>Unidad</th>
+        <th>Rol</th>
+        <th>Estado</th>
+        <th class="text-end">Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in configuraciones %}
+      <tr>
+        <td class="d-flex align-items-center gap-3">
+          <div class="cfg-avatar">{{ c.nombre_completo|slice:":2"|upper }}</div>
+          <div>
+            <div class="fw-bold">{{ c.nombre_completo }}</div>
+            <div class="text-muted small">{{ c.email }}</div>
+          </div>
+        </td>
+        <td><span class="unit-badge unit-{{ c.unidad_negocio }}">{{ c.get_unidad_negocio_display }}</span></td>
+        <td class="small">{{ c.get_rol_display }}</td>
+        <td>
+          {% if c.activo %}<span class="text-success">● Activo</span>
+          {% else %}<span class="text-muted">○ Inactivo</span>{% endif %}
+        </td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-ghost"
+                  onclick="prepareUserForm('edit', {
+                      id: '{{ c.pk }}',
+                      nombre: '{{ c.nombre_completo|escapejs }}',
+                      email: '{{ c.email|escapejs }}',
+                      unidad: '{{ c.unidad_negocio }}',
+                      rol: '{{ c.rol }}',
+                      activo: '{{ c.activo|yesno:'true,false' }}'
+                  })"
+                  data-bs-toggle="offcanvas" data-bs-target="#offcanvasUsuario">✎</button>
+          <button class="btn btn-sm btn-ghost text-danger"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-name="{{ c.nombre_completo }}"
+                  data-delete-url="{% url 'configuracion:configuracion_delete' c.pk %}">✕</button>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="text-center text-muted py-4">Sin usuarios registrados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>{# /panelUsuarios #}
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     PANEL UNIDADES DE NEGOCIO
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="panelUnidades" style="display:none;">
+
+{% if unidades %}
+{% for u in unidades %}
+<div class="unidad-card fade-up" style="margin-bottom:24px;">
+
+  {# ── Cabecera ─────────────────────────────────────────────────────────── #}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div>
+      <span class="unidad-card__badge unit-badge unit-{{ u.codigo }}">{{ u.get_codigo_display }}</span>
+      <div class="unidad-card__name" style="margin-top:6px;">{{ u.razon_social }}</div>
+      <div class="unidad-card__nit">NIT {{ u.nit|default:"—" }}</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      {% if u.activa %}<span class="text-success" style="font-size:11px;">● Activa</span>
+      {% else %}<span class="text-muted" style="font-size:11px;">○ Inactiva</span>{% endif %}
+      <button class="btn btn-sm btn-ghost"
+              onclick="prepareUnidadForm('edit', {
+                  id: '{{ u.pk }}',
+                  razon_social: '{{ u.razon_social|escapejs }}',
+                  nit: '{{ u.nit|escapejs }}',
+                  ciudad: '{{ u.ciudad|escapejs }}',
+                  direccion: '{{ u.direccion|escapejs }}',
+                  telefono: '{{ u.telefono|escapejs }}',
+                  email: '{{ u.email|escapejs }}',
+                  sitio_web: '{{ u.sitio_web|escapejs }}',
+                  quienes_somos: '{{ u.quienes_somos|escapejs }}',
+                  mision: '{{ u.mision|escapejs }}',
+                  vision: '{{ u.vision|escapejs }}',
+                  activa: '{{ u.activa|yesno:'true,false' }}'
+              })"
+              data-bs-toggle="offcanvas" data-bs-target="#offcanvasUnidad">✎ Editar</button>
+    </div>
+  </div>
+
+  {# ── Sub-tabs ─────────────────────────────────────────────────────────── #}
+  <div style="display:flex;gap:2px;border-bottom:2px solid var(--border);margin-bottom:16px;" id="utabs-{{ u.pk }}">
+    <button class="utab-btn active" onclick="switchUTab('{{ u.pk }}','contacto')" style="font-size:11px;font-weight:700;padding:6px 14px;border:none;background:none;color:var(--theme-accent);border-bottom:2px solid var(--theme-accent);cursor:pointer;">Contacto</button>
+    <button class="utab-btn" onclick="switchUTab('{{ u.pk }}','quienes')" style="font-size:11px;font-weight:700;padding:6px 14px;border:none;background:none;color:var(--ink-soft);cursor:pointer;">Quiénes somos</button>
+    <button class="utab-btn" onclick="switchUTab('{{ u.pk }}','politicas')" style="font-size:11px;font-weight:700;padding:6px 14px;border:none;background:none;color:var(--ink-soft);cursor:pointer;">Políticas <span style="font-size:10px;background:rgba(0,0,0,0.07);border-radius:8px;padding:0 5px;">{{ u.politicas.count }}</span></button>
+    <button class="utab-btn" onclick="switchUTab('{{ u.pk }}','clausulas')" style="font-size:11px;font-weight:700;padding:6px 14px;border:none;background:none;color:var(--ink-soft);cursor:pointer;">Cláusulas <span style="font-size:10px;background:rgba(0,0,0,0.07);border-radius:8px;padding:0 5px;">{{ u.clausulas.count }}</span></button>
+    <button class="utab-btn" onclick="switchUTab('{{ u.pk }}','alianzas')" style="font-size:11px;font-weight:700;padding:6px 14px;border:none;background:none;color:var(--ink-soft);cursor:pointer;">Alianzas <span style="font-size:10px;background:rgba(0,0,0,0.07);border-radius:8px;padding:0 5px;">{{ u.alianzas.count }}</span></button>
+  </div>
+
+  {# ── Tab Contacto ─────────────────────────────────────────────────────── #}
+  <div id="upanel-{{ u.pk }}-contacto">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;">
+      {% if u.ciudad %}<div class="unidad-card__row"><span class="unidad-card__label">Ciudad</span> {{ u.ciudad }}</div>{% endif %}
+      {% if u.telefono %}<div class="unidad-card__row"><span class="unidad-card__label">Teléfono</span> {{ u.telefono }}</div>{% endif %}
+      {% if u.email %}<div class="unidad-card__row"><span class="unidad-card__label">Email</span> {{ u.email }}</div>{% endif %}
+      {% if u.sitio_web %}<div class="unidad-card__row"><span class="unidad-card__label">Web</span> <a href="{{ u.sitio_web }}" target="_blank" style="font-size:12px;">{{ u.sitio_web }}</a></div>{% endif %}
+      {% if u.direccion %}<div class="unidad-card__row" style="grid-column:1/-1;"><span class="unidad-card__label">Dirección</span> {{ u.direccion }}</div>{% endif %}
+    </div>
+  </div>
+
+  {# ── Tab Quiénes somos ────────────────────────────────────────────────── #}
+  <div id="upanel-{{ u.pk }}-quienes" style="display:none;">
+    {% if u.quienes_somos %}<p style="font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ u.quienes_somos }}</p>{% endif %}
+    {% if u.mision %}<div style="margin-top:12px;"><strong style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Misión</strong><p style="font-size:13px;margin-top:4px;white-space:pre-wrap;">{{ u.mision }}</p></div>{% endif %}
+    {% if u.vision %}<div style="margin-top:12px;"><strong style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Visión</strong><p style="font-size:13px;margin-top:4px;white-space:pre-wrap;">{{ u.vision }}</p></div>{% endif %}
+    {% if not u.quienes_somos and not u.mision and not u.vision %}<div class="text-muted small">Sin información.</div>{% endif %}
+  </div>
+
+  {# ── Tab Políticas ────────────────────────────────────────────────────── #}
+  <div id="upanel-{{ u.pk }}-politicas" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-sm btn-primary"
+              onclick="prepareSubForm('politica','create',{{ u.pk }})"
+              data-bs-toggle="offcanvas" data-bs-target="#offcanvasPolitica">+ Política</button>
+    </div>
+    {% for pol in u.politicas.all %}
+    <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <strong style="font-size:13px;">{{ pol.titulo }}</strong>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-xs btn-ghost"
+                  onclick="prepareSubForm('politica','edit',{{ u.pk }},{ id:'{{ pol.pk }}', titulo:'{{ pol.titulo|escapejs }}', descripcion:'{{ pol.descripcion|escapejs }}', orden:'{{ pol.orden }}' })"
+                  data-bs-toggle="offcanvas" data-bs-target="#offcanvasPolitica">✎</button>
+          <button class="btn btn-xs btn-ghost text-danger"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-name="{{ pol.titulo }}"
+                  data-delete-url="{% url 'configuracion:politica_delete' pol.pk %}">✕</button>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:6px;white-space:pre-wrap;">{{ pol.descripcion }}</p>
+    </div>
+    {% empty %}<div class="text-muted small">Sin políticas registradas.</div>
+    {% endfor %}
+  </div>
+
+  {# ── Tab Cláusulas ────────────────────────────────────────────────────── #}
+  <div id="upanel-{{ u.pk }}-clausulas" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-sm btn-primary"
+              onclick="prepareSubForm('clausula','create',{{ u.pk }})"
+              data-bs-toggle="offcanvas" data-bs-target="#offcanvasClausula">+ Cláusula</button>
+    </div>
+    {% for cl in u.clausulas.all %}
+    <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <strong style="font-size:13px;">{{ cl.titulo }}</strong>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-xs btn-ghost"
+                  onclick="prepareSubForm('clausula','edit',{{ u.pk }},{ id:'{{ cl.pk }}', titulo:'{{ cl.titulo|escapejs }}', descripcion:'{{ cl.descripcion|escapejs }}', orden:'{{ cl.orden }}' })"
+                  data-bs-toggle="offcanvas" data-bs-target="#offcanvasClausula">✎</button>
+          <button class="btn btn-xs btn-ghost text-danger"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-name="{{ cl.titulo }}"
+                  data-delete-url="{% url 'configuracion:clausula_delete' cl.pk %}">✕</button>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--ink-soft);margin-top:6px;white-space:pre-wrap;">{{ cl.descripcion }}</p>
+    </div>
+    {% empty %}<div class="text-muted small">Sin cláusulas registradas.</div>
+    {% endfor %}
+  </div>
+
+  {# ── Tab Alianzas ─────────────────────────────────────────────────────── #}
+  <div id="upanel-{{ u.pk }}-alianzas" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-sm btn-primary"
+              onclick="prepareSubForm('alianza','create',{{ u.pk }})"
+              data-bs-toggle="offcanvas" data-bs-target="#offcanvasAlianza">+ Alianza</button>
+    </div>
+    {% for al in u.alianzas.all %}
+    <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <strong style="font-size:13px;">{{ al.nombre }}</strong>
+          {% if al.url %}<a href="{{ al.url }}" target="_blank" style="font-size:11px;margin-left:8px;color:var(--theme-accent);">↗ sitio</a>{% endif %}
+        </div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-xs btn-ghost"
+                  onclick="prepareSubForm('alianza','edit',{{ u.pk }},{ id:'{{ al.pk }}', nombre:'{{ al.nombre|escapejs }}', descripcion:'{{ al.descripcion|escapejs }}', url:'{{ al.url|escapejs }}', orden:'{{ al.orden }}' })"
+                  data-bs-toggle="offcanvas" data-bs-target="#offcanvasAlianza">✎</button>
+          <button class="btn btn-xs btn-ghost text-danger"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-name="{{ al.nombre }}"
+                  data-delete-url="{% url 'configuracion:alianza_delete' al.pk %}">✕</button>
+        </div>
+      </div>
+      {% if al.descripcion %}<p style="font-size:12px;color:var(--ink-soft);margin-top:6px;">{{ al.descripcion }}</p>{% endif %}
+    </div>
+    {% empty %}<div class="text-muted small">Sin alianzas registradas.</div>
+    {% endfor %}
+  </div>
+
+</div>{# /unidad-card #}
+{% endfor %}
+
+{% else %}
+<div class="unidad-empty fade-up">
+  <div style="font-size:32px;margin-bottom:12px;">🏢</div>
+  <div style="font-weight:700;margin-bottom:6px;">Sin unidades registradas</div>
+  <div style="font-size:13px;">Registra la información de cada unidad de negocio.</div>
+  <button class="btn btn-primary btn-sm mt-3"
+          onclick="prepareUnidadForm('create')"
+          data-bs-toggle="offcanvas" data-bs-target="#offcanvasUnidad">
+    + Crear primera unidad
+  </button>
+</div>
+{% endif %}
+
+</div>{# /panelUnidades #}
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     OFFCANVAS — USUARIO
+══════════════════════════════════════════════════════════════════════════ -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasUsuario" style="width:420px;">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title fw-bold" id="userTitle">Usuario</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form id="userForm" method="post" action="{% url 'configuracion:configuracion_create' %}">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Nombre completo</label>
+        <input type="text" name="nombre_completo" id="u_nombre" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Email</label>
+        <input type="email" name="email" id="u_email" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">
+          Contraseña <span id="u_pwRequired" style="color:var(--brand-red)">*</span>
+        </label>
+        <input type="password" name="password_hash" id="u_password" class="form-control" autocomplete="new-password">
+        <div class="form-text" id="u_pwHint" style="font-size:10px;display:none;">
+          Dejar vacío para conservar la contraseña actual.
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Unidad de negocio</label>
+        <select name="unidad_negocio" id="u_unidad" class="form-select">
+          <option value="IMPERANDINA">Imperandina</option>
+          <option value="SOLARANDINA">Solarandina</option>
+          <option value="IMPERTIENDA">Impertienda</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Rol</label>
+        <select name="rol" id="u_rol" class="form-select">
+          <option value="ADMINISTRADOR">Administrador</option>
+          <option value="PRESUPUESTOS">Presupuestos</option>
+          <option value="COMPRAS">Compras</option>
+          <option value="ASESOR_COMERCIAL">Asesor comercial</option>
+          <option value="SOLO_LECTURA">Solo lectura</option>
+        </select>
+      </div>
+      <div class="form-check form-switch mt-4">
+        <input class="form-check-input" type="checkbox" name="activo" id="u_activo" checked>
+        <label class="form-check-label fw-bold">Usuario activo</label>
+      </div>
+      <div class="mt-5 d-grid">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     OFFCANVAS — UNIDAD DE NEGOCIO
+══════════════════════════════════════════════════════════════════════════ -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasUnidad" style="width:500px;">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title fw-bold" id="unidadTitle">Unidad de negocio</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form id="unidadForm" method="post" action="{% url 'configuracion:unidad_create' %}">
+      {% csrf_token %}
+      <div id="unidadCodigoWrap" class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Unidad</label>
+        <select name="codigo" id="un_codigo" class="form-select" required>
+          <option value="IMPERANDINA">Imperandina</option>
+          <option value="SOLARANDINA">Solarandina</option>
+          <option value="IMPERTIENDA">Impertienda</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Razón social <span style="color:var(--brand-red)">*</span></label>
+        <input type="text" name="razon_social" id="un_razon_social" class="form-control" required>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col">
+          <label class="form-label small fw-bold text-uppercase">NIT</label>
+          <input type="text" name="nit" id="un_nit" class="form-control">
+        </div>
+        <div class="col">
+          <label class="form-label small fw-bold text-uppercase">Ciudad</label>
+          <input type="text" name="ciudad" id="un_ciudad" class="form-control">
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Dirección</label>
+        <input type="text" name="direccion" id="un_direccion" class="form-control">
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col">
+          <label class="form-label small fw-bold text-uppercase">Teléfono</label>
+          <input type="text" name="telefono" id="un_telefono" class="form-control">
+        </div>
+        <div class="col">
+          <label class="form-label small fw-bold text-uppercase">Email</label>
+          <input type="email" name="email" id="un_email" class="form-control">
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Sitio web</label>
+        <input type="url" name="sitio_web" id="un_sitio_web" class="form-control" placeholder="https://...">
+      </div>
+      <hr>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Quiénes somos</label>
+        <textarea name="quienes_somos" id="un_quienes_somos" class="form-control" rows="3" placeholder="Descripción de la empresa..."></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Misión</label>
+        <textarea name="mision" id="un_mision" class="form-control" rows="2"></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Visión</label>
+        <textarea name="vision" id="un_vision" class="form-control" rows="2"></textarea>
+      </div>
+      <div class="form-check form-switch mt-3">
+        <input class="form-check-input" type="checkbox" name="activa" id="un_activa" checked>
+        <label class="form-check-label fw-bold">Unidad activa</label>
+      </div>
+      <div class="mt-4 d-grid">
+        <button type="submit" class="btn btn-primary">Guardar unidad</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     OFFCANVAS — POLÍTICA
+══════════════════════════════════════════════════════════════════════════ -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasPolitica" style="width:440px;">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title fw-bold" id="politicaTitle">Política</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form id="politicaForm" method="post" action="">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Título <span style="color:var(--brand-red)">*</span></label>
+        <input type="text" name="titulo" id="pol_titulo" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Descripción <span style="color:var(--brand-red)">*</span></label>
+        <textarea name="descripcion" id="pol_descripcion" class="form-control" rows="5" required></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Orden</label>
+        <input type="number" name="orden" id="pol_orden" class="form-control" value="0" min="0">
+      </div>
+      <div class="mt-4 d-grid">
+        <button type="submit" class="btn btn-primary">Guardar política</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     OFFCANVAS — CLÁUSULA
+══════════════════════════════════════════════════════════════════════════ -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasClausula" style="width:440px;">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title fw-bold" id="clausulaTitle">Cláusula</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form id="clausulaForm" method="post" action="">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Título <span style="color:var(--brand-red)">*</span></label>
+        <input type="text" name="titulo" id="cl_titulo" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Descripción <span style="color:var(--brand-red)">*</span></label>
+        <textarea name="descripcion" id="cl_descripcion" class="form-control" rows="5" required></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Orden</label>
+        <input type="number" name="orden" id="cl_orden" class="form-control" value="0" min="0">
+      </div>
+      <div class="mt-4 d-grid">
+        <button type="submit" class="btn btn-primary">Guardar cláusula</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     OFFCANVAS — ALIANZA
+══════════════════════════════════════════════════════════════════════════ -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasAlianza" style="width:440px;">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title fw-bold" id="alianzaTitle">Alianza</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form id="alianzaForm" method="post" action="">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Nombre del aliado <span style="color:var(--brand-red)">*</span></label>
+        <input type="text" name="nombre" id="al_nombre" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Descripción</label>
+        <textarea name="descripcion" id="al_descripcion" class="form-control" rows="3"></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Sitio web</label>
+        <input type="url" name="url" id="al_url" class="form-control" placeholder="https://...">
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-bold text-uppercase">Orden</label>
+        <input type="number" name="orden" id="al_orden" class="form-control" value="0" min="0">
+      </div>
+      <div class="mt-4 d-grid">
+        <button type="submit" class="btn btn-primary">Guardar alianza</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+// ── Tab principal (Usuarios / Unidades) ──────────────────────────────────────
+function switchCfgTab(tab) {
+  const showU = tab === 'usuarios';
+  document.getElementById('panelUsuarios').style.display   = showU ? '' : 'none';
+  document.getElementById('panelUnidades').style.display   = showU ? 'none' : '';
+  document.getElementById('btnNuevoUsuario').style.display = showU ? '' : 'none';
+  document.getElementById('btnNuevaUnidad').style.display  = showU ? 'none' : '';
+  document.getElementById('tabBtnUsuarios').className  = 'cfg-tab-btn' + (showU ? ' active' : '');
+  document.getElementById('tabBtnUnidades').className  = 'cfg-tab-btn' + (showU ? '' : ' active');
+  sessionStorage.setItem('cfgTab', tab);
+}
+(function() {
+  const saved = sessionStorage.getItem('cfgTab');
+  if (saved === 'unidades') switchCfgTab('unidades');
+})();
+
+// ── Sub-tabs por unidad (Contacto / Quiénes somos / Políticas / Cláusulas / Alianzas) ──
+function switchUTab(unidadPk, tab) {
+  const sections = ['contacto', 'quienes', 'politicas', 'clausulas', 'alianzas'];
+  sections.forEach(function(s) {
+    const panel = document.getElementById('upanel-' + unidadPk + '-' + s);
+    if (panel) panel.style.display = (s === tab) ? '' : 'none';
+  });
+  // Actualizar estilos de los botones de sub-tab
+  const container = document.getElementById('utabs-' + unidadPk);
+  if (container) {
+    container.querySelectorAll('.utab-btn').forEach(function(btn) {
+      const isActive = btn.getAttribute('onclick').includes("'" + tab + "'");
+      btn.style.color       = isActive ? 'var(--theme-accent)' : 'var(--ink-soft)';
+      btn.style.borderBottom = isActive ? '2px solid var(--theme-accent)' : '2px solid transparent';
+      btn.style.fontWeight  = isActive ? '700' : '600';
+    });
+  }
+}
+
+// ── Offcanvas Usuario ────────────────────────────────────────────────────────
+function prepareUserForm(mode, data = null) {
+  const form    = document.getElementById('userForm');
+  const title   = document.getElementById('userTitle');
+  const pwReq   = document.getElementById('u_pwRequired');
+  const pwHint  = document.getElementById('u_pwHint');
+  const pwInput = document.getElementById('u_password');
+  form.reset();
+
+  if (mode === 'create') {
+    title.textContent = 'Nuevo usuario';
+    form.action = "{% url 'configuracion:configuracion_create' %}";
+    document.getElementById('u_activo').checked = true;
+    pwReq.style.display  = 'inline';
+    pwHint.style.display = 'none';
+    pwInput.placeholder  = '';
+  } else {
+    title.textContent = 'Editar: ' + data.nombre;
+    form.action = '/configuracion/' + data.id + '/editar/';
+    document.getElementById('u_nombre').value   = data.nombre  || '';
+    document.getElementById('u_email').value    = data.email   || '';
+    document.getElementById('u_unidad').value   = data.unidad  || '';
+    document.getElementById('u_rol').value      = data.rol     || '';
+    document.getElementById('u_activo').checked = (data.activo === 'true');
+    pwInput.value        = '';
+    pwInput.placeholder  = 'Dejar vacío para no cambiar';
+    pwReq.style.display  = 'none';
+    pwHint.style.display = 'block';
+  }
+}
+
+// ── Offcanvas Unidad de negocio ──────────────────────────────────────────────
+function prepareUnidadForm(mode, data = null) {
+  const form  = document.getElementById('unidadForm');
+  const title = document.getElementById('unidadTitle');
+  const wrap  = document.getElementById('unidadCodigoWrap');
+  form.reset();
+
+  if (mode === 'create') {
+    title.textContent = 'Nueva unidad de negocio';
+    form.action = "{% url 'configuracion:unidad_create' %}";
+    wrap.style.display = '';
+    document.getElementById('un_activa').checked = true;
+  } else {
+    title.textContent = 'Editar unidad';
+    form.action = '/configuracion/unidades/' + data.id + '/editar/';
+    wrap.style.display = 'none';
+    document.getElementById('un_razon_social').value  = data.razon_social  || '';
+    document.getElementById('un_nit').value           = data.nit           || '';
+    document.getElementById('un_ciudad').value        = data.ciudad        || '';
+    document.getElementById('un_direccion').value     = data.direccion     || '';
+    document.getElementById('un_telefono').value      = data.telefono      || '';
+    document.getElementById('un_email').value         = data.email         || '';
+    document.getElementById('un_sitio_web').value     = data.sitio_web     || '';
+    document.getElementById('un_quienes_somos').value = data.quienes_somos || '';
+    document.getElementById('un_mision').value        = data.mision        || '';
+    document.getElementById('un_vision').value        = data.vision        || '';
+    document.getElementById('un_activa').checked      = (data.activa === 'true');
+  }
+}
+
+// ── Offcanvas Política / Cláusula / Alianza ──────────────────────────────────
+function prepareSubForm(type, mode, unidadPk, data = null) {
+  const configs = {
+    politica: {
+      formId:  'politicaForm',
+      titleId: 'politicaTitle',
+      createUrl: '/configuracion/unidades/' + unidadPk + '/politicas/nueva/',
+      editUrlFn: function(id) { return '/configuracion/unidades/politicas/' + id + '/editar/'; },
+      fields: ['titulo', 'descripcion', 'orden'],
+      prefixes: { titulo: 'pol_titulo', descripcion: 'pol_descripcion', orden: 'pol_orden' },
+      labelCreate: 'Nueva política',
+      labelEdit:   'Editar política',
+    },
+    clausula: {
+      formId:  'clausulaForm',
+      titleId: 'clausulaTitle',
+      createUrl: '/configuracion/unidades/' + unidadPk + '/clausulas/nueva/',
+      editUrlFn: function(id) { return '/configuracion/unidades/clausulas/' + id + '/editar/'; },
+      fields: ['titulo', 'descripcion', 'orden'],
+      prefixes: { titulo: 'cl_titulo', descripcion: 'cl_descripcion', orden: 'cl_orden' },
+      labelCreate: 'Nueva cláusula',
+      labelEdit:   'Editar cláusula',
+    },
+    alianza: {
+      formId:  'alianzaForm',
+      titleId: 'alianzaTitle',
+      createUrl: '/configuracion/unidades/' + unidadPk + '/alianzas/nueva/',
+      editUrlFn: function(id) { return '/configuracion/unidades/alianzas/' + id + '/editar/'; },
+      fields: ['nombre', 'descripcion', 'url', 'orden'],
+      prefixes: { nombre: 'al_nombre', descripcion: 'al_descripcion', url: 'al_url', orden: 'al_orden' },
+      labelCreate: 'Nueva alianza',
+      labelEdit:   'Editar alianza',
+    },
+  };
+
+  const cfg  = configs[type];
+  const form = document.getElementById(cfg.formId);
+  form.reset();
+  document.getElementById(cfg.titleId).textContent = (mode === 'create') ? cfg.labelCreate : cfg.labelEdit;
+
+  if (mode === 'create') {
+    form.action = cfg.createUrl;
+    // Resetear orden a 0
+    const ordenEl = form.querySelector('[name="orden"]');
+    if (ordenEl) ordenEl.value = '0';
+  } else {
+    form.action = cfg.editUrlFn(data.id);
+    cfg.fields.forEach(function(field) {
+      const elId = cfg.prefixes[field];
+      const el   = document.getElementById(elId);
+      if (el && data[field] !== undefined) el.value = data[field];
+    });
+  }
+}
+</script>
+{% endblock %}

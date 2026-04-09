@@ -1,9 +1,9 @@
 from django.contrib import admin
-from .models import UsuarioSistema
+from .models import ConfiguracionSistema
 
 
-@admin.register(UsuarioSistema)
-class UsuarioSistemaAdmin(admin.ModelAdmin):
+@admin.register(ConfiguracionSistema)
+class ConfiguracionSistemaAdmin(admin.ModelAdmin):
     list_display = ("email", "nombre_completo", "unidad_negocio", "rol", "activo", "created_at")
     list_filter = ("unidad_negocio", "rol", "activo")
     search_fields = ("email", "nombre_completo")

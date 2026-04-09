@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('catalogos', '0001_initial'),
         ('ingenieria', '0001_initial'),
-        ('usuarios', '0001_initial'),
+        ('configuracion', '0001_initial'),
         ('comercial', '0001_initial'),
     ]
 
@@ -71,7 +71,7 @@ class Migration(migrations.Migration):
                 ('activa', models.BooleanField(default=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('modificado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='configs_apu', to='usuarios.usuariosistema')),
+                ('modificado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='configs_apu', to='configuracion.usuariosistema')),
             ],
             options={
                 'db_table': 'configuracion_apu',

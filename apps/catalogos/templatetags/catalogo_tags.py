@@ -72,6 +72,18 @@ def currency(value, moneda_code="COP"):
         return f"{symbol}{formatted}"
 
 
+@register.filter(name="sum_attr")
+def sum_attr(objects, attr):
+    """Suma el atributo 'attr' de cada objeto en la lista.
+
+    {{ cat_group.list|sum_attr:"costo_por_dia"|floatformat:2 }}
+    """
+    try:
+        return sum(float(getattr(obj, attr, 0) or 0) for obj in objects)
+    except (TypeError, ValueError):
+        return 0
+
+
 @register.filter(name="multiply")
 def multiply(value, arg):
     """Multiplica value por arg. Útil para calcular totales en plantillas."""

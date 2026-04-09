@@ -6,7 +6,7 @@
 <div class="page-header d-flex align-items-center justify-content-between mb-4">
   <div>
     <h1 class="page-title mb-0">
-      <i class="bi bi-currency-dollar me-2"></i>Catálogo APU
+      Catálogo APU
     </h1>
     <p class="text-muted small mb-0 mt-1">
       Ítems reutilizables organizados por tipo de análisis de precios unitarios
@@ -25,10 +25,7 @@
        class="btn btn-sm btn-outline-success">
       <i class="bi bi-people me-1"></i>Nueva cuadrilla
     </a>
-    <a href="{% url 'presupuestos:apu_list' %}"
-       class="btn btn-sm btn-outline-secondary">
-      <i class="bi bi-list-ul me-1"></i>APUs de proyectos
-    </a>
+    
   </div>
 </div>
 
@@ -141,11 +138,22 @@
                         Sal. ${{ item.salario_base|floatformat:0 }}
                       </span>
                     {% endif %}
+                    <!-- Fabricante / tienda de referencia -->
+                    {% if item.tienda_referencia %}
+                      <span class="me-2">
+                        <i class="bi bi-shop me-1 opacity-50"></i>
+                        {{ item.tienda_referencia }}
+                      </span>
+                    {% endif %}
                     <!-- Vida útil (herramientas) -->
                     {% if item.vida_util_dias %}
-                      <span class="text-warning">
+                      <span class="me-1 text-warning">
                         <i class="bi bi-clock me-1 opacity-50"></i>
-                        {{ item.vida_util_dias }} días
+                        {{ item.vida_util_dias }} días útiles
+                      </span>
+                      <span class="text-success fw-semibold">
+                        <i class="bi bi-calendar-day me-1 opacity-75"></i>
+                        ${{ item.costo_por_dia|floatformat:2 }}/día
                       </span>
                     {% endif %}
                     {% if not item.activo %}

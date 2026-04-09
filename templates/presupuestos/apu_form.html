@@ -25,55 +25,87 @@
           <div class="alert alert-danger py-2" style="font-size:12.5px;">{{ form.non_field_errors }}</div>
           {% endif %}
 
-          <!-- Márgenes y factores -->
+          <!-- Identificación -->
           <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
                       color:rgba(14,17,23,0.38);margin-bottom:14px;padding-bottom:6px;
                       border-bottom:1px solid var(--sidebar-light-border);">
-            Márgenes y factores
+            Identificación
           </div>
           <div class="row g-3 mb-4">
-            {% for field in form %}
-            {% if field.name != 'cuadrilla_personas' and field.name != 'dias_trabajo' and field.name != 'tiempo_estimado_meses' and field.name != 'rendimiento_und_dia' %}
-            <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">{{ field.label }}</label>
-              {{ field }}
-              {% if field.errors %}
-              <div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ field.errors.0 }}</div>
-              {% endif %}
+            <div class="col-12">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.nombre.label }}</label>
+              {{ form.nombre }}
+              {% if form.nombre.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.nombre.errors.0 }}</div>{% endif %}
             </div>
-            {% endif %}
-            {% endfor %}
+            <div class="col-12">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.descripcion.label }}</label>
+              {{ form.descripcion }}
+            </div>
           </div>
 
-          <!-- Mano de obra -->
+          <!-- Factores de precio -->
           <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
                       color:rgba(14,17,23,0.38);margin-bottom:14px;padding-bottom:6px;
                       border-bottom:1px solid var(--sidebar-light-border);">
-            Mano de obra
+            Factores de precio
           </div>
           <div class="row g-3 mb-4">
+
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.cuadrilla_personas.label }}</label>
-              {{ form.cuadrilla_personas }}
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.factor_venta_pct.label }}</label>
+              {{ form.factor_venta_pct }}
               <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">
-                Personas en cuadrilla de instalación
+                Valor unit. = Costo unit. × (factor ÷ 100). Ej: 121 → ×1.21
               </div>
+              {% if form.factor_venta_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.factor_venta_pct.errors.0 }}</div>{% endif %}
             </div>
+
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.dias_trabajo.label }}</label>
-              {{ form.dias_trabajo }}
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.iva_pct.label }}</label>
+              {{ form.iva_pct }}
               <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">
-                Se calcula automáticamente al generar el APU
+                Solo aplica a materiales cuando "Aplica IVA" está activo
               </div>
+              {% if form.iva_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.iva_pct.errors.0 }}</div>{% endif %}
             </div>
+
+            <div class="col-12 d-flex align-items-center gap-2 pt-1">
+              {{ form.aplica_iva }}
+              <label class="form-check-label" style="font-size:12.5px;font-weight:600;">{{ form.aplica_iva.label }}</label>
+            </div>
+
+          </div>
+
+          <!-- Mano de obra, herramientas, transporte y administración -->
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                      color:rgba(14,17,23,0.38);margin-bottom:14px;padding-bottom:6px;
+                      border-bottom:1px solid var(--sidebar-light-border);">
+            Parámetros de cálculo (MO · Herramientas · Transporte · Admin)
+          </div>
+          
+          <div class="row g-3 mb-4">
+
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.tiempo_estimado_meses.label }}</label>
-              {{ form.tiempo_estimado_meses }}
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.aiu_contratista_pct.label }}</label>
+              {{ form.aiu_contratista_pct }}
+              <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">Administración, Imprevistos y Utilidad</div>
+              {% if form.aiu_contratista_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.aiu_contratista_pct.errors.0 }}</div>{% endif %}
             </div>
+
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.rendimiento_und_dia.label }}</label>
-              {{ form.rendimiento_und_dia }}
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.margen_ganancia_pct.label }}</label>
+              {{ form.margen_ganancia_pct }}
+              <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">Margen de ganancia sobre el costo directo</div>
+              {% if form.margen_ganancia_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.margen_ganancia_pct.errors.0 }}</div>{% endif %}
             </div>
+
+            <div class="col-6">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.dias_duracion.label }}</label>
+              {{ form.dias_duracion }}
+              <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">Días hábiles del proyecto (afecta costo de personal, equipos y transporte)</div>
+              {% if form.dias_duracion.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.dias_duracion.errors.0 }}</div>{% endif %}
+            </div>
+
           </div>
 
           <div class="d-flex gap-2 justify-content-end">

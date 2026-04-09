@@ -14,9 +14,10 @@
 <style>
   /* ═══ APU DETAIL ══════════════════════════════════════════════════ */
   .apu-header {
-    background: var(--ink);
-    color: #fff;
-    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid var(--sidebar-light-border);
+    border-left: 4px solid var(--theme-accent);
+    border-radius: 14px;
     padding: 20px 28px;
     margin-bottom: 20px;
     display: flex;
@@ -37,17 +38,17 @@
     font-family: 'Lato';
     font-size: 17px;
     font-weight: 800;
-    color: #fff;
+    color: var(--ink);
     line-height: 1.2;
   }
   .apu-header__sub {
     font-size: 12px;
-    color: rgba(255,255,255,0.40);
+    color: rgba(14,17,23,0.42);
     margin-top: 3px;
   }
   .apu-header__total-label {
     font-size: 10.5px;
-    color: rgba(255,255,255,0.35);
+    color: rgba(14,17,23,0.40);
     text-transform: uppercase;
     letter-spacing: .08em;
     font-weight: 600;
@@ -64,7 +65,7 @@
   }
   .apu-header__cost-value {
     font-size: 13px;
-    color: rgba(255,255,255,0.45);
+    color: rgba(14,17,23,0.45);
     text-align: right;
     font-variant-numeric: tabular-nums;
     margin-top: 2px;
@@ -73,10 +74,10 @@
   /* KPI bar */
   .apu-kpi-row {
     display: grid;
-    grid-template-columns: repeat(5, 1fr) auto;
+    grid-template-columns: 1fr 1fr auto;
     gap: 10px;
     margin-bottom: 20px;
-    align-items: stretch;
+    align-items: start;
   }
   .apu-kpi {
     background: var(--card);
@@ -128,72 +129,86 @@
     font-family: 'Lato';
   }
 
-  /* Section panels */
-  .apu-section {
+  /* ── Tabs horizontales ─────────────────────────────────────────── */
+  .apu-tabs-wrap {
     background: var(--card);
     border: 1px solid var(--sidebar-light-border);
     border-radius: 16px;
-    margin-bottom: 12px;
     overflow: hidden;
+    margin-bottom: 12px;
   }
-  .apu-section__head {
+  .apu-tabs-nav {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
+    border-bottom: 1px solid var(--sidebar-light-border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .apu-tabs-nav::-webkit-scrollbar { display: none; }
+
+  .apu-tab-navitem { flex: 1; min-width: 110px; display: flex; }
+
+  .apu-tab-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 10px 14px 9px;
     cursor: pointer;
     user-select: none;
-    border-bottom: 1px solid transparent;
     transition: background .15s;
-    gap: 12px;
+    border-right: 1px solid var(--sidebar-light-border);
+    position: relative;
+    text-align: left;
   }
-  .apu-section__head:hover {
-    background: var(--surface);
+  .apu-tab-navitem:last-child .apu-tab-btn { border-right: none; }
+  .apu-tab-btn:hover { background: rgba(0,0,0,0.025); }
+  .apu-tab-btn.active { background: var(--surface); }
+  .apu-tab-indicator {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--tab-color, var(--theme-accent));
+    opacity: 0.3;
+    transition: opacity .15s;
   }
-  .apu-section.open .apu-section__head {
-    border-bottom-color: var(--sidebar-light-border);
+  .apu-tab-btn.active .apu-tab-indicator { opacity: 1; }
+  .apu-tab-main {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 3px;
   }
-  .apu-section__type-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--sec-color, var(--theme-accent));
-    flex-shrink: 0;
-  }
-  .apu-section__title {
-    font-family: 'Lato';
-    font-size: 13px;
+  .apu-tab-icon { color: var(--tab-color, var(--theme-accent)); font-size: 12px; }
+  .apu-tab-name {
+    font-size: 12px;
     font-weight: 700;
     color: var(--ink);
-    flex: 1;
+    white-space: nowrap;
   }
-  .apu-section__subtotal {
-    font-family: 'Lato';
-    font-size: 14px;
+  .apu-tab-meta { display: flex; align-items: center; gap: 8px; }
+  .apu-tab-count { font-size: 10px; color: rgba(14,17,23,0.35); white-space: nowrap; }
+  .apu-tab-subtotal {
+    font-size: 11px;
     font-weight: 700;
-    color: var(--sec-color, var(--theme-accent));
+    color: var(--tab-color, var(--theme-accent));
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .apu-section__count {
-    font-size: 11px;
-    color: rgba(14,17,23,0.30);
-    white-space: nowrap;
-  }
-  .apu-section__chevron {
-    font-size: 11px;
-    color: rgba(14,17,23,0.30);
-    transition: transform .2s ease;
-    flex-shrink: 0;
-  }
-  .apu-section.open .apu-section__chevron {
-    transform: rotate(180deg);
-  }
-  .apu-section__body {
-    display: none;
-    overflow-x: auto;
-  }
-  .apu-section.open .apu-section__body {
-    display: block;
+  /* confirmado en el tab */
+  .apu-tab-navitem.confirmado .apu-tab-btn { background: rgba(23,168,94,0.04); }
+  .apu-tab-navitem.confirmado .apu-tab-indicator { background: #17a85e !important; opacity: 1; }
+
+  /* Contenido de cada tab */
+  .apu-tab-pane { display: none; }
+  .apu-tab-pane.active { display: block; }
+  .apu-tab-body { overflow-x: auto; }
+  .apu-tab-foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--sidebar-light-border);
   }
 
   /* APU line table */
@@ -291,14 +306,128 @@
   }
   .herr-row input { margin: 0; }
 
+  /* Costo total column — color propio para diferenciarlo del valor total */
+  /* Costo total: azul índigo */
+  .apu-table thead th.th-costo { color: #5b72e8; }
+  .apu-table td.apu-costo-total { color: #5b72e8; font-weight: 600; }
+  .apu-table tfoot .tf-costo { color: #5b72e8; font-weight: 700; }
+  /* Valor total: verde (acento de la sección ya no aplica — color fijo) */
+  .apu-table thead th.th-valor { color: #17a85e; }
+  .apu-table td.apu-valor-total { color: #17a85e; font-weight: 600; }
+  .apu-table tfoot .tf-valor { color: #17a85e; font-weight: 700; }
+  /* Resto de encabezados y celdas: negro estándar */
+  .apu-table thead th { color: rgba(14,17,23,0.45) !important; }
+  .apu-table thead th.th-costo { color: #5b72e8 !important; }
+  .apu-table thead th.th-valor { color: #17a85e !important; }
+
+  /* Fila de encabezado de categoría (colapsable) */
+  .apu-table tr.apu-cat-row { cursor: pointer; }
+  .apu-table tr.apu-cat-row td {
+    background: var(--surface);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink);
+    padding: 8px 16px 8px 20px;
+    border-bottom: 1px solid var(--sidebar-light-border);
+    user-select: none;
+  }
+  .apu-table tr.apu-cat-row:hover td { filter: brightness(.97); }
+  .cat-chevron { font-style: normal; display: inline-block; transition: transform .18s; font-size: 11px; }
+  .cat-open .cat-chevron { transform: rotate(90deg); }
+  /* Filas detalle de categoría — ocultas por defecto */
+  .apu-table tr.apu-cat-detail td { padding-left: 28px; }
+  /* Totales por categoría usan los mismos colores de costo/valor */
+  .apu-cat-costo { font-size: 11px; font-weight: 700; color: #5b72e8; white-space: nowrap; text-align: right; }
+  .apu-cat-valor { font-size: 11px; font-weight: 700; color: #17a85e; white-space: nowrap; text-align: right; }
+
+  /* Barra de totales globales */
+  .apu-grand-total {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .apu-grand-total__card {
+    background: var(--card);
+    border: 1px solid var(--sidebar-light-border);
+    border-radius: 14px;
+    padding: 16px 22px;
+  }
+  .apu-grand-total__label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    font-weight: 700;
+    color: rgba(14,17,23,0.38);
+    margin-bottom: 4px;
+  }
+  .apu-grand-total__costo {
+    font-family: 'Lato';
+    font-size: 22px;
+    font-weight: 800;
+    color: #5b72e8;
+    font-variant-numeric: tabular-nums;
+  }
+  .apu-grand-total__valor {
+    font-family: 'Lato';
+    font-size: 22px;
+    font-weight: 800;
+    color: #17a85e;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 900px) {
+    .apu-kpi-row {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
   @media (max-width: 768px) {
     .apu-kpi-row {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: 1fr;
     }
     .apu-kpi--params { min-width: unset; }
     .apu-header { flex-direction: column; align-items: flex-start; }
     .apu-header__total-value { text-align: left; }
     .apu-header__total-label { text-align: left; }
+    .apu-grand-total { flex-direction: column; align-items: flex-start; gap: 12px; }
+  }
+
+  /* ── Botón "De acuerdo" por sección ───────────────────────────── */
+  .apu-confirmado-btn {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: rgba(14,17,23,0.45);
+    border: 1px solid rgba(14,17,23,0.12);
+    border-radius: 8px;
+    padding: 5px 12px;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .apu-confirmado-btn:hover {
+    border-color: #17a85e;
+    color: #17a85e;
+  }
+  .apu-confirmado-btn.confirmado {
+    background: rgba(23,168,94,0.10);
+    color: #17a85e;
+    border-color: rgba(23,168,94,0.35);
+    font-weight: 700;
+  }
+  /* Indicador "confirmado" en el encabezado de la sección */
+  .apu-section__confirmado-badge {
+    display: none;
+    font-size: 10px;
+    font-weight: 700;
+    color: #17a85e;
+    background: rgba(23,168,94,0.10);
+    border-radius: 4px;
+    padding: 2px 7px;
+    margin-left: 8px;
+    letter-spacing: .04em;
+  }
+  .apu-section.confirmado .apu-section__confirmado-badge {
+    display: inline-block;
   }
 </style>
 {% endblock %}
@@ -315,30 +444,14 @@
         class="d-inline" style="margin:0;">
     {% csrf_token %}
     <button type="submit" class="btn btn-ghost btn-sm">
-      <i class="bi bi-arrow-clockwise" style="margin-right:4px;"></i>Regenerar materiales
+      <i class="bi bi-arrow-clockwise" style="margin-right:4px;"></i>Actualizar
     </button>
   </form>
   {% endif %}
-  <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}" class="btn btn-ghost btn-sm" target="_blank">
-    <i class="bi bi-file-earmark-pdf" style="margin-right:4px;"></i>PDF Interno
-  </a>
-  <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}" class="btn btn-ghost btn-sm" target="_blank">
-    <i class="bi bi-file-earmark-person" style="margin-right:4px;"></i>PDF Cliente
-  </a>
-  <form method="post"
-        action="{% url 'presupuestos:apu_enviar_revision' apu.pk %}"
-        class="d-inline" style="margin:0;">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary btn-sm">
-      <i class="bi bi-send-check" style="margin-right:4px;"></i>Enviar a revisión
-    </button>
-  </form>
 {% endblock %}
 
 
 {% block content %}
-
-<!-- ── CABECERA ──────────────────────────────────────────────────────────── -->
 <div class="apu-header fade-up">
   <div>
     {% if apu.proyecto_sistema %}
@@ -347,7 +460,7 @@
     <div class="apu-header__sub">
       {{ apu.proyecto_sistema.sistema.nombre }}
       {% if apu.proyecto_sistema.subsistema %}&nbsp;·&nbsp;{{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
-      &nbsp;·&nbsp;{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}
+      {% if apu.proyecto_sistema.proyecto.cliente %}&nbsp;·&nbsp;{{ apu.proyecto_sistema.proyecto.cliente.razon_social }}{% endif %}
     </div>
     {% else %}
     <div class="apu-header__code">APU</div>
@@ -355,461 +468,297 @@
     {% if apu.descripcion %}<div class="apu-header__sub">{{ apu.descripcion }}</div>{% endif %}
     {% endif %}
   </div>
-  <div>
-    <div class="apu-header__total-label">Total venta</div>
-    <div class="apu-header__total-value">{{ apu.total_valor_venta|currency:"COP" }}</div>
-    <div class="apu-header__cost-value">Costo: {{ apu.total_costo|currency:"COP" }}</div>
-  </div>
 </div>
 
 
-<!-- ── KPI ROW ──────────────────────────────────────────────────────────── -->
 <div class="apu-kpi-row fade-up-1">
 
-  <div class="apu-kpi" style="--kpi-accent:#1470e6;">
-    <div class="apu-kpi__label">Materiales</div>
-    <div class="apu-kpi__value">{{ apu.subtotal_materiales|currency:"COP" }}</div>
-    <div class="apu-kpi__sub">Por unidad de referencia</div>
+  <!-- Costo total con desglose por categoría -->
+  <div class="apu-kpi" style="--kpi-accent:#5b72e8;">
+    <div class="apu-kpi__label">Costo total</div>
+    <div class="apu-kpi__value">{{ apu.total_costo|currency:"COP" }}</div>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px;">
+      <div class="apu-param-row">
+        <span><i class="bi bi-box-seam" style="color:#1470e6;margin-right:4px;font-size:10px;"></i>Materiales</span>
+        <strong style="color:#5b72e8;">{{ apu.subtotal_materiales|currency:"COP" }}</strong>
+      </div>
+      <div class="apu-param-row">
+        <span><i class="bi bi-tools" style="color:#e07d10;margin-right:4px;font-size:10px;"></i>Herramientas</span>
+        <strong style="color:#5b72e8;">{{ apu.subtotal_herramientas|currency:"COP" }}</strong>
+      </div>
+      <div class="apu-param-row">
+        <span><i class="bi bi-truck" style="color:#7048d0;margin-right:4px;font-size:10px;"></i>Transporte</span>
+        <strong style="color:#5b72e8;">{{ apu.subtotal_transporte|currency:"COP" }}</strong>
+      </div>
+      <div class="apu-param-row">
+        <span><i class="bi bi-people" style="color:#17a85e;margin-right:4px;font-size:10px;"></i>Mano de obra</span>
+        <strong style="color:#5b72e8;">{{ apu.subtotal_mano_obra|currency:"COP" }}</strong>
+      </div>
+      <div class="apu-param-row">
+        <span><i class="bi bi-briefcase" style="color:#64748b;margin-right:4px;font-size:10px;"></i>Administración</span>
+        <strong style="color:#5b72e8;">{{ apu.subtotal_administracion|currency:"COP" }}</strong>
+      </div>
+    </div>
   </div>
 
-  <div class="apu-kpi" style="--kpi-accent:#e07d10;">
-    <div class="apu-kpi__label">Herramientas</div>
-    <div class="apu-kpi__value">{{ apu.subtotal_herramientas|currency:"COP" }}</div>
-    <div class="apu-kpi__sub">Equipos y eléctricos</div>
-  </div>
-
-  <div class="apu-kpi" style="--kpi-accent:#7048d0;">
-    <div class="apu-kpi__label">Transporte</div>
-    <div class="apu-kpi__value">{{ apu.subtotal_transporte|currency:"COP" }}</div>
-    <div class="apu-kpi__sub">Retiro y envío</div>
-  </div>
-
+  <!-- Valor total cliente con desglose por categoría -->
   <div class="apu-kpi" style="--kpi-accent:#17a85e;">
-    <div class="apu-kpi__label">Mano de obra</div>
-    <div class="apu-kpi__value">{{ apu.subtotal_mano_obra|currency:"COP" }}</div>
-    <div class="apu-kpi__sub">Personal y cuadrillas</div>
-  </div>
-
-  <div class="apu-kpi" style="--kpi-accent:#64748b;">
-    <div class="apu-kpi__label">Administración</div>
-    <div class="apu-kpi__value">{{ apu.subtotal_administracion|currency:"COP" }}</div>
-    <div class="apu-kpi__sub">Gastos generales</div>
+    <div class="apu-kpi__label">Valor total</div>
+    <div class="apu-kpi__value">{{ apu.total_valor_venta|currency:"COP" }}</div>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:5px;">
+      {% for cat in categorias_apu %}
+      <div class="apu-param-row">
+        <span><i class="bi {{ cat.icon }}" style="color:{{ cat.color }};margin-right:4px;font-size:10px;"></i>{{ cat.label }}</span>
+        <strong style="color:#17a85e;">{{ cat.subtotal_valor|currency:"COP" }}</strong>
+      </div>
+      {% endfor %}
+    </div>
   </div>
 
   <!-- Parámetros rápidos -->
   <div class="apu-kpi apu-kpi--params">
-    <div class="apu-kpi__label" style="margin-bottom:8px;">Parámetros</div>
+    <div class="apu-kpi__label" style="margin-bottom:8px;">
+      Parámetros
+      <a href="{% url 'presupuestos:apu_update' apu.pk %}"
+         style="font-size:10px;font-weight:600;color:var(--theme-accent);margin-left:6px;">Editar</a>
+    </div>
     <div class="apu-param-row"><span>Factor venta</span><strong>{{ apu.factor_venta_pct }}%</strong></div>
     <div class="apu-param-row"><span>IVA</span><strong>{% if apu.aplica_iva %}{{ apu.iva_pct }}%{% else %}—{% endif %}</strong></div>
-    <div class="apu-param-row"><span>Total costo</span><strong>{{ apu.total_costo|currency:"COP" }}</strong></div>
-    <div class="apu-param-row"><span>Total venta</span><strong>{{ apu.total_valor_venta|currency:"COP" }}</strong></div>
+    <div class="apu-param-row"><span>AIU contratista</span><strong>{{ apu.aiu_contratista_pct }}%</strong></div>
+    <div class="apu-param-row"><span>Margen ganancia</span><strong>{{ apu.margen_ganancia_pct }}%</strong></div>
+    <div class="apu-param-row"><span>Días duración</span><strong>{{ apu.dias_duracion }} días</strong></div>
   </div>
 
 </div><!-- /.apu-kpi-row -->
 
 
-<!-- ══════════════════════════════════════════════════════════════════════════
-     SECCIONES APU — una por TipoAPU
-══════════════════════════════════════════════════════════════════════════ -->
+<div class="apu-tabs-wrap fade-up">
 
-{% regroup lineas by tipo as lineas_por_tipo %}
-
-{# ── Sección MATERIALES ─────────────────────────────────────────── #}
-{% with color="#1470e6" subtotal=apu.subtotal_materiales %}
-<div class="apu-section fade-up open" style="--sec-color:{{ color }};">
-  <div class="apu-section__head" onclick="toggleSection(this.parentElement)">
-    <span class="apu-section__type-dot"></span>
-    <span class="apu-section__title">
-      <i class="bi bi-box-seam" style="margin-right:6px;opacity:.6;"></i>Materiales
-    </span>
-    <span class="apu-section__count">
-      {% for g in lineas_por_tipo %}{% if g.grouper == "MATERIALES" %}{{ g.list|length }} línea{{ g.list|length|pluralize }}{% endif %}{% endfor %}
-    </span>
-    <span class="apu-section__subtotal">${{ subtotal|floatformat:0 }}</span>
-    <span class="apu-section__chevron">▾</span>
-  </div>
-  <div class="apu-section__body">
-    {% for grupo in lineas_por_tipo %}{% if grupo.grouper == "MATERIALES" %}
-    {% if grupo.list %}
-    <table class="apu-table">
-      <thead>
-        <tr>
-          <th>Descripción</th>
-          <th>Rendimiento</th>
-          <th>Unidad</th>
-          <th>Costo unit.</th>
-          <th>Costo total</th>
-          <th>Valor unit.</th>
-          <th style="color:{{ color }};">Valor total</th>
-          <th style="width:36px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for linea in grupo.list %}
-        <tr id="apu-linea-{{ linea.pk }}">
-          <td class="apu-desc">
-            {{ linea.descripcion }}
-            {% if linea.iva_aplicado %}<span class="badge-iva">+IVA</span>{% endif %}
-          </td>
-          <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
-          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
-          <td>${{ linea.costo_total|floatformat:0 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
-          <td>{% if linea.editable %}
-            <button class="btn btn-ghost btn-xs"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalEditarLinea"
-                    data-linea-pk="{{ linea.pk }}"
-                    data-descripcion="{{ linea.descripcion }}"
-                    data-rendimiento="{{ linea.rendimiento }}"
-                    data-precio="{{ linea.precio_referencia }}">✎</button>
-          {% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="6">Subtotal materiales</td>
-          <td style="color:{{ color }};">${{ subtotal|floatformat:0 }}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
-    {% else %}
-    <div class="apu-section-empty">
-      <i class="bi bi-box-seam"></i>
-      Sin líneas de materiales. Use "Regenerar materiales" para generarlas desde el despiece.
+  <!-- ── Nav tabs horizontal ─────────────────────────────────────── -->
+  <div class="apu-tabs-nav" role="tablist">
+    {% for cat in categorias_apu %}
+    <div class="apu-tab-navitem" style="--tab-color:{{ cat.color }};">
+      <button class="apu-tab-btn {% if forloop.first %}active{% endif %}"
+              onclick="switchTab(this,'{{ cat.tab_id }}')" role="tab"
+              {% if forloop.first %}aria-selected="true"{% endif %}>
+        <div class="apu-tab-indicator"></div>
+        <div class="apu-tab-main">
+          <i class="bi {{ cat.icon }} apu-tab-icon"></i>
+          <span class="apu-tab-name">{{ cat.label }}</span>
+        </div>
+        <div class="apu-tab-meta">
+          <span class="apu-tab-count">{{ cat.count }} línea{{ cat.count|pluralize }}</span>
+          <span class="apu-tab-subtotal">{{ cat.subtotal_costo|currency:"COP" }}</span>
+        </div>
+      </button>
     </div>
-    {% endif %}
-    {% endif %}{% endfor %}
+    {% endfor %}
+  </div><!-- /.apu-tabs-nav -->
+
+  <!-- ── Panes de contenido ──────────────────────────────────────── -->
+  {% for cat in categorias_apu %}
+  <div id="{{ cat.tab_id }}" class="apu-tab-pane {% if forloop.first %}active{% endif %}" style="--sec-color:{{ cat.color }};">
+    <div class="apu-tab-body">
+
+      {% if cat.grupos %}
+      <table class="apu-table">
+        <thead>
+          <tr>
+            <th>Descripción</th><th>Rendimiento</th><th>Unidad</th>
+            <th>Costo unit.</th><th class="th-costo">Costo total</th>
+            <th class="th-valor">Valor unit.</th><th class="th-valor">Valor total</th>
+            <th style="width:60px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for grupo in cat.grupos %}
+
+          {% if grupo.linea_resumen %}
+          {# ── Fila resumen de categoría (siempre visible) ───────────── #}
+          <tr class="apu-cat-row {% if grupo.lineas_detalle %}has-detail{% endif %}"
+              {% if grupo.lineas_detalle %}onclick="toggleCatRows(this)"{% endif %}>
+            <td>
+              {% if grupo.lineas_detalle %}
+              <i class="cat-chevron bi bi-chevron-right" style="margin-right:6px;font-size:10px;"></i>
+              {% endif %}
+              {{ grupo.descripcion }}
+              {% if grupo.lineas_detalle %}
+              <span style="color:rgba(14,17,23,.30);font-size:10px;font-weight:400;margin-left:6px;">
+                {{ grupo.lineas_detalle|length }} ítem{{ grupo.lineas_detalle|length|pluralize }}
+              </span>
+              {% endif %}
+            </td>
+            <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">{{ grupo.linea_resumen.rendimiento|floatformat:2 }}</td>
+            <td style="background:var(--surface);color:var(--ink-soft);font-size:11px;">{{ grupo.linea_resumen.get_unidad_display }}</td>
+            <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">${{ grupo.linea_resumen.costo_unitario|floatformat:2 }}</td>
+            <td class="apu-cat-costo" style="background:var(--surface);">${{ grupo.linea_resumen.costo_total|floatformat:2 }}</td>
+            <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">${{ grupo.linea_resumen.valor_unitario|floatformat:2 }}</td>
+            <td class="apu-cat-valor" style="background:var(--surface);">${{ grupo.linea_resumen.valor_total|floatformat:2 }}</td>
+            <td style="background:var(--surface);white-space:nowrap;">
+              {% if grupo.linea_resumen.editable %}
+              <button class="btn btn-ghost btn-xs"
+                      data-bs-toggle="modal" data-bs-target="#modalEditarLinea"
+                      data-linea-pk="{{ grupo.linea_resumen.pk }}"
+                      data-descripcion="{{ grupo.linea_resumen.descripcion }}"
+                      data-rendimiento="{{ grupo.linea_resumen.rendimiento }}"
+                      data-precio="{{ grupo.linea_resumen.precio_referencia }}"
+                      onclick="event.stopPropagation()">✎</button>
+              {% endif %}
+            </td>
+          </tr>
+
+          {% for linea in grupo.lineas_detalle %}
+          <tr id="apu-linea-{{ linea.pk }}" class="apu-cat-detail" style="display:none;">
+            <td class="apu-desc" style="padding-left:32px;color:rgba(14,17,23,0.7);">
+              {{ linea.descripcion }}
+              {% if linea.vida_util_dias %}<span style="font-size:10px;color:var(--ink-soft);margin-left:4px;">({{ linea.vida_util_dias }}d útiles)</span>{% endif %}
+            </td>
+            <td style="color:rgba(14,17,23,0.6);font-size:12px;">{{ linea.rendimiento|floatformat:0 }}</td>
+            <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+            <td style="color:rgba(14,17,23,0.6);font-size:12px;">${{ linea.precio_referencia|floatformat:0 }}</td>
+            <td style="color:rgba(14,17,23,0.55);font-size:12px;font-weight:600;">${{ linea.precio_referencia|multiply:linea.rendimiento|floatformat:0 }}</td>
+            <td style="color:var(--ink-soft);">—</td>
+            <td style="color:var(--ink-soft);">—</td>
+            <td></td>
+          </tr>
+          {% endfor %}
+
+          {% else %}
+          {# ── Tabla plana (MATERIALES o APUs sin líneas resumen) ────── #}
+          {% for linea in grupo.lineas_detalle %}
+          <tr id="apu-linea-{{ linea.pk }}">
+            <td class="apu-desc">
+              {{ linea.descripcion }}
+              {% if linea.iva_aplicado %}<span class="badge-iva">+IVA</span>{% endif %}
+            </td>
+            <td>{{ linea.rendimiento|floatformat:5 }}</td>
+            <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+            <td>${{ linea.costo_unitario|floatformat:2 }}</td>
+            <td class="apu-costo-total">${{ linea.costo_total|floatformat:2 }}</td>
+            <td>${{ linea.valor_unitario|floatformat:2 }}</td>
+            <td class="apu-valor-total">${{ linea.valor_total|floatformat:2 }}</td>
+            <td>
+              {% if linea.editable %}
+              <button class="btn btn-ghost btn-xs"
+                      data-bs-toggle="modal" data-bs-target="#modalEditarLinea"
+                      data-linea-pk="{{ linea.pk }}"
+                      data-descripcion="{{ linea.descripcion }}"
+                      data-rendimiento="{{ linea.rendimiento }}"
+                      data-precio="{{ linea.precio_referencia }}">✎</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% endif %}
+
+          {% endfor %}{# /grupo #}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4">Subtotal {{ cat.label|lower }}</td>
+            <td class="tf-costo">${{ cat.subtotal_costo|floatformat:2 }}</td>
+            <td></td>
+            <td class="tf-valor">${{ cat.subtotal_valor|floatformat:2 }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {% else %}
+      {# ── Estado vacío por sección ──────────────────────────────────── #}
+      <div class="apu-section-empty">
+        <i class="bi {{ cat.icon }}"></i>
+        {% if cat.tipo == "MATERIALES" %}
+        Sin líneas de materiales. Use "Actualizar" para generarlas desde el despiece.
+        {% elif cat.tipo == "MANO_DE_OBRA" %}
+        Sin mano de obra configurada.
+        {% if proyecto_num_personas %}
+        <div style="margin-top:8px;font-size:12px;">Proyecto requiere <strong>{{ proyecto_num_personas }} persona{{ proyecto_num_personas|pluralize }}</strong>.</div>
+        {% endif %}
+        {% else %}
+        Sin {{ cat.label|lower }} configurado.
+        {% endif %}
+      </div>
+      {% endif %}{# /if cat.grupos #}
+
+    </div>{# /.apu-tab-body #}
+
+    <div class="apu-tab-foot">
+      <button type="button" class="btn btn-ghost btn-sm apu-confirmado-btn"
+              data-section="{{ cat.tipo }}" data-apu="{{ apu.pk }}"
+              onclick="toggleconfirmado(this)">
+        <i class="bi bi-check2-circle" style="margin-right:4px;"></i>Confirmado
+      </button>
+      {% if cat.tipo == "HERRAMIENTAS_EQUIPOS" %}
+      <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalHerramientas"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar herramientas</button>
+      {% elif cat.tipo == "TRANSPORTE" %}
+      <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalTransporte"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar transporte</button>
+      {% elif cat.tipo == "MANO_DE_OBRA" %}
+      <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalManoObra"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar mano de obra</button>
+      {% elif cat.tipo == "ADMINISTRACION" %}
+      <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalAdmin"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar administración</button>
+      {% endif %}
+    </div>
+  </div>{# /.apu-tab-pane #}
+
+  {% endfor %}{# /for cat in categorias_apu #}
+
+
+</div><!-- /.apu-tabs-wrap -->
+
+
+
+<div id="apuFinalActions" style="display:none;margin-top:16px;">
+  <div style="
+    background: linear-gradient(135deg, rgba(23,168,94,0.08) 0%, rgba(23,168,94,0.04) 100%);
+    border: 1px solid rgba(23,168,94,0.25);
+    border-radius: 16px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  ">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="
+        width: 38px; height: 38px;
+        background: rgba(23,168,94,0.15);
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+      ">
+        <i class="bi bi-check2-all" style="color:#17a85e;font-size:18px;"></i>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#17a85e;">APU confirmado</div>
+        <div style="font-size:11.5px;color:rgba(14,17,23,0.45);margin-top:2px;">
+          Todas las secciones han sido revisadas y aprobadas.
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
+         class="btn btn-ghost btn-sm" target="_blank">
+        <i class="bi bi-file-earmark-pdf" style="margin-right:4px;"></i>PDF Interno
+      </a>
+      <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
+         class="btn btn-ghost btn-sm" target="_blank">
+        <i class="bi bi-file-earmark-person" style="margin-right:4px;"></i>PDF Cliente
+      </a>
+      <form method="post"
+            action="{% url 'presupuestos:apu_enviar_revision' apu.pk %}"
+            class="d-inline" style="margin:0;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="bi bi-send-check" style="margin-right:4px;"></i>Enviar a revisión
+        </button>
+      </form>
+    </div>
   </div>
 </div>
-{% endwith %}
 
 
-{# ── Sección HERRAMIENTAS Y EQUIPOS ─────────────────────────────── #}
-{% with color="#e07d10" subtotal=apu.subtotal_herramientas %}
-<div class="apu-section" style="--sec-color:{{ color }};">
-  <div class="apu-section__head" onclick="toggleSection(this.parentElement)">
-    <span class="apu-section__type-dot"></span>
-    <span class="apu-section__title">
-      <i class="bi bi-tools" style="margin-right:6px;opacity:.6;"></i>Herramientas y Equipos
-    </span>
-    <span class="apu-section__count">
-      {% for g in lineas_por_tipo %}{% if g.grouper == "HERRAMIENTAS_EQUIPOS" %}{{ g.list|length }} línea{{ g.list|length|pluralize }}{% endif %}{% endfor %}
-    </span>
-    <span class="apu-section__subtotal">${{ subtotal|floatformat:0 }}</span>
-    <span class="apu-section__chevron">▾</span>
-  </div>
-  <div class="apu-section__body">
-    {% for grupo in lineas_por_tipo %}{% if grupo.grouper == "HERRAMIENTAS_EQUIPOS" %}
-    {% if grupo.list %}
-    <table class="apu-table">
-      <thead>
-        <tr>
-          <th>Descripción</th>
-          <th>Rendimiento</th>
-          <th>Unidad</th>
-          <th>Costo unit.</th>
-          <th>Costo total</th>
-          <th>Valor unit.</th>
-          <th style="color:{{ color }};">Valor total</th>
-          <th style="width:36px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for linea in grupo.list %}
-        <tr id="apu-linea-{{ linea.pk }}">
-          <td class="apu-desc">{{ linea.descripcion }}</td>
-          <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
-          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
-          <td>${{ linea.costo_total|floatformat:0 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
-          <td>{% if linea.editable %}
-            <button class="btn btn-ghost btn-xs"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalEditarLinea"
-                    data-linea-pk="{{ linea.pk }}"
-                    data-descripcion="{{ linea.descripcion }}"
-                    data-rendimiento="{{ linea.rendimiento }}"
-                    data-precio="{{ linea.precio_referencia }}">✎</button>
-          {% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="6">Subtotal herramientas y equipos</td>
-          <td style="color:{{ color }};">${{ subtotal|floatformat:0 }}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
-    {% else %}
-    <div class="apu-section-empty">
-      <i class="bi bi-tools"></i>
-      Sin herramientas configuradas.
-    </div>
-    {% endif %}
-    {% endif %}{% endfor %}
-  </div>
-  <div class="apu-section__foot">
-    <button class="btn btn-ghost btn-sm"
-            data-bs-toggle="modal"
-            data-bs-target="#modalHerramientas">
-      <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar herramientas
-    </button>
-  </div>
-</div>
-{% endwith %}
-
-
-{# ── Sección TRANSPORTE ──────────────────────────────────────────── #}
-{% with color="#7048d0" subtotal=apu.subtotal_transporte %}
-<div class="apu-section" style="--sec-color:{{ color }};">
-  <div class="apu-section__head" onclick="toggleSection(this.parentElement)">
-    <span class="apu-section__type-dot"></span>
-    <span class="apu-section__title">
-      <i class="bi bi-truck" style="margin-right:6px;opacity:.6;"></i>Transporte
-    </span>
-    <span class="apu-section__count">
-      {% for g in lineas_por_tipo %}{% if g.grouper == "TRANSPORTE" %}{{ g.list|length }} línea{{ g.list|length|pluralize }}{% endif %}{% endfor %}
-    </span>
-    <span class="apu-section__subtotal">${{ subtotal|floatformat:0 }}</span>
-    <span class="apu-section__chevron">▾</span>
-  </div>
-  <div class="apu-section__body">
-    {% for grupo in lineas_por_tipo %}{% if grupo.grouper == "TRANSPORTE" %}
-    {% if grupo.list %}
-    <table class="apu-table">
-      <thead>
-        <tr>
-          <th>Descripción</th>
-          <th>Rendimiento</th>
-          <th>Unidad</th>
-          <th>Costo unit.</th>
-          <th>Costo total</th>
-          <th>Valor unit.</th>
-          <th style="color:{{ color }};">Valor total</th>
-          <th style="width:36px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for linea in grupo.list %}
-        <tr id="apu-linea-{{ linea.pk }}">
-          <td class="apu-desc">{{ linea.descripcion }}</td>
-          <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
-          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
-          <td>${{ linea.costo_total|floatformat:0 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
-          <td>{% if linea.editable %}
-            <button class="btn btn-ghost btn-xs"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalEditarLinea"
-                    data-linea-pk="{{ linea.pk }}"
-                    data-descripcion="{{ linea.descripcion }}"
-                    data-rendimiento="{{ linea.rendimiento }}"
-                    data-precio="{{ linea.precio_referencia }}">✎</button>
-          {% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="6">Subtotal transporte</td>
-          <td style="color:{{ color }};">${{ subtotal|floatformat:0 }}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
-    {% else %}
-    <div class="apu-section-empty">
-      <i class="bi bi-truck"></i>
-      Sin transporte configurado.
-    </div>
-    {% endif %}
-    {% endif %}{% endfor %}
-  </div>
-  <div class="apu-section__foot">
-    <button class="btn btn-ghost btn-sm"
-            data-bs-toggle="modal"
-            data-bs-target="#modalTransporte">
-      <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar transporte
-    </button>
-  </div>
-</div>
-{% endwith %}
-
-
-{# ── Sección MANO DE OBRA ────────────────────────────────────────── #}
-{% with color="#17a85e" subtotal=apu.subtotal_mano_obra %}
-<div class="apu-section" style="--sec-color:{{ color }};">
-  <div class="apu-section__head" onclick="toggleSection(this.parentElement)">
-    <span class="apu-section__type-dot"></span>
-    <span class="apu-section__title">
-      <i class="bi bi-people" style="margin-right:6px;opacity:.6;"></i>Mano de Obra
-    </span>
-    <span class="apu-section__count">
-      {% for g in lineas_por_tipo %}{% if g.grouper == "MANO_DE_OBRA" %}{{ g.list|length }} línea{{ g.list|length|pluralize }}{% endif %}{% endfor %}
-    </span>
-    <span class="apu-section__subtotal">${{ subtotal|floatformat:0 }}</span>
-    <span class="apu-section__chevron">▾</span>
-  </div>
-  <div class="apu-section__body">
-    {% for grupo in lineas_por_tipo %}{% if grupo.grouper == "MANO_DE_OBRA" %}
-    {% if grupo.list %}
-    <table class="apu-table">
-      <thead>
-        <tr>
-          <th>Descripción</th>
-          <th>Rendimiento</th>
-          <th>Unidad</th>
-          <th>Costo unit.</th>
-          <th>Costo total</th>
-          <th>Valor unit.</th>
-          <th style="color:{{ color }};">Valor total</th>
-          <th style="width:36px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for linea in grupo.list %}
-        <tr id="apu-linea-{{ linea.pk }}">
-          <td class="apu-desc">{{ linea.descripcion }}</td>
-          <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
-          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
-          <td>${{ linea.costo_total|floatformat:0 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
-          <td>{% if linea.editable %}
-            <button class="btn btn-ghost btn-xs"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalEditarLinea"
-                    data-linea-pk="{{ linea.pk }}"
-                    data-descripcion="{{ linea.descripcion }}"
-                    data-rendimiento="{{ linea.rendimiento }}"
-                    data-precio="{{ linea.precio_referencia }}">✎</button>
-          {% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="6">Subtotal mano de obra</td>
-          <td style="color:{{ color }};">${{ subtotal|floatformat:0 }}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
-    {% else %}
-    <div class="apu-section-empty">
-      <i class="bi bi-people"></i>
-      Sin mano de obra configurada.
-    </div>
-    {% endif %}
-    {% endif %}{% endfor %}
-  </div>
-  <div class="apu-section__foot">
-    <button class="btn btn-ghost btn-sm"
-            data-bs-toggle="modal"
-            data-bs-target="#modalManoObra">
-      <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar mano de obra
-    </button>
-  </div>
-</div>
-{% endwith %}
-
-
-{# ── Sección ADMINISTRACIÓN ──────────────────────────────────────── #}
-{% with color="#64748b" subtotal=apu.subtotal_administracion %}
-<div class="apu-section" style="--sec-color:{{ color }};">
-  <div class="apu-section__head" onclick="toggleSection(this.parentElement)">
-    <span class="apu-section__type-dot"></span>
-    <span class="apu-section__title">
-      <i class="bi bi-briefcase" style="margin-right:6px;opacity:.6;"></i>Administración
-    </span>
-    <span class="apu-section__count">
-      {% for g in lineas_por_tipo %}{% if g.grouper == "ADMINISTRACION" %}{{ g.list|length }} línea{{ g.list|length|pluralize }}{% endif %}{% endfor %}
-    </span>
-    <span class="apu-section__subtotal">${{ subtotal|floatformat:0 }}</span>
-    <span class="apu-section__chevron">▾</span>
-  </div>
-  <div class="apu-section__body">
-    {% for grupo in lineas_por_tipo %}{% if grupo.grouper == "ADMINISTRACION" %}
-    {% if grupo.list %}
-    <table class="apu-table">
-      <thead>
-        <tr>
-          <th>Descripción</th>
-          <th>Rendimiento</th>
-          <th>Unidad</th>
-          <th>Costo unit.</th>
-          <th>Costo total</th>
-          <th>Valor unit.</th>
-          <th style="color:{{ color }};">Valor total</th>
-          <th style="width:36px;"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for linea in grupo.list %}
-        <tr id="apu-linea-{{ linea.pk }}">
-          <td class="apu-desc">{{ linea.descripcion }}</td>
-          <td>{{ linea.rendimiento|floatformat:5 }}</td>
-          <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
-          <td>${{ linea.costo_unitario|floatformat:0 }}</td>
-          <td>${{ linea.costo_total|floatformat:0 }}</td>
-          <td>${{ linea.valor_unitario|floatformat:0 }}</td>
-          <td class="apu-valor-total">${{ linea.valor_total|floatformat:0 }}</td>
-          <td>{% if linea.editable %}
-            <button class="btn btn-ghost btn-xs"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalEditarLinea"
-                    data-linea-pk="{{ linea.pk }}"
-                    data-descripcion="{{ linea.descripcion }}"
-                    data-rendimiento="{{ linea.rendimiento }}"
-                    data-precio="{{ linea.precio_referencia }}">✎</button>
-          {% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="6">Subtotal administración</td>
-          <td style="color:{{ color }};">${{ subtotal|floatformat:0 }}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
-    {% else %}
-    <div class="apu-section-empty">
-      <i class="bi bi-briefcase"></i>
-      Sin administración configurada.
-    </div>
-    {% endif %}
-    {% endif %}{% endfor %}
-  </div>
-  <div class="apu-section__foot">
-    <button class="btn btn-ghost btn-sm"
-            data-bs-toggle="modal"
-            data-bs-target="#modalAdmin">
-      <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar administración
-    </button>
-  </div>
-</div>
-{% endwith %}
-
-
-<!-- ══════════════════════════════════════════════════════════════════════
-     MODALES
-══════════════════════════════════════════════════════════════════════ -->
-
-{# ── Modal: Editar línea ────────────────────────────────────────── #}
 <div class="modal fade" id="modalEditarLinea" tabindex="-1">
   <div class="modal-dialog modal-sm">
     <div class="modal-content">
@@ -847,7 +796,6 @@
 </div>
 
 
-{# ── Modal: Configurar Herramientas ─────────────────────────────── #}
 <div class="modal fade" id="modalHerramientas" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -879,14 +827,18 @@
               <label for="herr-{{ item.pk }}" style="flex:1;font-size:12.5px;cursor:pointer;margin:0;">
                 {{ item.nombre }}
                 {% if item.vida_util_dias %}
-                  <span style="font-size:10px;color:var(--muted);">— vida útil {{ item.vida_util_dias }} días</span>
+                  <span style="font-size:10px;color:var(--muted);">— {{ item.vida_util_dias }} días útiles</span>
                 {% endif %}
               </label>
-              <span style="font-size:11.5px;color:var(--muted);width:100px;text-align:right;">
-                ${{ item.precio_base|floatformat:0 }}
+              <span style="font-size:11.5px;color:var(--muted);width:120px;text-align:right;">
+                {% if item.vida_util_dias %}
+                  ${{ item.costo_por_dia|floatformat:2 }}/día
+                {% else %}
+                  ${{ item.precio_base|floatformat:0 }}
+                {% endif %}
               </span>
               <div style="width:80px;">
-                <input type="number" name="cantidad[]" value="1" min="1"
+                <input type="number" name="cantidad[]" value="{{ proyecto_num_personas|default:1 }}" min="1"
                        class="form-control form-control-sm" style="text-align:center;">
               </div>
             </div>
@@ -910,7 +862,6 @@
 </div>
 
 
-{# ── Modal: Configurar Transporte ───────────────────────────────── #}
 <div class="modal fade" id="modalTransporte" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -978,7 +929,6 @@
 </div>
 
 
-{# ── Modal: Configurar Mano de Obra ─────────────────────────────── #}
 <div class="modal fade" id="modalManoObra" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -1030,14 +980,14 @@
               <label for="mo-{{ item.pk }}" style="flex:1;font-size:12.5px;cursor:pointer;margin:0;">
                 {{ item.nombre }}
                 {% if item.salario_base %}
-                  <span style="font-size:10px;color:var(--muted);">— salario ${{ item.salario_base|floatformat:0 }}</span>
+                  <span style="font-size:10px;color:var(--muted);">— sal. ${{ item.salario_base|floatformat:0 }}/mes</span>
                 {% endif %}
               </label>
-              <span style="font-size:11.5px;color:var(--muted);width:100px;text-align:right;">
+              <span style="font-size:11.5px;color:var(--muted);width:120px;text-align:right;">
                 ${{ item.precio_base|floatformat:0 }}/{{ item.unidad }}
               </span>
               <div style="width:80px;">
-                <input type="number" name="cantidad[]" value="1" min="1"
+                <input type="number" name="cantidad[]" value="{{ proyecto_num_personas|default:1 }}" min="1"
                        class="form-control form-control-sm" style="text-align:center;">
               </div>
             </div>
@@ -1062,7 +1012,6 @@
 </div>
 
 
-{# ── Modal: Configurar Administración ───────────────────────────── #}
 <div class="modal fade" id="modalAdmin" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -1128,9 +1077,33 @@
 
 {% block extra_js %}
 <script>
-/* ── Accordion toggle ─────────────────────────────────────────────── */
+/* ── Tab switching ────────────────────────────────────────────────── */
+function switchTab(btn, paneId) {
+  btn.closest('.apu-tabs-nav').querySelectorAll('.apu-tab-btn').forEach(function(b) {
+    b.classList.remove('active');
+    b.setAttribute('aria-selected', 'false');
+  });
+  btn.closest('.apu-tabs-wrap').querySelectorAll('.apu-tab-pane').forEach(function(p) {
+    p.classList.remove('active');
+  });
+  btn.classList.add('active');
+  btn.setAttribute('aria-selected', 'true');
+  document.getElementById(paneId).classList.add('active');
+}
+
+/* ── Accordion toggle (legacy) ─────────────────────────────────────── */
 function toggleSection(el) {
   el.classList.toggle('open');
+}
+
+/* ── Category row collapse ────────────────────────────────────────── */
+function toggleCatRows(catRow) {
+  catRow.classList.toggle('cat-open');
+  let sibling = catRow.nextElementSibling;
+  while (sibling && sibling.classList.contains('apu-cat-detail')) {
+    sibling.style.display = sibling.style.display === 'none' ? '' : 'none';
+    sibling = sibling.nextElementSibling;
+  }
 }
 
 /* ── Edit line modal ──────────────────────────────────────────────── */
@@ -1195,5 +1168,69 @@ function addAdminRow() {
             class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.3);">✕</button>`;
   container.appendChild(row);
 }
+
+/* ── Botón "Confirmado" por sección ─────────────────────────────── */
+const APU_SECTIONS = ['MATERIALES','HERRAMIENTAS_EQUIPOS','TRANSPORTE','MANO_DE_OBRA','ADMINISTRACION'];
+
+function _confirmadoKey(btn) {
+  return 'apu_' + btn.dataset.apu + '_' + btn.dataset.section + '_confirmado';
+}
+
+function _apuId() {
+  const btn = document.querySelector('.apu-confirmado-btn');
+  return btn ? btn.dataset.apu : null;
+}
+
+function checkAllConfirmed() {
+  const apuId = _apuId();
+  const panel = document.getElementById('apuFinalActions');
+  if (!panel || !apuId) return;
+  const allOk = APU_SECTIONS.every(function(s) {
+    return localStorage.getItem('apu_' + apuId + '_' + s + '_confirmado') === '1';
+  });
+  panel.style.display = allOk ? 'block' : 'none';
+}
+
+function toggleconfirmado(btn) {
+  const key   = _confirmadoKey(btn);
+  const pane  = btn.closest('.apu-tab-pane');
+  const tabId = pane ? pane.id : null;
+  const isNow = !btn.classList.contains('confirmado');
+
+  if (isNow) {
+    localStorage.setItem(key, '1');
+    btn.classList.add('confirmado');
+    btn.innerHTML = '<i class="bi bi-check2-circle" style="margin-right:4px;"></i>✓ Confirmado';
+    // Marcar tab nav como confirmado
+    if (tabId) {
+      const tabBtn = document.querySelector('[onclick*="' + tabId + '"]');
+      if (tabBtn) tabBtn.closest('.apu-tab-navitem').classList.add('confirmado');
+    }
+  } else {
+    localStorage.removeItem(key);
+    btn.classList.remove('confirmado');
+    btn.innerHTML = '<i class="bi bi-check2-circle" style="margin-right:4px;"></i>Confirmado';
+    if (tabId) {
+      const tabBtn = document.querySelector('[onclick*="' + tabId + '"]');
+      if (tabBtn) tabBtn.closest('.apu-tab-navitem').classList.remove('confirmado');
+    }
+  }
+  checkAllConfirmed();
+}
+
+/* Restaurar estado de conformidad al cargar la página */
+document.querySelectorAll('.apu-confirmado-btn').forEach(function(btn) {
+  if (localStorage.getItem(_confirmadoKey(btn)) === '1') {
+    btn.classList.add('confirmado');
+    btn.innerHTML = '<i class="bi bi-check2-circle" style="margin-right:4px;"></i>✓ Confirmado';
+    const pane  = btn.closest('.apu-tab-pane');
+    const tabId = pane ? pane.id : null;
+    if (tabId) {
+      const tabBtn = document.querySelector('[onclick*="' + tabId + '"]');
+      if (tabBtn) tabBtn.closest('.apu-tab-navitem').classList.add('confirmado');
+    }
+  }
+});
+checkAllConfirmed();
 </script>
 {% endblock %}

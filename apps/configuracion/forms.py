@@ -1,12 +1,12 @@
-"""apps/usuarios/forms.py — Formularios del módulo de usuarios."""
+"""apps/configuracion/forms.py — Formularios del módulo de configuración."""
 
 from django import forms
-from .models import UsuarioSistema
+from .models import ConfiguracionSistema
 
 
-class UsuarioSistemaForm(forms.ModelForm):
+class ConfiguracionSistemaForm(forms.ModelForm):
     """
-    Formulario de usuario.
+    Formulario de configuración.
     - Creación: password_hash obligatorio.
     - Edición: si se deja vacío, se conserva la contraseña existente.
     """
@@ -19,7 +19,7 @@ class UsuarioSistemaForm(forms.ModelForm):
     )
 
     class Meta:
-        model = UsuarioSistema
+        model = ConfiguracionSistema
         fields = ["email", "nombre_completo", "password_hash", "unidad_negocio", "rol", "activo"]
         labels = {
             "email": "Email",

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ProyectoSistema, DespieceLinea, ConfiguracionAPU, APUProyecto, APULinea
+from .models import ProyectoSistema, DespieceLinea, ConfiguracionAPU, APUProyecto, APULinea, CategoriaItemAPU
 
 
 class DespieceLineaInline(admin.TabularInline):
@@ -21,6 +21,14 @@ class DespieceLineaAdmin(admin.ModelAdmin):
     list_display = ("proyecto", "producto", "categoria_producto", "cantidad_calculada", "precio_snapshot")
     list_filter = ("es_dependencia_automatica",)
     readonly_fields = ("cantidad_final", "pendiente_seleccion", "created_at", "updated_at")
+
+
+@admin.register(CategoriaItemAPU)
+class CategoriaItemAPUAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "tipo_apu", "aplica_dias_mensuales", "activa", "orden")
+    list_filter = ("tipo_apu", "activa", "aplica_dias_mensuales")
+    search_fields = ("nombre",)
+    list_editable = ("aplica_dias_mensuales", "orden")
 
 
 @admin.register(ConfiguracionAPU)

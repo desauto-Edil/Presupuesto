@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('presupuestos', '0002_catalogo_apu'),
-        ('usuarios', '0001_initial'),
+        ('configuracion', '0001_initial'),
     ]
 
     operations = [

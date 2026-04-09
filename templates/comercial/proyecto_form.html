@@ -69,6 +69,21 @@
         </div>
       </div>
 
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label>Días de duración estimada</label>
+          {{ form.dias_duracion }}
+          <small style="color:var(--ink-soft);font-size:10.5px;">Días calendario del proyecto</small>
+        </div>
+        <div class="form-group">
+          <label>Número de personas <span style="font-size:10px;color:var(--ink-soft);">(equipo de trabajo)</span></label>
+          {{ form.num_personas }}
+          <small style="color:var(--ink-soft);font-size:10.5px;">
+            7 = cuadrilla de instalación estándar. Otro valor: seleccione quiénes.
+          </small>
+        </div>
+      </div>
+
       <div class="section-heading" style="margin-top:18px;">Variables financieras</div>
 
       <div class="form-grid-2">

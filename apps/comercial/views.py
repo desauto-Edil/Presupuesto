@@ -1,7 +1,8 @@
 """apps/comercial/views.py — Vistas del módulo comercial."""
 
+import logging
 from django.contrib import messages
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
@@ -18,23 +19,25 @@ from .forms import (
 from apps.common.mixins import WithCreateFormMixin
 from apps.common.choices import EstadoSolicitud
 
+logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 def _usuario_sistema(request):
-    """Retorna el UsuarioSistema del request, o None si no hay sesión activa."""
-    from apps.usuarios.models import UsuarioSistema
-    if hasattr(request, "usuario_sistema"):
-        return request.usuario_sistema
+    """Retorna el ConfiguracionSistema del request, o None si no hay sesión activa."""
+    from apps.configuracion.models import ConfiguracionSistema
+    if hasattr(request, "configuracion_sistema"):
+        return request.configuracion_sistema
     if getattr(request, "user", None) and request.user.is_authenticated:
-        return UsuarioSistema.objects.filter(email=request.user.email).first()
+        return ConfiguracionSistema.objects.filter(email=request.user.email).first()
     # Fallback: autenticación por sesión personalizada
     try:
-        usuario_id = request.session.get("usuario_id")
-        if usuario_id:
-            return UsuarioSistema.objects.filter(pk=usuario_id).first()
+        configuracion_id = request.session.get("configuracion_id")
+        if configuracion_id:
+            return ConfiguracionSistema.objects.filter(pk=configuracion_id).first()
     except Exception:
         pass
     return None
@@ -52,7 +55,7 @@ def registrar_log(request, accion, descripcion="", modelo_afectado="", objeto_id
         except Exception:
             pass
         LogSistema.objects.create(
-            usuario=usuario,
+            configuracion=usuario,
             unidad_negocio=unidad,
             accion=accion,
             descripcion=descripcion,
@@ -72,39 +75,64 @@ class DashboardView(TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        qs = Solicitud.objects.select_related("cliente", "creado_por")
-
-        # Conteo solicitudes por estado
-        by_estado = {
-            item["estado"]: item["total"]
-            for item in qs.values("estado").annotate(total=Count("id"))
-        }
-
-        ctx["total"] = qs.count()
-        ctx["por_estado"] = [
-            {
-                "label": label,
-                "value": estado,
-                "count": by_estado.get(estado, 0),
-            }
-            for estado, label in EstadoSolicitud.choices
-        ]
-
-        # Solicitudes recientes — añadir proyecto_actual por anotación
-        recientes_qs = list(qs.order_by("-created_at")[:10])
-        for s in recientes_qs:
-            s.proyecto_actual = s.proyectos.filter(es_version_actual=True).first()
-        ctx["recientes"] = recientes_qs
-
-        # Conteo proyectos (solo versiones actuales)
-        ctx["total_proyectos"] = Proyecto.objects.filter(es_version_actual=True).count()
-
-        # Conteo despiece y APU (presupuestos)
+        
         try:
-            from apps.presupuestos.models import ProyectoSistema, APUProyecto
-            ctx["total_despieces"] = ProyectoSistema.objects.count()
-            ctx["total_apus"] = APUProyecto.objects.count()
-        except Exception:
+            # Obtener solicitudes con relaciones obligatorias
+            qs = Solicitud.objects.select_related("cliente", "creado_por")
+
+            # Conteo solicitudes por estado
+            by_estado = {
+                item["estado"]: item["total"]
+                for item in qs.values("estado").annotate(total=Count("id"))
+            }
+
+            ctx["total"] = qs.count()
+            ctx["por_estado"] = [
+                {
+                    "label": label,
+                    "value": estado,
+                    "count": by_estado.get(estado, 0),
+                }
+                for estado, label in EstadoSolicitud.choices
+            ]
+
+            # Solicitudes recientes — optimizar con prefetch_related en lugar de N+1
+            proyecto_prefetch = Prefetch(
+                'proyectos',
+                Proyecto.objects.filter(es_version_actual=True).only('id', 'consecutivo')
+            )
+            recientes_qs = list(
+                qs.prefetch_related(proyecto_prefetch)
+                  .order_by("-created_at")[:10]
+            )
+            
+            # Asignar proyecto_actual desde la prefetch (no ejecuta queries adicionales)
+            for s in recientes_qs:
+                proyectos_actuales = [p for p in s.proyectos.all() if p.es_version_actual]
+                s.proyecto_actual = proyectos_actuales[0] if proyectos_actuales else None
+            
+            ctx["recientes"] = recientes_qs
+
+            # Conteo proyectos (solo versiones actuales)
+            ctx["total_proyectos"] = Proyecto.objects.filter(es_version_actual=True).count()
+
+            # Conteo despiece y APU (presupuestos)
+            try:
+                from apps.presupuestos.models import ProyectoSistema, APUProyecto
+                ctx["total_despieces"] = ProyectoSistema.objects.count()
+                ctx["total_apus"] = APUProyecto.objects.count()
+            except Exception as e:
+                logger.warning(f"Error al contar despieces/APUs: {e}")
+                ctx["total_despieces"] = 0
+                ctx["total_apus"] = 0
+
+        except Exception as e:
+            logger.error(f"Error en DashboardView.get_context_data: {e}", exc_info=True)
+            # Valores por defecto en caso de error
+            ctx["total"] = 0
+            ctx["por_estado"] = []
+            ctx["recientes"] = []
+            ctx["total_proyectos"] = 0
             ctx["total_despieces"] = 0
             ctx["total_apus"] = 0
 
@@ -221,7 +249,7 @@ class ClienteUpdateView(UpdateView):
 
 class ClienteDeleteView(DeleteView):
     model = Cliente
-    template_name = "comercial/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:cliente_list")
 
     def form_valid(self, form):
@@ -262,7 +290,7 @@ class ContactoUpdateView(UpdateView):
 
 class ContactoDeleteView(DeleteView):
     model = ContactoCliente
-    template_name = "comercial/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:contacto_list")
 
 
@@ -286,7 +314,7 @@ class SolicitudDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         solicitud = self.object
-        ctx["archivos"] = solicitud.archivos.select_related("usuario").all()
+        ctx["archivos"] = solicitud.archivos.select_related("configuracion").all()
         ctx["archivo_form"] = SolicitudArchivoForm()
 
         # Proyectos / versiones vinculadas a esta solicitud
@@ -384,7 +412,7 @@ class SolicitudArchivoCreateView(CreateView):
         solicitud = self._get_solicitud()
         self.object = form.save(commit=False)
         self.object.solicitud = solicitud
-        self.object.usuario = _usuario_sistema(self.request)
+        self.object.configuracion = _usuario_sistema(self.request)
         self.object.save()
         registrar_log(
             self.request,
@@ -450,7 +478,7 @@ class TipoProyectoUpdateView(UpdateView):
 
 class TipoProyectoDeleteView(DeleteView):
     model = TipoProyecto
-    template_name = "comercial/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:tipoproyecto_list")
 
 
@@ -543,7 +571,7 @@ class ProyectoUpdateView(UpdateView):
 
 class ProyectoDeleteView(DeleteView):
     model = Proyecto
-    template_name = "comercial/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:proyecto_list")
 
 

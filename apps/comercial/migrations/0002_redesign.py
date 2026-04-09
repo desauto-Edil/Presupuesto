@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("comercial", "0001_initial"),
-        ("usuarios", "0001_initial"),
+        ("configuracion", "0001_initial"),
     ]
 
     operations = [
@@ -101,7 +101,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="archivos_subidos",
-                        to="usuarios.usuariosistema",
+                        to="configuracion.usuariosistema",
                         verbose_name="Subido por",
                     ),
                 ),
@@ -152,7 +152,7 @@ class Migration(migrations.Migration):
                             models.ForeignKey(
                                 on_delete=django.db.models.deletion.CASCADE,
                                 related_name="logs",
-                                to="usuarios.usuariosistema",
+                                to="configuracion.usuariosistema",
                             ),
                         ),
                         ("unidad_negocio", models.CharField(db_index=True, max_length=20, verbose_name="Unidad de negocio")),

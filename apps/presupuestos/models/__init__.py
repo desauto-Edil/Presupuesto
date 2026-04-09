@@ -11,6 +11,7 @@ from .apu import (
     ItemCatalogoAPU,
     CuadrillaPreset,
     CuadrillaPresetItem,
+    ReglaAPUSubsistema,
 )
 
 # Alias de compatibilidad — el modelo se llama APU en el código fuente
@@ -27,4 +28,5 @@ __all__ = [
     "ItemCatalogoAPU",
     "CuadrillaPreset",
     "CuadrillaPresetItem",
+    "ReglaAPUSubsistema",
 ]

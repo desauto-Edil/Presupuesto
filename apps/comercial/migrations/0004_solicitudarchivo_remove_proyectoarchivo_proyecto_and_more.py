@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('usuarios', '0002_alter_usuariosistema_rol_and_more'),
+        ('configuracion', '0002_alter_usuariosistema_rol_and_more'),
         ('comercial', '0003_alter_logsistema_accion_alter_proyectoarchivo_nombre_and_more'),
     ]
 
@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ('nombre', models.CharField(max_length=300, verbose_name='Nombre del archivo')),
                 ('fecha_subida', models.DateTimeField(auto_now_add=True, verbose_name='Fecha de subida')),
                 ('solicitud', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='archivos', to='comercial.solicitud', verbose_name='Solicitud')),
-                ('usuario', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='archivos_solicitud', to='usuarios.usuariosistema', verbose_name='Subido por')),
+                ('usuario', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='archivos_solicitud', to='configuracion.usuariosistema', verbose_name='Subido por')),
             ],
             options={
                 'verbose_name': 'Archivo de solicitud',

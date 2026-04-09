@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('usuarios', '0001_initial'),
+        ('configuracion', '0001_initial'),
     ]
 
     operations = [
@@ -72,7 +72,7 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('cliente', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='solicitudes', to='comercial.cliente')),
                 ('contacto', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='solicitudes', to='comercial.contactocliente')),
-                ('creado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='solicitudes_creadas', to='usuarios.usuariosistema')),
+                ('creado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='solicitudes_creadas', to='configuracion.usuariosistema')),
             ],
             options={
                 'db_table': 'solicitudes',
@@ -100,7 +100,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('cliente', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='proyectos', to='comercial.cliente')),
-                ('creado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proyectos_creados', to='usuarios.usuariosistema')),
+                ('creado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proyectos_creados', to='configuracion.usuariosistema')),
                 ('solicitud', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proyecto', to='comercial.solicitud')),
                 ('tipo_proyecto', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proyectos', to='comercial.tipoproyecto')),
             ],
@@ -115,7 +115,7 @@ class Migration(migrations.Migration):
                 ('accion', models.TextField()),
                 ('unidad_negocio', models.CharField(max_length=20)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('usuario', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='usuarios.usuariosistema')),
+                ('usuario', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='configuracion.usuariosistema')),
             ],
         ),
     ]

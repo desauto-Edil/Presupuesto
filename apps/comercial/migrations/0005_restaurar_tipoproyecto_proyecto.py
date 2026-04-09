@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('usuarios', '0002_alter_usuariosistema_rol_and_more'),
+        ('configuracion', '0002_alter_usuariosistema_rol_and_more'),
         ('comercial', '0004_solicitudarchivo_remove_proyectoarchivo_proyecto_and_more'),
     ]
 
@@ -46,7 +46,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('cliente', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='proyectos', to='comercial.cliente')),
-                ('creado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proyectos_creados', to='usuarios.usuariosistema')),
+                ('creado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proyectos_creados', to='configuracion.usuariosistema')),
                 ('solicitud', models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proyecto', to='comercial.solicitud')),
                 ('tipo_proyecto', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='proyectos', to='comercial.tipoproyecto')),
             ],

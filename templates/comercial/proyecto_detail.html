@@ -97,6 +97,20 @@
         <span class="s-value">{% if proyecto.dias_duracion %}{{ proyecto.dias_duracion }} días{% else %}—{% endif %}</span>
       </div>
       <div class="summary-line">
+        <span class="s-label">Número de personas</span>
+        <span class="s-value">
+          {% if proyecto.num_personas %}
+            {{ proyecto.num_personas }} pers.
+            {% if proyecto.num_personas == 7 %}
+            <span style="font-size:10px;background:rgba(23,168,94,.12);color:#17a85e;
+                         border-radius:4px;padding:1px 6px;margin-left:4px;font-weight:600;">
+              cuadrilla estándar
+            </span>
+            {% endif %}
+          {% else %}—{% endif %}
+        </span>
+      </div>
+      <div class="summary-line">
         <span class="s-label">Área total (m²)</span>
         <span class="s-value">{{ proyecto.area_total_m2|default:"—" }}</span>
       </div>

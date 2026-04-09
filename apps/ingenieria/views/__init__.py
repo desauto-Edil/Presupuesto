@@ -81,7 +81,7 @@ class SistemaUpdateView(UpdateView):
 
 class SistemaDeleteView(DeleteView):
     model = Sistema
-    template_name = "ingenieria/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
@@ -117,6 +117,30 @@ class SubsistemaDetailView(DetailView):
         from apps.ingenieria.system_defs.registry import get_subsistema_def
         ctx["sub_def"] = get_subsistema_def(self.object.sistema.codigo, self.object.codigo)
         return ctx
+
+
+def _guardar_reglas_apu(subsistema, post):
+    """
+    Procesa las reglas APU enviadas desde el form del subsistema.
+    Reemplaza todos los registros existentes con los nuevos valores.
+    POST arrays: regla_tipo_apu[], regla_formula[]
+    """
+    from apps.presupuestos.models import ReglaAPUSubsistema
+
+    tipos    = post.getlist("regla_tipo_apu[]")
+    formulas = post.getlist("regla_formula[]")
+
+    ReglaAPUSubsistema.objects.filter(subsistema=subsistema).delete()
+    for idx, (tipo, formula) in enumerate(zip(tipos, formulas)):
+        tipo    = tipo.strip()
+        formula = formula.strip()
+        if tipo and formula:
+            ReglaAPUSubsistema.objects.create(
+                subsistema=subsistema,
+                tipo_apu=tipo,
+                formula_costo_unitario=formula,
+                orden=idx + 1,
+            )
 
 
 def _guardar_componentes_variables(subsistema, post):
@@ -187,6 +211,11 @@ def _guardar_componentes_variables(subsistema, post):
             )
 
 
+def _tipo_apu_choices_sin_materiales():
+    from apps.common.choices import TipoAPU
+    return [(v, l) for v, l in TipoAPU.choices if v != TipoAPU.MATERIALES]
+
+
 class SubsistemaCreateView(CreateView):
     model = Subsistema
     form_class = SubsistemaForm
@@ -197,11 +226,14 @@ class SubsistemaCreateView(CreateView):
         ctx = super().get_context_data(**kwargs)
         from apps.catalogos.models import CategoriaProducto
         ctx["categorias_producto"] = CategoriaProducto.objects.filter(activa=True).order_by("nombre")
+        ctx["tipo_apu_choices"] = _tipo_apu_choices_sin_materiales()
+        ctx["reglas_apu_existentes"] = []
         return ctx
 
     def form_valid(self, form):
         response = super().form_valid(form)
         _guardar_componentes_variables(self.object, self.request.POST)
+        _guardar_reglas_apu(self.object, self.request.POST)
         return response
 
 
@@ -214,6 +246,7 @@ class SubsistemaUpdateView(UpdateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         from apps.catalogos.models import CategoriaProducto
+        from apps.presupuestos.models import ReglaAPUSubsistema
         ctx["categorias_producto"] = CategoriaProducto.objects.filter(activa=True).order_by("nombre")
         ctx["variables_existentes"] = list(
             VariableSubsistema.objects.filter(subsistema=self.object).order_by("orden").values()
@@ -225,15 +258,22 @@ class SubsistemaUpdateView(UpdateView):
             .values("id", "codigo", "nombre", "categoria_id", "formula_texto",
                     "variable_salida", "unidad", "variable_referencia_apu", "unidad_apu", "orden")
         )
+        ctx["tipo_apu_choices"] = _tipo_apu_choices_sin_materiales()
+        ctx["reglas_apu_existentes"] = list(
+            ReglaAPUSubsistema.objects.filter(subsistema=self.object)
+            .order_by("orden")
+            .values("tipo_apu", "formula_costo_unitario", "orden")
+        )
         return ctx
 
     def form_valid(self, form):
         response = super().form_valid(form)
         _guardar_componentes_variables(self.object, self.request.POST)
+        _guardar_reglas_apu(self.object, self.request.POST)
         return response
 
 
 class SubsistemaDeleteView(DeleteView):
     model = Subsistema
-    template_name = "ingenieria/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:subsistema_list")

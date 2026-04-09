@@ -67,14 +67,29 @@ class ConfiguracionAPUForm(forms.ModelForm):
 
 class APUProyectoForm(forms.ModelForm):
     class Meta:
-        model = APUProyecto          # alias → APU
-        fields = ["nombre", "descripcion", "factor_venta_pct", "iva_pct", "aplica_iva"]
+        model = APUProyecto
+        fields = [
+            "nombre", "descripcion",
+            "factor_venta_pct", "iva_pct", "aplica_iva",
+            "aiu_contratista_pct", "margen_ganancia_pct", "dias_duracion",
+        ]
         widgets = {
-            "nombre":           forms.TextInput(attrs={"class": "form-control"}),
-            "descripcion":      forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "factor_venta_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "iva_pct":          forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "aplica_iva":       forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nombre":              forms.TextInput(attrs={"class": "form-control"}),
+            "descripcion":         forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "factor_venta_pct":    forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "iva_pct":             forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "aplica_iva":          forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "aiu_contratista_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "margen_ganancia_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "dias_duracion":       forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
+        }
+        labels = {
+            "factor_venta_pct":    "Factor de venta (%)",
+            "iva_pct":             "IVA (%)",
+            "aplica_iva":          "Aplica IVA",
+            "aiu_contratista_pct": "AIU contratista (%)",
+            "margen_ganancia_pct": "Margen de ganancia (%)",
+            "dias_duracion":       "Días de duración",
         }
 
 
@@ -100,26 +115,28 @@ class ItemCatalogoAPUForm(forms.ModelForm):
         model = ItemCatalogoAPU
         fields = [
             "categoria", "codigo", "nombre", "descripcion",
-            "precio_base", "unidad",
+            "precio_base", "unidad", "tienda_referencia",
             "salario_base", "prestaciones",
             "vida_util_dias", "activo",
         ]
         widgets = {
-            "categoria":      forms.Select(attrs={"class": "form-select"}),
-            "codigo":         forms.TextInput(attrs={"class": "form-control"}),
-            "nombre":         forms.TextInput(attrs={"class": "form-control"}),
-            "descripcion":    forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "precio_base":    forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
-            "unidad":         forms.Select(attrs={"class": "form-select"}),
-            "salario_base":   forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
-            "prestaciones":   forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
-            "vida_util_dias": forms.NumberInput(attrs={"class": "form-control"}),
-            "activo":         forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "categoria":         forms.Select(attrs={"class": "form-select"}),
+            "codigo":            forms.TextInput(attrs={"class": "form-control"}),
+            "nombre":            forms.TextInput(attrs={"class": "form-control"}),
+            "descripcion":       forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "precio_base":       forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
+            "unidad":            forms.Select(attrs={"class": "form-select"}),
+            "tienda_referencia": forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: Home Center, Homecenter en línea…"}),
+            "salario_base":      forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
+            "prestaciones":      forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
+            "vida_util_dias":    forms.NumberInput(attrs={"class": "form-control"}),
+            "activo":            forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
         labels = {
-            "salario_base":   "Salario base mensual",
-            "prestaciones":   "Prestaciones sociales ($/mes)",
-            "vida_util_dias": "Vida útil (días) — solo herramientas",
+            "salario_base":      "Salario base mensual",
+            "prestaciones":      "Prestaciones sociales ($/mes)",
+            "vida_util_dias":    "Vida útil (días) — solo herramientas/dotación",
+            "tienda_referencia": "Tienda de referencia",
         }
 
 

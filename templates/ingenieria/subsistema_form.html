@@ -234,6 +234,71 @@
             </div>
           </div>
 
+          {# ── Reglas de cálculo APU ── #}
+          <div class="sub-section">
+            <div class="sub-section__head">
+              <span class="sub-section__title">Reglas de cálculo APU</span>
+              <button type="button" class="btn btn-ghost btn-xs" id="btnAddRegla">+ Regla</button>
+            </div>
+            <div class="sub-section__body">
+
+              <div class="hint-code" style="margin-bottom:14px;">
+                <strong>Variables disponibles en cada fórmula</strong><br>
+                · <code>suma</code> — suma del costo de los ítems de la categoría<br>
+                · <code>aiu</code> — factor AIU <br>
+                · <code>margen</code> — factor margen <br>
+                · <code>dias</code> — días de duración (÷30 si la categoría tiene "aplica_dias_mensuales")<br>
+                · <code>total material base</code> — dejar el nombre como se establecio en la variable (denominador de referencia)<br>
+                · <code>personas</code> — número de personas de la cuadrilla<br>
+                · <code>factor_venta</code> — factor de venta <br>
+                <br>
+                <strong>Ejemplos por tipo:</strong><br>
+                · Herramientas: <code>suma * aiu * margen * dias / tp</code><br>
+                · Transporte: <code>suma / tp</code><br>
+                · Mano de Obra: <code>suma * aiu * margen * dias * personas / tp</code><br>
+                · Administración: <code>suma * aiu * margen * dias / tp</code>
+              </div>
+
+              <table class="rows-table" id="tbReglas">
+                <thead>
+                  <tr>
+                    <th style="width:180px;">Tipo APU <span style="color:var(--red)">*</span></th>
+                    <th>Fórmula costo unitario <span style="color:var(--red)">*</span></th>
+                    <th style="width:36px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="reglaRows">
+                  {% for r in reglas_apu_existentes %}
+                  <tr class="regla-row">
+                    <td>
+                      <select name="regla_tipo_apu[]" class="form-select form-select-sm" required>
+                        <option value="">— Seleccionar —</option>
+                        {% for val, label in tipo_apu_choices %}
+                        <option value="{{ val }}" {% if val == r.tipo_apu %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td>
+                      <input type="text" name="regla_formula[]" class="form-control form-control-sm"
+                             value="{{ r.formula_costo_unitario }}"
+                             placeholder="suma * aiu * margen * dias / tp"
+                             style="font-family:monospace;font-size:11.5px;" required>
+                    </td>
+                    <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+              {% if not reglas_apu_existentes %}
+              <p id="noReglasMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;">
+                Sin reglas APU definidas. Usa "+ Regla" para agregar el cálculo de cada tipo.
+              </p>
+              {% endif %}
+
+            </div>
+          </div>
+
           <div class="d-flex gap-2 justify-content-end">
             <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
             <button type="submit" class="btn btn-primary btn-sm">
@@ -313,6 +378,34 @@
     `;
     tbody.appendChild(tr);
     tr.querySelector('input').focus();
+  });
+  // ── Plantilla de fila Regla APU ───────────────────────────────────────────
+  const tipoAPUOpts = `<option value="">— Seleccionar —</option>` + [
+    {% for val, label in tipo_apu_choices %}
+    `<option value="{{ val }}">{{ label }}</option>`,
+    {% endfor %}
+  ].join('');
+
+  document.getElementById('btnAddRegla').addEventListener('click', function () {
+    document.getElementById('noReglasMsg') && (document.getElementById('noReglasMsg').style.display = 'none');
+    const tbody = document.getElementById('reglaRows');
+    const tr = document.createElement('tr');
+    tr.className = 'regla-row';
+    tr.innerHTML = `
+      <td>
+        <select name="regla_tipo_apu[]" class="form-select form-select-sm" required>
+          ${tipoAPUOpts}
+        </select>
+      </td>
+      <td>
+        <input type="text" name="regla_formula[]" class="form-control form-control-sm"
+               placeholder="suma * aiu * margen * dias / tp"
+               style="font-family:monospace;font-size:11.5px;" required>
+      </td>
+      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector('select').focus();
   });
 })();
 </script>

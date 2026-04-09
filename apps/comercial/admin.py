@@ -49,7 +49,7 @@ class SolicitudAdmin(admin.ModelAdmin):
 
 @admin.register(SolicitudArchivo)
 class SolicitudArchivoAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "solicitud", "usuario", "fecha_subida")
+    list_display = ("nombre", "solicitud", "configuracion", "fecha_subida")
     list_filter = ("fecha_subida",)
     search_fields = ("nombre", "solicitud__consecutivo")
     readonly_fields = ("fecha_subida",)
@@ -57,11 +57,11 @@ class SolicitudArchivoAdmin(admin.ModelAdmin):
 
 @admin.register(LogSistema)
 class LogSistemaAdmin(admin.ModelAdmin):
-    list_display = ("created_at", "unidad_negocio", "accion", "usuario", "modelo_afectado", "objeto_id")
+    list_display = ("created_at", "unidad_negocio", "accion", "configuracion", "modelo_afectado", "objeto_id")
     list_filter = ("unidad_negocio", "accion", "modelo_afectado")
-    search_fields = ("accion", "descripcion", "usuario__nombre_completo")
+    search_fields = ("accion", "descripcion", "configuracion__nombre_completo")
     readonly_fields = (
-        "created_at", "unidad_negocio", "usuario",
+        "created_at", "unidad_negocio", "configuracion",
         "accion", "descripcion", "modelo_afectado", "objeto_id",
     )
     date_hierarchy = "created_at"

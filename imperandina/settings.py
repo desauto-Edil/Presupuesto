@@ -53,7 +53,7 @@ SECRET_KEY = config(
 
 DEBUG = config("DEBUG", default=True, cast=bool)
 
-_allowed = config("ALLOWED_HOSTS", default="localhost,127.0.0.1")
+_allowed = config("ALLOWED_HOSTS", default="localhost,127.0.0.1,testserver")
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 
 
@@ -69,7 +69,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # ── Apps por dominio de negocio ──────────────────────────────────────────
     "apps.common",
-    "apps.usuarios",
+    "apps.configuracion",
     "apps.catalogos",
     "apps.ingenieria",
     "apps.comercial",
@@ -85,7 +85,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'apps.usuarios.middleware.AuthCustomMiddleware',
+    'apps.configuracion.middleware.AuthCustomMiddleware',
 ]
 
 ROOT_URLCONF = "imperandina.urls"

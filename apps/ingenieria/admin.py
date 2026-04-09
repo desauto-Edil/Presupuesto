@@ -11,9 +11,19 @@ ReglaCalculo y DependenciaTecnica quedan registradas como LEGADO —
 
 from django.contrib import admin
 from .models import Sistema, Subsistema, ReglaCalculo, DependenciaTecnica
+from apps.presupuestos.models import ReglaAPUSubsistema
 
 
 # ── Catálogo activo ───────────────────────────────────────────────────────────
+
+class ReglaAPUSubsistemaInline(admin.TabularInline):
+    model = ReglaAPUSubsistema
+    extra = 1
+    fields = ("tipo_apu", "formula_costo_unitario", "orden")
+    ordering = ("orden",)
+    verbose_name = "Regla de cálculo APU"
+    verbose_name_plural = "Reglas de cálculo APU (Herramientas, Transporte, MO, Admin)"
+
 
 class SubsistemaInline(admin.TabularInline):
     model = Subsistema
@@ -37,6 +47,7 @@ class SubsistemaAdmin(admin.ModelAdmin):
     list_filter   = ("sistema", "activo")
     search_fields = ("codigo", "nombre")
     readonly_fields = ("created_at", "updated_at")
+    inlines = [ReglaAPUSubsistemaInline]
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("sistema")

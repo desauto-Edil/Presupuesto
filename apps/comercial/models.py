@@ -93,7 +93,7 @@ class Solicitud(models.Model):
         blank=True, null=True, related_name="solicitudes",
     )
     creado_por = models.ForeignKey(
-        "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
+        "configuracion.ConfiguracionSistema", on_delete=models.SET_NULL,
         blank=True, null=True, related_name="solicitudes_creadas",
     )
     nombre = models.CharField(max_length=300, verbose_name="Nombre / descripción")
@@ -139,8 +139,8 @@ class SolicitudArchivo(models.Model):
     )
     nombre = models.CharField(max_length=300, verbose_name="Nombre del archivo")
     fecha_subida = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de subida")
-    usuario = models.ForeignKey(
-        "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
+    configuracion = models.ForeignKey(
+        "configuracion.ConfiguracionSistema", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="archivos_solicitud",
         verbose_name="Subido por",
     )
@@ -194,7 +194,7 @@ class Proyecto(models.Model):
     # ── Datos del proyecto ───────────────────────────────────────────────────
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos")
     creado_por = models.ForeignKey(
-        "usuarios.UsuarioSistema", on_delete=models.SET_NULL,
+        "configuracion.ConfiguracionSistema", on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyectos_creados",
     )
     tipo_proyecto = models.ForeignKey(
@@ -210,6 +210,11 @@ class Proyecto(models.Model):
         blank=True, null=True,
         verbose_name="Días de duración",
         help_text="Duración estimada del proyecto en días calendario",
+    )
+    num_personas = models.PositiveIntegerField(
+        blank=True, null=True,
+        verbose_name="Número de personas",
+        help_text="Personas en el equipo de trabajo. Si es 7 se usa la cuadrilla de instalación estándar.",
     )
 
     # ── Parámetros financieros ───────────────────────────────────────────────
@@ -292,8 +297,8 @@ class LogSistema(models.Model):
     Registro de auditoría de acciones importantes.
     Filtrado por unidad de negocio del usuario.
     """
-    usuario = models.ForeignKey(
-        "usuarios.UsuarioSistema", on_delete=models.CASCADE,
+    configuracion = models.ForeignKey(
+        "configuracion.ConfiguracionSistema", on_delete=models.CASCADE,
         related_name="logs",
     )
     unidad_negocio = models.CharField(
@@ -330,4 +335,4 @@ class LogSistema(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"[{self.unidad_negocio}] {self.accion} — {self.usuario} ({self.created_at:%d/%m/%Y %H:%M})"
+        return f"[{self.unidad_negocio}] {self.accion} — {self.configuracion} ({self.created_at:%d/%m/%Y %H:%M})"

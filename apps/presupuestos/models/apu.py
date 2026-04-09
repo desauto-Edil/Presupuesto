@@ -3,12 +3,17 @@ apps/presupuestos/models/apu.py — Análisis de Precios Unitarios (APU).
 
 """
 
+import math
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models
 from django.db.models import Sum
 
 from apps.common.choices import TipoAPU
+
+
+# Nombres matemáticos seguros para eval() — misma técnica que ComponenteSubsistema
+_SAFE_MATH = {k: v for k, v in math.__dict__.items() if not k.startswith("_")}
 
 
 class ConfiguracionAPU(models.Model):
@@ -19,8 +24,8 @@ class ConfiguracionAPU(models.Model):
 
     nombre = models.CharField(max_length=100, default="Configuración global")
     factor_venta_pct = models.DecimalField(
-        max_digits=8, decimal_places=4, default=Decimal("121"),
-        help_text="Factor de venta aplicado al costo total para obtener el valor unitario. Ej: 121 → multiplica × 1.21.",
+        max_digits=8, decimal_places=4, default=Decimal("20"),
+        help_text="Margen de venta (%). Se suma al costo para obtener el valor unitario. Ej: 20 → multiplica × 1.20.",
     )
     iva_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("19"),
@@ -40,7 +45,7 @@ class ConfiguracionAPU(models.Model):
     )
     activa = models.BooleanField(default=True)
     modificado_por = models.ForeignKey(
-        "usuarios.UsuarioSistema",
+        "configuracion.ConfiguracionSistema",
         on_delete=models.SET_NULL,
         blank=True, null=True,
         related_name="configs_apu",
@@ -84,6 +89,13 @@ class CategoriaItemAPU(models.Model):
     descripcion = models.TextField(blank=True)
     activa = models.BooleanField(default=True)
     orden = models.PositiveIntegerField(default=0, help_text="Orden en la UI.")
+    aplica_dias_mensuales = models.BooleanField(
+        default=False,
+        help_text=(
+            "Si True, los días de duración se dividen entre 30 en la fórmula de costo. "
+            "Usar en categorías de personal donde el salario es mensual."
+        ),
+    )
 
     class Meta:
         app_label = "presupuestos"
@@ -139,6 +151,12 @@ class ItemCatalogoAPU(models.Model):
     )
     unidad = models.CharField(max_length=20, choices=UNIDAD_CHOICES, default="und")
 
+    tienda_referencia = models.CharField(
+        max_length=200, blank=True, default="",
+        verbose_name="Tienda de referencia",
+        help_text="Proveedor o tienda donde se cotizó el precio base.",
+    )
+
     # Solo para personal: prestaciones sociales
     salario_base = models.DecimalField(
         max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
@@ -186,6 +204,11 @@ class ItemCatalogoAPU(models.Model):
                 Decimal("0.0001"), rounding=ROUND_HALF_UP
             )
         return Decimal("0")
+
+    @property
+    def costo_por_dia(self) -> Decimal:
+        """Alias de costo_por_dia_herramienta para uso en plantillas."""
+        return self.costo_por_dia_herramienta
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +278,76 @@ class CuadrillaPresetItem(models.Model):
 
 
 # ---------------------------------------------------------------------------
-# 4. APU (cabecera)
+# 4. Reglas de cálculo APU por subsistema
+# ---------------------------------------------------------------------------
+
+class ReglaAPUSubsistema(models.Model):
+    """
+    Fórmula de costo unitario para una categoría de APU, definida en el subsistema.
+
+    Se crea desde la edición del Subsistema (inline en SubsistemaAdmin) para que
+    cada receta técnica defina sus propios factores de cálculo.
+
+    Una regla por subsistema × tipo_apu (excepto MATERIALES, que se calcula desde
+    las líneas del despiece).
+
+    Variables disponibles en formula_costo_unitario:
+        suma      — suma del costo de todos los ítems de la categoría (float)
+        aiu       — factor AIU, e.g. 1.30 si AIU=30%
+        margen    — factor margen, e.g. 1.20 si margen=20%
+        dias      — días efectivos (ya ajustados si aplica_dias_mensuales)
+        tp        — total_powergrip (denominador)
+        personas  — número de personas en cuadrilla (solo MO)
+        factor_venta — factor de venta, e.g. 1.21 si factor_venta=121%
+
+    Ejemplo Herramientas:  suma * aiu * margen * dias / tp
+    Ejemplo Mano de Obra:  suma * aiu * margen * dias * personas / tp
+    Ejemplo Transporte:    suma / tp
+    Ejemplo Administración: suma * aiu * margen * dias / tp
+    """
+
+    subsistema = models.ForeignKey(
+        "ingenieria.Subsistema",
+        on_delete=models.CASCADE,
+        related_name="reglas_apu",
+    )
+    tipo_apu = models.CharField(
+        max_length=30,
+        choices=[c for c in TipoAPU.choices if c[0] != TipoAPU.MATERIALES],
+        help_text="Tipo de APU al que aplica esta regla (no aplica a MATERIALES).",
+    )
+    formula_costo_unitario = models.TextField(
+        help_text=(
+            "Expresión Python que devuelve el costo unitario de la categoría. "
+            "Variables: suma, aiu, margen, dias, tp, personas, factor_venta. "
+            "Ej (herramientas): suma * aiu * margen * dias / tp"
+        ),
+    )
+    orden = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "reglas_apu_subsistema"
+        unique_together = [["subsistema", "tipo_apu"]]
+        ordering = ["subsistema", "orden"]
+        verbose_name = "Regla APU de subsistema"
+        verbose_name_plural = "Reglas APU de subsistema"
+
+    def __str__(self):
+        return f"{self.subsistema} — {self.get_tipo_apu_display()}"
+
+    def evaluar(self, contexto: dict) -> float:
+        """
+        Evalúa formula_costo_unitario con el contexto dado.
+        Usa eval() restringido (mismo patrón que ComponenteSubsistema).
+        """
+        safe_ctx = {**_SAFE_MATH, **contexto}
+        result = eval(self.formula_costo_unitario, {"__builtins__": {}}, safe_ctx)
+        return float(result)
+
+
+# ---------------------------------------------------------------------------
+# 5. APU (cabecera)
 # ---------------------------------------------------------------------------
 
 class APUProyecto(models.Model):
@@ -293,13 +385,25 @@ class APUProyecto(models.Model):
 
     # -- Parámetros de cálculo --
     factor_venta_pct = models.DecimalField(
-        max_digits=8, decimal_places=4, default=Decimal("121"),
-        help_text="Factor de venta: Valor unit = Costo total × (factor/100). Ej: 121 → × 1.21.",
+        max_digits=8, decimal_places=4, default=Decimal("20"),
+        help_text="Margen de venta (%). Valor unit = Costo unit × (1 + factor/100). Ej: 20 → × 1.20.",
     )
     iva_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("19"),
     )
     aplica_iva = models.BooleanField(default=True)
+    aiu_contratista_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("30"),
+        help_text="AIU del contratista (%). Se aplica al calcular costo unitario de MO, herramientas, transporte y admin.",
+    )
+    margen_ganancia_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("20"),
+        help_text="Margen de ganancia (%). Se aplica junto al AIU en el costo unitario.",
+    )
+    dias_duracion = models.PositiveIntegerField(
+        default=30,
+        help_text="Días de duración del proyecto. Se usa para calcular el costo unitario de MO, herramientas, etc.",
+    )
 
     # -- Subtotales por categoría (calculados) --
     subtotal_materiales = models.DecimalField(
@@ -364,7 +468,21 @@ class APUProyecto(models.Model):
         total_valor = Decimal("0")
 
         for tipo, campo in _TIPO_CAMPO.items():
-            agg = self.lineas.filter(tipo=tipo).aggregate(
+            if tipo == TipoAPU.MATERIALES:
+                # Materiales: sumar todas las líneas (cada una es un componente del despiece)
+                qs = self.lineas.filter(tipo=tipo)
+            else:
+                # No-materiales: sumar solo las líneas resumen (item_catalogo=None, despiece_linea=None).
+                # Estas son las líneas que contienen el costo agregado por categoría.
+                # Si no existen líneas resumen (APU en formato antiguo), se usa fallback a todas las líneas.
+                qs_resumen = self.lineas.filter(
+                    tipo=tipo,
+                    item_catalogo__isnull=True,
+                    despiece_linea__isnull=True,
+                )
+                qs = qs_resumen if qs_resumen.exists() else self.lineas.filter(tipo=tipo)
+
+            agg = qs.aggregate(
                 costo=Sum("costo_total"),
                 valor=Sum("valor_total"),
             )
@@ -380,8 +498,8 @@ class APUProyecto(models.Model):
         self.save(update_fields=[
             "subtotal_materiales", "subtotal_herramientas",
             "subtotal_transporte", "subtotal_mano_obra",
-            "subtotal_administracion", "total_costo",
-            "total_valor_venta", "updated_at",
+            "subtotal_administracion",
+            "total_costo", "total_valor_venta", "updated_at",
         ])
 
 
@@ -514,10 +632,16 @@ class APULinea(models.Model):
         help_text="rendimiento × valor_unitario.",
     )
 
+    tienda_referencia = models.CharField(
+        max_length=200, blank=True, default="",
+        verbose_name="Tienda de referencia",
+        help_text="Proveedor o tienda de referencia (copiado del catálogo).",
+    )
+
     # -- Control de edición manual --
     editable = models.BooleanField(
         default=False,
-        help_text="Si True, el usuario puede modificar precio_referencia y rendimiento.",
+        help_text="Si True, la configuracion puede modificar precio_referencia y rendimiento.",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -532,8 +656,6 @@ class APULinea(models.Model):
 
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.descripcion}"
-
-  
 
     def calcular(self):
 
@@ -562,8 +684,8 @@ class APULinea(models.Model):
             if (self.iva_aplicado and apu.aplica_iva)
             else Decimal("1")
         )
-        # factor_venta: divisor 100 → 121% = ×1.21
-        factor_venta = Decimal(str(apu.factor_venta_pct)) / Decimal("100")
+        # factor_venta: mismo convenio que AIU/margen → 20 = 20% markup → ×1.20
+        factor_venta = Decimal("1") + Decimal(str(apu.factor_venta_pct)) / Decimal("100")
         rendimiento  = Decimal(str(self.rendimiento)) if self.rendimiento else Decimal("1")
         precio       = Decimal(str(self.precio_referencia))
 
@@ -575,8 +697,8 @@ class APULinea(models.Model):
         self.costo_total = (rendimiento * self.costo_unitario).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
-        # Valor unit  = Costo total × factor_venta   (Ej: ×1.21)
-        self.valor_unitario = (self.costo_total * factor_venta).quantize(
+        # Valor unit  = Costo unit × (1 + factor_venta_pct/100)   (Ej: 20% → ×1.20)
+        self.valor_unitario = (self.costo_unitario * factor_venta).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
         # Valor total = Valor unit × rendimiento

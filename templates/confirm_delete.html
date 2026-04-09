@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Confirmar eliminación · Andicost{% endblock %}
+{% block page_title %}Eliminar{% endblock %}
+{% block breadcrumb %}Confirmar eliminación{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+  <div class="col-12 col-md-6 col-lg-4">
+    <div style="background:white;border-radius:14px;border:1px solid var(--border);
+                border-left:4px solid var(--red,#e62833);overflow:hidden;" class="fade-up">
+
+      <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:.08em;color:var(--red,#e62833);margin-bottom:4px;">
+          Confirmar eliminación
+        </div>
+        <div style="font-size:16px;font-weight:700;color:var(--ink);">
+          {{ object }}
+        </div>
+      </div>
+
+      <div style="padding:20px 24px;">
+        <p style="font-size:14px;color:var(--ink);margin-bottom:6px;">
+          ¿Está seguro de que desea eliminar este registro?
+        </p>
+        <p style="font-size:12px;color:rgba(14,17,23,0.40);margin-bottom:0;">
+          Esta acción no se puede deshacer.
+        </p>
+      </div>
+
+      <div style="padding:16px 24px;border-top:1px solid var(--border);
+                  display:flex;justify-content:flex-end;gap:8px;">
+        <a href="javascript:history.back()" class="btn btn-ghost btn-sm">Cancelar</a>
+        <form method="post" style="margin:0;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

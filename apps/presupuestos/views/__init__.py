@@ -72,7 +72,7 @@ class ProyectoSistemaUpdateView(UpdateView):
 
 class ProyectoSistemaDeleteView(DeleteView):
     model = ProyectoSistema
-    template_name = "presupuestos/confirm_delete.html"
+    template_name = "confirm_delete.html"
 
     def get_success_url(self):
         return reverse("presupuestos:despiece_proyecto", args=[self.object.proyecto_id])
@@ -347,14 +347,155 @@ class APUListView(ListView):
         )
 
 
+def _build_categorias_context(apu) -> list:
+    """
+    Construye la estructura de categorías para la vista de detalle del APU.
+
+    Para cada TipoAPU devuelve un dict con:
+      - tipo, label, icon, color, tab_id
+      - subtotal_costo, subtotal_valor, count
+      - grupos: lista de grupos (uno por CategoriaItemAPU o "flat" para MATERIALES)
+        Cada grupo contiene:
+          - descripcion: nombre del grupo
+          - linea_resumen: APULinea resumen (o None para MATERIALES)
+          - lineas_detalle: lista de APULineas de detalle
+          - subtotal_costo, subtotal_valor
+
+    Patrón de identificación:
+      - MATERIALES: todas las líneas son detalle (despiece_linea set o item_catalogo=None sin resumen).
+      - No-MATERIALES: líneas resumen = item_catalogo__isnull=True AND despiece_linea__isnull=True.
+                       líneas detalle = item_catalogo__isnull=False.
+    """
+    from apps.common.choices import TipoAPU
+    from decimal import Decimal
+
+    TIPO_INFO = [
+        {"tipo": TipoAPU.MATERIALES,          "label": "Materiales",     "icon": "bi-box-seam",  "color": "#1470e6", "tab_id": "tab-materiales"},
+        {"tipo": TipoAPU.HERRAMIENTAS_EQUIPOS, "label": "Herramientas",   "icon": "bi-tools",     "color": "#e07d10", "tab_id": "tab-herramientas"},
+        {"tipo": TipoAPU.TRANSPORTE,           "label": "Transporte",     "icon": "bi-truck",     "color": "#7048d0", "tab_id": "tab-transporte"},
+        {"tipo": TipoAPU.MANO_DE_OBRA,         "label": "Mano de Obra",   "icon": "bi-people",    "color": "#17a85e", "tab_id": "tab-manoobra"},
+        {"tipo": TipoAPU.ADMINISTRACION,       "label": "Administración", "icon": "bi-briefcase", "color": "#64748b", "tab_id": "tab-admin"},
+    ]
+
+    # Cargar todas las líneas del APU de una sola vez
+    all_lineas = list(
+        apu.lineas.select_related(
+            "item_catalogo__categoria", "despiece_linea__producto"
+        ).order_by("descripcion")
+    )
+
+    categorias = []
+    for info in TIPO_INFO:
+        tipo = info["tipo"]
+        lineas_tipo = [l for l in all_lineas if l.tipo == tipo]
+
+        if tipo == TipoAPU.MATERIALES:
+            # Todos los materiales se muestran en tabla plana
+            grupos = []
+            if lineas_tipo:
+                subtotal_c = sum(l.costo_total for l in lineas_tipo)
+                subtotal_v = sum(l.valor_total  for l in lineas_tipo)
+                grupos = [{
+                    "descripcion": "Materiales",
+                    "linea_resumen": None,
+                    "lineas_detalle": lineas_tipo,
+                    "subtotal_costo": subtotal_c,
+                    "subtotal_valor": subtotal_v,
+                }]
+            subtotal_costo = sum(l.costo_total for l in lineas_tipo)
+            subtotal_valor = sum(l.valor_total  for l in lineas_tipo)
+
+        else:
+            # Líneas resumen (item_catalogo=None, despiece_linea=None)
+            resumen_lines = [l for l in lineas_tipo if not l.item_catalogo_id and not l.despiece_linea_id]
+            # Líneas detalle (item_catalogo set, solo referencia)
+            detalle_lines = [l for l in lineas_tipo if l.item_catalogo_id]
+
+            grupos = []
+            if resumen_lines:
+                # Agrupar líneas detalle por nombre de categoría (coincide con descripcion de la resumen)
+                for lr in resumen_lines:
+                    # Las líneas detalle de esta resumen comparten el nombre de categoría
+                    detalle_para_lr = [
+                        l for l in detalle_lines
+                        if l.item_catalogo
+                        and l.item_catalogo.categoria
+                        and l.item_catalogo.categoria.nombre == lr.descripcion.replace(" — Dotación", "").replace(" — Personal", "").strip()
+                    ]
+                    grupos.append({
+                        "descripcion": lr.descripcion,
+                        "linea_resumen": lr,
+                        "lineas_detalle": detalle_para_lr,
+                        "subtotal_costo": lr.costo_total,
+                        "subtotal_valor": lr.valor_total,
+                    })
+            elif lineas_tipo:
+                # Formato antiguo: sin líneas resumen → mostrar todas en tabla plana
+                subtotal_c = sum(l.costo_total for l in lineas_tipo)
+                subtotal_v = sum(l.valor_total  for l in lineas_tipo)
+                grupos = [{
+                    "descripcion": info["label"],
+                    "linea_resumen": None,
+                    "lineas_detalle": lineas_tipo,
+                    "subtotal_costo": subtotal_c,
+                    "subtotal_valor": subtotal_v,
+                }]
+
+            subtotal_costo = sum(g["subtotal_costo"] for g in grupos)
+            subtotal_valor = sum(g["subtotal_valor"] for g in grupos)
+
+        categorias.append({
+            **info,
+            "grupos": grupos,
+            "subtotal_costo": subtotal_costo,
+            "subtotal_valor": subtotal_valor,
+            "count": len(lineas_tipo),
+        })
+
+    return categorias
+
+
 class APUProyectoDetailView(DetailView):
     model = APUProyecto
     template_name = "presupuestos/apu_detail.html"
     context_object_name = "apu"
 
     def get_context_data(self, **kwargs):
+        from django.db.models import Sum as _Sum
+
         ctx = super().get_context_data(**kwargs)
-        ctx["lineas"] = self.object.lineas.order_by("tipo", "descripcion")
+
+        # Contexto estructurado por categoría (Session 4)
+        ctx["categorias_apu"] = _build_categorias_context(self.object)
+
+        # Mantener lineas y subtotales para compatibilidad con otras partes del template
+        ctx["lineas"] = self.object.lineas.select_related(
+            "item_catalogo__categoria"
+        ).order_by("tipo", "item_catalogo__categoria__nombre", "descripcion")
+
+        # Subtotales de costo_total, valor_total y costo_por_dia por tipo
+        valor_subs: dict = {}
+        costo_subs: dict = {}
+        dia_subs: dict = {}
+        for agg in self.object.lineas.values("tipo").annotate(
+            valor=_Sum("valor_total"),
+            costo=_Sum("costo_total"),
+            dia=_Sum("costo_por_dia"),
+        ):
+            valor_subs[agg["tipo"]] = float(agg["valor"] or 0)
+            costo_subs[agg["tipo"]] = float(agg["costo"] or 0)
+            dia_subs[agg["tipo"]] = float(agg["dia"] or 0)
+        ctx["valor_subtotales"] = valor_subs
+        ctx["costo_subtotales"] = costo_subs
+        ctx["dia_subtotales"] = dia_subs
+        ctx["total_dia"] = sum(dia_subs.values())
+
+        # Datos del proyecto vinculado
+        proyecto = None
+        if self.object.proyecto_sistema_id:
+            proyecto = getattr(self.object.proyecto_sistema, "proyecto", None)
+        ctx["proyecto_num_personas"] = getattr(proyecto, "num_personas", None)
+
         # Catálogo para los modales de selección
         ctx["presets"] = (
             CuadrillaPreset.objects
@@ -397,6 +538,58 @@ class APUProyectoUpdateView(UpdateView):
 
     def get_success_url(self):
         return reverse("presupuestos:apu_detail", args=[self.object.pk])
+
+    def form_valid(self, form):
+        # Snapshot config fields before save to detect changes
+        old = APUProyecto.objects.get(pk=self.object.pk)
+        old_aiu  = old.aiu_contratista_pct
+        old_mg   = old.margen_ganancia_pct
+        old_dias = old.dias_duracion
+        old_fv   = old.factor_venta_pct
+
+        response = super().form_valid(form)
+
+        # If any calc-affecting field changed, regenerate non-MATERIALES lines
+        new = self.object
+        if (new.aiu_contratista_pct != old_aiu
+                or new.margen_ganancia_pct != old_mg
+                or new.dias_duracion != old_dias
+                or new.factor_venta_pct != old_fv):
+            try:
+                from apps.presupuestos.services.apu_service import APUService
+                from apps.presupuestos.models import ItemCatalogoAPU
+
+                svc = APUService.for_apu(new)
+                tipos = [
+                    TipoAPU.HERRAMIENTAS_EQUIPOS,
+                    TipoAPU.MANO_DE_OBRA,
+                    TipoAPU.TRANSPORTE,
+                    TipoAPU.ADMINISTRACION,
+                ]
+                regenerado = False
+                for tipo in tipos:
+                    items = list(ItemCatalogoAPU.objects.filter(
+                        activo=True, categoria__tipo_apu=tipo
+                    ))
+                    if items:
+                        svc._generar_categoria_desde_catalogo(
+                            tipo,
+                            [{"item_id": i.pk, "cantidad": 1} for i in items],
+                        )
+                        regenerado = True
+                if regenerado:
+                    new.recalcular()
+                    messages.success(
+                        self.request,
+                        "Parámetros guardados y líneas recalculadas con los nuevos valores.",
+                    )
+            except Exception as exc:
+                messages.warning(
+                    self.request,
+                    f"Parámetros guardados, pero error al recalcular líneas: {exc}",
+                )
+
+        return response
 
 
 class APUGenerarView(View):
@@ -692,6 +885,26 @@ class APULineaUpdateView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[linea.apu.pk]))
 
 
+class APULineaDeleteView(View):
+    """
+    POST /presupuestos/apu/linea/<pk>/eliminar/
+
+    Elimina una APULinea individual de tipo no-MATERIALES.
+    El signal post_delete dispara apu.recalcular() automáticamente.
+    """
+    def post(self, request, pk):
+        from apps.presupuestos.models import APULinea
+        linea = get_object_or_404(APULinea, pk=pk)
+        if linea.tipo == "MATERIALES":
+            messages.error(request, "Las líneas de materiales se regeneran desde el despiece.")
+            return redirect(reverse("presupuestos:apu_detail", args=[linea.apu_id]))
+        apu_pk = linea.apu_id
+        desc = linea.descripcion
+        linea.delete()
+        messages.success(request, f"Línea «{desc}» eliminada.")
+        return redirect(reverse("presupuestos:apu_detail", args=[apu_pk]))
+
+
 class APUAdminView(View):
     """
     POST /presupuestos/apu/<pk>/administrativo/
@@ -806,7 +1019,7 @@ class CategoriaItemAPUUpdateView(UpdateView):
 
 class CategoriaItemAPUDeleteView(DeleteView):
     model = CategoriaItemAPU
-    template_name = "presupuestos/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 
@@ -835,7 +1048,7 @@ class ItemCatalogoAPUUpdateView(UpdateView):
 
 class ItemCatalogoAPUDeleteView(DeleteView):
     model = ItemCatalogoAPU
-    template_name = "presupuestos/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 
@@ -895,7 +1108,7 @@ class CuadrillaPresetUpdateView(UpdateView):
 
 class CuadrillaPresetDeleteView(DeleteView):
     model = CuadrillaPreset
-    template_name = "presupuestos/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 

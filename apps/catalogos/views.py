@@ -48,6 +48,12 @@ class CatalogoView(ListView):
         ctx["categorias_activas"]= qs.filter(activa=True).count()
         ctx["total_productos"] = Producto.objects.filter(activo=True).count()
 
+        # Proveedores (tab unificado)
+        proveedores_qs = Proveedor.objects.order_by("nombre")
+        ctx["proveedores"]          = proveedores_qs
+        ctx["proveedores_activos"]  = proveedores_qs.filter(activo=True).count()
+        ctx["proveedores_inactivos"]= proveedores_qs.filter(activo=False).count()
+
         # Formularios para los modales de creación
         ctx["modal_categoria_form"] = CategoriaForm()
         ctx["modal_producto_form"] = ProductoForm()
@@ -93,7 +99,7 @@ class CategoriaUpdateView(UpdateView):
 
 class CategoriaDeleteView(DeleteView):
     model = CategoriaProducto
-    template_name = "catalogos/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
 
 
@@ -174,7 +180,7 @@ class ProductoUpdateView(UpdateView):
 
 class ProductoDeleteView(DeleteView):
     model = Producto
-    template_name = "catalogos/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
 
 
@@ -203,7 +209,7 @@ class UnidadUpdateView(UpdateView):
 
 class UnidadDeleteView(DeleteView):
     model = UnidadMedida
-    template_name = "catalogos/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
 
 
@@ -219,22 +225,20 @@ class ProveedorListView(ListView):
 
 class ProveedorCreateView(CreateView):
     model = Proveedor
-    template_name = "catalogos/proveedor_form.html"
-    fields = "__all__"
-    success_url = reverse_lazy("catalogos:proveedor_list")
+    form_class = ProveedorForm
+    success_url = reverse_lazy("catalogos:catalogo")
 
 
 class ProveedorUpdateView(UpdateView):
     model = Proveedor
-    template_name = "catalogos/proveedor_form.html"
-    fields = "__all__"
-    success_url = reverse_lazy("catalogos:proveedor_list")
+    form_class = ProveedorForm
+    success_url = reverse_lazy("catalogos:catalogo")
 
 
 class ProveedorDeleteView(DeleteView):
     model = Proveedor
-    template_name = "catalogos/confirm_delete.html"
-    success_url = reverse_lazy("catalogos:proveedor_list")
+    template_name = "confirm_delete.html"
+    success_url = reverse_lazy("catalogos:catalogo")
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -268,5 +272,5 @@ class ProductoProveedorUpdateView(UpdateView):
 
 class ProductoProveedorDeleteView(DeleteView):
     model = ProductoProveedor
-    template_name = "catalogos/confirm_delete.html"
+    template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:productoproveedor_list")

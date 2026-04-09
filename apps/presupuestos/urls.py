@@ -16,7 +16,7 @@ from apps.presupuestos.views import (
     # APU — proyectos
     APUListView, APUProyectoDetailView, APUProyectoUpdateView, APUGenerarView,
     APUManoObraView, APUHerramientasView, APUTransporteView, APUAdminView,
-    APULineaUpdateView,
+    APULineaUpdateView, APULineaDeleteView,
     APUPDFInternoView, APUPDFClienteView, APUEnviarRevisionView,
     # Catálogo APU
     CatalogoAPUView,
@@ -79,6 +79,7 @@ urlpatterns = [
     path("apu/<int:pk>/transporte/",     APUTransporteView.as_view(),     name="apu_transporte"),
     path("apu/<int:pk>/administrativo/", APUAdminView.as_view(),          name="apu_admin"),
     path("apu/linea/<int:pk>/editar/",   APULineaUpdateView.as_view(),    name="apu_linea_update"),
+    path("apu/linea/<int:pk>/eliminar/", APULineaDeleteView.as_view(),    name="apu_linea_delete"),
     path("apu/<int:pk>/pdf-interno/",    APUPDFInternoView.as_view(),     name="apu_pdf_interno"),
     path("apu/<int:pk>/pdf-cliente/",    APUPDFClienteView.as_view(),     name="apu_pdf_cliente"),
     path("apu/<int:pk>/enviar-revision/", APUEnviarRevisionView.as_view(), name="apu_enviar_revision"),
