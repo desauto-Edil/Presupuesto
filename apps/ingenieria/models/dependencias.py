@@ -42,6 +42,7 @@ class DependenciaTecnica(models.Model):
 
     class Meta:
         app_label = "ingenieria"
+        db_table = "dependencias_tecnicas"
 
     def __str__(self):
         return f"{self.subsistema} -> {self.nombre or 'dependencia'}"

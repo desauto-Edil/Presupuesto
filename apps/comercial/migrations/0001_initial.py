@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('nit', models.CharField(max_length=50, unique=True)),
                 ('razon_social', models.CharField(max_length=300)),
-                ('creacion_selford', models.BooleanField(default=False)),
+                ('creacion_salesforce', models.BooleanField(default=False)),
                 ('activo', models.BooleanField(default=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),

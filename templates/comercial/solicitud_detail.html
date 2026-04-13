@@ -132,10 +132,10 @@ Eliminar
 
     <div class="project-divider"></div>
     <div>
-        <div class="project-meta-label">Link Selford</div>
-        <a href="{{ solicitud.link_selford }}" target="_blank" rel="noopener"
+        <div class="project-meta-label">Link Salesforce</div>
+        <a href="{{ solicitud.link_salesforce }}" target="_blank" rel="noopener"
            style="font-size:12px;color:var(--brand-lime);">
-            Ver en Selford ↗
+            Ver en Salesforce ↗
         </a>
     </div>
 
@@ -184,11 +184,15 @@ Eliminar
         <div class="panel">
             <div class="panel-header">
                 <span class="panel-title">Archivos adjuntos</span>
-                {% if archivos %}
-                <span style="font-size:11px;color:var(--ink-soft);">
-                    {{ archivos|length }} archivo{{ archivos|length|pluralize }}
-                </span>
-                {% endif %}
+                <div style="display:flex;align-items:center;gap:10px;">
+                    {% if archivos %}
+                    <span style="font-size:11px;color:var(--ink-soft);">
+                        {{ archivos|length }} archivo{{ archivos|length|pluralize }}
+                    </span>
+                    {% endif %}
+                    <a href="{% url 'comercial:solicitud_update' solicitud.pk %}"
+                       class="btn btn-primary btn-xs">+ Adjuntar</a>
+                </div>
             </div>
 
             {% if archivos %}
@@ -208,7 +212,7 @@ Eliminar
                         <div class="archivo-meta">
                             {{ archivo.extension|upper }} ·
                             {{ archivo.fecha_subida|date:"d/m/Y H:i" }}
-                            {% if archivo.usuario %} · {{ archivo.usuario }}{% endif %}
+                            {% if archivo.configuracion %} · {{ archivo.configuracion }}{% endif %}
                         </div>
                     </div>
                     <form method="post"
@@ -226,57 +230,55 @@ Eliminar
                 <div class="empty-state-text">Sin archivos adjuntos.</div>
             </div>
             {% endif %}
-
-            <!-- ── Subir archivo ── -->
-            <form method="post"
-                  action="{% url 'comercial:solicitud_archivo_create' solicitud.pk %}"
-                  enctype="multipart/form-data"
-                  class="upload-bar">
-                {% csrf_token %}
-                {{ archivo_form.archivo }}
-                {{ archivo_form.nombre }}
-                <button type="submit" class="btn btn-ghost btn-sm d-inline-flex align-items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-box-arrow-in-down me-2" viewBox="0 0 16 16">
-                        <path fill-rule="evenodd" d="M3.5 6a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 1 0-1h2A1.5 1.5 0 0 1 14 6.5v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5v-8A1.5 1.5 0 0 1 3.5 5h2a.5.5 0 0 1 0 1z"/>
-                        <path fill-rule="evenodd" d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
-                    </svg>
-                    Subir
-                </button>
-            </form>
         </div>
 
         <!-- ── HISTORIAL DE ACTIVIDAD ── -->
-        {% if logs %}
         <div class="panel">
             <div class="panel-header">
                 <span class="panel-title">Historial de actividad</span>
                 <span style="font-size:11px;color:var(--ink-soft);">
-                    Últimos {{ logs|length }} eventos
+                    {% if logs %}Últimos {{ logs|length }} eventos{% else %}Sin eventos registrados{% endif %}
                 </span>
             </div>
+            {% if logs %}
             <div>
                 {% for log in logs %}
                 <div style="padding:10px 20px;border-bottom:1px solid var(--border);
                             display:flex;align-items:flex-start;gap:12px;">
-                    <div style="width:6px;height:6px;border-radius:50%;
-                                background:var(--theme-accent);margin-top:6px;flex-shrink:0;"></div>
+                    <!-- Dot de color según origen -->
+                    <div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;
+                                background:{% if log.modelo_afectado == 'Proyecto' %}var(--theme-accent){% elif log.modelo_afectado == 'Solicitud' %}#1470e6{% else %}#64748b{% endif %};">
+                    </div>
                     <div style="flex:1;min-width:0;">
-                        <div style="font-size:12.5px;font-weight:500;">
+                        <div style="font-size:12.5px;font-weight:500;line-height:1.4;">
                             {{ log.descripcion|default:log.accion }}
                         </div>
-                        <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
-                            {{ log.usuario }} · {{ log.created_at|date:"d/m/Y H:i" }}
+                        <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                            <span>{{ log.configuracion.nombre_completo|default:"Sistema" }}</span>
+                            <span style="color:rgba(14,17,23,0.25);">·</span>
+                            <span>{{ log.created_at|date:"d/m/Y H:i" }}</span>
+                            {% if log.modelo_afectado %}
+                            <span style="color:rgba(14,17,23,0.25);">·</span>
+                            <span style="font-size:10px;background:rgba(0,0,0,0.05);padding:1px 6px;border-radius:4px;font-family:monospace;">
+                                {{ log.modelo_afectado }}
+                            </span>
+                            {% endif %}
                         </div>
                     </div>
-                    <span style="font-size:10px;font-family:monospace;
-                                 color:rgba(14,17,23,0.35);white-space:nowrap;padding-top:3px;">
+                    <span style="font-size:10px;font-family:monospace;background:rgba(86,83,148,0.08);
+                                 color:rgba(86,83,148,0.80);padding:2px 7px;border-radius:4px;
+                                 white-space:nowrap;align-self:flex-start;margin-top:2px;">
                         {{ log.accion }}
                     </span>
                 </div>
                 {% endfor %}
             </div>
+            {% else %}
+            <div style="padding:30px 20px;text-align:center;color:var(--ink-soft);font-size:13px;">
+                No hay actividad registrada para esta solicitud todavía.
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
 
         <!-- Observaciones -->
         {% if solicitud.observaciones %}

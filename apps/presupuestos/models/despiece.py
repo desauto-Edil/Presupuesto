@@ -25,8 +25,11 @@ class ProyectoSistema(models.Model):
         "ingenieria.Sistema", on_delete=models.PROTECT, related_name="proyecto_sistemas"
     )
     subsistema = models.ForeignKey(
-        "ingenieria.Subsistema", on_delete=models.SET_NULL,
-        blank=True, null=True, related_name="proyecto_sistemas",
+        "ingenieria.Subsistema",
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name="proyecto_sistemas",
     )
     parametros_entrada = models.JSONField(
         default=dict,
@@ -95,14 +98,24 @@ class ProyectoSistema(models.Model):
         vars_db = list(
             VariableSubsistema.objects.filter(subsistema=self.subsistema).order_by("orden")
         )
+        def _fmt(v):
+            """Convierte a int si es entero, a float si tiene decimales, sin trailing zeros."""
+            if v is None or v == "":
+                return ""
+            try:
+                f = float(v)
+                return int(f) if f == int(f) else f
+            except (TypeError, ValueError):
+                return v
+
         if vars_db:
             return [
                 {
                     "variable": v.variable,
                     "label": v.label,
                     "unidad": v.unidad,
-                    "default": float(v.valor_default),
-                    "valor": params.get(v.variable, float(v.valor_default)),
+                    "default": _fmt(v.valor_default),
+                    "valor": _fmt(params.get(v.variable, v.valor_default)),
                 }
                 for v in vars_db
                 if v.variable not in VARS_PROYECTO
@@ -119,8 +132,8 @@ class ProyectoSistema(models.Model):
                 "variable": v.variable,
                 "label": v.label,
                 "unidad": v.unidad,
-                "default": v.default,
-                "valor": params.get(v.variable, v.default if v.default is not None else ""),
+                "default": _fmt(v.default),
+                "valor": _fmt(params.get(v.variable, v.default if v.default is not None else "")),
             }
             for v in sub_def.variables
             if v.variable not in VARS_PROYECTO
@@ -219,7 +232,11 @@ class DespieceLinea(models.Model):
     # ── Operaciones ───────────────────────────────────────────────────────────
 
     def capturar_precio(self):
-        """Toma snapshot del mejor precio activo del producto dividido por unidades_por_presentacion."""
+        """
+        Toma snapshot del mejor precio activo del producto.
+        - Divide por unidades_por_presentacion para obtener el precio unitario real.
+        - Si producto.precio_en_dolares es True, convierte a COP usando proyecto.trm.
+        """
         if not self.producto_id:
             return
         pp = (
@@ -236,8 +253,18 @@ class DespieceLinea(models.Model):
 
         if precio_base is not None:
             from decimal import Decimal
-            divisor = self.producto.unidades_por_presentacion or 1
-            self.precio_snapshot = Decimal(str(precio_base)) / Decimal(str(divisor))
+            divisor = Decimal(str(self.producto.unidades_por_presentacion or 1))
+            precio = Decimal(str(precio_base)) / divisor
+
+            # Si el precio está en USD, convertir a COP con la TRM del proyecto
+            if self.producto.precio_en_dolares:
+                try:
+                    trm = Decimal(str(self.proyecto_sistema.proyecto.trm or 4200))
+                    precio = precio / trm
+                except Exception:
+                    pass  # Si no hay TRM disponible, dejar el precio sin convertir
+
+            self.precio_snapshot = precio
             self.save(update_fields=["precio_snapshot", "updated_at"])
 
     def resolver_producto(self, producto_seleccionado):

@@ -90,7 +90,11 @@ class Producto(models.Model):
     )
     marca = models.CharField(max_length=150, blank=True, null=True)
     linea = models.CharField(max_length=150, blank=True, null=True)
-    rendimiento = models.DecimalField(max_digits=14, decimal_places=6, blank=True, null=True)
+    precio_en_dolares = models.BooleanField(
+        default=False,
+        verbose_name="Precio en dólares (USD)",
+        help_text="Si está activo, el precio del producto está en USD y se dividirá por la TRM del proyecto al calcular el despiece.",
+    )
     unidades_por_presentacion = models.PositiveIntegerField(
         default=1,
         verbose_name="Unidades por presentación",

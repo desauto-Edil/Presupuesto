@@ -152,10 +152,16 @@
         </div>
       </div>
 
-      <div class="form-group" style="max-width:220px;">
-        <label>Rendimiento</label>
-        {{ form.rendimiento }}
-        <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">Unidades por unidad base (si aplica)</div>
+      <div class="form-group">
+        <div class="form-check form-switch" style="margin-top:6px;">
+          {{ form.precio_en_dolares }}
+          <label class="form-check-label fw-bold ms-2" for="{{ form.precio_en_dolares.id_for_label }}">
+            Precio en dólares (USD)
+          </label>
+        </div>
+        <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
+          Si está activo, el precio ingresado está en USD y se dividirá por la TRM del proyecto al calcular el despiece.
+        </div>
       </div>
 
       <!-- ── Ficha técnica ── -->

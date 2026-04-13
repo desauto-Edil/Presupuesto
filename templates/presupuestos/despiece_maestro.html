@@ -361,7 +361,14 @@
                 {{ dl.cantidad_final|floatformat:2 }}
               </td>
               <td style="text-align:right;" id="col-precio-{{ dl.pk }}">
-                {% if dl.precio_snapshot %}{{ dl.precio_snapshot|currency:moneda }}{% else %}<span style="color:var(--muted);">—</span>{% endif %}
+                {% if dl.precio_snapshot %}
+                  {{ dl.precio_snapshot|currency:moneda }}
+                  <div id="col-fecha-{{ dl.pk }}" style="font-size:10px;color:var(--ink-soft);margin-top:2px;">
+                    Act. {{ dl.producto.fecha_actualizacion_precio|date:"d/m/Y" }}
+                  </div>
+                {% else %}
+                  <span style="color:var(--muted);">—</span>
+                {% endif %}
               </td>
               <td style="text-align:right;white-space:nowrap;">
                 <button type="button" class="btn btn-ghost btn-sm"
@@ -703,9 +710,13 @@ function asignarProducto(lineaPk, productoPk, nombre, moneda) {
       const precEl = document.getElementById(`col-precio-${lineaPk}`);
       if (precEl && data.precio_snapshot) {
         const sym = data.moneda === 'COP' ? '$' : data.moneda + ' ';
-        precEl.textContent = data.moneda === 'COP'
+        const precioFmt = data.moneda === 'COP'
           ? '$' + Math.round(data.precio_snapshot).toLocaleString('es-CO')
           : data.moneda + ' ' + data.precio_snapshot.toFixed(2);
+        precEl.innerHTML = precioFmt +
+          (data.fecha_actualizacion
+            ? `<div id="col-fecha-${lineaPk}" style="font-size:10px;color:var(--ink-soft);margin-top:2px;">Act. ${data.fecha_actualizacion}</div>`
+            : '');
       }
       row.classList.remove('row-pendiente');
     }

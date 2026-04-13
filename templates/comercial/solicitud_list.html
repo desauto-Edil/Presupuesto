@@ -165,7 +165,7 @@
         <div class="empty-state-icon">◷</div>
         <div style="font-size:15px;font-weight:600;margin-bottom:6px;">Sin solicitudes registradas</div>
         <div class="empty-state-text" style="margin-bottom:20px;">
-            Las solicitudes provienen del sistema Selford. Registra la primera.
+            Las solicitudes provienen del sistema Salesforce. Registra la primera.
         </div>
         <button class="btn btn-primary btn-sm"
                 data-bs-toggle="offcanvas" data-bs-target="#offcanvasSol">
@@ -191,7 +191,7 @@
         <div class="sol-sys-info">
             <div>
                 <div class="sol-sys-info-label">Consecutivo</div>
-                <div class="sol-sys-info-val">Asignado por Selford</div>
+                <div class="sol-sys-info-val">Asignado por Salesforce</div>
             </div>
             <div>
                 <div class="sol-sys-info-label">Estado inicial</div>
@@ -206,8 +206,8 @@
         <form method="post" action="{% url 'comercial:solicitud_create' %}">
             {% csrf_token %}
 
-            <!-- Referencia Selford -->
-            <div class="section-heading">Referencia Selford</div>
+            <!-- Referencia Salesforce -->
+            <div class="section-heading">Referencia Salesforce</div>
 
             <div class="oc-grid2" style="margin-bottom:14px;">
                 <div>
@@ -215,8 +215,8 @@
                     {{ create_form.consecutivo }}
                 </div>
                 <div>
-                    <label class="form-label">Link Selford <span style="color:var(--brand-red)">*</span></label>
-                    {{ create_form.link_selford }}
+                    <label class="form-label">Link Salesforce <span style="color:var(--brand-red)">*</span></label>
+                    {{ create_form.link_salesforce }}
                 </div>
             </div>
 

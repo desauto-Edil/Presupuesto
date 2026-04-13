@@ -153,7 +153,7 @@
     {% endif %}
 
     <!-- ── Formulario ── -->
-    <form method="post" id="formSolicitud" novalidate>
+    <form method="post" id="formSolicitud" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
 
         <div class="sol-body">
@@ -165,29 +165,29 @@
             </div>
             {% endif %}
 
-            <!-- ─── SECCIÓN 1: Referencia Selford ─── -->
-            <div class="section-heading">Referencia Selford</div>
+            <!-- ─── SECCIÓN 1: Referencia Salesforce ─── -->
+            <div class="section-heading">Referencia Salesforce</div>
 
             <div class="sol-grid2" style="margin-bottom:14px;">
                 <div>
                     <label class="form-label">
-                        Consecutivo Selford <span class="req">*</span>
+                        Consecutivo Salesforce <span class="req">*</span>
                     </label>
                     {{ form.consecutivo }}
                     {% if form.consecutivo.errors %}
                     <div class="invalid-feedback d-block">{{ form.consecutivo.errors.0 }}</div>
                     {% endif %}
-                    <div class="field-help">Número asignado en el sistema Selford.</div>
+                    <div class="field-help">Número asignado en el sistema Salesforce.</div>
                 </div>
                 <div>
                     <label class="form-label">
-                        Link de Selford <span class="req">*</span>
+                        Link de Salesforce <span class="req">*</span>
                     </label>
-                    {{ form.link_selford }}
-                    {% if form.link_selford.errors %}
-                    <div class="invalid-feedback d-block">{{ form.link_selford.errors.0 }}</div>
+                    {{ form.link_salesforce }}
+                    {% if form.link_salesforce.errors %}
+                    <div class="invalid-feedback d-block">{{ form.link_salesforce.errors.0 }}</div>
                     {% endif %}
-                    <div class="field-help">URL directa al registro en Selford.</div>
+                    <div class="field-help">URL directa al registro en Salesforce.</div>
                 </div>
             </div>
 
@@ -259,5 +259,71 @@
         </div>
 
     </form>
+
+    <!-- ─── SECCIÓN ARCHIVOS ─── -->
+    <div style="border-top:1px solid var(--border);">
+        <div style="padding:18px 28px 8px;">
+            <div class="section-heading" style="margin-bottom:14px;">
+                Archivos adjuntos
+                {% if archivos %}
+                <span style="font-size:11px;font-weight:400;color:var(--ink-soft);margin-left:8px;">
+                    {{ archivos|length }} archivo{{ archivos|length|pluralize }}
+                </span>
+                {% endif %}
+            </div>
+
+            {% if archivos %}
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">
+                {% for archivo in archivos %}
+                <div style="display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;">
+                    <span style="font-size:20px;">
+                        {% if archivo.extension == 'pdf' %}📄
+                        {% elif archivo.extension in 'jpg,jpeg,png,gif,webp' %}🖼️
+                        {% elif archivo.extension in 'xls,xlsx,csv' %}📊
+                        {% elif archivo.extension in 'doc,docx' %}📝
+                        {% else %}📎{% endif %}
+                    </span>
+                    <div style="flex:1;min-width:0;">
+                        <a href="{{ archivo.archivo.url }}" target="_blank"
+                           style="font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;">
+                            {{ archivo.nombre }}
+                        </a>
+                        <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
+                            {{ archivo.extension|upper }} · {{ archivo.fecha_subida|date:"d/m/Y H:i" }}
+                            {% if archivo.configuracion %} · {{ archivo.configuracion }}{% endif %}
+                        </div>
+                    </div>
+                    <form method="post"
+                          action="{% url 'comercial:solicitud_archivo_delete' archivo.pk %}"
+                          onsubmit="return confirm('¿Eliminar «{{ archivo.nombre }}»?')">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-ghost btn-sm text-danger" title="Eliminar">✕</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Subir nuevo archivo -->
+            <form method="post"
+                  action="{% url 'comercial:solicitud_archivo_create' object.pk %}"
+                  enctype="multipart/form-data"
+                  style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;">
+                {% csrf_token %}
+                <div style="flex:1;min-width:180px;">
+                    <label class="form-label small fw-bold text-uppercase" style="font-size:10px;">Nombre del archivo</label>
+                    <input type="text" name="nombre" class="form-control form-control-sm" placeholder="Ej: Cotización proveedor" required>
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <label class="form-label small fw-bold text-uppercase" style="font-size:10px;">Archivo</label>
+                    <input type="file" name="archivo" class="form-control form-control-sm" required>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary btn-sm">Adjuntar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 </div>
 {% endblock %}

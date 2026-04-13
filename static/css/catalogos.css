@@ -236,122 +236,90 @@
 ═══════════════════════════════════════════════ */
 .cat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
 }
 
 /* ═══════════════════════════════════════════════
-   CARD DE CATEGORÍA
+   CARD DE CATEGORÍA — diseño compacto sin imagen
 ═══════════════════════════════════════════════ */
 .cat-card {
-  background: var(--surface);
-  border-radius: 14px;
-  border: 1px solid rgba(0,0,0,0.07);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.04);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: transform .2s ease, box-shadow .2s ease;
+  transition: box-shadow .18s ease, border-color .18s ease;
 }
 
 .cat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 28px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+  border-color: rgba(0,0,0,0.14);
 }
 
-/* — Imagen — */
-.cat-card__img {
-  position: relative;
-  height: 140px;
-  overflow: hidden;
-  background: var(--theme-accent-pale);
-}
-
-.cat-card__img img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform .3s ease;
-}
-
-.cat-card:hover .cat-card__img img {
-  transform: scale(1.04);
-}
-
-/* Placeholder cuando no hay imagen */
-.cat-card__img-placeholder {
-  width: 100%;
-  height: 100%;
+/* — Cabecera compacta — */
+.cat-card__head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 38px;
-  opacity: 0.25;
-  color: var(--theme-accent);
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  background: var(--theme-accent-pale, #faf6e8);
 }
 
-.cat-card__img-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.50));
-}
-
-.cat-card__status {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 20px;
-  backdrop-filter: blur(8px);
-}
-
-.cat-card__status--activa {
-  background: rgba(34,197,94,0.15);
-  color: #16a34a;
-  border: 1px solid rgba(34,197,94,0.3);
-}
-
-.cat-card__status--inactiva {
-  background: rgba(0,0,0,0.18);
-  color: rgba(255,255,255,0.85);
-  border: 1px solid rgba(255,255,255,0.2);
-}
-
-.cat-card__img-label {
-  position: absolute;
-  bottom: 10px;
-  left: 14px;
-  right: 14px;
+.cat-card__head-left {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
 }
 
-.cat-card__code-badge {
+.cat-card__head-name {
   font-family: 'Syne', sans-serif;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  background: rgba(255,255,255,0.20);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255,255,255,0.28);
-  color: #fff;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.cat-card__img-title {
-  font-family: 'Syne', sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+  color: var(--ink, #0e1117);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Badge de código */
+.cat-card__code-badge {
+  font-family: 'Syne', sans-serif;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  background: var(--theme-accent, #c9a200);
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* Pill de estado */
+.cat-card__status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cat-card__status--activa {
+  background: rgba(34,197,94,0.12);
+  color: #16a34a;
+  border: 1px solid rgba(34,197,94,0.25);
+}
+
+.cat-card__status--inactiva {
+  background: rgba(0,0,0,0.06);
+  color: rgba(14,17,23,0.45);
+  border: 1px solid rgba(0,0,0,0.10);
 }
 
 /* — Cuerpo — */
@@ -528,6 +496,36 @@
   padding: 8px 10px;
   text-align: center;
   font-style: italic;
+}
+
+/* — Lista mini de productos (sin colapso) — */
+.cat-prods-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-top: 1px solid rgba(0,0,0,0.07);
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+/* Botón "Ver más" que abre modal */
+.cat-ver-mas-btn {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--theme-accent);
+  padding: 7px 10px 5px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  border-radius: 6px;
+  transition: background .15s;
+}
+
+.cat-ver-mas-btn:hover {
+  background: var(--theme-accent-pale, rgba(var(--theme-accent-rgb, 86,83,148),0.08));
 }
 
 /* — Footer — */

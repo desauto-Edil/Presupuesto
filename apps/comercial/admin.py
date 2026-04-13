@@ -33,9 +33,9 @@ class SolicitudAdmin(admin.ModelAdmin):
     inlines = [SolicitudArchivoInline]
 
     fieldsets = (
-        ("Datos de Selford", {
-            "fields": ("consecutivo", "link_selford"),
-            "description": "Consecutivo y link provienen del sistema Selford.",
+        ("Datos de Salesforce", {
+            "fields": ("consecutivo", "link_salesforce"),
+            "description": "Consecutivo y link provienen del sistema Salesforce.",
         }),
         ("Datos de la solicitud", {
             "fields": ("cliente", "contacto", "nombre", "descripcion", "fecha_entrega", "observaciones"),

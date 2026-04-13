@@ -61,6 +61,10 @@
         <td class="td-actions">
           <a href="{% url 'comercial:proyecto_detail' p.pk %}" class="btn btn-ghost btn-xs">Ver →</a>
           <a href="{% url 'comercial:proyecto_update' p.pk %}" class="btn btn-ghost btn-xs">Editar</a>
+          <button class="btn btn-ghost btn-xs text-danger"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-name="{{ p.consecutivo }} — {{ p.nombre|truncatechars:30 }}"
+                  data-delete-url="{% url 'comercial:proyecto_delete' p.pk %}">✕</button>
         </td>
       </tr>
       {% endfor %}

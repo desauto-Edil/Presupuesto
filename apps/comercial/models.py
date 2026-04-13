@@ -14,6 +14,14 @@ class Cliente(models.Model):
     nit = models.CharField(max_length=50, unique=True)
     razon_social = models.CharField(max_length=300)
     activo = models.BooleanField(default=True)
+    unidad_negocio = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name="Unidad de negocio",
+        help_text="Unidad a la que pertenece este cliente. Se asigna automáticamente al crear.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -71,7 +79,7 @@ class TipoProyecto(models.Model):
 
 class Solicitud(models.Model):
     """
-    Solicitud de presupuesto proveniente de Selford.
+    Solicitud de presupuesto proveniente de Salesforce.
     El consecutivo es provisto por el usuario (no auto-generado).
     Los archivos asociados se gestionan en SolicitudArchivo.
     """
@@ -80,12 +88,12 @@ class Solicitud(models.Model):
     consecutivo = models.CharField(
         max_length=30,
         unique=True,
-        verbose_name="Consecutivo de Selford",
-        help_text="Número de consecutivo asignado en Selford",
+        verbose_name="Consecutivo de Salesforce",
+        help_text="Número de consecutivo asignado en Salesforce",
     )
-    link_selford = models.URLField(
-        verbose_name="Link de Selford",
-        help_text="URL directa al registro en Selford",
+    link_salesforce = models.URLField(
+        verbose_name="Link de Salesforce",
+        help_text="URL directa al registro en Salesforce",
     )
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="solicitudes")
     contacto = models.ForeignKey(

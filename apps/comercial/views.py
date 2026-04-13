@@ -16,7 +16,7 @@ from .forms import (
     TipoProyectoForm, SolicitudForm, SolicitudArchivoForm,
     ProyectoForm, ProyectoFromSolicitudForm,
 )
-from apps.common.mixins import WithCreateFormMixin
+from apps.common.mixins import WithCreateFormMixin, UnidadFilterMixin
 from apps.common.choices import EstadoSolicitud
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,26 @@ def _usuario_sistema(request):
     except Exception:
         pass
     return None
+
+
+def _diff_campos(original, nuevo, campos_labels: dict) -> str:
+    """
+    Compara los atributos de `original` y `nuevo` para los campos indicados.
+    Devuelve una cadena tipo "Nombre: «A» → «B»; TRM: «4200» → «5000»".
+    `campos_labels` es {field_name: label_display}.
+    """
+    cambios = []
+    for campo, label in campos_labels.items():
+        v_old = getattr(original, campo, None)
+        v_new = getattr(nuevo, campo, None)
+        # Para FKs, comparar PKs
+        if hasattr(v_old, "pk"):
+            v_old = str(v_old)
+        if hasattr(v_new, "pk"):
+            v_new = str(v_new)
+        if str(v_old or "") != str(v_new or ""):
+            cambios.append(f"{label}: «{v_old or '—'}» → «{v_new or '—'}»")
+    return "; ".join(cambios) if cambios else ""
 
 
 def registrar_log(request, accion, descripcion="", modelo_afectado="", objeto_id=None):
@@ -75,12 +95,16 @@ class DashboardView(TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        
-        try:
-            # Obtener solicitudes con relaciones obligatorias
-            qs = Solicitud.objects.select_related("cliente", "creado_por")
 
-            # Conteo solicitudes por estado
+        # ── Unidad del usuario en sesión ────────────────────────────────────
+        unidad = self.request.session.get("unidad_negocio", "") or ""
+
+        try:
+            # Filtrar por unidad si aplica
+            qs = Solicitud.objects.select_related("cliente", "creado_por")
+            if unidad:
+                qs = qs.filter(creado_por__unidad_negocio=unidad)
+
             by_estado = {
                 item["estado"]: item["total"]
                 for item in qs.values("estado").annotate(total=Count("id"))
@@ -88,53 +112,87 @@ class DashboardView(TemplateView):
 
             ctx["total"] = qs.count()
             ctx["por_estado"] = [
-                {
-                    "label": label,
-                    "value": estado,
-                    "count": by_estado.get(estado, 0),
-                }
+                {"label": label, "value": estado, "count": by_estado.get(estado, 0)}
                 for estado, label in EstadoSolicitud.choices
             ]
 
-            # Solicitudes recientes — optimizar con prefetch_related en lugar de N+1
+            # Solicitudes recientes de la unidad
             proyecto_prefetch = Prefetch(
-                'proyectos',
-                Proyecto.objects.filter(es_version_actual=True).only('id', 'consecutivo')
+                "proyectos",
+                Proyecto.objects.filter(es_version_actual=True).only("id", "consecutivo"),
             )
             recientes_qs = list(
-                qs.prefetch_related(proyecto_prefetch)
-                  .order_by("-created_at")[:10]
+                qs.prefetch_related(proyecto_prefetch).order_by("-created_at")[:10]
             )
-            
-            # Asignar proyecto_actual desde la prefetch (no ejecuta queries adicionales)
             for s in recientes_qs:
-                proyectos_actuales = [p for p in s.proyectos.all() if p.es_version_actual]
-                s.proyecto_actual = proyectos_actuales[0] if proyectos_actuales else None
-            
+                actuales = [p for p in s.proyectos.all() if p.es_version_actual]
+                s.proyecto_actual = actuales[0] if actuales else None
             ctx["recientes"] = recientes_qs
 
-            # Conteo proyectos (solo versiones actuales)
-            ctx["total_proyectos"] = Proyecto.objects.filter(es_version_actual=True).count()
+            # Conteo proyectos de la unidad
+            proy_qs = Proyecto.objects.filter(es_version_actual=True)
+            if unidad:
+                proy_qs = proy_qs.filter(creado_por__unidad_negocio=unidad)
+            ctx["total_proyectos"] = proy_qs.count()
 
-            # Conteo despiece y APU (presupuestos)
+            # Conteo despiece y APU
             try:
                 from apps.presupuestos.models import ProyectoSistema, APUProyecto
-                ctx["total_despieces"] = ProyectoSistema.objects.count()
-                ctx["total_apus"] = APUProyecto.objects.count()
+                ps_qs = ProyectoSistema.objects.all()
+                apu_qs = APUProyecto.objects.all()
+                if unidad:
+                    ps_qs = ps_qs.filter(proyecto__creado_por__unidad_negocio=unidad)
+                    apu_qs = apu_qs.filter(
+                        proyecto_sistema__proyecto__creado_por__unidad_negocio=unidad
+                    )
+                ctx["total_despieces"] = ps_qs.count()
+                ctx["total_apus"] = apu_qs.count()
             except Exception as e:
                 logger.warning(f"Error al contar despieces/APUs: {e}")
                 ctx["total_despieces"] = 0
                 ctx["total_apus"] = 0
 
+            # ── Pendientes de sistema ──────────────────────────────────────
+            pendientes = []
+            # Solicitudes sin proyecto vinculado
+            sin_proyecto = qs.filter(proyectos__isnull=True).count()
+            if sin_proyecto:
+                from django.urls import reverse
+                pendientes.append({
+                    "titulo": f"{sin_proyecto} solicitud{'es' if sin_proyecto > 1 else ''} sin proyecto",
+                    "descripcion": "Requieren creación de proyecto de presupuesto.",
+                    "nivel": "aviso",
+                    "url": reverse("comercial:solicitud_list"),
+                })
+            # Proyectos en estado SOLICITUD (sin despiece)
+            sin_despiece = proy_qs.filter(estado="SOLICITUD").count()
+            if sin_despiece:
+                pendientes.append({
+                    "titulo": f"{sin_despiece} proyecto{'s' if sin_despiece > 1 else ''} sin despiece",
+                    "descripcion": "Aún no se ha iniciado el despiece de materiales.",
+                    "nivel": "aviso",
+                    "url": None,
+                })
+            # Proyectos con despiece pero sin APU
+            sin_apu = proy_qs.filter(estado="DESPIECE").count()
+            if sin_apu:
+                pendientes.append({
+                    "titulo": f"{sin_apu} proyecto{'s' if sin_apu > 1 else ''} pendiente{'s' if sin_apu > 1 else ''} de APU",
+                    "descripcion": "El despiece está completo, falta generar el APU.",
+                    "nivel": "critico" if sin_apu > 2 else "aviso",
+                    "url": None,
+                })
+            ctx["pendientes_sistema"] = pendientes
+
         except Exception as e:
             logger.error(f"Error en DashboardView.get_context_data: {e}", exc_info=True)
-            # Valores por defecto en caso de error
             ctx["total"] = 0
             ctx["por_estado"] = []
             ctx["recientes"] = []
             ctx["total_proyectos"] = 0
             ctx["total_despieces"] = 0
             ctx["total_apus"] = 0
+            ctx["pendientes_sistema"] = []
 
         return ctx
 
@@ -143,12 +201,13 @@ class DashboardView(TemplateView):
 # Clientes
 # ---------------------------------------------------------------------------
 
-class ClienteListView(WithCreateFormMixin, ListView):
+class ClienteListView(UnidadFilterMixin, WithCreateFormMixin, ListView):
     model = Cliente
     form_class = ClienteConContactoForm
     template_name = "comercial/cliente_list.html"
     context_object_name = "clientes"
     ordering = ["razon_social"]
+    unidad_field = "unidad_negocio"
 
     def get_queryset(self):
         return super().get_queryset().prefetch_related("contactos")
@@ -168,7 +227,13 @@ class ClienteCreateView(CreateView):
     success_url = reverse_lazy("comercial:cliente_list")
 
     def form_valid(self, form):
-        self.object = form.save()
+        self.object = form.save(commit=False)
+        # Asignar unidad de negocio desde la sesión
+        unidad = self.request.session.get("unidad_negocio", "") or ""
+        if unidad and not self.object.unidad_negocio:
+            self.object.unidad_negocio = unidad
+        self.object.save()
+        form.save_m2m()
         ContactoCliente.objects.create(
             cliente=self.object,
             nombre=form.cleaned_data["contacto_nombre"],
@@ -298,12 +363,13 @@ class ContactoDeleteView(DeleteView):
 # Solicitudes
 # ---------------------------------------------------------------------------
 
-class SolicitudListView(WithCreateFormMixin, ListView):
+class SolicitudListView(UnidadFilterMixin, WithCreateFormMixin, ListView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_list.html"
     context_object_name = "solicitudes"
     ordering = ["-created_at"]
+    unidad_field = "creado_por__unidad_negocio"
 
 
 class SolicitudDetailView(DetailView):
@@ -315,7 +381,6 @@ class SolicitudDetailView(DetailView):
         ctx = super().get_context_data(**kwargs)
         solicitud = self.object
         ctx["archivos"] = solicitud.archivos.select_related("configuracion").all()
-        ctx["archivo_form"] = SolicitudArchivoForm()
 
         # Proyectos / versiones vinculadas a esta solicitud
         ctx["proyectos"] = solicitud.proyectos.select_related(
@@ -325,10 +390,17 @@ class SolicitudDetailView(DetailView):
             es_version_actual=True
         ).first()
 
-        ctx["logs"] = LogSistema.objects.filter(
-            modelo_afectado="Solicitud",
-            objeto_id=solicitud.pk,
-        ).select_related("usuario").order_by("-created_at")[:50]
+        # Logs directos de la solicitud + logs de cualquier proyecto vinculado
+        from django.db.models import Q as _Q
+        proyecto_pks = list(solicitud.proyectos.values_list("pk", flat=True))
+        ctx["logs"] = (
+            LogSistema.objects.filter(
+                _Q(modelo_afectado="Solicitud", objeto_id=solicitud.pk)
+                | _Q(modelo_afectado__in=["Proyecto", "Despiece", "APU"], objeto_id__in=proyecto_pks)
+            )
+            .select_related("configuracion")
+            .order_by("-created_at")[:100]
+        )
         return ctx
 
 
@@ -360,18 +432,37 @@ class SolicitudUpdateView(UpdateView):
     template_name = "comercial/solicitud_form.html"
     success_url = reverse_lazy("comercial:solicitud_list")
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["archivos"] = self.object.archivos.select_related("configuracion").all()
+        return ctx
+
     def form_valid(self, form):
         self.object = form.save(commit=False)
         # Proteger campos de sistema
         original = Solicitud.objects.get(pk=self.object.pk)
         self.object.estado = original.estado
         self.object.creado_por_id = original.creado_por_id
+
+        diff = _diff_campos(original, self.object, {
+            "nombre": "Nombre",
+            "consecutivo": "Consecutivo",
+            "fecha_entrega": "Fecha entrega",
+            "cliente": "Cliente",
+            "descripcion": "Descripción",
+            "observaciones": "Observaciones",
+            "link_salesforce": "Link Salesforce",
+        })
+
         self.object.save()
         form.save_m2m()
         registrar_log(
             self.request,
             accion="EDITAR_SOLICITUD",
-            descripcion=f"Solicitud {self.object.consecutivo} actualizada",
+            descripcion=(
+                f"Solicitud {self.object.consecutivo} actualizada"
+                + (f" — Cambios: {diff}" if diff else " (sin cambios en campos principales)")
+            ),
             modelo_afectado="Solicitud",
             objeto_id=self.object.pk,
         )
@@ -486,11 +577,12 @@ class TipoProyectoDeleteView(DeleteView):
 # Proyectos
 # ---------------------------------------------------------------------------
 
-class ProyectoListView(ListView):
+class ProyectoListView(UnidadFilterMixin, ListView):
     model = Proyecto
     template_name = "comercial/proyecto_list.html"
     context_object_name = "proyectos"
     ordering = ["-created_at"]
+    unidad_field = "creado_por__unidad_negocio"
 
 
 class ProyectoDetailView(DetailView):
@@ -553,15 +645,49 @@ class ProyectoUpdateView(UpdateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         original = Proyecto.objects.get(pk=self.object.pk)
+        trm_cambio = original.trm != form.cleaned_data.get("trm", original.trm)
+
+        diff = _diff_campos(original, self.object, {
+            "nombre": "Nombre",
+            "trm": "TRM",
+            "area_total_m2": "Área (m²)",
+            "perimetro_ml": "Perímetro (ml)",
+            "dias_duracion": "Días",
+            "num_personas": "Personas",
+            "margen_comercial_pct": "Margen comercial",
+            "iva_pct": "IVA",
+            "aiu_pct": "AIU",
+            "moneda": "Moneda",
+            "tipo_proyecto": "Tipo proyecto",
+        })
+
         self.object.consecutivo = original.consecutivo
         self.object.estado = original.estado
         self.object.creado_por_id = original.creado_por_id
         self.object.save()
         form.save_m2m()
+
+        # Si cambió la TRM, recapturar precios de materiales en dólares en el despiece
+        if trm_cambio:
+            try:
+                from apps.presupuestos.models import DespieceLinea
+                lineas_usd = DespieceLinea.objects.filter(
+                    proyecto_sistema__proyecto=self.object,
+                    producto__precio_en_dolares=True,
+                ).select_related("producto", "proyecto_sistema__proyecto")
+                for linea in lineas_usd:
+                    linea.capturar_precio()
+            except Exception:
+                pass
+
         registrar_log(
             self.request,
             accion="EDITAR_PROYECTO",
-            descripcion=f"Proyecto {self.object.consecutivo} — {self.object.nombre} actualizado",
+            descripcion=(
+                f"Proyecto {self.object.consecutivo} actualizado"
+                + (f" — Cambios: {diff}" if diff else "")
+                + (" · TRM recalculó precios USD" if trm_cambio else "")
+            ),
             modelo_afectado="Proyecto",
             objeto_id=self.object.pk,
         )
@@ -654,9 +780,21 @@ class LogListView(ListView):
     paginate_by = 50
 
     def get_queryset(self):
+        from django.db.models import Q as _Q
         usuario = _usuario_sistema(self.request)
-        if usuario:
-            return LogSistema.objects.filter(
-                unidad_negocio=usuario.unidad_negocio
-            ).select_related("usuario").order_by("-created_at")
-        return LogSistema.objects.none()
+        if not usuario:
+            return LogSistema.objects.none()
+        qs = (
+            LogSistema.objects
+            .filter(unidad_negocio=usuario.unidad_negocio)
+            .select_related("configuracion")
+            .order_by("-created_at")
+        )
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(
+                _Q(accion__icontains=q)
+                | _Q(descripcion__icontains=q)
+                | _Q(modelo_afectado__icontains=q)
+            )
+        return qs

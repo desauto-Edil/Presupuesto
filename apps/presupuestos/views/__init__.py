@@ -22,6 +22,7 @@ from apps.presupuestos.models import (
     CategoriaItemAPU, CuadrillaPreset, CuadrillaPresetItem, ItemCatalogoAPU,
 )
 from apps.comercial.models import Proyecto
+from apps.comercial.views import registrar_log
 from apps.ingenieria.models import Sistema, Subsistema
 from apps.common.choices import TipoAPU
 from apps.presupuestos.forms import (
@@ -169,6 +170,18 @@ class CalcularDespiecePSView(View):
 
             lineas = DespieceService(ps).ejecutar()
             messages.success(request, f"Despiece calculado: {len(lineas)} líneas generadas.")
+            registrar_log(
+                request,
+                accion="CALCULAR_DESPIECE",
+                descripcion=(
+                    f"Despiece calculado para {proyecto.consecutivo} — {proyecto.nombre}: "
+                    f"sistema {sistema.nombre}"
+                    + (f" / {subsistema.nombre}" if subsistema else "")
+                    + f" · {len(lineas)} líneas generadas"
+                ),
+                modelo_afectado="Proyecto",
+                objeto_id=proyecto.pk,
+            )
         except Exception as exc:
             messages.error(request, f"Error al calcular despiece: {exc}")
 
@@ -186,6 +199,18 @@ class DespieceEjecutarView(View):
 
             lineas = DespieceService(ps).ejecutar()
             messages.success(request, f"Despiece ejecutado: {len(lineas)} líneas calculadas.")
+            registrar_log(
+                request,
+                accion="RECALCULAR_DESPIECE",
+                descripcion=(
+                    f"Re-ejecución despiece — {ps.proyecto.consecutivo}: "
+                    f"sistema {ps.sistema.nombre}"
+                    + (f" / {ps.subsistema.nombre}" if ps.subsistema_id else "")
+                    + f" · {len(lineas)} líneas"
+                ),
+                modelo_afectado="Proyecto",
+                objeto_id=ps.proyecto_id,
+            )
         except Exception as exc:
             messages.error(request, f"Error al ejecutar despiece: {exc}")
         return redirect(reverse("presupuestos:despiece_proyecto", args=[ps.proyecto_id]))
@@ -267,12 +292,17 @@ class AsignarProductoLineaAPIView(View):
         linea.refresh_from_db()
 
         moneda = producto.moneda or "COP"
+        fecha_act = (
+            producto.fecha_actualizacion_precio.strftime("%d/%m/%Y")
+            if producto.fecha_actualizacion_precio else "—"
+        )
         return JsonResponse({
             "ok": True,
             "producto_nombre": producto.nombre,
             "producto_codigo": producto.codigo,
             "moneda": moneda,
             "precio_snapshot": float(linea.precio_snapshot or 0),
+            "fecha_actualizacion": fecha_act,
         })
 
 
@@ -551,10 +581,13 @@ class APUProyectoUpdateView(UpdateView):
 
         # If any calc-affecting field changed, regenerate non-MATERIALES lines
         new = self.object
-        if (new.aiu_contratista_pct != old_aiu
-                or new.margen_ganancia_pct != old_mg
-                or new.dias_duracion != old_dias
-                or new.factor_venta_pct != old_fv):
+        parametros_cambiaron = (
+            new.aiu_contratista_pct != old_aiu
+            or new.margen_ganancia_pct != old_mg
+            or new.dias_duracion != old_dias
+            or new.factor_venta_pct != old_fv
+        )
+        if parametros_cambiaron:
             try:
                 from apps.presupuestos.services.apu_service import APUService
                 from apps.presupuestos.models import ItemCatalogoAPU
@@ -589,6 +622,28 @@ class APUProyectoUpdateView(UpdateView):
                     f"Parámetros guardados, pero error al recalcular líneas: {exc}",
                 )
 
+        # Registrar log de actualización de parámetros APU
+        try:
+            proyecto_id = new.proyecto_sistema.proyecto_id if new.proyecto_sistema_id else None
+            proyecto_nombre = (
+                f"{new.proyecto_sistema.proyecto.consecutivo} — {new.proyecto_sistema.proyecto.nombre}"
+                if new.proyecto_sistema_id else "—"
+            )
+            registrar_log(
+                self.request,
+                accion="ACTUALIZAR_APU",
+                descripcion=(
+                    f"Parámetros APU actualizados — {proyecto_nombre}: "
+                    f"AIU {new.aiu_contratista_pct}%, margen {new.margen_ganancia_pct}%, "
+                    f"días {new.dias_duracion}, factor venta {new.factor_venta_pct}%"
+                    + (" · líneas recalculadas" if parametros_cambiaron else "")
+                ),
+                modelo_afectado="Proyecto",
+                objeto_id=proyecto_id,
+            )
+        except Exception:
+            pass
+
         return response
 
 
@@ -600,6 +655,17 @@ class APUGenerarView(View):
             from apps.presupuestos.services.apu_service import APUService
             apu = APUService.generar(ps)
             messages.success(request, "APU generado correctamente.")
+            registrar_log(
+                request,
+                accion="GENERAR_APU",
+                descripcion=(
+                    f"APU generado para {ps.proyecto.consecutivo} — {ps.proyecto.nombre}: "
+                    f"sistema {ps.sistema.nombre}"
+                    + (f" / {ps.subsistema.nombre}" if ps.subsistema_id else "")
+                ),
+                modelo_afectado="Proyecto",
+                objeto_id=ps.proyecto_id,
+            )
             return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
         except Exception as exc:
             messages.error(request, f"Error al generar APU: {exc}")

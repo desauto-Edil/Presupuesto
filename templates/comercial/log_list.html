@@ -1,71 +1,217 @@
 {% extends "base.html" %}
 {% block title %}Historial del sistema{% endblock %}
+{% block nav_logs %}active{% endblock %}
 {% block page_title %}Historial del sistema{% endblock %}
 {% block breadcrumb %}Configuración → Logs{% endblock %}
 
 {% block content %}
-<div class="panel fade-up">
+
+{# ── TOOLBAR: título + búsqueda en línea ── #}
+<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
+  <div>
+    <div style="font-size:11px;font-weight:600;letter-spacing:0.10em;text-transform:uppercase;
+                color:var(--theme-accent);margin-bottom:3px;">
+      Configuración · Logs
+    </div>
+    <h1 style="font-family:'Lato';font-size:20px;font-weight:800;color:var(--ink);line-height:1.2;">
+      Historial del sistema
+    </h1>
+    <div style="font-size:12px;color:rgba(14,17,23,0.38);margin-top:3px;">
+      Unidad: <strong style="color:var(--ink-soft);">{{ request.session.unidad_negocio }}</strong>
+    </div>
+  </div>
+
+  {# Filtro de búsqueda rápida #}
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <form method="get" style="display:flex;gap:8px;align-items:center;">
+      <div style="position:relative;">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);
+                     color:rgba(14,17,23,0.30);font-size:13px;pointer-events:none;">⌕</span>
+        <input type="text" name="q" value="{{ request.GET.q }}"
+               placeholder="Buscar acción, usuario…"
+               class="form-control"
+               style="padding-left:30px;width:220px;height:34px;font-size:12.5px;">
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+      {% if request.GET.q %}
+      <a href="?" class="btn btn-ghost btn-sm">✕ Limpiar</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+{# ── PANEL PRINCIPAL ── #}
+<div class="panel fade-up accent-top-theme">
+
   <div class="panel-header">
     <span class="panel-title">Actividad registrada</span>
-    <span style="font-size:11px;color:var(--ink-soft);">
-      Unidad: <strong>{{ request.session.unidad_negocio }}</strong>
+    {% if logs %}
+    <span style="font-size:11px;color:var(--ink-soft);background:var(--surface);
+                 border:1px solid var(--border);border-radius:99px;padding:2px 10px;">
+      {{ page_obj.paginator.count|default:logs|length }} registros
     </span>
+    {% endif %}
   </div>
 
   {% if logs %}
-  <table class="imp-table">
-    <thead>
-      <tr>
-        <th>Fecha</th>
-        <th>Acción</th>
-        <th>Descripción</th>
-        <th>Usuario</th>
-        <th>Objeto</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for log in logs %}
-      <tr>
-        <td class="td-mono" style="white-space:nowrap;font-size:11.5px;">
-          {{ log.created_at|date:"d/m/Y H:i" }}
-        </td>
-        <td>
-          <span style="font-size:10.5px;font-family:monospace;background:rgba(86,83,148,0.08);
-                       padding:2px 7px;border-radius:4px;color:var(--brand-violet);">
-            {{ log.accion }}
-          </span>
-        </td>
-        <td style="font-size:13px;">{{ log.descripcion|default:"—" }}</td>
-        <td style="font-size:12.5px;">{{ log.usuario.nombre_completo }}</td>
-        <td style="font-size:11.5px;color:var(--ink-soft);">
-          {% if log.modelo_afectado %}
-          {{ log.modelo_afectado }}{% if log.objeto_id %} #{{ log.objeto_id }}{% endif %}
-          {% else %}—{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
 
+  {# ── TABLA ── #}
+  <div style="overflow-x:auto;">
+    <table class="data-table" style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr>
+          <th style="width:140px;">Fecha</th>
+          <th style="width:160px;">Acción</th>
+          <th>Descripción</th>
+          <th style="width:160px;">Usuario</th>
+          <th style="width:160px;">Objeto afectado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+
+          {# Fecha #}
+          <td class="td-mono" style="white-space:nowrap;font-size:11.5px;color:var(--ink-soft);">
+            <div style="font-size:12px;font-weight:600;color:var(--ink);">
+              {{ log.created_at|date:"d/m/Y" }}
+            </div>
+            <div style="font-size:10.5px;color:rgba(14,17,23,0.38);margin-top:1px;">
+              {{ log.created_at|date:"H:i" }}
+            </div>
+          </td>
+
+          {# Acción — chip semántico por tipo #}
+          <td>
+            {% with a=log.accion|lower %}
+            {% if "crea" in a or "add" in a or "insert" in a %}
+              <span class="chip chip-green" style="font-family:monospace;font-size:10.5px;letter-spacing:0.03em;">
+                {{ log.accion }}
+              </span>
+            {% elif "elimin" in a or "delet" in a or "remov" in a %}
+              <span class="chip chip-red" style="font-family:monospace;font-size:10.5px;letter-spacing:0.03em;">
+                {{ log.accion }}
+              </span>
+            {% elif "edit" in a or "modif" in a or "updat" in a or "cambi" in a %}
+              <span class="chip chip-amber" style="font-family:monospace;font-size:10.5px;letter-spacing:0.03em;">
+                {{ log.accion }}
+              </span>
+            {% elif "login" in a or "acces" in a or "auth" in a %}
+              <span class="chip chip-blue" style="font-family:monospace;font-size:10.5px;letter-spacing:0.03em;">
+                {{ log.accion }}
+              </span>
+            {% else %}
+              <span class="chip chip-violet" style="font-family:monospace;font-size:10.5px;letter-spacing:0.03em;">
+                {{ log.accion }}
+              </span>
+            {% endif %}
+            {% endwith %}
+          </td>
+
+          {# Descripción #}
+          <td style="font-size:12.5px;color:var(--ink);max-width:280px;">
+            <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+                         overflow:hidden;line-height:1.4;">
+              {{ log.descripcion|default:"—" }}
+            </span>
+          </td>
+
+          {# Usuario #}
+          <td>
+            {% if log.configuracion.nombre_completo %}
+            <div style="display:flex;align-items:center;gap:7px;">
+              <div style="width:26px;height:26px;border-radius:50%;background:var(--theme-accent-pale);
+                          border:1.5px solid var(--theme-accent-border);display:flex;align-items:center;
+                          justify-content:center;font-size:10px;font-weight:700;
+                          color:var(--theme-accent);flex-shrink:0;">
+                {{ log.configuracion.nombre_completo|first|upper }}
+              </div>
+              <span style="font-size:12.5px;color:var(--ink);">
+                {{ log.configuracion.nombre_completo }}
+              </span>
+            </div>
+            {% else %}
+            <span style="color:rgba(14,17,23,0.28);font-size:12px;">—</span>
+            {% endif %}
+          </td>
+
+          {# Objeto afectado #}
+          <td>
+            {% if log.modelo_afectado %}
+            <div style="font-size:11.5px;">
+              <span style="font-weight:600;color:var(--ink-soft);">{{ log.modelo_afectado }}</span>
+              {% if log.objeto_id %}
+              <span style="color:rgba(14,17,23,0.35);margin-left:3px;">#{{ log.objeto_id }}</span>
+              {% endif %}
+            </div>
+            {% else %}
+            <span style="color:rgba(14,17,23,0.28);font-size:12px;">—</span>
+            {% endif %}
+          </td>
+
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# ── PAGINACIÓN ── #}
   {% if is_paginated %}
-  <div style="padding:12px 20px;display:flex;gap:8px;justify-content:flex-end;">
-    {% if page_obj.has_previous %}
-    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-ghost btn-sm">← Anterior</a>
-    {% endif %}
-    <span style="font-size:12px;padding:6px 10px;color:var(--ink-soft);">
-      Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+  <div style="padding:12px 20px;display:flex;align-items:center;justify-content:space-between;
+              border-top:1px solid var(--border);flex-wrap:wrap;gap:8px;">
+
+    {# Info de página #}
+    <span style="font-size:12px;color:rgba(14,17,23,0.40);">
+      Página <strong style="color:var(--ink);">{{ page_obj.number }}</strong>
+      de <strong style="color:var(--ink);">{{ page_obj.paginator.num_pages }}</strong>
     </span>
-    {% if page_obj.has_next %}
-    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-ghost btn-sm">Siguiente →</a>
-    {% endif %}
+
+    {# Controles #}
+    <div style="display:flex;gap:6px;align-items:center;">
+      {% if page_obj.has_previous %}
+      <a href="?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}page=1"
+         class="btn btn-ghost btn-sm">«</a>
+      <a href="?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}page={{ page_obj.previous_page_number }}"
+         class="btn btn-ghost btn-sm">‹ Anterior</a>
+      {% endif %}
+
+      {# Páginas cercanas #}
+      {% for num in page_obj.paginator.page_range %}
+        {% if num == page_obj.number %}
+        <span style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px;
+                     background:var(--theme-accent);color:#fff;min-width:30px;text-align:center;">
+          {{ num }}
+        </span>
+        {% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
+        <a href="?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}page={{ num }}"
+           class="btn btn-ghost btn-sm" style="min-width:30px;text-align:center;">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if page_obj.has_next %}
+      <a href="?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}page={{ page_obj.next_page_number }}"
+         class="btn btn-ghost btn-sm">Siguiente ›</a>
+      <a href="?{% if request.GET.q %}q={{ request.GET.q }}&{% endif %}page={{ page_obj.paginator.num_pages }}"
+         class="btn btn-ghost btn-sm">»</a>
+      {% endif %}
+    </div>
+
   </div>
   {% endif %}
 
   {% else %}
-  <div class="empty-state" style="padding:40px;">
-    <div class="empty-state-icon">◷</div>
-    <div class="empty-state-text">Sin actividad registrada para esta unidad.</div>
+
+  {# ── ESTADO VACÍO ── #}
+  <div class="empty-state" style="padding:56px 24px;">
+    <div class="empty-state-icon" style="font-size:36px;margin-bottom:12px;opacity:0.35;">◷</div>
+    <div style="font-size:14px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;">
+      Sin actividad registrada
+    </div>
+    <div class="empty-state-text">
+      No hay logs disponibles para esta unidad de negocio.
+    </div>
   </div>
+
   {% endif %}
 </div>
 {% endblock %}

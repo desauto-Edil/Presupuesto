@@ -115,10 +115,10 @@
 }
 
 /* ── RESET ── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Lato', sans-serif; }
 
 body {
-  font-family: 'Lato';
+  font-family: 'Lato', sans-serif;
   background: var(--surface);
   color: var(--ink);
   display: flex;
@@ -298,16 +298,7 @@ body {
 .user-name { font-size: 12px; font-weight: 500; color: #fff; }
 .user-role { font-size: 11px; color: rgba(255,255,255,0.38); }
 
-/* ══════════════════════════════════════════════
-   MAIN
-   ══════════════════════════════════════════════ */
-.main {
-  margin-left: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-}
+
 
 /* ══════════════════════════════════════════════
    TOPBAR — franja de color del tema a la izquierda
@@ -835,6 +826,26 @@ table.data-table tbody tr:hover td { background: var(--surface); }
 }
 .sidebar-open .sidebar-toggle-btn span:nth-child(3) {
   transform: translateY(-6px) rotate(-45deg);
+}
+
+.table-compact tbody td {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.table-compact tbody tr:hover td {
+  background: rgba(0,0,0,0.03);
+}
+
+/* estilo tipo excel */
+.table-compact td,
+.table-compact th {
+  border-right: 1px solid var(--border);
+}
+
+.table-compact th:last-child,
+.table-compact td:last-child {
+  border-right: none;
 }
 
 /* ── ANIMATIONS ── */

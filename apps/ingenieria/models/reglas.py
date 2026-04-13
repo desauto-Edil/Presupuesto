@@ -44,6 +44,7 @@ class ReglaCalculo(models.Model):
 
     class Meta:
         app_label = "ingenieria"
+        db_table = "reglas_calculo"
         ordering = ["subsistema", "orden_ejecucion"]
 
     def __str__(self):

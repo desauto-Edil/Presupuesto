@@ -88,7 +88,7 @@ class SolicitudForm(forms.ModelForm):
     class Meta:
         model = Solicitud
         fields = [
-            "consecutivo", "link_selford", "cliente",
+            "consecutivo", "link_salesforce", "cliente",
             "nombre", "descripcion", "fecha_entrega", "observaciones",
         ]
         widgets = {
@@ -96,9 +96,9 @@ class SolicitudForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "Ej: SEL-2026-0042",
             }),
-            "link_selford": forms.URLInput(attrs={
+            "link_salesforce": forms.URLInput(attrs={
                 "class": "form-control",
-                "placeholder": "https://selford.example.com/solicitud/42",
+                "placeholder": "https://salesforce.example.com/solicitud/42",
             }),
             "cliente": forms.Select(attrs={"class": "form-select"}),
             "nombre": forms.TextInput(attrs={
@@ -156,7 +156,7 @@ class ProyectoForm(forms.ModelForm):
     class Meta:
         model = Proyecto
         fields = [
-            "cliente", "tipo_proyecto", "nombre", "descripcion",
+            "cliente", "nombre", "descripcion",
             "area_total_m2", "perimetro_ml", "dias_duracion", "num_personas",
             "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
             "moneda", "aplica_exencion_iva", "observaciones",

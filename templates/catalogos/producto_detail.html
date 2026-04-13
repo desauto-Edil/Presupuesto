@@ -10,7 +10,7 @@
     <dt class="col-sm-3">Origen</dt><dd class="col-sm-9">{{ producto.get_origen_display }}</dd>
     <dt class="col-sm-3">Marca</dt><dd class="col-sm-9">{{ producto.marca|default:"-" }}</dd>
     <dt class="col-sm-3">Linea</dt><dd class="col-sm-9">{{ producto.linea|default:"-" }}</dd>
-    <dt class="col-sm-3">Rendimiento</dt><dd class="col-sm-9">{{ producto.rendimiento|default:"-" }}</dd>
+    <dt class="col-sm-3">Precio en USD</dt><dd class="col-sm-9">{% if producto.precio_en_dolares %}Sí — se divide por TRM del proyecto{% else %}No{% endif %}</dd>
     <dt class="col-sm-3">Activo</dt><dd class="col-sm-9">{% if producto.activo %}Si{% else %}No{% endif %}</dd>
 </dl>
 <h5 class="mt-4">Precios por proveedor</h5>

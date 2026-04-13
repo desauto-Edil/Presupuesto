@@ -14,20 +14,20 @@ class Migration(migrations.Migration):
 
     operations = [
 
-        # ── 1. Cliente: eliminar creacion_selford ────────────────────────────
+        # ── 1. Cliente: eliminar creacion_Salesforce ────────────────────────────
         migrations.RemoveField(
             model_name="cliente",
-            name="creacion_selford",
+            name="creacion_salesforce",
         ),
 
-        # ── 2. Solicitud: agregar link_selford ───────────────────────────────
+        # ── 2. Solicitud: agregar link_salesforce ───────────────────────────────
         migrations.AddField(
             model_name="solicitud",
-            name="link_selford",
+            name="link_salesforce",
             field=models.URLField(
-                verbose_name="Link de Selford",
-                help_text="URL directa al registro en Selford",
-                default="https://selford.example.com",
+                verbose_name="Link de Salesforce",
+                help_text="URL directa al registro en Salesforce",
+                default="https://salesforce.example.com",
             ),
             preserve_default=False,
         ),
@@ -39,8 +39,8 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 max_length=30,
                 unique=True,
-                verbose_name="Consecutivo de Selford",
-                help_text="Número de consecutivo asignado en Selford",
+                verbose_name="Consecutivo de Salesforce",
+                help_text="Número de consecutivo asignado en Salesforce",
             ),
         ),
 

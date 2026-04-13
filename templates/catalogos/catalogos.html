@@ -221,23 +221,15 @@
        data-status="{% if cat.activa %}activa{% else %}inactiva{% endif %}"
        data-name="{{ cat.nombre|lower }} {{ cat.codigo|lower }}">
 
-    <!-- Imagen -->
-    <div class="cat-card__img">
-      {% if cat.imagen %}
-        <img src="{{ cat.imagen.url }}"
-             alt="{{ cat.nombre }}"
-             loading="lazy">
-      {% else %}
-        <div class="cat-card__img-placeholder">⊞</div>
-      {% endif %}
-      <div class="cat-card__img-overlay"></div>
+    <!-- Cabecera compacta sin imagen -->
+    <div class="cat-card__head">
+      <div class="cat-card__head-left">
+        <span class="cat-card__code-badge">{{ cat.codigo }}</span>
+        <span class="cat-card__head-name">{{ cat.nombre }}</span>
+      </div>
       <span class="cat-card__status {% if cat.activa %}cat-card__status--activa{% else %}cat-card__status--inactiva{% endif %}">
         {% if cat.activa %}● Activa{% else %}○ Inactiva{% endif %}
       </span>
-      <div class="cat-card__img-label">
-        <span class="cat-card__code-badge">{{ cat.codigo }}</span>
-        <span class="cat-card__img-title">{{ cat.nombre }}</span>
-      </div>
     </div>
 
     <!-- Cuerpo -->
@@ -251,71 +243,49 @@
           <span class="cat-card__count-num">{{ cat.cantidad_productos }}</span>
           <span>producto{{ cat.cantidad_productos|pluralize }}</span>
         </div>
-        {% if cat.cantidad_productos > 0 %}
-        <button class="cat-card__toggle"
-                data-target="prods-{{ cat.pk }}"
-                aria-expanded="false">
-          Ver lista
-          <span class="cat-card__toggle-icon">▾</span>
+      </div>
+
+      <!-- Primeros 5 productos visibles -->
+      {% if cat.cantidad_productos > 0 %}
+      <div class="cat-prods-mini">
+        {% for prod in cat.productos.all %}{% if forloop.counter <= 5 %}
+        <div class="cat-prod-item"
+             data-bs-toggle="modal"
+             data-bs-target="#modalDetalleProd"
+             data-prod-nombre="{{ prod.nombre }}"
+             data-prod-codigo="{{ prod.codigo }}"
+             data-prod-categoria="{{ cat.nombre }}"
+             data-prod-precio="{{ prod.precio_actual|floatformat:0 }}"
+             data-prod-moneda="{{ prod.moneda }}"
+             data-prod-proveedor="{{ prod.proveedor.nombre|default:'—' }}"
+             data-prod-unidad="{{ prod.unidad.abreviatura|default:'—' }}"
+             data-prod-marca="{{ prod.marca|default:'—' }}"
+             data-prod-activo="{{ prod.activo|yesno:'Activo,Inactivo' }}"
+             data-prod-edit-url="{% url 'catalogos:producto_update' prod.pk %}"
+             title="Ver detalle" style="cursor:pointer;">
+          <div class="cat-prod-item__left">
+            <span class="cat-prod-item__dot"></span>
+            <div class="cat-prod-item__name">{{ prod.nombre }}</div>
+          </div>
+          <div class="cat-prod-item__right">
+            {% if prod.precio_actual %}
+            <span class="cat-prod-item__price">${{ prod.precio_actual|floatformat:0 }} <span class="cat-prod-item__moneda">{{ prod.moneda }}</span></span>
+            {% else %}<span class="cat-prod-item__no-price">Sin precio</span>{% endif %}
+          </div>
+        </div>
+        {% endif %}{% endfor %}
+
+        {% if cat.cantidad_productos > 5 %}
+        <button class="cat-ver-mas-btn"
+                data-bs-toggle="modal"
+                data-bs-target="#modalListaProductos"
+                data-cat-nombre="{{ cat.nombre }}"
+                data-cat-pk="{{ cat.pk }}"
+                data-productos='[{% for prod in cat.productos.all %}{"nombre":"{{ prod.nombre|escapejs }}","codigo":"{{ prod.codigo|escapejs }}","precio":"{{ prod.precio_actual|floatformat:0 }}","moneda":"{{ prod.moneda }}","proveedor":"{{ prod.proveedor.nombre|default:'—'|escapejs }}","unidad":"{{ prod.unidad.abreviatura|default:'—'|escapejs }}","marca":"{{ prod.marca|default:'—'|escapejs }}","activo":{{ prod.activo|yesno:"true,false" }},"edit_url":"{% url 'catalogos:producto_update' prod.pk %}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
+          + {{ cat.cantidad_productos|add:"-5" }} más — Ver todos
         </button>
         {% endif %}
       </div>
-
-      <!-- Productos colapsables -->
-      {% if cat.cantidad_productos > 0 %}
-      <div class="cat-prods" id="prods-{{ cat.pk }}">
-        <div class="cat-prods-inner">
-          {% for prod in cat.productos.all %}
-          {% if forloop.counter <= 6 %}
-          <div class="cat-prod-item"
-               data-prod-name="{{ prod.nombre|lower }} {{ prod.codigo|lower }}"
-               data-bs-toggle="modal"
-               data-bs-target="#modalDetalleProd"
-               data-prod-nombre="{{ prod.nombre }}"
-               data-prod-codigo="{{ prod.codigo }}"
-               data-prod-categoria="{{ cat.nombre }}"
-               data-prod-precio="{{ prod.precio_actual|floatformat:0 }}"
-               data-prod-moneda="{{ prod.moneda }}"
-               data-prod-proveedor="{{ prod.proveedor.nombre|default:'—' }}"
-               data-prod-unidad="{{ prod.unidad.abreviatura|default:'—' }}"
-               data-prod-marca="{{ prod.marca|default:'—' }}"
-               data-prod-activo="{{ prod.activo|yesno:'Activo,Inactivo' }}"
-               data-prod-edit-url="{% url 'catalogos:producto_update' prod.pk %}"
-               title="Ver detalle">
-            <div class="cat-prod-item__left">
-              <span class="cat-prod-item__dot"></span>
-              <div>
-                <div class="cat-prod-item__name">{{ prod.nombre }}</div>
-                {% if prod.proveedor %}
-                <div class="cat-prod-item__sub">{{ prod.proveedor.nombre }}</div>
-                {% endif %}
-              </div>
-            </div>
-            <div class="cat-prod-item__right">
-              {% if prod.precio_actual %}
-              <span class="cat-prod-item__price">
-                ${{ prod.precio_actual|floatformat:0 }}
-                <span class="cat-prod-item__moneda">{{ prod.moneda }}</span>
-              </span>
-              {% else %}
-              <span class="cat-prod-item__no-price">Sin precio</span>
-              {% endif %}
-            </div>
-          </div>
-          {% endif %}
-          {% endfor %}
-
-          {% if cat.cantidad_productos > 5 %}
-          <div class="cat-prods-more">
-            + {{ cat.cantidad_productos|add:"-5" }} más →
-            <a href="{% url 'catalogos:producto_list' %}?categoria={{ cat.pk }}"
-               style="color:inherit;">Ver todos</a>
-          </div>
-          {% endif %}
-        </div>
-      </div>
-      {% else %}
-      <div class="cat-prods-empty">Sin productos en esta categoría.</div>
       {% endif %}
 
     </div><!-- /.cat-card__body -->
@@ -413,15 +383,6 @@
           </div>
 
           <div class="form-group">
-            <label>Imagen de categoría</label>
-            {{ modal_categoria_form.imagen }}
-            <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
-              Formatos: JPG, PNG, WEBP. La imagen se mostrará en la tarjeta.
-            </div>
-            <img id="catImgPreview" class="cat-img-preview" alt="Vista previa">
-          </div>
-
-          <div class="form-group">
             <div class="form-check">
               {{ modal_categoria_form.activa }}
               <label class="form-check-label" style="font-size:13px;">Categoría activa</label>
@@ -449,7 +410,7 @@
         <h5 class="modal-title">Nuevo producto</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="post" action="{% url 'catalogos:producto_create' %}">
+      <form method="post" action="{% url 'catalogos:producto_create' %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="modal-body">
 
@@ -496,9 +457,27 @@
                 {{ modal_producto_form.precio_actual }}
               </div>
             </div>
-            <div class="form-group" style="margin-bottom:0;max-width:180px;">
-              <label>Moneda <span style="color:var(--red)">*</span></label>
-              {{ modal_producto_form.moneda }}
+            <div class="form-grid-2" style="margin-top:8px;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Moneda <span style="color:var(--red)">*</span></label>
+                {{ modal_producto_form.moneda }}
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label>Unidades por presentación</label>
+                {{ modal_producto_form.unidades_por_presentacion }}
+                <div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">Ej: 1000 si el precio es por bolsa de 1000 und</div>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:8px;margin-bottom:0;">
+              <div class="form-check form-switch">
+                {{ modal_producto_form.precio_en_dolares }}
+                <label class="form-check-label fw-bold ms-2" for="{{ modal_producto_form.precio_en_dolares.id_for_label }}" style="font-size:13px;">
+                  Precio en dólares (USD)
+                </label>
+              </div>
+              <div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">
+                Si activo, el precio se dividirá por la TRM del proyecto al calcular el despiece.
+              </div>
             </div>
           </div>
 
@@ -510,6 +489,18 @@
             <div class="form-group">
               <label>Línea</label>
               {{ modal_producto_form.linea }}
+            </div>
+          </div>
+
+          <!-- Ficha técnica -->
+          <div class="cat-modal-section">
+            <div class="cat-modal-section-label">Ficha técnica <span style="font-weight:400;color:var(--ink-soft);">(opcional)</span></div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:11.5px;">{{ modal_producto_form.ficha_tecnica.label }}</label>
+              {{ modal_producto_form.ficha_tecnica }}
+              <div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">
+                PDF o imagen JPG/PNG con las especificaciones técnicas.
+              </div>
             </div>
           </div>
 
@@ -621,6 +612,123 @@
 </div>
 
 
+
+<!-- ════════════════════════════════════════════════════════
+     MODAL — LISTA COMPLETA DE PRODUCTOS DE CATEGORÍA
+════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalListaProductos" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header cat-modal-header">
+        <div>
+          <h5 class="modal-title" id="listaProdsTitle">Productos</h5>
+          <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:2px;" id="listaProdsSubtitle"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:0;">
+        <!-- Buscador inline -->
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:var(--surface);">
+          <input type="text" id="listaProdsSearch" class="form-control form-control-sm"
+                 placeholder="Buscar producto…" autocomplete="off"
+                 style="font-size:12.5px;">
+        </div>
+        <!-- Tabla de productos -->
+        <div style="overflow-y:auto;max-height:440px;">
+          <table class="imp-table" id="listaProdsTable">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Código</th>
+                <th>Proveedor</th>
+                <th style="text-align:right;">Precio</th>
+                <th style="text-align:center;">Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="listaProdsBody">
+            </tbody>
+          </table>
+          <div id="listaProdsEmpty" style="display:none;padding:30px;text-align:center;
+               font-size:13px;color:var(--ink-soft);">Sin resultados.</div>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <span id="listaProdsCount" style="font-size:12px;color:var(--ink-soft);"></span>
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const modal = document.getElementById('modalListaProductos');
+  if (!modal) return;
+
+  modal.addEventListener('show.bs.modal', function (e) {
+    const btn = e.relatedTarget;
+    if (!btn) return;
+
+    const catNombre = btn.dataset.catNombre || '—';
+    const productos = JSON.parse(btn.dataset.productos || '[]');
+
+    document.getElementById('listaProdsTitle').textContent = catNombre;
+    document.getElementById('listaProdsSubtitle').textContent =
+      productos.length + ' producto' + (productos.length !== 1 ? 's' : '');
+    document.getElementById('listaProdsCount').textContent =
+      productos.length + ' producto' + (productos.length !== 1 ? 's' : '');
+    document.getElementById('listaProdsSearch').value = '';
+
+    renderListaProds(productos);
+
+    document.getElementById('listaProdsSearch').addEventListener('input', function () {
+      const q = this.value.toLowerCase().trim();
+      const filtrados = q
+        ? productos.filter(p =>
+            p.nombre.toLowerCase().includes(q) ||
+            p.codigo.toLowerCase().includes(q) ||
+            p.proveedor.toLowerCase().includes(q))
+        : productos;
+      renderListaProds(filtrados);
+    });
+  });
+
+  function renderListaProds(prods) {
+    const tbody = document.getElementById('listaProdsBody');
+    const empty = document.getElementById('listaProdsEmpty');
+    const table = document.getElementById('listaProdsTable');
+
+    if (!prods.length) {
+      tbody.innerHTML = '';
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+    table.style.display = '';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = prods.map(p => `
+      <tr>
+        <td style="font-weight:500;font-size:13px;">${p.nombre}</td>
+        <td class="td-mono" style="font-size:11.5px;">${p.codigo || '—'}</td>
+        <td style="font-size:12px;color:var(--ink-soft);">${p.proveedor}</td>
+        <td style="text-align:right;font-size:13px;font-weight:600;">
+          ${p.precio ? '$' + Number(p.precio).toLocaleString('es-CO') + ' <span style="font-size:10px;color:var(--ink-soft);">' + p.moneda + '</span>' : '<span style="color:var(--ink-soft);font-size:12px;">Sin precio</span>'}
+        </td>
+        <td style="text-align:center;">
+          <span class="badge-status ${p.activo ? 'badge-status--active' : 'badge-status--inactive'}">
+            ${p.activo ? 'Activo' : 'Inactivo'}
+          </span>
+        </td>
+        <td style="text-align:right;">
+          <a href="${p.edit_url}" class="btn btn-ghost btn-xs" title="Editar">✎</a>
+        </td>
+      </tr>
+    `).join('');
+  }
+})();
+</script>
 
 </div>{# /panelCatalogos #}
 

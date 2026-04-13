@@ -19,12 +19,11 @@ class UnidadMedidaForm(forms.ModelForm):
 class CategoriaForm(forms.ModelForm):
     class Meta:
         model = CategoriaProducto
-        fields = ["codigo", "nombre", "descripcion", "imagen", "activa"]
+        fields = ["codigo", "nombre", "descripcion", "activa"]
         widgets = {
             "codigo": forms.TextInput(attrs={"class": "form-control"}),
             "nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-            "imagen": forms.ClearableFileInput(attrs={"class": "form-control"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "activa": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
@@ -41,7 +40,7 @@ class ProductoForm(forms.ModelForm):
         fields = [
             "codigo", "nombre", "categoria", "unidad",
             "proveedor", "precio_actual", "moneda", "unidades_por_presentacion",
-            "origen", "marca", "linea", "rendimiento",
+            "origen", "marca", "linea", "precio_en_dolares",
             "ficha_tecnica", "activo",
         ]
         widgets = {
@@ -61,7 +60,7 @@ class ProductoForm(forms.ModelForm):
             "origen": forms.Select(attrs={"class": "form-select"}),
             "marca": forms.TextInput(attrs={"class": "form-control"}),
             "linea": forms.TextInput(attrs={"class": "form-control"}),
-            "rendimiento": forms.NumberInput(attrs={"class": "form-control", "step": "0.000001"}),
+            "precio_en_dolares": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "ficha_tecnica": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }

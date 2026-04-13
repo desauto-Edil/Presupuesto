@@ -8,82 +8,155 @@
 
 {% block extra_head %}
 <style>
-  .apu-hub-grid {
-    display: grid;
-    grid-template-columns: 1fr 300px;
-    gap: 20px;
-    align-items: start;
-  }
-  .config-card {
-    background: var(--card);
-    border: 1px solid var(--sidebar-light-border);
-    border-radius: 16px;
-    overflow: hidden;
-  }
-  .config-card__head {
-    background: var(--ink);
-    padding: 20px 24px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .config-card__head i {
-    font-size: 22px;
-    color: var(--theme-accent);
-  }
-  .config-card__head-text {
-    font-family: 'Lato';
-    font-size: 15px;
-    font-weight: 700;
-    color: #fff;
-  }
-  .config-card__head-sub {
-    font-size: 11.5px;
-    color: rgba(255,255,255,0.38);
-    margin-top: 2px;
-  }
-  .config-param-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: var(--sidebar-light-border);
-    border-top: 1px solid var(--sidebar-light-border);
-  }
-  .config-param {
-    background: var(--card);
-    padding: 16px 20px;
-  }
-  .config-param__label {
-    font-size: 10.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .07em;
-    color: rgba(14,17,23,0.35);
-    margin-bottom: 4px;
-  }
-  .config-param__value {
-    font-family: 'Lato';
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--theme-accent);
-  }
-  .config-param__unit {
-    font-size: 12px;
-    color: rgba(14,17,23,0.40);
-    margin-left: 2px;
-  }
-  .config-inactive {
-    opacity: .5;
-    border-top: 2px solid rgba(14,17,23,0.08);
-  }
-  @media (max-width: 768px) {
-    .apu-hub-grid { grid-template-columns: 1fr; }
-  }
+* { font-family: 'Lato', sans-serif; }
+
+/* ── Grid de cards ── */
+.apu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+/* ── Card ── */
+.apu-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.apu-card:hover {
+  box-shadow: 0 6px 24px rgba(0,0,0,.07);
+  transform: translateY(-2px);
+}
+.apu-card--inactive { opacity: .55; }
+
+/* ── Cabecera de card ── */
+.apu-card__head {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.apu-card__name {
+  font-family: 'Lato';
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.apu-card__meta {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 3px;
+  font-family: 'Lato';
+}
+
+/* ── Métricas ── */
+.apu-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+.apu-metric {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.apu-metric:nth-child(even) { border-right: none; }
+.apu-metric:nth-child(n+3)  { border-bottom: none; }
+
+.apu-metric__label {
+  font-family: 'Lato';
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(14,17,23,.35);
+  margin-bottom: 4px;
+}
+.apu-metric__value {
+  font-family: 'Lato';
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--ink);
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.apu-metric__value--accent { color: var(--theme-accent); }
+.apu-metric__unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+/* ── Footer de card ── */
+.apu-card__footer {
+  padding: 10px 16px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+/* ── Panel "Cómo funciona" ── */
+.apu-how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+}
+.apu-how-item {
+  padding: 16px 20px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.apu-how-item:last-child { border-right: none; }
+.apu-how-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--theme-accent);
+  color: #fff;
+  font-family: 'Lato';
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.apu-how-title {
+  font-family: 'Lato';
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+.apu-how-desc {
+  font-family: 'Lato';
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .apu-how-grid { grid-template-columns: 1fr; }
+  .apu-how-item { border-right: none; border-bottom: 1px solid var(--border); }
+  .apu-how-item:last-child { border-bottom: none; }
+}
 </style>
 {% endblock %}
 
 {% block topbar_actions %}
-<a href="{% url 'presupuestos:configapu_create' %}" class="btn btn-ghost btn-sm">
+<a href="{% url 'presupuestos:configapu_create' %}" class="btn btn-primary btn-sm">
   <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Nueva configuración
 </a>
 {% endblock %}
@@ -91,142 +164,120 @@
 
 {% block content %}
 
-<!-- Intro header -->
-<div class="panel fade-up" style="padding:20px 28px;margin-bottom:20px;
-     background:linear-gradient(135deg,var(--ink) 0%,rgba(14,17,23,0.82) 100%);
-     color:#fff;border:none;">
-  <div style="display:flex;align-items:center;gap:16px;">
-    <i class="bi bi-currency-dollar"
-       style="font-size:32px;color:var(--theme-accent);flex-shrink:0;"></i>
-    <div>
-      <div style="font-family:'Lato';font-size:18px;font-weight:800;">
-        Análisis de Precios Unitarios
+{% if object_list %}
+
+<!-- ── Cards de configuración ────────────────────────────────────────────── -->
+<div class="apu-grid fade-up">
+  {% for config in object_list %}
+  <div class="apu-card {% if not config.activa %}apu-card--inactive{% endif %}">
+
+    <!-- Cabecera -->
+    <div class="apu-card__head">
+      <div>
+        <div class="apu-card__name">{{ config.nombre }}</div>
+        <div class="apu-card__meta">Modificada {{ config.updated_at|date:"d/m/Y · H:i" }}</div>
       </div>
-      <div style="font-size:12.5px;color:rgba(255,255,255,0.40);margin-top:3px;">
-        Configuración global de márgenes, factores y parámetros para el cálculo de APU por proyecto.
+      {% if config.activa %}
+      <span class="badge-status badge-status--active" style="flex-shrink:0;">Activa</span>
+      {% else %}
+      <span class="badge-status badge-status--inactive" style="flex-shrink:0;">Inactiva</span>
+      {% endif %}
+    </div>
+
+    <!-- Métricas 2×2 -->
+    <div class="apu-metrics">
+      <div class="apu-metric">
+        <div class="apu-metric__label">Factor de venta</div>
+        <div class="apu-metric__value apu-metric__value--accent">
+          {{ config.porcentaje_ganancia }}<span class="apu-metric__unit">%</span>
+        </div>
+      </div>
+      <div class="apu-metric">
+        <div class="apu-metric__label">AIU Contratista</div>
+        <div class="apu-metric__value">
+          {{ config.aiu_contratista }}<span class="apu-metric__unit">%</span>
+        </div>
+      </div>
+      <div class="apu-metric">
+        <div class="apu-metric__label">Desperdicio</div>
+        <div class="apu-metric__value">
+          {{ config.desperdicio }}<span class="apu-metric__unit">%</span>
+        </div>
+      </div>
+      <div class="apu-metric">
+        <div class="apu-metric__label">Margen contratista</div>
+        <div class="apu-metric__value">
+          {{ config.margen_ganancia_contratista }}<span class="apu-metric__unit">%</span>
+        </div>
       </div>
     </div>
+
+    <!-- Footer -->
+    <div class="apu-card__footer">
+      <a href="{% url 'presupuestos:configapu_update' config.pk %}"
+         class="btn btn-ghost btn-sm">
+        <i class="bi bi-pencil me-1"></i>Editar configuración
+      </a>
+    </div>
+
   </div>
+  {% endfor %}
 </div>
 
-<!-- Config grid -->
-{% if object_list %}
-<div class="apu-hub-grid fade-up-1">
-  <div>
-    {% for config in object_list %}
-    <div class="config-card mb-3 {% if not config.activa %}config-inactive{% endif %}">
-      <div class="config-card__head">
-        <i class="bi bi-sliders"></i>
-        <div>
-          <div class="config-card__head-text">
-            {{ config.nombre }}
-            {% if config.activa %}
-            <span style="font-size:10px;background:rgba(29,212,109,0.15);color:#1dd46d;
-                         padding:2px 8px;border-radius:20px;font-weight:600;
-                         margin-left:8px;vertical-align:middle;">● Activa</span>
-            {% else %}
-            <span style="font-size:10px;background:rgba(255,255,255,0.10);color:rgba(255,255,255,0.35);
-                         padding:2px 8px;border-radius:20px;font-weight:600;
-                         margin-left:8px;vertical-align:middle;">Inactiva</span>
-            {% endif %}
-          </div>
-          <div class="config-card__head-sub">
-            Modificada: {{ config.updated_at|date:"d M Y · H:i" }}
-          </div>
-        </div>
-      </div>
-
-      <div class="config-param-grid">
-        <div class="config-param">
-          <div class="config-param__label">Factor de venta</div>
-          <div class="config-param__value">{{ config.porcentaje_ganancia }}<span class="config-param__unit">%</span></div>
-        </div>
-        <div class="config-param">
-          <div class="config-param__label">AIU Contratista</div>
-          <div class="config-param__value">{{ config.aiu_contratista }}<span class="config-param__unit">%</span></div>
-        </div>
-        <div class="config-param">
-          <div class="config-param__label">Desperdicio</div>
-          <div class="config-param__value">{{ config.desperdicio }}<span class="config-param__unit">%</span></div>
-        </div>
-        <div class="config-param">
-          <div class="config-param__label">Margen contratista</div>
-          <div class="config-param__value">{{ config.margen_ganancia_contratista }}<span class="config-param__unit">%</span></div>
-        </div>
-      </div>
-
-      <div style="padding:14px 20px;border-top:1px solid var(--sidebar-light-border);
-                  display:flex;justify-content:flex-end;gap:8px;">
-        <a href="{% url 'presupuestos:configapu_update' config.pk %}"
-           class="btn btn-ghost btn-sm">✎ Editar</a>
+<!-- ── Cómo funciona ─────────────────────────────────────────────────────── -->
+<div class="panel fade-up-1" style="margin-top:20px;">
+  <div class="panel-header">
+    <span class="panel-title">Cómo funciona el APU</span>
+  </div>
+  <div class="apu-how-grid">
+    <div class="apu-how-item">
+      <div class="apu-how-num">1</div>
+      <div>
+        <div class="apu-how-title">Despiece de materiales</div>
+        <div class="apu-how-desc">Las líneas del despiece del proyecto se convierten automáticamente en materiales del APU.</div>
       </div>
     </div>
-    {% endfor %}
-  </div>
-
-  <!-- Side info panel -->
-  <div>
-    <div class="panel" style="padding:20px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
-                  color:rgba(14,17,23,0.35);margin-bottom:14px;">Cómo funciona</div>
-
-      {% for step, title, desc in "1,Despiece de materiales,Las líneas del despiece se convierten en materiales del APU. El rendimiento se calcula como cantidad total ÷ unidades de referencia.|2,Secciones de usuario,Herramientas y equipos · Transporte · Mano de obra · Administración se ingresan manualmente por proyecto.|3,Cálculo automático,Costo unitario = Precio × (1+IVA). Valor unitario = Costo × (1+Factor venta). El APU se recalcula al guardar cualquier sección."|split:"|" %}
-      {# Django no soporta este for — ver bloques individuales abajo #}
-      {% endfor %}
-
-      <div style="display:flex;gap:10px;margin-bottom:14px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:var(--theme-accent);
-                    color:#fff;font-size:10.5px;font-weight:700;display:flex;
-                    align-items:center;justify-content:center;flex-shrink:0;">1</div>
-        <div>
-          <div style="font-size:12.5px;font-weight:600;margin-bottom:2px;">Despiece de materiales</div>
-          <div style="font-size:11.5px;color:rgba(14,17,23,0.45);">
-            Las líneas del despiece se convierten automáticamente en materiales del APU.
-          </div>
-        </div>
+    <div class="apu-how-item">
+      <div class="apu-how-num">2</div>
+      <div>
+        <div class="apu-how-title">Secciones manuales</div>
+        <div class="apu-how-desc">Herramientas · Transporte · Mano de obra · Administración se ingresan manualmente por proyecto.</div>
       </div>
-
-      <div style="display:flex;gap:10px;margin-bottom:14px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:var(--theme-accent);
-                    color:#fff;font-size:10.5px;font-weight:700;display:flex;
-                    align-items:center;justify-content:center;flex-shrink:0;">2</div>
-        <div>
-          <div style="font-size:12.5px;font-weight:600;margin-bottom:2px;">Secciones manuales</div>
-          <div style="font-size:11.5px;color:rgba(14,17,23,0.45);">
-            Herramientas · Transporte · Mano de obra · Administración se ingresan por proyecto.
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:10px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:var(--theme-accent);
-                    color:#fff;font-size:10.5px;font-weight:700;display:flex;
-                    align-items:center;justify-content:center;flex-shrink:0;">3</div>
-        <div>
-          <div style="font-size:12.5px;font-weight:600;margin-bottom:2px;">Cálculo automático</div>
-          <div style="font-size:11.5px;color:rgba(14,17,23,0.45);">
-            <strong>Costo unit.</strong> = Precio × (1+IVA)<br>
-            <strong>Valor unit.</strong> = Costo × (1+Factor venta)
-          </div>
+    </div>
+    <div class="apu-how-item">
+      <div class="apu-how-num">3</div>
+      <div>
+        <div class="apu-how-title">Cálculo automático</div>
+        <div class="apu-how-desc">
+          <strong>Costo unit.</strong> = Precio × (1 + IVA)<br>
+          <strong>Valor unit.</strong> = Costo × (1 + Factor venta)
         </div>
       </div>
     </div>
   </div>
-
 </div>
 
 {% else %}
-<!-- Empty state -->
-<div class="panel fade-up" style="text-align:center;padding:60px 24px;">
-  <i class="bi bi-currency-dollar" style="font-size:40px;color:rgba(14,17,23,0.15);display:block;margin-bottom:16px;"></i>
-  <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Sin configuraciones APU</div>
-  <div style="font-size:13px;color:rgba(14,17,23,0.40);margin-bottom:24px;">
-    Crea la configuración global de márgenes y factores para el cálculo de APU.
+
+<!-- ── Empty state ───────────────────────────────────────────────────────── -->
+<div class="panel fade-up" style="text-align:center;padding:70px 24px;">
+  <div style="width:56px;height:56px;border-radius:16px;background:rgba(0,0,0,.05);
+              display:flex;align-items:center;justify-content:center;
+              margin:0 auto 18px;">
+    <i class="bi bi-sliders" style="font-size:26px;color:rgba(14,17,23,.25);"></i>
+  </div>
+  <div style="font-family:'Lato';font-size:17px;font-weight:800;color:var(--ink);margin-bottom:8px;">
+    Sin configuraciones APU
+  </div>
+  <div style="font-family:'Lato';font-size:13px;color:var(--ink-soft);margin-bottom:28px;
+              max-width:360px;margin-left:auto;margin-right:auto;line-height:1.6;">
+    Define los márgenes y factores globales que se usarán en el cálculo de APU de cada proyecto.
   </div>
   <a href="{% url 'presupuestos:configapu_create' %}" class="btn btn-primary btn-sm">
-    + Crear configuración
+    <i class="bi bi-plus-lg me-1"></i>Crear primera configuración
   </a>
 </div>
+
 {% endif %}
 
 {% endblock %}
