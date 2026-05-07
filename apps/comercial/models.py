@@ -200,7 +200,7 @@ class Proyecto(models.Model):
     )
 
     # ── Datos del proyecto ───────────────────────────────────────────────────
-    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos")
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos", null=True, blank=True)
     creado_por = models.ForeignKey(
         "configuracion.ConfiguracionSistema", on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyectos_creados",
@@ -209,7 +209,7 @@ class Proyecto(models.Model):
         TipoProyecto, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyectos",
     )
-    nombre = models.CharField(max_length=300)
+    nombre = models.CharField(max_length=300, blank=True, default="")
     descripcion = models.TextField(blank=True, null=True)
     fecha_proyecto = models.DateField(auto_now_add=True)
     area_total_m2 = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)

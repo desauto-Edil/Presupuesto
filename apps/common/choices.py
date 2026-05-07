@@ -76,3 +76,29 @@ class TipoAPU(models.TextChoices):
     TRANSPORTE = "TRANSPORTE", "Transporte"
     MANO_DE_OBRA = "MANO_DE_OBRA", "Mano de obra"
     ADMINISTRACION = "ADMINISTRACION", "Administración"
+
+
+class TipoSistema(models.TextChoices):
+    CONSTRUCTIVO = "CONSTRUCTIVO", "Sistema constructivo"
+    CONSUMO = "CONSUMO", "Sistema de consumo"
+
+
+class TipoProductoConsumo(models.TextChoices):
+    MONOCOMPONENTE = "MONOCOMPONENTE", "Monocomponente"
+    BICOMPONENTE = "BICOMPONENTE", "Bicomponente"
+    MULTICOMPONENTE = "MULTICOMPONENTE", "Multicomponente"
+
+
+class EstadoFisicoProducto(models.TextChoices):
+    LIQUIDO = "LIQUIDO", "Líquido"
+    SOLIDO = "SOLIDO", "Sólido"
+    PASTOSO = "PASTOSO", "Pastoso"
+    POLVO = "POLVO", "Polvo"
+    ROLLO_PREFORMADO = "ROLLO_PREFORMADO", "Rollo preformado"
+    MIXTO = "MIXTO", "Mixto"
+
+
+class InteriorExterior(models.TextChoices):
+    INTERIOR = "INTERIOR", "Interior"
+    EXTERIOR = "EXTERIOR", "Exterior"
+    AMBOS = "AMBOS", "Interior y exterior"

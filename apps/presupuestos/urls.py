@@ -5,6 +5,8 @@ from apps.presupuestos.views import (
     # ProyectoSistema
     ProyectoSistemaListView, ProyectoSistemaDetailView,
     ProyectoSistemaCreateView, ProyectoSistemaUpdateView, ProyectoSistemaDeleteView,
+    # Despiece — módulo lista
+    DespieceListView, DespieceCSVDownloadView, NuevoDespieceView,
     # Despiece
     DespieceProyectoView, DespieceEjecutarView, DespieceLineaAjusteView,
     SubsistemaVariablesView, DespieceLineaAjusteAPIView, CalcularDespiecePSView,
@@ -24,6 +26,9 @@ from apps.presupuestos.views import (
     ItemCatalogoAPUCreateView, ItemCatalogoAPUUpdateView, ItemCatalogoAPUDeleteView,
     CuadrillaPresetCreateView, CuadrillaPresetUpdateView, CuadrillaPresetDeleteView,
     ItemsCatalogoAPIView,
+    # Consumo
+    CalculoConsumoView, EjecutarCalculoConsumoView,
+    AsignarProductoConsumoAPIView, ProductosPorCategoriaConsumoAPIView,
 )
 
 app_name = "presupuestos"
@@ -36,6 +41,11 @@ urlpatterns = [
     path("sistemas/<int:pk>/",           ProyectoSistemaDetailView.as_view(), name="proyectosistema_detail"),
     path("sistemas/<int:pk>/editar/",    ProyectoSistemaUpdateView.as_view(), name="proyectosistema_update"),
     path("sistemas/<int:pk>/eliminar/",  ProyectoSistemaDeleteView.as_view(), name="proyectosistema_delete"),
+
+    # ── Despiece — módulo lista ───────────────────────────────────────────────
+    path("despiece/",                        DespieceListView.as_view(),           name="despiece_list"),
+    path("despiece/nuevo/",                  NuevoDespieceView.as_view(),          name="despiece_nuevo"),
+    path("despiece/<int:pk>/csv/",           DespieceCSVDownloadView.as_view(),    name="despiece_csv"),
 
     # ── Despiece ─────────────────────────────────────────────────────────────
     path("despiece/proyecto/<int:pk>/",      DespieceProyectoView.as_view(),       name="despiece_proyecto"),
@@ -68,6 +78,12 @@ urlpatterns = [
     path("catalogo-apu/cuadrilla/nueva/",              CuadrillaPresetCreateView.as_view(),  name="catalogo_cuadrilla_create"),
     path("catalogo-apu/cuadrilla/<int:pk>/editar/",    CuadrillaPresetUpdateView.as_view(),  name="catalogo_cuadrilla_update"),
     path("catalogo-apu/cuadrilla/<int:pk>/eliminar/",  CuadrillaPresetDeleteView.as_view(),  name="catalogo_cuadrilla_delete"),
+
+    # ── Consumo ───────────────────────────────────────────────────────────────
+    path("consumo/<int:pk>/",                           CalculoConsumoView.as_view(),                  name="consumo_maestro"),
+    path("consumo/<int:pk>/ejecutar/",                  EjecutarCalculoConsumoView.as_view(),          name="consumo_ejecutar"),
+    path("consumo/api/asignar-producto/<int:pk>/",      AsignarProductoConsumoAPIView.as_view(),       name="consumo_api_asignar_producto"),
+    path("consumo/api/productos-linea/<int:pk>/",       ProductosPorCategoriaConsumoAPIView.as_view(), name="consumo_api_productos_linea"),
 
     # ── APU — proyectos ───────────────────────────────────────────────────────
     path("apu/",                         APUListView.as_view(),           name="apu_list"),

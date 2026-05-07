@@ -1,0 +1,643 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Calculadora · {{ sistema.nombre }}{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Calculadora de consumo{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'ingenieria:sistema_list' %}" style="color:inherit;text-decoration:none;">Sistemas</a>
+  · <a href="{% url 'ingenieria:sistema_detail' sistema.pk %}" style="color:inherit;text-decoration:none;">{{ sistema.nombre }}</a>
+  · Calculadora
+{% endblock %}
+
+{% block extra_head %}
+<style>
+
+/* ══ Layout ══════════════════════════════════════════════════════════════════ */
+.calc-grid {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .calc-grid { grid-template-columns: 1fr; }
+}
+
+/* ══ Panel genérico ══════════════════════════════════════════════════════════ */
+.calc-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.calc-panel__head {
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.calc-panel__icon {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  background: rgba(16,130,80,.12);
+  color: #108250;
+  flex-shrink: 0;
+}
+.calc-panel__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.calc-panel__subtitle {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 1px;
+}
+.calc-panel__body { padding: 20px; }
+
+/* ══ Encabezado del sistema ══════════════════════════════════════════════════ */
+.sistema-hero {
+  background: linear-gradient(135deg, rgba(16,130,80,.08) 0%, rgba(16,130,80,.02) 100%);
+  border: 1px solid rgba(16,130,80,.2);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.sistema-hero__icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.sistema-hero__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sistema-hero__desc {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+/* ══ Inputs de área ══════════════════════════════════════════════════════════ */
+.area-input-block {
+  margin-bottom: 16px;
+}
+.area-input-block:last-child { margin-bottom: 0; }
+
+.area-input-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.area-input-icon {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.area-input-icon--parqueo   { background: rgba(var(--theme-accent-rgb, 86,83,148),.1); color: var(--theme-accent); }
+.area-input-icon--transit   { background: rgba(34,139,230,.1); color: #228be6; }
+.area-input-icon--rampa     { background: rgba(249,115,22,.1); color: #f97316; }
+
+.area-input-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.area-input-hint {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.area-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.area-input-row input {
+  flex: 1;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  padding: 10px 14px !important;
+  border-radius: 10px !important;
+  text-align: right;
+  color: var(--ink);
+}
+.area-input-row .unit-badge {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* ══ Separador visual ════════════════════════════════════════════════════════ */
+.calc-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
+/* ══ Resultados ═════════════════════════════════════════════════════════════ */
+.result-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink-soft);
+}
+.result-empty__icon {
+  font-size: 40px;
+  opacity: .35;
+  display: block;
+  margin-bottom: 10px;
+}
+.result-empty__text {
+  font-size: 13px;
+}
+
+/* Tabla de resultados */
+.res-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.res-table thead th {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+.res-table thead th.num { text-align: right; }
+.res-table tbody td {
+  padding: 11px 12px;
+  border-bottom: 1px solid rgba(14,17,23,.05);
+  font-size: 13px;
+  vertical-align: top;
+}
+.res-table tbody tr:last-child td { border-bottom: none; }
+.res-table tbody tr:hover td { background: rgba(16,130,80,.03); }
+.res-table .num { text-align: right; }
+
+.res-funcion-badge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(16,130,80,.1);
+  color: #108250;
+  margin-bottom: 3px;
+}
+.res-producto-name {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 13px;
+}
+.res-producto-meta {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.res-kg {
+  font-size: 15px;
+  font-weight: 700;
+  color: #108250;
+}
+.res-kg--zero {
+  color: var(--ink-soft);
+  font-weight: 400;
+  font-size: 13px;
+}
+.res-kg-range {
+  font-size: 10px;
+  color: var(--ink-soft);
+  display: block;
+  margin-top: 1px;
+}
+
+/* Total strip */
+.res-total-strip {
+  background: rgba(16,130,80,.07);
+  border: 1px solid rgba(16,130,80,.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.res-total-item__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #108250;
+  margin-bottom: 3px;
+}
+.res-total-item__value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.res-total-item__unit {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-left: 3px;
+}
+
+/* Sin datos de consumo */
+.no-consumo-warn {
+  font-size: 11px;
+  color: #e67e22;
+  background: rgba(230,126,34,.08);
+  border: 1px solid rgba(230,126,34,.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  display: inline-block;
+  margin-top: 2px;
+}
+
+/* ══ Descripción adicional ════════════════════════════════════════════════════ */
+.desc-field {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--card);
+  resize: vertical;
+  min-height: 68px;
+  outline: none;
+  transition: border-color .15s;
+}
+.desc-field:focus { border-color: #108250; box-shadow: 0 0 0 3px rgba(16,130,80,.12); }
+
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'ingenieria:sistema_detail' sistema.pk %}" class="btn btn-ghost btn-sm">← Volver al sistema</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- ══ Hero del sistema ══════════════════════════════════════════════════════ -->
+<div class="sistema-hero fade-up">
+  <span class="sistema-hero__icon">🧮</span>
+  <div>
+    <div class="sistema-hero__name">{{ sistema.nombre }}</div>
+    <div class="sistema-hero__desc">
+      {{ sistema.descripcion|default:"Calcula el consumo de productos según las áreas a tratar." }}
+    </div>
+  </div>
+</div>
+
+<div class="calc-grid fade-up">
+
+  <!-- ══ PANEL IZQUIERDO — Inputs ════════════════════════════════════════════ -->
+  <div>
+
+    <!-- Áreas a tratar -->
+    <div class="calc-panel" style="margin-bottom:16px;">
+      <div class="calc-panel__head">
+        <div class="calc-panel__icon">📐</div>
+        <div>
+          <div class="calc-panel__title">Áreas a tratar</div>
+          <div class="calc-panel__subtitle">Ingresa los metros cuadrados por tipo de área</div>
+        </div>
+      </div>
+      <div class="calc-panel__body">
+
+        <!-- Parqueo -->
+        <div class="area-input-block">
+          <div class="area-input-label">
+            <div class="area-input-icon area-input-icon--parqueo">🅿</div>
+            <div>
+              <div class="area-input-name">Área de parqueo</div>
+              <div class="area-input-hint">Zonas de estacionamiento con carga vehicular</div>
+            </div>
+          </div>
+          <div class="area-input-row">
+            <input type="number" id="areaParqueo" class="form-control" min="0" step="0.1" value="0" placeholder="0">
+            <span class="unit-badge">m²</span>
+          </div>
+        </div>
+
+        <hr class="calc-divider">
+
+        <!-- Transitable -->
+        <div class="area-input-block">
+          <div class="area-input-label">
+            <div class="area-input-icon area-input-icon--transit">🚶</div>
+            <div>
+              <div class="area-input-name">Área transitable</div>
+              <div class="area-input-hint">Zonas peatonales o de circulación a pie</div>
+            </div>
+          </div>
+          <div class="area-input-row">
+            <input type="number" id="areaTransitable" class="form-control" min="0" step="0.1" value="0" placeholder="0">
+            <span class="unit-badge">m²</span>
+          </div>
+        </div>
+
+        <hr class="calc-divider">
+
+        <!-- Rampa -->
+        <div class="area-input-block">
+          <div class="area-input-label">
+            <div class="area-input-icon area-input-icon--rampa">⬆</div>
+            <div>
+              <div class="area-input-name">Rampa / arranque / frenado</div>
+              <div class="area-input-hint">Zonas con alta carga dinámica y abrasión</div>
+            </div>
+          </div>
+          <div class="area-input-row">
+            <input type="number" id="areaRampa" class="form-control" min="0" step="0.1" value="0" placeholder="0">
+            <span class="unit-badge">m²</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Contexto del lugar -->
+    <div class="calc-panel">
+      <div class="calc-panel__head">
+        <div class="calc-panel__icon">📝</div>
+        <div>
+          <div class="calc-panel__title">Descripción del lugar</div>
+          <div class="calc-panel__subtitle">Opcional — ayuda para la cotización</div>
+        </div>
+      </div>
+      <div class="calc-panel__body">
+        <div style="margin-bottom:12px;">
+          <label style="font-size:12px;font-weight:600;color:var(--ink);display:block;margin-bottom:6px;">Descripción del lugar / proyecto</label>
+          <textarea id="descLugar" class="desc-field" placeholder="Ej: Parqueadero cubierto nivel -1, superficie de concreto existente, uso comercial intensivo..."></textarea>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ink);display:block;margin-bottom:6px;">Condición del sustrato</label>
+          <select id="condicionSustrato" class="form-select" style="font-size:13px;">
+            <option value="">— Seleccionar —</option>
+            <option value="nuevo">Concreto nuevo (≥ 28 días)</option>
+            <option value="existente_liso">Concreto existente liso</option>
+            <option value="existente_rugoso">Concreto existente rugoso (shot blasted)</option>
+            <option value="mamposteria">Mampostería / yeso / mortero</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ PANEL DERECHO — Resultados ════════════════════════════════════════ -->
+  <div class="calc-panel">
+    <div class="calc-panel__head">
+      <div class="calc-panel__icon">📊</div>
+      <div>
+        <div class="calc-panel__title">Consumo estimado de productos</div>
+        <div class="calc-panel__subtitle" id="resSubtitle">Ingresa las áreas para ver el consumo</div>
+      </div>
+    </div>
+    <div class="calc-panel__body" style="padding:0;">
+
+      <!-- Estado vacío -->
+      <div id="resultEmpty" class="result-empty">
+        <span class="result-empty__icon">⬤</span>
+        <div class="result-empty__text">Ingresa el área en al menos un tipo de zona<br>para calcular el consumo de productos.</div>
+      </div>
+
+      <!-- Tabla de resultados (oculta hasta calcular) -->
+      <div id="resultTable" style="display:none;">
+        <div style="overflow-x:auto;">
+          <table class="res-table">
+            <thead>
+              <tr>
+                <th>Producto / capa</th>
+                <th class="num" style="color:var(--theme-accent);">🅿 Parqueo</th>
+                <th class="num" style="color:#228be6;">🚶 Transitable</th>
+                <th class="num" style="color:#f97316;">⬆ Rampa</th>
+                <th class="num" style="color:#108250;">Total</th>
+              </tr>
+            </thead>
+            <tbody id="resRows"></tbody>
+          </table>
+        </div>
+
+        <!-- Total general -->
+        <div style="padding:16px 16px 20px;">
+          <div class="res-total-strip" id="resTotalStrip">
+            <div class="res-total-item">
+              <div class="res-total-item__label">🅿 Parqueo total</div>
+              <div><span class="res-total-item__value" id="totalParqueo">0</span><span class="res-total-item__unit">m²</span></div>
+            </div>
+            <div class="res-total-item">
+              <div class="res-total-item__label">🚶 Transitable total</div>
+              <div><span class="res-total-item__value" id="totalTransitable">0</span><span class="res-total-item__unit">m²</span></div>
+            </div>
+            <div class="res-total-item">
+              <div class="res-total-item__label">⬆ Rampa total</div>
+              <div><span class="res-total-item__value" id="totalRampa">0</span><span class="res-total-item__unit">m²</span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;font-size:11px;color:var(--ink-soft);line-height:1.7;">
+            ⚠ Los consumos son estimados. El consumo real puede variar según la rugosidad del sustrato,
+            la temperatura y la aplicación. Consultar ficha técnica de cada producto.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ Tabla de productos del sistema (referencia técnica) ═════════════════ -->
+{% if subsistemas %}
+<div class="calc-panel fade-up" style="margin-top:24px;">
+  <div class="calc-panel__head">
+    <div class="calc-panel__icon">📋</div>
+    <div>
+      <div class="calc-panel__title">Composición del sistema — capas</div>
+      <div class="calc-panel__subtitle">Datos técnicos de cada producto / capa</div>
+    </div>
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="res-table">
+      <thead>
+        <tr>
+          <th>Función</th>
+          <th>Producto / capa</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th class="num">Capas parqueo</th>
+          <th class="num">Capas transit.</th>
+          <th class="num">Capas rampa</th>
+          <th class="num">Consumo (g/m²/capa)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in subsistemas %}
+        <tr>
+          <td>
+            {% if s.funcion %}
+            <span class="res-funcion-badge">{{ s.funcion }}</span>
+            {% else %}<span style="color:var(--ink-soft);font-size:11px;">—</span>{% endif %}
+          </td>
+          <td>
+            <div class="res-producto-name">{{ s.nombre }}</div>
+            {% if s.superficie %}<div class="res-producto-meta">{{ s.superficie }}</div>{% endif %}
+          </td>
+          <td style="font-size:12px;">{{ s.get_tipo_producto_display|default:"—" }}</td>
+          <td style="font-size:12px;">{{ s.get_estado_producto_display|default:"—" }}</td>
+          <td class="num" style="font-weight:700;">{{ s.capas_parqueo|default:"—" }}</td>
+          <td class="num" style="font-weight:700;">{{ s.capas_transitable|default:"—" }}</td>
+          <td class="num" style="font-weight:700;">{{ s.capas_rampa|default:"—" }}</td>
+          <td class="num">
+            {% if s.consumo_min_g_m2 and s.consumo_max_g_m2 %}
+              <strong>{{ s.consumo_min_g_m2|floatformat:0 }} – {{ s.consumo_max_g_m2|floatformat:0 }}</strong>
+            {% elif s.consumo_min_g_m2 %}
+              <strong>{{ s.consumo_min_g_m2|floatformat:0 }}</strong>
+            {% else %}
+              <span class="no-consumo-warn">Sin datos</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const SUBS = {{ subsistemas_json|safe }};
+
+  const inpParqueo    = document.getElementById('areaParqueo');
+  const inpTransit    = document.getElementById('areaTransitable');
+  const inpRampa      = document.getElementById('areaRampa');
+  const resEmpty      = document.getElementById('resultEmpty');
+  const resTable      = document.getElementById('resultTable');
+  const resRows       = document.getElementById('resRows');
+  const resSubtitle   = document.getElementById('resSubtitle');
+  const totalParqueo  = document.getElementById('totalParqueo');
+  const totalTransit  = document.getElementById('totalTransitable');
+  const totalRampa    = document.getElementById('totalRampa');
+
+  function fmt(kg) {
+    if (kg === null || kg === undefined) return null;
+    if (kg === 0) return '0';
+    if (kg < 1) return (kg * 1000).toFixed(0) + ' g';
+    return kg.toFixed(1) + ' kg';
+  }
+
+  function calcKg(consumo_min, consumo_max, capas, area_m2) {
+    if (!consumo_min && !consumo_max) return null;
+    if (!capas || !area_m2) return 0;
+    const avg = consumo_max ? ((consumo_min + consumo_max) / 2) : consumo_min;
+    return (avg * capas * area_m2) / 1000;
+  }
+
+  function kgRange(consumo_min, consumo_max, capas, area_m2) {
+    if (!consumo_min || !capas || !area_m2) return null;
+    const lo = (consumo_min * capas * area_m2) / 1000;
+    if (!consumo_max || consumo_max === consumo_min) return null;
+    const hi = (consumo_max * capas * area_m2) / 1000;
+    return `${lo.toFixed(1)} – ${hi.toFixed(1)} kg`;
+  }
+
+  function calcular() {
+    const ap = parseFloat(inpParqueo.value) || 0;
+    const at = parseFloat(inpTransit.value) || 0;
+    const ar = parseFloat(inpRampa.value) || 0;
+    const totalArea = ap + at + ar;
+
+    if (totalArea <= 0) {
+      resEmpty.style.display = '';
+      resTable.style.display = 'none';
+      resSubtitle.textContent = 'Ingresa las áreas para ver el consumo';
+      return;
+    }
+
+    resEmpty.style.display = 'none';
+    resTable.style.display = '';
+
+    // Update total areas
+    totalParqueo.textContent = ap.toLocaleString('es-CO');
+    totalTransit.textContent = at.toLocaleString('es-CO');
+    totalRampa.textContent   = ar.toLocaleString('es-CO');
+
+    resSubtitle.textContent = `Área total: ${totalArea.toLocaleString('es-CO')} m²`;
+
+    // Build rows
+    resRows.innerHTML = '';
+    SUBS.forEach(s => {
+      const kgP = calcKg(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_parqueo, ap);
+      const kgT = calcKg(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_transitable, at);
+      const kgR = calcKg(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_rampa, ar);
+
+      const kgTotal = [kgP, kgT, kgR].reduce((acc, v) => acc + (v || 0), 0);
+      const hasData = s.consumo_min_g_m2 !== null;
+
+      const sinDatos = '<span class="no-consumo-warn" style="font-size:10px;">Sin datos</span>';
+
+      const cellP = !hasData ? sinDatos : (kgP === null ? '—' : kgP === 0 ? '<span class="res-kg--zero">—</span>' :
+        `<span class="res-kg">${fmt(kgP)}</span>${kgRange(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_parqueo, ap) ? `<span class="res-kg-range">${kgRange(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_parqueo, ap)}</span>` : ''}`);
+
+      const cellT = !hasData ? sinDatos : (kgT === null ? '—' : kgT === 0 ? '<span class="res-kg--zero">—</span>' :
+        `<span class="res-kg">${fmt(kgT)}</span>${kgRange(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_transitable, at) ? `<span class="res-kg-range">${kgRange(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_transitable, at)}</span>` : ''}`);
+
+      const cellR = !hasData ? sinDatos : (kgR === null ? '—' : kgR === 0 ? '<span class="res-kg--zero">—</span>' :
+        `<span class="res-kg">${fmt(kgR)}</span>${kgRange(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_rampa, ar) ? `<span class="res-kg-range">${kgRange(s.consumo_min_g_m2, s.consumo_max_g_m2, s.capas_rampa, ar)}</span>` : ''}`);
+
+      const cellTot = !hasData ? sinDatos :
+        `<span class="res-kg" style="font-size:17px;">${fmt(kgTotal)}</span>`;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          ${s.funcion ? `<span class="res-funcion-badge">${s.funcion}</span><br>` : ''}
+          <span class="res-producto-name">${s.nombre}</span>
+          ${s.tipo_producto ? `<div class="res-producto-meta">${s.tipo_producto}${s.estado_producto ? ' · ' + s.estado_producto : ''}</div>` : ''}
+        </td>
+        <td class="num">${cellP}</td>
+        <td class="num">${cellT}</td>
+        <td class="num">${cellR}</td>
+        <td class="num">${cellTot}</td>
+      `;
+      resRows.appendChild(tr);
+    });
+  }
+
+  [inpParqueo, inpTransit, inpRampa].forEach(inp => {
+    inp.addEventListener('input', calcular);
+  });
+
+  // Calcular al cargar por si hay valores preestablecidos
+  calcular();
+})();
+</script>
+{% endblock %}

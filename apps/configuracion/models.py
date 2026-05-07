@@ -94,7 +94,11 @@ class UnidadAlianza(models.Model):
     unidad      = models.ForeignKey(UnidadNegocioInfo, on_delete=models.CASCADE, related_name="alianzas")
     nombre      = models.CharField(max_length=200, verbose_name="Nombre del aliado")
     descripcion = models.TextField(blank=True, default="", verbose_name="Descripción")
-    url         = models.URLField(blank=True, default="", verbose_name="Sitio web")
+    imagen      = models.ImageField(
+        upload_to="configuracion/alianzas/",
+        blank=True, null=True,
+        verbose_name="Logo / imagen",
+    )
     orden       = models.PositiveIntegerField(default=0)
 
     class Meta:

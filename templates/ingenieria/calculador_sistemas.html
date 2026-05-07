@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Calculador de Sistemas{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Calculador{% endblock %}
+{% block breadcrumb %}Catálogo de Sistemas{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'ingenieria:despieces_guardados' %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+  <i class="bi bi-archive"></i>
+  <span>Guardados</span>
+  {% if total_guardados %}<span class="badge bg-secondary ms-1">{{ total_guardados }}</span>{% endif %}
+</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Barra de búsqueda ─────────────────────────────────────────────────── */
+.calc-search-wrap {
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.10);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+}
+.calc-search-input {
+  border-radius: 8px;
+  border: 1.5px solid rgba(0,0,0,.12);
+  font-size: 15px;
+  height: 42px;
+  padding-left: 40px;
+}
+.calc-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #888;
+  pointer-events: none;
+}
+.calc-filter-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.calc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  text-decoration: none;
+  transition: all .15s;
+}
+.calc-chip--all {
+  background: var(--theme-accent);
+  color: #fff;
+  border-color: var(--theme-accent);
+}
+.calc-chip--all.inactive {
+  background: rgba(0,0,0,.06);
+  color: #555;
+  border-color: transparent;
+}
+.calc-chip--all.inactive:hover { background: rgba(0,0,0,.10); }
+.calc-chip--linea {
+  background: rgba(0,0,0,.05);
+  color: #444;
+  border-color: transparent;
+}
+.calc-chip--linea.active {
+  background: var(--theme-accent-pale,#e8f0fe);
+  color: var(--theme-accent);
+  border-color: var(--theme-accent);
+}
+.calc-chip--linea:hover { background: rgba(0,0,0,.09); }
+
+/* ── Grid de tarjetas ──────────────────────────────────────────────────── */
+.calc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+.calc-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: box-shadow .2s, transform .18s, border-color .2s;
+}
+.calc-card:hover {
+  box-shadow: 0 6px 24px rgba(0,0,0,.10);
+  border-color: rgba(0,0,0,.13);
+  transform: translateY(-2px);
+}
+.calc-card__head {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  background: linear-gradient(135deg, var(--theme-accent-pale,#e8f0fe) 0%, rgba(255,255,255,0) 80%);
+  border-top: 3px solid var(--theme-accent);
+}
+.calc-card__codigo {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  line-height: 1;
+  color: var(--theme-accent);
+  margin-bottom: 4px;
+}
+.calc-card__nombre {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+  line-height: 1.3;
+}
+.calc-card__body {
+  padding: 14px 18px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.calc-card__desc {
+  font-size: 13px;
+  color: #666;
+  flex: 1;
+}
+.calc-card__meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.calc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(0,0,0,.06);
+  color: #555;
+}
+.calc-card__footer {
+  padding: 12px 18px;
+  border-top: 1px solid rgba(0,0,0,.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fafafa;
+}
+.calc-card__subsistemas {
+  font-size: 12px;
+  color: #888;
+}
+.btn-calc-primary {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: var(--theme-accent);
+  color: #fff;
+  border: none;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: opacity .15s;
+}
+.btn-calc-primary:hover { opacity: .88; color: #fff; }
+
+/* ── Empty state ──────────────────────────────────────────────────────── */
+.calc-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #888;
+}
+.calc-empty i { font-size: 48px; margin-bottom: 12px; opacity: .4; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="calc-search-wrap">
+  <form method="get" action="">
+    <div class="position-relative">
+      <i class="bi bi-search calc-search-icon"></i>
+      <input type="text" name="q" value="{{ q }}"
+             class="form-control calc-search-input"
+             placeholder="Buscar sistema por nombre o código…"
+             autocomplete="off">
+    </div>
+    <!-- Chips de filtro por línea -->
+    <div class="calc-filter-chips">
+      <a href="?{% if q %}q={{ q }}{% endif %}"
+         class="calc-chip calc-chip--all {% if not linea_activa %}{% else %}inactive{% endif %}">
+        <i class="bi bi-grid-3x3-gap"></i> Todos
+      </a>
+      {% for val, label in linea_choices %}
+      <a href="?linea={{ val }}{% if q %}&q={{ q }}{% endif %}"
+         class="calc-chip calc-chip--linea {% if linea_activa == val %}active{% endif %}">
+        {{ label }}
+      </a>
+      {% endfor %}
+    </div>
+  </form>
+</div>
+
+{% if sistemas %}
+<div class="calc-grid">
+  {% for sistema in sistemas %}
+  <div class="calc-card">
+    <div class="calc-card__head">
+      <div class="calc-card__codigo">{{ sistema.codigo }}</div>
+      <div class="calc-card__nombre">{{ sistema.nombre }}</div>
+    </div>
+    <div class="calc-card__body">
+      {% if sistema.descripcion %}
+      <div class="calc-card__desc">{{ sistema.descripcion|truncatechars:100 }}</div>
+      {% endif %}
+      <div class="calc-card__meta">
+        <span class="calc-badge"><i class="bi bi-diagram-3"></i> {{ sistema.linea_negocio }}</span>
+        <span class="calc-badge"><i class="bi bi-layers"></i> {{ sistema.subsistemas.count }} subsistemas</span>
+      </div>
+    </div>
+    <div class="calc-card__footer">
+      <span class="calc-card__subsistemas">
+        {% for sub in sistema.subsistemas.all|slice:":3" %}
+        <span class="text-muted">{{ sub.codigo }}</span>{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+        {% if sistema.subsistemas.count > 3 %}…{% endif %}
+      </span>
+      <a href="{% url 'ingenieria:calculador_seleccionar' sistema.pk %}" class="btn-calc-primary">
+        <i class="bi bi-calculator"></i> Calcular
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="calc-empty">
+  <div><i class="bi bi-search"></i></div>
+  <div class="fw-semibold mb-1">No se encontraron sistemas</div>
+  <div class="small">
+    {% if q %}Intenta con otro término de búsqueda.{% else %}No hay sistemas constructivos activos.{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if total_borradores %}
+<div class="mt-4 text-end">
+  <a href="{% url 'ingenieria:despieces_guardados' %}?estado=BORRADOR" class="text-muted small">
+    <i class="bi bi-file-earmark-text"></i> {{ total_borradores }} borrador{{ total_borradores|pluralize:"es" }} pendiente{{ total_borradores|pluralize:"s" }}
+  </a>
+</div>
+{% endif %}
+{% endblock %}

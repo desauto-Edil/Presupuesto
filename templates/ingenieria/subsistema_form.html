@@ -6,299 +6,746 @@
 {% block page_title %}{% if form.instance.pk %}Editar subsistema{% else %}Nuevo subsistema{% endif %}{% endblock %}
 {% block breadcrumb %}
   <a href="{% url 'ingenieria:sistema_list' %}" style="color:inherit;text-decoration:none;">Sistemas</a>
-  · {% if form.instance.pk %}Editar subsistema{% else %}Nuevo subsistema{% endif %}
+  · {% if form.instance.pk %}Editar{% else %}Nuevo{% endif %}
 {% endblock %}
 
 {% block extra_head %}
 <style>
-  .sub-section {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 20px;
-  }
-  .sub-section__head {
-    background: var(--surface);
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .sub-section__title {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .07em;
-    color: var(--ink-soft);
-  }
-  .sub-section__body { padding: 16px; }
 
-  /* Tabla de filas */
-  .rows-table { width: 100%; border-collapse: collapse; }
-  .rows-table th {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: var(--ink-soft);
-    padding: 6px 8px;
-    border-bottom: 1px solid var(--border);
-    font-weight: 600;
-    text-align: left;
-  }
-  .rows-table td { padding: 5px 6px; vertical-align: middle; }
-  .rows-table tr:not(:last-child) td { border-bottom: 1px solid rgba(14,17,23,0.05); }
-  .rows-table input, .rows-table select {
-    font-size: 12px !important;
-    padding: 4px 8px !important;
-  }
-  .hint-code {
-    font-size: 10px;
-    color: var(--ink-soft);
-    font-family: monospace;
-    background: var(--surface);
-    border-radius: 4px;
-    padding: 6px 10px;
-    margin-top: 10px;
-    line-height: 1.6;
-  }
-  .formula-help {
-    font-size: 10.5px;
-    color: var(--ink-soft);
-    margin-top: 4px;
-    font-style: italic;
-  }
+/* ══ Corregir scroll: desactivar overflow bloqueante ════════════════════════ */
+html, body { overflow-y: auto !important; height: auto !important; }
+#appMain   { overflow: visible !important; }
+.panel     { overflow: visible !important; }
+
+/* ══ Bloque de sección ═══════════════════════════════════════════════════════ */
+.sf-block {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.sf-block__head {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sf-block__head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sf-block__num {
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  background: rgba(14,17,23,.06);
+  color: var(--ink-soft);
+  border: 1px solid rgba(14,17,23,.12);
+  font-size: 10px;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sf-block__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-soft);
+}
+.sf-block__body { padding: 18px 20px 16px; }
+
+/* Sección consumo — oculta por defecto */
+.sf-block--consumo { display: none; }
+.sf-block--consumo.visible { display: block; }
+
+/* ══ Campo con label ═════════════════════════════════════════════════════════ */
+.sf-field { display: flex; flex-direction: column; gap: 5px; }
+.sf-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.sf-label span { color: var(--ink); }
+
+/* ══ Nota hint ══════════════════════════════════════════════════════════════ */
+.sf-hint {
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border-left: 3px solid rgba(14,17,23,.15);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 12px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.sf-hint strong { color: var(--ink); font-weight: 700; }
+
+/* ══ Tabla de filas inline ══════════════════════════════════════════════════ */
+.rows-table { width: 100%; border-collapse: collapse; }
+.rows-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  text-align: left;
+  background: var(--surface);
+  white-space: nowrap;
+}
+.rows-table td {
+  padding: 5px 6px;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(14,17,23,.04);
+}
+.rows-table tr:last-child td { border-bottom: none; }
+.rows-table tbody tr:hover td { background: rgba(14,17,23,.03); }
+.rows-table input,
+.rows-table select { font-size: 12px !important; padding: 5px 8px !important; }
+
+/* ══ Consumo rango ══════════════════════════════════════════════════════════ */
+.consumo-range-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: end;
+}
+.consumo-range-sep {
+  padding-bottom: 9px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+/* ══ Checkboxes M2M ════════════════════════════════════════════════════════ */
+.m2m-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.m2m-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.m2m-item input[type=checkbox] { cursor: pointer; }
+
+/* ══ Vista previa imagen técnica ════════════════════════════════════════════ */
+.img-tecnica-preview {
+  max-height: 160px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+  background: var(--surface);
+  display: block;
+}
+.img-tecnica-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.img-tecnica-meta {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+/* ══ Tarjetas de subconjunto ════════════════════════════════════════════════ */
+.sq-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 14px;
+  background: var(--card);
+  overflow: hidden;
+  transition: box-shadow .15s;
+}
+.sq-card:focus-within {
+  box-shadow: 0 0 0 2px rgba(14,17,23,.08);
+}
+.sq-card__head {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sq-idx-badge {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: rgba(14,17,23,.07);
+  color: var(--ink-soft);
+  border: 1px solid rgba(14,17,23,.12);
+  font-size: 10px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sq-nombre {
+  flex: 1;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  padding: 4px 8px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: var(--ink) !important;
+  border-radius: 6px !important;
+  transition: border-color .15s, background .15s;
+  min-width: 0;
+}
+.sq-nombre:focus {
+  border-color: var(--border) !important;
+  background: var(--card) !important;
+  outline: none;
+}
+.sq-card__body {
+  padding: 14px 16px 12px;
+}
+.sq-desc {
+  font-size: 12px !important;
+  color: var(--ink-soft);
+  resize: vertical;
+  min-height: 36px;
+  margin-bottom: 12px;
+  padding: 6px 10px !important;
+}
+.sq-add-comp-btn {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sq-add-comp-btn:hover {
+  color: var(--ink);
+}
+.sq-empty-msg {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+  margin: 6px 0 10px;
+}
+#noSubconjuntosMsg {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+  text-align: center;
+  padding: 24px 0 8px;
+}
+
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-12 col-lg-10 col-xl-9">
+  <div class="col-12 col-lg-11 col-xl-10">
     <div class="panel fade-up">
       <div class="panel-header d-flex align-items-center justify-content-between">
-        <span style="font-size:16px; font-weight:700; color:var(--ink);">
-          {% if form.instance.pk %}Editar: {{ form.instance.nombre }}{% else %}Nuevo subsistema{% endif %}
-        </span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:15px;font-weight:700;color:var(--ink);">
+            {% if form.instance.pk %}{{ form.instance.nombre }}{% else %}Nuevo subsistema{% endif %}
+          </span>
+          {% if form.instance.pk %}
+          <span style="font-size:11px;color:var(--ink-soft);">{{ form.instance.sistema.nombre }}</span>
+          {% endif %}
+        </div>
         <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
       </div>
-      <div style="padding:24px;">
-        <form method="post" id="formSubsistema">
+
+      <div style="padding:22px 24px 28px;">
+        <form method="post" enctype="multipart/form-data" id="formSubsistema">
           {% csrf_token %}
 
           {% if form.non_field_errors %}
           <div class="msg-bar msg-error mb-3">{{ form.non_field_errors }}</div>
           {% endif %}
 
-          {# ── Datos básicos ── #}
-          <div class="sub-section">
-            <div class="sub-section__head">
-              <span class="sub-section__title">Datos del subsistema</span>
+          <!-- ══ 1. DATOS BÁSICOS ══════════════════════════════════════════ -->
+          <div class="sf-block">
+            <div class="sf-block__head">
+              <div class="sf-block__head-left">
+                <span class="sf-block__num">1</span>
+                <span class="sf-block__label">Datos del subsistema</span>
+              </div>
             </div>
-            <div class="sub-section__body">
-              <div class="mb-3">
-                <label class="form-label" style="font-size:12.5px;font-weight:600;">Sistema *</label>
-                {{ form.sistema }}
-                {% if form.sistema.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.sistema.errors.0 }}</div>{% endif %}
-              </div>
+            <div class="sf-block__body">
+
               <div class="row g-3 mb-3">
-                <div class="col-4">
-                  <label class="form-label" style="font-size:12.5px;font-weight:600;">Código *</label>
-                  {{ form.codigo }}
-                  {% if form.codigo.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.codigo.errors.0 }}</div>{% endif %}
-                </div>
-                <div class="col-8">
-                  <label class="form-label" style="font-size:12.5px;font-weight:600;">Nombre *</label>
-                  {{ form.nombre }}
-                  {% if form.nombre.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.nombre.errors.0 }}</div>{% endif %}
+                <div class="col-12">
+                  <div class="sf-field">
+                    <label class="sf-label">Sistema <span>*</span></label>
+                    {{ form.sistema }}
+                    {% if form.sistema.errors %}<div class="text-danger" style="font-size:11px;margin-top:2px;">{{ form.sistema.errors.0 }}</div>{% endif %}
+                  </div>
                 </div>
               </div>
-              <div class="mb-3">
-                <label class="form-label" style="font-size:12.5px;font-weight:600;">Descripción</label>
+
+              <div class="row g-3 mb-3">
+                <div class="col-3">
+                  <div class="sf-field">
+                    <label class="sf-label">Código <span>*</span></label>
+                    {{ form.codigo }}
+                    {% if form.codigo.errors %}<div class="text-danger" style="font-size:11px;">{{ form.codigo.errors.0 }}</div>{% endif %}
+                  </div>
+                </div>
+                <div class="col-7">
+                  <div class="sf-field">
+                    <label class="sf-label">Nombre <span>*</span></label>
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}<div class="text-danger" style="font-size:11px;">{{ form.nombre.errors.0 }}</div>{% endif %}
+                  </div>
+                </div>
+                <div class="col-2 d-flex align-items-end pb-1">
+                  <div class="form-check" style="margin-bottom:0;">
+                    {{ form.activo }}
+                    <label class="form-check-label" style="font-size:12px;font-weight:500;">Activo</label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sf-field mb-3">
+                <label class="sf-label">Descripción</label>
                 {{ form.descripcion }}
               </div>
-              <div class="form-check">
-                {{ form.activo }}
-                <label class="form-check-label" style="font-size:13px;">Subsistema activo</label>
+
+              <!-- Imagen técnica -->
+              <div class="sf-field">
+                <label class="sf-label">Imagen técnica
+                  <span style="font-weight:400;font-size:10.5px;">(opcional — diagrama, plano o foto del sistema)</span>
+                </label>
+                {% if form.instance.imagen_tecnica %}
+                <div class="img-tecnica-wrap" id="imgPreviewWrap">
+                  <img id="imgPreview" src="{{ form.instance.imagen_tecnica.url }}" class="img-tecnica-preview" alt="Imagen técnica">
+                  <div>
+                    <p class="img-tecnica-meta">Imagen actual. Selecciona un archivo nuevo para reemplazarla.</p>
+                    <p class="img-tecnica-meta" style="margin-top:2px;">{{ form.instance.imagen_tecnica.name }}</p>
+                  </div>
+                </div>
+                {% else %}
+                <div id="imgPreviewWrap" style="display:none;">
+                  <img id="imgPreview" class="img-tecnica-preview" alt="Vista previa">
+                </div>
+                {% endif %}
+                {{ form.imagen_tecnica }}
+                {% if form.imagen_tecnica.errors %}<div class="text-danger" style="font-size:11px;">{{ form.imagen_tecnica.errors.0 }}</div>{% endif %}
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ══ SECCIÓN CONSUMO — DATOS TÉCNICOS ═══════════════════════════ -->
+          <div class="sf-block sf-block--consumo" id="seccionConsumo">
+            <div class="sf-block__head">
+              <div class="sf-block__head-left">
+                <span class="sf-block__num">◉</span>
+                <span class="sf-block__label">Datos técnicos del sistema</span>
+              </div>
+            </div>
+            <div class="sf-block__body">
+              <div class="row g-3 mb-3">
+                <div class="col-4">
+                  <div class="sf-field">
+                    <label class="sf-label">Tipo de componente</label>
+                    {{ form.tipo_producto }}
+                  </div>
+                </div>
+                <div class="col-8">
+                  <div class="sf-field">
+                    <label class="sf-label">Resistencia química</label>
+                    {{ form.resistencia_quimica }}
+                  </div>
+                </div>
+              </div>
+              <div class="row g-3 mb-3">
+                <div class="col-3">
+                  <div class="sf-field">
+                    <label class="sf-label">Temperatura mínima (°C)</label>
+                    {{ form.temperatura_min }}
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="sf-field">
+                    <label class="sf-label">Temperatura máxima (°C)</label>
+                    {{ form.temperatura_max }}
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="sf-field">
+                    <label class="sf-label">Aplicación</label>
+                    {{ form.interior_exterior }}
+                  </div>
+                </div>
+              </div>
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="sf-label" style="display:block;margin-bottom:8px;">
+                    Consumo de referencia
+                    <span style="font-size:10.5px;font-weight:400;color:var(--ink-soft);">(g/m² por capa — orientativo para la calculadora)</span>
+                  </label>
+                  <div class="consumo-range-row">
+                    <div class="sf-field">
+                      <label class="sf-label">Mínimo</label>
+                      {{ form.consumo_min_g_m2 }}
+                    </div>
+                    <div class="consumo-range-sep">—</div>
+                    <div class="sf-field">
+                      <label class="sf-label">Máximo</label>
+                      {{ form.consumo_max_g_m2 }}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {# ── Variables de entrada ── #}
-          <div class="sub-section">
-            <div class="sub-section__head">
-              <span class="sub-section__title">Variables de entrada</span>
-              <button type="button" class="btn btn-ghost btn-xs" id="btnAddVar">+ Variable</button>
+          <!-- ══ CONSUMO — FUNCIONES (M2M) ══════════════════════════════════ -->
+          <div class="sf-block sf-block--consumo" id="seccionFunciones">
+            <div class="sf-block__head">
+              <div class="sf-block__head-left">
+                <span class="sf-block__num"><i class="bi bi-check2-square"></i></span>
+                <span class="sf-block__label">Funciones del sistema</span>
+              </div>
             </div>
-            <div class="sub-section__body">
+            <div class="sf-block__body">
+              {% if funciones_catalogo %}
+              <div class="m2m-grid">
+                {% for f in funciones_catalogo %}
+                <label class="m2m-item">
+                  <input type="checkbox" name="funciones[]" value="{{ f.pk }}"
+                    {% if f.pk in funciones_seleccionadas %}checked{% endif %}>
+                  {{ f.nombre }}
+                </label>
+                {% endfor %}
+              </div>
+              {% else %}
+              <p style="font-size:12px;color:var(--ink-soft);font-style:italic;">
+                Sin funciones registradas.
+              </p>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- ══ CONSUMO — PROBLEMAS QUE RESUELVE (M2M) ════════════════════ -->
+          <div class="sf-block sf-block--consumo" id="seccionProblemas">
+            <div class="sf-block__head">
+              <div class="sf-block__head-left">
+                <span class="sf-block__num"><i class="bi bi-tools"></i></span>
+                <span class="sf-block__label">Problemas que resuelve</span>
+              </div>
+            </div>
+            <div class="sf-block__body">
+              {% if problemas_catalogo %}
+              <div class="m2m-grid">
+                {% for p in problemas_catalogo %}
+                <label class="m2m-item">
+                  <input type="checkbox" name="problemas_resuelve[]" value="{{ p.pk }}"
+                    {% if p.pk in problemas_seleccionados %}checked{% endif %}>
+                  {{ p.nombre }}
+                </label>
+                {% endfor %}
+              </div>
+              {% else %}
+              <p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Sin problemas en catálogo.</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- ══ CONSUMO — SUPERFICIES COMPATIBLES (M2M) ═══════════════════ -->
+          <div class="sf-block sf-block--consumo" id="seccionSuperficies">
+            <div class="sf-block__head">
+              <div class="sf-block__head-left">
+                <span class="sf-block__num"><i class="bi bi-layers"></i></span>
+                <span class="sf-block__label">Superficies compatibles</span>
+              </div>
+            </div>
+            <div class="sf-block__body">
+              {% if superficies_catalogo %}
+              <div class="m2m-grid">
+                {% for s in superficies_catalogo %}
+                <label class="m2m-item">
+                  <input type="checkbox" name="superficies_compatibles[]" value="{{ s.pk }}"
+                    {% if s.pk in superficies_seleccionadas %}checked{% endif %}>
+                  {{ s.nombre }}
+                </label>
+                {% endfor %}
+              </div>
+              {% else %}
+              <p style="font-size:12px;color:var(--ink-soft);font-style:italic;">Sin superficies en catálogo.</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- ══ CONSUMO — PRODUCTOS TÉCNICOS ASOCIADOS ════════════════════ -->
+          <div class="sf-block sf-block--consumo" id="seccionProductosTecnicos">
+            <div class="sf-block__head">
+              <div class="sf-block__head-left">
+                <span class="sf-block__num"><i class="bi bi-box-seam"></i></span>
+                <span class="sf-block__label">Productos técnicos asociados</span>
+              </div>
+              <button type="button" class="btn btn-ghost btn-xs" id="btnAddPT">
+                <i class="bi bi-plus"></i> Agregar producto técnico
+              </button>
+            </div>
+            <div class="sf-block__body">
               <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
-                Define qué datos ingresará el usuario al calcular el despiece.
-                Ej: <code>total_powergrip</code>, <code>desperdicio</code>.
+                Productos de referencia que puede usar este sistema. No son capas de cálculo.
               </p>
-              <table class="rows-table" id="tbVars">
-                <thead>
-                  <tr>
-                    <th style="width:150px;">Variable <span style="color:var(--red)">*</span></th>
-                    <th>Etiqueta <span style="color:var(--red)">*</span></th>
-                    <th style="width:80px;">Unidad</th>
-                    <th style="width:90px;">Valor por defecto</th>
-                    <th style="width:36px;"></th>
-                  </tr>
-                </thead>
-                <tbody id="varRows">
-                  {% for v in variables_existentes %}
-                  <tr class="var-row">
-                    <td><input type="text" name="var_variable[]" class="form-control form-control-sm" value="{{ v.variable }}" placeholder="mi_variable" style="font-family:monospace;" required></td>
-                    <td><input type="text" name="var_label[]" class="form-control form-control-sm" value="{{ v.label }}" placeholder="Etiqueta legible" required></td>
-                    <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" value="{{ v.unidad }}" placeholder="und"></td>
-                    <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="{{ v.valor_default }}"></td>
-                    <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-              {% if not variables_existentes %}
-              <p id="noVarsMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;">
-                Sin variables definidas. Usa "+ Variable" para agregar.
+              <div style="overflow-x:auto;">
+                <table class="rows-table" id="tbPT">
+                  <thead>
+                    <tr>
+                      <th style="width:28px;">#</th>
+                      <th style="min-width:200px;">Nombre comercial *</th>
+                      <th style="width:160px;">Estado físico</th>
+                      <th style="width:100px;">Consumo mín.</th>
+                      <th style="width:100px;">Consumo máx.</th>
+                      <th style="width:70px;">Unidad</th>
+                      <th style="width:36px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="ptRows">
+                    {% for pt in productos_tecnicos_existentes %}
+                    <tr class="pt-row">
+                      <td style="color:var(--ink-soft);font-size:11px;text-align:center;">{{ forloop.counter }}</td>
+                      <td><input type="text" name="pt_nombre[]" class="form-control form-control-sm" value="{{ pt.nombre }}" placeholder="Ej: KÖSTER KB-Pox 008" required></td>
+                      <td>
+                        <select name="pt_estado_fisico[]" class="form-select form-select-sm">
+                          <option value="">— Estado físico —</option>
+                          {% for val, label in estado_fisico_choices %}
+                          <option value="{{ val }}" {% if val == pt.estado_fisico %}selected{% endif %}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      </td>
+                      <td><input type="number" step="0.01" min="0" name="pt_consumo_min[]" class="form-control form-control-sm" value="{{ pt.consumo_min_g_m2|default:'' }}" placeholder="200"></td>
+                      <td><input type="number" step="0.01" min="0" name="pt_consumo_max[]" class="form-control form-control-sm" value="{{ pt.consumo_max_g_m2|default:'' }}" placeholder="400"></td>
+                      <td><input type="text" name="pt_unidad[]" class="form-control form-control-sm" value="{{ pt.unidad }}" placeholder="kg"></td>
+                      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% if not productos_tecnicos_existentes %}
+              <p id="noPTMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;">
+                Sin productos técnicos. Usa "Agregar producto técnico" para registrar los productos del sistema.
               </p>
               {% endif %}
             </div>
           </div>
 
-          {# ── Componentes de la receta ── #}
-          <div class="sub-section">
-            <div class="sub-section__head">
-              <span class="sub-section__title">Componentes del conjunto (receta técnica)</span>
-              <button type="button" class="btn btn-ghost btn-xs" id="btnAddComp">+ Componente</button>
+          <!-- ══ CONSUMO — COMPONENTES DE LA MEZCLA ════════════════════════ -->
+          <div class="sf-block sf-block--consumo" id="seccionComponentesQuimicos">
+            <div class="sf-block__head">
+              <div class="sf-block__head-left">
+                <span class="sf-block__num"><i class="bi bi-diagram-2"></i></span>
+                <span class="sf-block__label">Componentes de la mezcla</span>
+                <span style="font-size:10.5px;color:var(--ink-soft);margin-left:6px;">(solo bi/multicomponente)</span>
+              </div>
+              <button type="button" class="btn btn-ghost btn-xs" id="btnAddCQ">
+                <i class="bi bi-plus"></i> Componente
+              </button>
             </div>
-            <div class="sub-section__body">
-
-              <div class="hint-code">
-                <strong>Fórmulas de ejemplo</strong><br>
-                · <code>total_powergrip * tornilleria * desperdicio</code><br>
-                · <code>((total_powergrip * 0.09) / 20) * desperdicio</code><br>
-                · <code>limpiador / 2</code> &nbsp;← usa variable de cascada de fila anterior<br>
-                · <code>area_m2 * 1.05</code> &nbsp;← <code>area_m2</code> y <code>perimetro_ml</code> siempre disponibles
+            <div class="sf-block__body">
+              <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
+                Los porcentajes de todos los componentes deben sumar <strong>100%</strong>.
+              </p>
+              <div style="overflow-x:auto;">
+                <table class="rows-table" id="tbCQ">
+                  <thead>
+                    <tr>
+                      <th style="width:28px;">#</th>
+                      <th>Nombre componente *</th>
+                      <th style="width:160px;">Estado físico</th>
+                      <th style="width:100px;">% mezcla *</th>
+                      <th style="width:36px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="cqRows">
+                    {% for cq in componentes_quimicos_existentes %}
+                    <tr class="cq-row">
+                      <td style="color:var(--ink-soft);font-size:11px;text-align:center;">{{ forloop.counter }}</td>
+                      <td><input type="text" name="cq_nombre[]" class="form-control form-control-sm" value="{{ cq.nombre }}" placeholder="Ej: Comp. A (Base)" required></td>
+                      <td>
+                        <select name="cq_estado_fisico[]" class="form-select form-select-sm">
+                          <option value="">— Estado físico —</option>
+                          {% for val, label in estado_fisico_choices %}
+                          <option value="{{ val }}" {% if val == cq.estado_fisico %}selected{% endif %}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      </td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:4px;">
+                          <input type="number" step="0.01" min="0" max="100" name="cq_porcentaje[]" class="form-control form-control-sm" value="{{ cq.porcentaje }}" placeholder="60.00" required>
+                          <span style="font-size:12px;color:var(--ink-soft);">%</span>
+                        </div>
+                      </td>
+                      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
               </div>
-
-              <div style="overflow-x:auto;margin-top:14px;">
-              <table class="rows-table" id="tbComps">
-                <thead>
-                  <tr>
-                    <th style="width:30px;">#</th>
-                    <th style="width:140px;">Código <span style="color:var(--red)">*</span></th>
-                    <th style="min-width:150px;">Nombre <span style="color:var(--red)">*</span></th>
-                    <th style="width:160px;">Categoría producto</th>
-                    <th style="min-width:220px;">Fórmula <span style="color:var(--red)">*</span></th>
-                    <th style="width:120px;">Variable salida</th>
-                    <th style="width:70px;">Unidad</th>
-                    <th style="width:130px;" title="Variable de entrada que divide el total del componente para calcular el rendimiento APU. Ej: total_powergrip">
-                      Ref. APU
-                      <span style="font-size:9px;font-weight:400;display:block;color:var(--ink-soft);margin-top:1px;">÷ para rendimiento</span>
-                    </th>
-                    <th style="width:70px;">Und. APU</th>
-                    <th style="width:36px;"></th>
-                  </tr>
-                </thead>
-                <tbody id="compRows">
-                  {% for c in componentes_existentes %}
-                  <tr class="comp-row" draggable="true">
-                    <td style="color:var(--ink-soft);font-size:11px;text-align:center;">{{ forloop.counter }}</td>
-                    <td><input type="text" name="comp_codigo[]" class="form-control form-control-sm" value="{{ c.codigo }}" placeholder="fijaciones_plus" style="font-family:monospace;" required></td>
-                    <td><input type="text" name="comp_nombre[]" class="form-control form-control-sm" value="{{ c.nombre }}" placeholder="Nombre del componente" required></td>
-                    <td>
-                      <select name="comp_categoria[]" class="form-select form-select-sm">
-                        <option value="">— Sin categoría —</option>
-                        {% for cat in categorias_producto %}
-                        <option value="{{ cat.pk }}" {% if cat.pk == c.categoria_id %}selected{% endif %}>{{ cat.nombre }}</option>
-                        {% endfor %}
-                      </select>
-                    </td>
-                    <td><input type="text" name="comp_formula[]" class="form-control form-control-sm" value="{{ c.formula_texto }}" placeholder="total * factor * desperdicio" required style="font-family:monospace;font-size:11px;"></td>
-                    <td><input type="text" name="comp_variable_salida[]" class="form-control form-control-sm" value="{{ c.variable_salida }}" placeholder="limpiador" style="font-family:monospace;"></td>
-                    <td><input type="text" name="comp_unidad[]" class="form-control form-control-sm" value="{{ c.unidad }}" placeholder="und"></td>
-                    <td><input type="text" name="comp_variable_referencia_apu[]" class="form-control form-control-sm" value="{{ c.variable_referencia_apu }}" placeholder="total_powergrip" style="font-family:monospace;font-size:10.5px;" title="Variable cuyo valor se usa como denominador del rendimiento APU"></td>
-                    <td><input type="text" name="comp_unidad_apu[]" class="form-control form-control-sm" value="{{ c.unidad_apu }}" placeholder="soporte"></td>
-                    <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+              <div id="cqTotal" style="margin-top:10px;font-size:12px;display:flex;align-items:center;gap:8px;">
+                <span style="color:var(--ink-soft);">Total:</span>
+                <strong id="cqTotalVal" style="color:var(--ink);">0%</strong>
+                <span id="cqTotalOk" style="display:none;color:#108250;font-size:11px;"><i class="bi bi-check-circle"></i> OK</span>
+                <span id="cqTotalErr" style="display:none;color:#c0392b;font-size:11px;"><i class="bi bi-exclamation-triangle"></i> Debe ser 100%</span>
               </div>
-
-              {% if not componentes_existentes %}
-              <p id="noCompsMsg" style="font-size:12px;color:var(--ink-soft);margin-top:12px;font-style:italic;">
-                Sin componentes definidos. Usa "+ Componente" para agregar las líneas del despiece.
+              {% if not componentes_quimicos_existentes %}
+              <p id="noCQMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;">
+                Sin componentes. Deja vacío para sistemas monocomponente.
               </p>
               {% endif %}
-
             </div>
           </div>
 
-          {# ── Reglas de cálculo APU ── #}
-          <div class="sub-section">
-            <div class="sub-section__head">
-              <span class="sub-section__title">Reglas de cálculo APU</span>
-              <button type="button" class="btn btn-ghost btn-xs" id="btnAddRegla">+ Regla</button>
-            </div>
-            <div class="sub-section__body">
+          <!-- ══ SECCIÓN CONSTRUCTIVO ════════════════════════════════════ -->
+          <div id="seccionConstructivo">
 
-              <div class="hint-code" style="margin-bottom:14px;">
-                <strong>Variables disponibles en cada fórmula</strong><br>
-                · <code>suma</code> — suma del costo de los ítems de la categoría<br>
-                · <code>aiu</code> — factor AIU <br>
-                · <code>margen</code> — factor margen <br>
-                · <code>dias</code> — días de duración (÷30 si la categoría tiene "aplica_dias_mensuales")<br>
-                · <code>total material base</code> — dejar el nombre como se establecio en la variable (denominador de referencia)<br>
-                · <code>personas</code> — número de personas de la cuadrilla<br>
-                · <code>factor_venta</code> — factor de venta <br>
-                <br>
-                <strong>Ejemplos por tipo:</strong><br>
-                · Herramientas: <code>suma * aiu * margen * dias / tp</code><br>
-                · Transporte: <code>suma / tp</code><br>
-                · Mano de Obra: <code>suma * aiu * margen * dias * personas / tp</code><br>
-                · Administración: <code>suma * aiu * margen * dias / tp</code>
+            <!-- 2. Variables de entrada -->
+            <div class="sf-block">
+              <div class="sf-block__head">
+                <div class="sf-block__head-left">
+                  <span class="sf-block__num">2</span>
+                  <span class="sf-block__label">Variables de entrada</span>
+                </div>
+                <button type="button" class="btn btn-ghost btn-xs" id="btnAddVar">+ Variable</button>
               </div>
-
-              <table class="rows-table" id="tbReglas">
-                <thead>
-                  <tr>
-                    <th style="width:180px;">Tipo APU <span style="color:var(--red)">*</span></th>
-                    <th>Fórmula costo unitario <span style="color:var(--red)">*</span></th>
-                    <th style="width:36px;"></th>
-                  </tr>
-                </thead>
-                <tbody id="reglaRows">
-                  {% for r in reglas_apu_existentes %}
-                  <tr class="regla-row">
-                    <td>
-                      <select name="regla_tipo_apu[]" class="form-select form-select-sm" required>
-                        <option value="">— Seleccionar —</option>
-                        {% for val, label in tipo_apu_choices %}
-                        <option value="{{ val }}" {% if val == r.tipo_apu %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                      </select>
-                    </td>
-                    <td>
-                      <input type="text" name="regla_formula[]" class="form-control form-control-sm"
-                             value="{{ r.formula_costo_unitario }}"
-                             placeholder="suma * aiu * margen * dias / tp"
-                             style="font-family:monospace;font-size:11.5px;" required>
-                    </td>
-                    <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-
-              {% if not reglas_apu_existentes %}
-              <p id="noReglasMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;">
-                Sin reglas APU definidas. Usa "+ Regla" para agregar el cálculo de cada tipo.
-              </p>
-              {% endif %}
-
+              <div class="sf-block__body">
+                <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
+                  Parámetros que el usuario ingresará al calcular el despiece.
+                  Ej: <code>total_powergrip</code>, <code>desperdicio</code>.
+                </p>
+                <div style="overflow-x:auto;">
+                  <table class="rows-table" id="tbVars">
+                    <thead>
+                      <tr>
+                        <th style="width:160px;">Variable *</th>
+                        <th>Etiqueta *</th>
+                        <th style="width:90px;">Unidad</th>
+                        <th style="width:120px;">Valor por defecto</th>
+                        <th style="width:36px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="varRows">
+                      {% for v in variables_existentes %}
+                      <tr class="var-row">
+                        <td><input type="text" name="var_variable[]" class="form-control form-control-sm" value="{{ v.variable }}" placeholder="mi_variable" style="font-family:monospace;" required></td>
+                        <td><input type="text" name="var_label[]" class="form-control form-control-sm" value="{{ v.label }}" placeholder="Etiqueta legible" required></td>
+                        <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" value="{{ v.unidad }}" placeholder="und"></td>
+                        <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="{{ v.valor_default }}"></td>
+                        <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% if not variables_existentes %}
+                <p id="noVarsMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;">
+                  Sin variables. Usa "+ Variable" para agregar.
+                </p>
+                {% endif %}
+              </div>
             </div>
-          </div>
 
+            <!-- 3. Receta técnica del subsistema — SUBCONJUNTOS -->
+            <div class="sf-block">
+              <div class="sf-block__head">
+                <div class="sf-block__head-left">
+                  <span class="sf-block__num">3</span>
+                  <span class="sf-block__label">Receta técnica del subsistema</span>
+                </div>
+                <button type="button" class="btn btn-ghost btn-xs" id="btnAddSubconjunto">
+                  <i class="bi bi-plus"></i> Agregar subconjunto
+                </button>
+              </div>
+              <div class="sf-block__body">
+
+                <div class="sf-hint">
+                  <strong>Organiza los componentes en subconjuntos</strong> — Ej: Estructura metálica, Membrana TPO, Remates, Fijaciones.<br>
+                  Cada subconjunto puede tener tantos componentes como necesites.<br>
+                  <strong>Fórmulas:</strong>
+                  <code>total_powergrip * tornilleria * desperdicio</code> ·
+                  <code>((area_m2 * 0.09) / 20) * desperdicio</code>
+                </div>
+
+                <!-- Contenedor dinámico de tarjetas subconjunto -->
+                <div id="contenedorSubconjuntos"></div>
+                <p id="noSubconjuntosMsg" style="display:none;">
+                  Sin subconjuntos. Usa <strong>"+ Agregar subconjunto"</strong> para organizar los componentes de la receta técnica.
+                </p>
+
+              </div>
+            </div>
+
+            <!-- 4. Reglas APU -->
+            <div class="sf-block">
+              <div class="sf-block__head">
+                <div class="sf-block__head-left">
+                  <span class="sf-block__num">4</span>
+                  <span class="sf-block__label">Reglas de cálculo APU</span>
+                </div>
+                <button type="button" class="btn btn-ghost btn-xs" id="btnAddRegla">+ Regla</button>
+              </div>
+              <div class="sf-block__body">
+                <div class="sf-hint">
+                  <strong>Variables disponibles:</strong>
+                  <code>suma</code> costo total · <code>aiu</code> · <code>margen</code> · <code>dias</code> · <code>tp</code> cant. base · <code>personas</code><br>
+                  Herramientas: <code>suma * aiu * margen * dias / tp</code> &nbsp;·&nbsp;
+                  M. de Obra: <code>suma * aiu * margen * dias * personas / tp</code>
+                </div>
+                <table class="rows-table" id="tbReglas">
+                  <thead>
+                    <tr>
+                      <th style="width:200px;">Tipo APU *</th>
+                      <th>Fórmula de costo unitario *</th>
+                      <th style="width:36px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="reglaRows">
+                    {% for r in reglas_apu_existentes %}
+                    <tr class="regla-row">
+                      <td>
+                        <select name="regla_tipo_apu[]" class="form-select form-select-sm" required>
+                          <option value="">— Seleccionar —</option>
+                          {% for val, label in tipo_apu_choices %}
+                          <option value="{{ val }}" {% if val == r.tipo_apu %}selected{% endif %}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                      </td>
+                      <td>
+                        <input type="text" name="regla_formula[]" class="form-control form-control-sm"
+                               value="{{ r.formula_costo_unitario }}"
+                               placeholder="suma * aiu * margen * dias / tp"
+                               style="font-family:monospace;" required>
+                      </td>
+                      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                {% if not reglas_apu_existentes %}
+                <p id="noReglasMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;">
+                  Sin reglas APU. Usa "+ Regla" para agregar el cálculo de cada tipo.
+                </p>
+                {% endif %}
+              </div>
+            </div>
+
+          </div>{# /seccionConstructivo #}
+
+          <!-- Input oculto: subconjuntos serializados a JSON antes del submit -->
+          <input type="hidden" name="subconjuntos_json" id="subconjuntosJson">
+
+          <!-- Acciones -->
           <div class="d-flex gap-2 justify-content-end">
             <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
             <button type="submit" class="btn btn-primary btn-sm">
@@ -316,27 +763,307 @@
 {% block extra_js %}
 <script>
 (function () {
-  // ── Eliminar filas ────────────────────────────────────────────────────────
-  document.addEventListener('click', function (e) {
-    const btn = e.target.closest('.del-row');
-    if (btn) {
-      btn.closest('tr').remove();
-      renumerar();
-    }
-  });
 
-  // ── Renumerar filas de componentes ────────────────────────────────────────
-  function renumerar() {
-    document.querySelectorAll('#compRows tr').forEach(function (tr, i) {
-      const numCell = tr.querySelector('td:first-child');
-      if (numCell) numCell.textContent = i + 1;
+  /* ─────────────────────────────────────────────────────────────────────────
+     DATOS BOOTSTRAP desde Django
+  ───────────────────────────────────────────────────────────────────────── */
+  const SUBCONJUNTOS_INIT = {{ subconjuntos_json|safe }};
+
+  const estadoFisicoOpts = `<option value="">— Estado físico —</option>` + [
+    {% for val, label in estado_fisico_choices %}`<option value="{{ val }}">{{ label }}</option>`,{% endfor %}
+  ].join('');
+
+  const categoriasOpts = `<option value="">— Sin categoría —</option>` + [
+    {% for cat in categorias_producto %}`<option value="{{ cat.pk }}">{{ cat.nombre }}</option>`,{% endfor %}
+  ].join('');
+
+  const tipoAPUOpts = `<option value="">— Seleccionar —</option>` + [
+    {% for val, label in tipo_apu_choices %}`<option value="{{ val }}">{{ label }}</option>`,{% endfor %}
+  ].join('');
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     SECCIONES: mostrar / ocultar según tipo de sistema
+  ───────────────────────────────────────────────────────────────────────── */
+  const sistemaTipos  = {{ sistemas_tipos_json|safe }};
+  const secConsumo    = document.getElementById('seccionConsumo');
+  const secConst      = document.getElementById('seccionConstructivo');
+  const consumoExtras = [
+    'seccionFunciones', 'seccionProblemas', 'seccionSuperficies',
+    'seccionProductosTecnicos', 'seccionComponentesQuimicos',
+  ].map(id => document.getElementById(id));
+
+  function actualizarSecciones(pk) {
+    const esConsumo = (sistemaTipos[String(pk)] || 'CONSTRUCTIVO') === 'CONSUMO';
+    if (secConsumo) secConsumo.classList.toggle('visible', esConsumo);
+    consumoExtras.forEach(el => { if (el) el.classList.toggle('visible', esConsumo); });
+    if (secConst) secConst.style.display = esConsumo ? 'none' : '';
+  }
+
+  const selSis = document.querySelector('select[name="sistema"]');
+  if (selSis) {
+    selSis.addEventListener('change', () => actualizarSecciones(selSis.value));
+    actualizarSecciones(selSis.value);
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     IMAGEN TÉCNICA — vista previa en tiempo real
+  ───────────────────────────────────────────────────────────────────────── */
+  const imgInput = document.querySelector('input[name="imagen_tecnica"]');
+  if (imgInput) {
+    imgInput.addEventListener('change', function () {
+      const file = this.files[0];
+      if (!file) return;
+      const wrap  = document.getElementById('imgPreviewWrap');
+      const prev  = document.getElementById('imgPreview');
+      const reader = new FileReader();
+      reader.onload = ev => {
+        prev.src = ev.target.result;
+        if (wrap) wrap.style.display = '';
+      };
+      reader.readAsDataURL(file);
     });
   }
 
-  // ── Plantilla de fila Variable ────────────────────────────────────────────
-  document.getElementById('btnAddVar').addEventListener('click', function () {
-    document.getElementById('noVarsMsg') && (document.getElementById('noVarsMsg').style.display = 'none');
-    const tbody = document.getElementById('varRows');
+  /* ─────────────────────────────────────────────────────────────────────────
+     UTILIDADES
+  ───────────────────────────────────────────────────────────────────────── */
+  function esc(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     COMPONENTES dentro de un subconjunto
+  ───────────────────────────────────────────────────────────────────────── */
+  function crearFilaComponente(comp) {
+    comp = comp || {};
+    const tr = document.createElement('tr');
+    tr.className = 'sq-comp-row';
+    const n = tr.parentElement ? tr.parentElement.querySelectorAll('tr').length + 1 : 1;
+    tr.innerHTML = `
+      <td style="color:var(--ink-soft);font-size:11px;text-align:center;width:28px;" class="sq-comp-num">${n}</td>
+      <td style="width:120px;">
+        <input type="text" class="form-control form-control-sm comp-f-codigo"
+               placeholder="id" style="font-family:monospace;"
+               value="${esc(comp.codigo)}" required>
+      </td>
+      <td style="min-width:130px;">
+        <input type="text" class="form-control form-control-sm comp-f-nombre"
+               placeholder="Nombre" value="${esc(comp.nombre)}" required>
+      </td>
+      <td style="width:140px;">
+        <select class="form-select form-select-sm comp-f-categoria">${categoriasOpts}</select>
+      </td>
+      <td style="min-width:180px;">
+        <input type="text" class="form-control form-control-sm comp-f-formula"
+               placeholder="var_a * var_b"
+               style="font-family:monospace;font-size:11px;"
+               value="${esc(comp.formula_texto)}" required>
+      </td>
+      <td style="width:100px;">
+        <input type="text" class="form-control form-control-sm comp-f-variable_salida"
+               placeholder="salida" style="font-family:monospace;"
+               value="${esc(comp.variable_salida)}">
+      </td>
+      <td style="width:65px;">
+        <input type="text" class="form-control form-control-sm comp-f-unidad"
+               placeholder="und" value="${esc(comp.unidad)}">
+      </td>
+      <td style="width:110px;">
+        <input type="text" class="form-control form-control-sm comp-f-var_ref_apu"
+               style="font-family:monospace;font-size:10.5px;"
+               value="${esc(comp.variable_referencia_apu)}">
+      </td>
+      <td style="width:65px;">
+        <input type="text" class="form-control form-control-sm comp-f-unidad_apu"
+               placeholder="und" value="${esc(comp.unidad_apu)}">
+      </td>
+      <td style="width:36px;">
+        <button type="button" class="btn btn-ghost btn-xs sq-del-comp"
+                style="color:rgba(14,17,23,.3);" title="Eliminar componente">✕</button>
+      </td>
+    `;
+    // Preseleccionar categoría
+    if (comp.categoria_id) {
+      const sel = tr.querySelector('.comp-f-categoria');
+      const opt = sel.querySelector(`option[value="${comp.categoria_id}"]`);
+      if (opt) opt.selected = true;
+    }
+    return tr;
+  }
+
+  function renumerarFilasComponen(tbody) {
+    tbody.querySelectorAll('.sq-comp-row').forEach((tr, i) => {
+      const cell = tr.querySelector('.sq-comp-num');
+      if (cell) cell.textContent = i + 1;
+    });
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     TARJETA DE SUBCONJUNTO
+  ───────────────────────────────────────────────────────────────────────── */
+  function crearTarjetaSubconjunto(sq) {
+    sq = sq || {};
+    const card = document.createElement('div');
+    card.className = 'sq-card';
+    card.innerHTML = `
+      <div class="sq-card__head">
+        <span class="sq-idx-badge">·</span>
+        <input type="text" class="sq-nombre form-control"
+               placeholder="Nombre del subconjunto (obligatorio)"
+               value="${esc(sq.nombre)}"
+               title="Nombre del subconjunto">
+        <button type="button" class="btn btn-ghost btn-xs sq-rm"
+                style="color:rgba(14,17,23,.35);white-space:nowrap;flex-shrink:0;"
+                title="Eliminar este subconjunto">
+          ✕ Eliminar
+        </button>
+      </div>
+      <div class="sq-card__body">
+        <textarea class="sq-desc form-control form-control-sm"
+                  rows="1"
+                  placeholder="Descripción del subconjunto (opcional)">${esc(sq.descripcion)}</textarea>
+
+        <div style="overflow-x:auto;">
+          <table class="rows-table sq-comp-table" style="min-width:900px;">
+            <thead>
+              <tr>
+                <th style="width:28px;">#</th>
+                <th style="width:120px;">Código *</th>
+                <th style="min-width:130px;">Nombre *</th>
+                <th style="width:140px;">Categoría</th>
+                <th style="min-width:180px;">Fórmula *</th>
+                <th style="width:100px;">Var. salida</th>
+                <th style="width:65px;">Unidad</th>
+                <th style="width:110px;">Ref. APU</th>
+                <th style="width:65px;">Und. APU</th>
+                <th style="width:36px;"></th>
+              </tr>
+            </thead>
+            <tbody class="sq-comp-tbody"></tbody>
+          </table>
+        </div>
+
+        <p class="sq-empty-msg" style="${(sq.componentes && sq.componentes.length) ? 'display:none;' : ''}">
+          Sin componentes. Usa "+ Agregar componente".
+        </p>
+
+        <button type="button" class="btn btn-ghost btn-xs sq-add-comp-btn">
+          <i class="bi bi-plus"></i> Agregar componente
+        </button>
+      </div>
+    `;
+
+    const tbody = card.querySelector('.sq-comp-tbody');
+    const emptyMsg = card.querySelector('.sq-empty-msg');
+
+    // Renderizar componentes existentes
+    (sq.componentes || []).forEach(comp => {
+      tbody.appendChild(crearFilaComponente(comp));
+    });
+
+    // Botón agregar componente
+    card.querySelector('.sq-add-comp-btn').addEventListener('click', () => {
+      const tr = crearFilaComponente({});
+      tbody.appendChild(tr);
+      renumerarFilasComponen(tbody);
+      emptyMsg.style.display = 'none';
+      tr.querySelector('input').focus();
+    });
+
+    // Botón eliminar subconjunto
+    card.querySelector('.sq-rm').addEventListener('click', () => {
+      if (!confirm('¿Eliminar este subconjunto y todos sus componentes?')) return;
+      card.remove();
+      renumerarSubconjuntos();
+    });
+
+    // Delegación: eliminar fila de componente
+    tbody.addEventListener('click', e => {
+      const btn = e.target.closest('.sq-del-comp');
+      if (!btn) return;
+      btn.closest('tr').remove();
+      renumerarFilasComponen(tbody);
+      if (tbody.querySelectorAll('.sq-comp-row').length === 0) {
+        emptyMsg.style.display = '';
+      }
+    });
+
+    return card;
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     NUMERACIÓN Y ESTADO DEL CONTENEDOR
+  ───────────────────────────────────────────────────────────────────────── */
+  const contenedor    = document.getElementById('contenedorSubconjuntos');
+  const noSqMsg       = document.getElementById('noSubconjuntosMsg');
+
+  function renumerarSubconjuntos() {
+    const cards = contenedor.querySelectorAll('.sq-card');
+    cards.forEach((card, i) => {
+      const badge = card.querySelector('.sq-idx-badge');
+      if (badge) badge.textContent = i + 1;
+    });
+    if (noSqMsg) noSqMsg.style.display = cards.length === 0 ? '' : 'none';
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     INICIALIZAR SUBCONJUNTOS EXISTENTES
+  ───────────────────────────────────────────────────────────────────────── */
+  SUBCONJUNTOS_INIT.forEach(sq => contenedor.appendChild(crearTarjetaSubconjunto(sq)));
+  renumerarSubconjuntos();
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     BOTÓN AGREGAR SUBCONJUNTO
+  ───────────────────────────────────────────────────────────────────────── */
+  document.getElementById('btnAddSubconjunto').addEventListener('click', () => {
+    const card = crearTarjetaSubconjunto({ nombre: '', descripcion: '', componentes: [] });
+    contenedor.appendChild(card);
+    renumerarSubconjuntos();
+    card.querySelector('.sq-nombre').focus();
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     SERIALIZAR AL SUBMIT
+  ───────────────────────────────────────────────────────────────────────── */
+  document.getElementById('formSubsistema').addEventListener('submit', function () {
+    const data = [];
+    contenedor.querySelectorAll('.sq-card').forEach(card => {
+      const nombre = card.querySelector('.sq-nombre').value.trim();
+      if (!nombre) return;
+      const descripcion = card.querySelector('.sq-desc').value.trim();
+      const componentes = [];
+      card.querySelectorAll('.sq-comp-row').forEach(tr => {
+        const codigo  = tr.querySelector('.comp-f-codigo').value.trim();
+        const nombre  = tr.querySelector('.comp-f-nombre').value.trim();
+        const formula = tr.querySelector('.comp-f-formula').value.trim();
+        if (!codigo || !nombre || !formula) return;
+        componentes.push({
+          codigo,
+          nombre,
+          categoria_id: tr.querySelector('.comp-f-categoria').value || null,
+          formula_texto: formula,
+          variable_salida:       tr.querySelector('.comp-f-variable_salida').value.trim(),
+          unidad:                tr.querySelector('.comp-f-unidad').value.trim(),
+          variable_referencia_apu: tr.querySelector('.comp-f-var_ref_apu').value.trim(),
+          unidad_apu:            tr.querySelector('.comp-f-unidad_apu').value.trim(),
+        });
+      });
+      data.push({ nombre, descripcion, componentes });
+    });
+    document.getElementById('subconjuntosJson').value = JSON.stringify(data);
+  });
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     VARIABLES DE ENTRADA (constructivo)
+  ───────────────────────────────────────────────────────────────────────── */
+  document.getElementById('btnAddVar').addEventListener('click', () => {
+    const m = document.getElementById('noVarsMsg');
+    if (m) m.style.display = 'none';
     const tr = document.createElement('tr');
     tr.className = 'var-row';
     tr.innerHTML = `
@@ -344,69 +1071,111 @@
       <td><input type="text" name="var_label[]" class="form-control form-control-sm" placeholder="Etiqueta legible" required></td>
       <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" placeholder="und"></td>
       <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="0"></td>
-      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
     `;
-    tbody.appendChild(tr);
+    document.getElementById('varRows').appendChild(tr);
     tr.querySelector('input').focus();
   });
 
-  // ── Plantilla de fila Componente ──────────────────────────────────────────
-  const categoriasOpts = `<option value="">— Sin categoría —</option>` + [
-    {% for cat in categorias_producto %}
-    `<option value="{{ cat.pk }}">{{ cat.nombre }}</option>`,
-    {% endfor %}
-  ].join('');
-
-  document.getElementById('btnAddComp').addEventListener('click', function () {
-    document.getElementById('noCompsMsg') && (document.getElementById('noCompsMsg').style.display = 'none');
-    const tbody = document.getElementById('compRows');
+  /* ─────────────────────────────────────────────────────────────────────────
+     PRODUCTOS TÉCNICOS ASOCIADOS (consumo)
+  ───────────────────────────────────────────────────────────────────────── */
+  document.getElementById('btnAddPT').addEventListener('click', () => {
+    const m = document.getElementById('noPTMsg');
+    if (m) m.style.display = 'none';
+    const tbody = document.getElementById('ptRows');
     const n = tbody.querySelectorAll('tr').length + 1;
     const tr = document.createElement('tr');
-    tr.className = 'comp-row';
-    tr.draggable = true;
+    tr.className = 'pt-row';
     tr.innerHTML = `
       <td style="color:var(--ink-soft);font-size:11px;text-align:center;">${n}</td>
-      <td><input type="text" name="comp_codigo[]" class="form-control form-control-sm" placeholder="componente_codigo" style="font-family:monospace;" required></td>
-      <td><input type="text" name="comp_nombre[]" class="form-control form-control-sm" placeholder="Nombre del componente" required></td>
-      <td><select name="comp_categoria[]" class="form-select form-select-sm">${categoriasOpts}</select></td>
-      <td><input type="text" name="comp_formula[]" class="form-control form-control-sm" placeholder="variable_a * variable_b" required style="font-family:monospace;font-size:11px;"></td>
-      <td><input type="text" name="comp_variable_salida[]" class="form-control form-control-sm" placeholder="nombre_salida" style="font-family:monospace;"></td>
-      <td><input type="text" name="comp_unidad[]" class="form-control form-control-sm" placeholder="und"></td>
-      <td><input type="text" name="comp_variable_referencia_apu[]" class="form-control form-control-sm" placeholder="total_powergrip" style="font-family:monospace;font-size:10.5px;" title="Variable denominador del rendimiento APU"></td>
-      <td><input type="text" name="comp_unidad_apu[]" class="form-control form-control-sm" placeholder="soporte"></td>
-      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+      <td><input type="text" name="pt_nombre[]" class="form-control form-control-sm" placeholder="Ej: KÖSTER KB-Pox 008" required></td>
+      <td><select name="pt_estado_fisico[]" class="form-select form-select-sm">${estadoFisicoOpts}</select></td>
+      <td><input type="number" step="0.01" min="0" name="pt_consumo_min[]" class="form-control form-control-sm" placeholder="200"></td>
+      <td><input type="number" step="0.01" min="0" name="pt_consumo_max[]" class="form-control form-control-sm" placeholder="400"></td>
+      <td><input type="text" name="pt_unidad[]" class="form-control form-control-sm" value="kg" placeholder="kg"></td>
+      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
     `;
     tbody.appendChild(tr);
     tr.querySelector('input').focus();
   });
-  // ── Plantilla de fila Regla APU ───────────────────────────────────────────
-  const tipoAPUOpts = `<option value="">— Seleccionar —</option>` + [
-    {% for val, label in tipo_apu_choices %}
-    `<option value="{{ val }}">{{ label }}</option>`,
-    {% endfor %}
-  ].join('');
 
-  document.getElementById('btnAddRegla').addEventListener('click', function () {
-    document.getElementById('noReglasMsg') && (document.getElementById('noReglasMsg').style.display = 'none');
-    const tbody = document.getElementById('reglaRows');
+  /* ─────────────────────────────────────────────────────────────────────────
+     COMPONENTES QUÍMICOS (consumo)
+  ───────────────────────────────────────────────────────────────────────── */
+  document.getElementById('btnAddCQ').addEventListener('click', () => {
+    const m = document.getElementById('noCQMsg');
+    if (m) m.style.display = 'none';
+    const tbody = document.getElementById('cqRows');
+    const n = tbody.querySelectorAll('tr').length + 1;
+    const tr = document.createElement('tr');
+    tr.className = 'cq-row';
+    tr.innerHTML = `
+      <td style="color:var(--ink-soft);font-size:11px;text-align:center;">${n}</td>
+      <td><input type="text" name="cq_nombre[]" class="form-control form-control-sm" placeholder="Ej: Comp. A (Base)" required></td>
+      <td><select name="cq_estado_fisico[]" class="form-select form-select-sm">${estadoFisicoOpts}</select></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input type="number" step="0.01" min="0" max="100" name="cq_porcentaje[]" class="form-control form-control-sm" placeholder="60.00" required>
+          <span style="font-size:12px;color:var(--ink-soft);">%</span>
+        </div>
+      </td>
+      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector('input').focus();
+    actualizarTotalCQ();
+  });
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     TOTALIZADOR PORCENTAJES CQ
+  ───────────────────────────────────────────────────────────────────────── */
+  function actualizarTotalCQ() {
+    const inputs = document.querySelectorAll('input[name="cq_porcentaje[]"]');
+    let total = 0;
+    inputs.forEach(i => { total += parseFloat(i.value || 0); });
+    const totalEl = document.getElementById('cqTotalVal');
+    const okEl    = document.getElementById('cqTotalOk');
+    const errEl   = document.getElementById('cqTotalErr');
+    if (totalEl) totalEl.textContent = total.toFixed(2) + '%';
+    const esOk = inputs.length === 0 || Math.abs(total - 100) < 0.02;
+    if (okEl)  okEl.style.display  = (inputs.length > 0 && esOk)  ? '' : 'none';
+    if (errEl) errEl.style.display = (inputs.length > 0 && !esOk) ? '' : 'none';
+  }
+  document.addEventListener('input', e => {
+    if (e.target.name === 'cq_porcentaje[]') actualizarTotalCQ();
+  });
+  actualizarTotalCQ();
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     ELIMINAR FILAS GENERALES (variables, reglas APU, PT, CQ)
+  ───────────────────────────────────────────────────────────────────────── */
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.del-row');
+    if (!btn) return;
+    btn.closest('tr').remove();
+    setTimeout(actualizarTotalCQ, 50);
+  });
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     REGLAS APU
+  ───────────────────────────────────────────────────────────────────────── */
+  document.getElementById('btnAddRegla').addEventListener('click', () => {
+    const m = document.getElementById('noReglasMsg');
+    if (m) m.style.display = 'none';
     const tr = document.createElement('tr');
     tr.className = 'regla-row';
     tr.innerHTML = `
-      <td>
-        <select name="regla_tipo_apu[]" class="form-select form-select-sm" required>
-          ${tipoAPUOpts}
-        </select>
-      </td>
-      <td>
-        <input type="text" name="regla_formula[]" class="form-control form-control-sm"
-               placeholder="suma * aiu * margen * dias / tp"
-               style="font-family:monospace;font-size:11.5px;" required>
-      </td>
-      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,0.3);">✕</button></td>
+      <td><select name="regla_tipo_apu[]" class="form-select form-select-sm" required>${tipoAPUOpts}</select></td>
+      <td><input type="text" name="regla_formula[]" class="form-control form-control-sm"
+                 placeholder="suma * aiu * margen * dias / tp"
+                 style="font-family:monospace;" required></td>
+      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
     `;
-    tbody.appendChild(tr);
+    document.getElementById('reglaRows').appendChild(tr);
     tr.querySelector('select').focus();
   });
+
 })();
 </script>
 {% endblock %}

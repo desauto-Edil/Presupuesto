@@ -122,6 +122,22 @@ class Producto(models.Model):
     def __str__(self):
         return f"{self.codigo} — {self.nombre}"
 
+    @property
+    def precio_para_display(self):
+        """Precio de referencia a mostrar en catálogo."""
+        from decimal import Decimal
+        if self.precio_en_dolares and self.moneda == "COP":
+            trm = Decimal("4200")
+            return (self.precio_actual / trm).quantize(Decimal("0.01"))
+        return self.precio_actual
+
+    @property
+    def moneda_para_display(self):
+        """Moneda de referencia a mostrar en catálogo."""
+        if self.precio_en_dolares:
+            return "USD"
+        return self.moneda
+
     def save(self, *args, **kwargs):
         """
         Auto-detecta cambio de precio y actualiza fecha_actualizacion_precio.

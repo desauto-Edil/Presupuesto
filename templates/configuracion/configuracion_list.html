@@ -193,8 +193,6 @@
                   email: '{{ u.email|escapejs }}',
                   sitio_web: '{{ u.sitio_web|escapejs }}',
                   quienes_somos: '{{ u.quienes_somos|escapejs }}',
-                  mision: '{{ u.mision|escapejs }}',
-                  vision: '{{ u.vision|escapejs }}',
                   activa: '{{ u.activa|yesno:'true,false' }}'
               })"
               data-bs-toggle="offcanvas" data-bs-target="#offcanvasUnidad">✎ Editar</button>
@@ -292,14 +290,18 @@
     </div>
     {% for al in u.alianzas.all %}
     <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        {% if al.imagen %}
+        <img src="{{ al.imagen.url }}" alt="{{ al.nombre }}"
+             style="height:40px;max-width:100px;object-fit:contain;border-radius:4px;flex-shrink:0;">
+        {% endif %}
+        <div style="flex:1;min-width:0;">
           <strong style="font-size:13px;">{{ al.nombre }}</strong>
-          {% if al.url %}<a href="{{ al.url }}" target="_blank" style="font-size:11px;margin-left:8px;color:var(--theme-accent);">↗ sitio</a>{% endif %}
+          {% if al.descripcion %}<p style="font-size:12px;color:var(--ink-soft);margin:3px 0 0;">{{ al.descripcion }}</p>{% endif %}
         </div>
-        <div style="display:flex;gap:4px;">
+        <div style="display:flex;gap:4px;flex-shrink:0;">
           <button class="btn btn-xs btn-ghost"
-                  onclick="prepareSubForm('alianza','edit',{{ u.pk }},{ id:'{{ al.pk }}', nombre:'{{ al.nombre|escapejs }}', descripcion:'{{ al.descripcion|escapejs }}', url:'{{ al.url|escapejs }}', orden:'{{ al.orden }}' })"
+                  onclick="prepareSubForm('alianza','edit',{{ u.pk }},{ id:'{{ al.pk }}', nombre:'{{ al.nombre|escapejs }}', descripcion:'{{ al.descripcion|escapejs }}', imagen_url:'{{ al.imagen.url|default:'' }}', orden:'{{ al.orden }}' })"
                   data-bs-toggle="offcanvas" data-bs-target="#offcanvasAlianza">✎</button>
           <button class="btn btn-xs btn-ghost text-danger"
                   data-bs-toggle="modal" data-bs-target="#deleteModal"
@@ -307,7 +309,6 @@
                   data-delete-url="{% url 'configuracion:alianza_delete' al.pk %}">✕</button>
         </div>
       </div>
-      {% if al.descripcion %}<p style="font-size:12px;color:var(--ink-soft);margin-top:6px;">{{ al.descripcion }}</p>{% endif %}
     </div>
     {% empty %}<div class="text-muted small">Sin alianzas registradas.</div>
     {% endfor %}
@@ -446,14 +447,6 @@
         <label class="form-label small fw-bold text-uppercase">Quiénes somos</label>
         <textarea name="quienes_somos" id="un_quienes_somos" class="form-control" rows="3" placeholder="Descripción de la empresa..."></textarea>
       </div>
-      <div class="mb-3">
-        <label class="form-label small fw-bold text-uppercase">Misión</label>
-        <textarea name="mision" id="un_mision" class="form-control" rows="2"></textarea>
-      </div>
-      <div class="mb-3">
-        <label class="form-label small fw-bold text-uppercase">Visión</label>
-        <textarea name="vision" id="un_vision" class="form-control" rows="2"></textarea>
-      </div>
       <div class="form-check form-switch mt-3">
         <input class="form-check-input" type="checkbox" name="activa" id="un_activa" checked>
         <label class="form-check-label fw-bold">Unidad activa</label>
@@ -537,7 +530,7 @@
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
   </div>
   <div class="offcanvas-body">
-    <form id="alianzaForm" method="post" action="">
+    <form id="alianzaForm" method="post" action="" enctype="multipart/form-data">
       {% csrf_token %}
       <div class="mb-3">
         <label class="form-label small fw-bold text-uppercase">Nombre del aliado <span style="color:var(--brand-red)">*</span></label>
@@ -548,8 +541,13 @@
         <textarea name="descripcion" id="al_descripcion" class="form-control" rows="3"></textarea>
       </div>
       <div class="mb-3">
-        <label class="form-label small fw-bold text-uppercase">Sitio web</label>
-        <input type="url" name="url" id="al_url" class="form-control" placeholder="https://...">
+        <label class="form-label small fw-bold text-uppercase">Logo / imagen</label>
+        <div id="al_imagen_preview" style="display:none;margin-bottom:8px;">
+          <img id="al_imagen_actual" src="" alt="Logo actual"
+               style="max-height:60px;max-width:160px;border-radius:6px;border:1px solid var(--border);object-fit:contain;padding:4px;">
+          <div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">Logo actual · subir nuevo para reemplazar</div>
+        </div>
+        <input type="file" name="imagen" id="al_imagen" class="form-control" accept="image/*">
       </div>
       <div class="mb-3">
         <label class="form-label small fw-bold text-uppercase">Orden</label>
@@ -657,8 +655,6 @@ function prepareUnidadForm(mode, data = null) {
     document.getElementById('un_email').value         = data.email         || '';
     document.getElementById('un_sitio_web').value     = data.sitio_web     || '';
     document.getElementById('un_quienes_somos').value = data.quienes_somos || '';
-    document.getElementById('un_mision').value        = data.mision        || '';
-    document.getElementById('un_vision').value        = data.vision        || '';
     document.getElementById('un_activa').checked      = (data.activa === 'true');
   }
 }
@@ -691,8 +687,8 @@ function prepareSubForm(type, mode, unidadPk, data = null) {
       titleId: 'alianzaTitle',
       createUrl: '/configuracion/unidades/' + unidadPk + '/alianzas/nueva/',
       editUrlFn: function(id) { return '/configuracion/unidades/alianzas/' + id + '/editar/'; },
-      fields: ['nombre', 'descripcion', 'url', 'orden'],
-      prefixes: { nombre: 'al_nombre', descripcion: 'al_descripcion', url: 'al_url', orden: 'al_orden' },
+      fields: ['nombre', 'descripcion', 'orden'],
+      prefixes: { nombre: 'al_nombre', descripcion: 'al_descripcion', orden: 'al_orden' },
       labelCreate: 'Nueva alianza',
       labelEdit:   'Editar alianza',
     },
@@ -708,6 +704,9 @@ function prepareSubForm(type, mode, unidadPk, data = null) {
     // Resetear orden a 0
     const ordenEl = form.querySelector('[name="orden"]');
     if (ordenEl) ordenEl.value = '0';
+    // Ocultar preview de imagen si existe
+    const preview = document.getElementById('al_imagen_preview');
+    if (preview) preview.style.display = 'none';
   } else {
     form.action = cfg.editUrlFn(data.id);
     cfg.fields.forEach(function(field) {
@@ -715,6 +714,17 @@ function prepareSubForm(type, mode, unidadPk, data = null) {
       const el   = document.getElementById(elId);
       if (el && data[field] !== undefined) el.value = data[field];
     });
+    // Mostrar imagen actual si es alianza y tiene imagen
+    if (type === 'alianza') {
+      const preview  = document.getElementById('al_imagen_preview');
+      const imgEl    = document.getElementById('al_imagen_actual');
+      if (preview && imgEl && data.imagen_url) {
+        imgEl.src = data.imagen_url;
+        preview.style.display = 'block';
+      } else if (preview) {
+        preview.style.display = 'none';
+      }
+    }
   }
 }
 </script>

@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}APU — {{ despiece.nombre|default:"Despiece" }}{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}APU Básico{% endblock %}
+{% block breadcrumb %}{{ despiece.subsistema.codigo }} · APU{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'ingenieria:despiece_maestro' despiece.pk %}"
+   class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+  <i class="bi bi-arrow-left"></i> Volver al despiece
+</a>
+<button onclick="window.print()" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 ms-1">
+  <i class="bi bi-printer"></i> Imprimir
+</button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.apu-wrap { max-width: 960px; margin: 0 auto; }
+
+/* ── Encabezado del documento ───────────────────────────────────────────── */
+.apu-header {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  border-top: 4px solid var(--theme-accent);
+}
+.apu-header__title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111;
+  margin-bottom: 4px;
+}
+.apu-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 10px;
+}
+.apu-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.apu-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #999;
+}
+.apu-meta-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+.apu-badge-guardado {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #d1e7dd;
+  color: #0a5239;
+  border: 1px solid #198754;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── Variables de entrada ───────────────────────────────────────────────── */
+.apu-vars {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.08);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.apu-vars__title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #888;
+  margin-bottom: 10px;
+}
+.apu-vars__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.apu-var-chip {
+  background: rgba(0,0,0,.04);
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.apu-var-chip__label { font-size: 11px; color: #888; }
+.apu-var-chip__value { font-size: 14px; font-weight: 700; color: #222; }
+.apu-var-chip__unit  { font-size: 10px; color: #aaa; }
+
+/* ── Tabla de despiece ─────────────────────────────────────────────────── */
+.apu-section {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.apu-section__head {
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(0,0,0,.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.apu-section__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #222;
+}
+
+.sq-block { border-bottom: 1px solid rgba(0,0,0,.06); }
+.sq-block:last-child { border-bottom: none; }
+.sq-block__head {
+  padding: 9px 20px;
+  background: rgba(0,0,0,.025);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #666;
+  border-bottom: 1px solid rgba(0,0,0,.05);
+}
+.apu-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+.apu-table th {
+  padding: 8px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #999;
+  background: rgba(0,0,0,.018);
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  white-space: nowrap;
+}
+.apu-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(0,0,0,.04);
+  vertical-align: middle;
+}
+.apu-table tr:last-child td { border-bottom: none; }
+.td-codigo  { font-family: monospace; font-size: 12px; color: #888; white-space: nowrap; }
+.td-nombre  { font-weight: 600; color: #222; }
+.td-formula { font-family: monospace; font-size: 11px; color: #aaa; }
+.td-cantidad{ text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.td-unidad  { color: #888; font-size: 12px; }
+.td-cat     { font-size: 11px; color: #999; }
+
+/* ── Reglas APU ─────────────────────────────────────────────────────────── */
+.reglas-section {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.reglas-section__head {
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(0,0,0,.08);
+  font-size: 14px;
+  font-weight: 700;
+  color: #222;
+}
+.regla-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(0,0,0,.05);
+}
+.regla-row:last-child { border-bottom: none; }
+.regla-tipo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(0,0,0,.06);
+  color: #555;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.regla-formula {
+  font-family: monospace;
+  font-size: 13px;
+  color: #333;
+  flex: 1;
+}
+.regla-unidad { font-size: 12px; color: #888; }
+
+.apu-no-reglas {
+  padding: 24px 20px;
+  text-align: center;
+  color: #bbb;
+  font-size: 13px;
+}
+
+/* ── Imprimir ───────────────────────────────────────────────────────────── */
+@media print {
+  .sidebar, .topbar, .topbar-actions, .btn { display: none !important; }
+  .main { margin-left: 0 !important; }
+  .apu-wrap { max-width: 100%; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="apu-wrap">
+
+  <!-- Encabezado -->
+  <div class="apu-header">
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+      <div>
+        <div class="apu-header__title">{{ despiece.nombre|default:"Despiece sin nombre" }}</div>
+        <div class="text-muted small">APU Básico · generado a partir del despiece maestro</div>
+      </div>
+      <span class="apu-badge-guardado"><i class="bi bi-check-circle-fill"></i> Guardado</span>
+    </div>
+    <div class="apu-header__meta">
+      <div class="apu-meta-item">
+        <span class="apu-meta-label">Sistema</span>
+        <span class="apu-meta-value">{{ despiece.subsistema.sistema.codigo }} — {{ despiece.subsistema.sistema.nombre }}</span>
+      </div>
+      <div class="apu-meta-item">
+        <span class="apu-meta-label">Subsistema</span>
+        <span class="apu-meta-value">{{ despiece.subsistema.codigo }} — {{ despiece.subsistema.nombre }}</span>
+      </div>
+      <div class="apu-meta-item">
+        <span class="apu-meta-label">Fecha</span>
+        <span class="apu-meta-value">{{ despiece.updated_at|date:"d/m/Y H:i" }}</span>
+      </div>
+      <div class="apu-meta-item">
+        <span class="apu-meta-label">Líneas</span>
+        <span class="apu-meta-value">{{ despiece.lineas.count }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Variables de entrada -->
+  {% if variables_entrada %}
+  <div class="apu-vars">
+    <div class="apu-vars__title">Variables de entrada</div>
+    <div class="apu-vars__grid">
+      {% for v in variables_entrada %}
+      <div class="apu-var-chip">
+        <span class="apu-var-chip__label">{{ v.label|default:v.variable }}</span>
+        <span class="apu-var-chip__value">{{ v.valor_actual }}</span>
+        {% if v.unidad %}<span class="apu-var-chip__unit">{{ v.unidad }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tabla de despiece por subconjunto -->
+  <div class="apu-section">
+    <div class="apu-section__head">
+      <span class="apu-section__title">Despiece de materiales</span>
+      <span class="text-muted small">{{ despiece.lineas.count }} componente{{ despiece.lineas.count|pluralize:"s" }}</span>
+    </div>
+
+    {% for grupo in lineas_por_subconjunto %}
+    <div class="sq-block">
+      <div class="sq-block__head">{{ grupo.nombre }}</div>
+      <table class="apu-table">
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Componente</th>
+            <th>Categoría</th>
+            <th>Fórmula</th>
+            <th class="text-end">Cantidad</th>
+            <th>Und</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linea in grupo.lineas %}
+          <tr>
+            <td class="td-codigo">{{ linea.componente_codigo }}</td>
+            <td class="td-nombre">{{ linea.componente_nombre }}</td>
+            <td class="td-cat">{{ linea.categoria_nombre|default:"—" }}</td>
+            <td class="td-formula">{{ linea.formula_texto }}</td>
+            <td class="td-cantidad">
+              {{ linea.cantidad_calculada }}
+            </td>
+            <td class="td-unidad">{{ linea.unidad }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% empty %}
+    <div class="apu-no-reglas">Sin líneas de despiece.</div>
+    {% endfor %}
+  </div>
+
+  <!-- Reglas APU -->
+  <div class="reglas-section">
+    <div class="reglas-section__head">
+      <i class="bi bi-bezier2 me-1 text-muted"></i> Reglas APU del subsistema
+    </div>
+    {% if reglas_apu %}
+      {% for regla in reglas_apu %}
+      <div class="regla-row">
+        <span class="regla-tipo">{{ regla.tipo_apu }}</span>
+        <span class="regla-formula">{{ regla.formula_texto }}</span>
+        {% if regla.unidad %}<span class="regla-unidad">{{ regla.unidad }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+    <div class="apu-no-reglas">
+      <i class="bi bi-info-circle me-1"></i>
+      Este subsistema no tiene reglas APU configuradas aún.
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

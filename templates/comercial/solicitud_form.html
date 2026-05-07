@@ -304,7 +304,8 @@
             </div>
             {% endif %}
 
-            <!-- Subir nuevo archivo -->
+            <!-- Subir nuevo archivo (solo si ya existe la solicitud) -->
+            {% if object.pk %}
             <form method="post"
                   action="{% url 'comercial:solicitud_archivo_create' object.pk %}"
                   enctype="multipart/form-data"
@@ -322,6 +323,16 @@
                     <button type="submit" class="btn btn-primary btn-sm">Adjuntar</button>
                 </div>
             </form>
+            {% else %}
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;
+                        background:rgba(var(--theme-accent-rgb,86,83,148),.06);
+                        border-radius:8px;border:1px dashed var(--border);margin-bottom:20px;">
+                <i class="bi bi-info-circle" style="color:var(--theme-accent);font-size:16px;flex-shrink:0;"></i>
+                <span style="font-size:12.5px;color:var(--ink-soft);">
+                    Guarda la solicitud primero y podrás adjuntar archivos desde el formulario de edición.
+                </span>
+            </div>
+            {% endif %}
         </div>
     </div>
 

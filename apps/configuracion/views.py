@@ -7,6 +7,7 @@ from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from .models import ConfiguracionSistema, UnidadNegocioInfo, UnidadPolitica, UnidadClausula, UnidadAlianza
 from .forms import ConfiguracionSistemaForm
+from apps.common.mixins import AdminRequiredMixin
 
 
 def _form_errors(form):
@@ -19,7 +20,7 @@ def _form_errors(form):
 
 # ── Vista principal unificada ──────────────────────────────────────────────────
 
-class ConfiguracionView(ListView):
+class ConfiguracionView(AdminRequiredMixin, ListView):
     """Página principal de Configuración: usuarios + unidades de negocio."""
     model = ConfiguracionSistema
     template_name = "configuracion/configuracion_list.html"
@@ -40,7 +41,7 @@ ConfiguracionListView = ConfiguracionView
 
 # ── CRUD ConfiguracionSistema (usuarios) ──────────────────────────────────────
 
-class ConfiguracionCreateView(CreateView):
+class ConfiguracionCreateView(AdminRequiredMixin, CreateView):
     model = ConfiguracionSistema
     form_class = ConfiguracionSistemaForm
     template_name = "configuracion/configuracion_list.html"
@@ -51,7 +52,7 @@ class ConfiguracionCreateView(CreateView):
         return redirect("configuracion:configuracion")
 
 
-class ConfiguracionUpdateView(UpdateView):
+class ConfiguracionUpdateView(AdminRequiredMixin, UpdateView):
     model = ConfiguracionSistema
     form_class = ConfiguracionSistemaForm
     template_name = "configuracion/configuracion_list.html"
@@ -79,17 +80,17 @@ class ConfiguracionDetailView(DetailView):
     context_object_name = "configuracion"
 
 
-class ConfiguracionDeleteView(DeleteView):
+class ConfiguracionDeleteView(AdminRequiredMixin, DeleteView):
     model = ConfiguracionSistema
     success_url = reverse_lazy("configuracion:configuracion")
 
 
 # ── CRUD UnidadNegocioInfo ────────────────────────────────────────────────────
 
-class UnidadCreateView(CreateView):
+class UnidadCreateView(AdminRequiredMixin, CreateView):
     model = UnidadNegocioInfo
     fields = ["codigo", "razon_social", "nit", "ciudad", "direccion", "telefono",
-              "email", "sitio_web", "quienes_somos", "mision", "vision", "activa"]
+              "email", "sitio_web", "quienes_somos", "activa"]
     success_url = reverse_lazy("configuracion:configuracion")
 
     def form_invalid(self, form):
@@ -97,10 +98,10 @@ class UnidadCreateView(CreateView):
         return redirect("configuracion:configuracion")
 
 
-class UnidadUpdateView(UpdateView):
+class UnidadUpdateView(AdminRequiredMixin, UpdateView):
     model = UnidadNegocioInfo
     fields = ["razon_social", "nit", "ciudad", "direccion", "telefono",
-              "email", "sitio_web", "quienes_somos", "mision", "vision", "activa"]
+              "email", "sitio_web", "quienes_somos", "activa"]
     success_url = reverse_lazy("configuracion:configuracion")
 
     def form_valid(self, form):
@@ -113,7 +114,7 @@ class UnidadUpdateView(UpdateView):
         return redirect("configuracion:configuracion")
 
 
-class UnidadDeleteView(DeleteView):
+class UnidadDeleteView(AdminRequiredMixin, DeleteView):
     model = UnidadNegocioInfo
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("configuracion:configuracion")
@@ -201,9 +202,9 @@ class ClausulaDeleteView(DeleteView):
 
 # ── CRUD Alianzas ─────────────────────────────────────────────────────────────
 
-class AlianzaCreateView(CreateView):
+class AlianzaCreateView(AdminRequiredMixin, CreateView):
     model = UnidadAlianza
-    fields = ["nombre", "descripcion", "url", "orden"]
+    fields = ["nombre", "descripcion", "imagen", "orden"]
 
     def form_valid(self, form):
         unidad = get_object_or_404(UnidadNegocioInfo, pk=self.kwargs["unidad_pk"])
@@ -218,9 +219,9 @@ class AlianzaCreateView(CreateView):
         return redirect("configuracion:configuracion")
 
 
-class AlianzaUpdateView(UpdateView):
+class AlianzaUpdateView(AdminRequiredMixin, UpdateView):
     model = UnidadAlianza
-    fields = ["nombre", "descripcion", "url", "orden"]
+    fields = ["nombre", "descripcion", "imagen", "orden"]
     success_url = reverse_lazy("configuracion:configuracion")
 
     def form_valid(self, form):
@@ -233,7 +234,7 @@ class AlianzaUpdateView(UpdateView):
         return redirect("configuracion:configuracion")
 
 
-class AlianzaDeleteView(DeleteView):
+class AlianzaDeleteView(AdminRequiredMixin, DeleteView):
     model = UnidadAlianza
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("configuracion:configuracion")
@@ -261,6 +262,7 @@ class LoginConfiguracionView(View):
                 request.session["usuario_nombre"]       = cfg.nombre_completo
                 request.session["configuracion_nombre"] = cfg.nombre_completo
                 request.session["unidad_negocio"]       = cfg.unidad_negocio
+                request.session["rol"]                  = cfg.rol
                 return redirect("comercial:dashboard")
             else:
                 messages.error(request, "Credenciales inválidas.")

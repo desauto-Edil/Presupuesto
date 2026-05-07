@@ -1,0 +1,98 @@
+{# Tabla de líneas guardadas para DespieceMaestroView (estado=GUARDADO o BORRADOR con líneas). #}
+{# Contexto esperado: lineas_por_subconjunto — salida de _agrupar_lineas() #}
+
+{% load static %}
+
+<div style="overflow-x:auto">
+<table class="dp-table">
+  <thead>
+    <tr>
+      <th>Componente</th>
+      <th>Subconjunto</th>
+      <th class="text-end">Cantidad</th>
+      <th>Und</th>
+      <th>Producto</th>
+      <th class="text-end">P. unitario</th>
+      <th class="text-end">P. total</th>
+      <th>Actualización</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for grupo in lineas_por_subconjunto %}
+      {% for linea in grupo.lineas %}
+      <tr>
+        <td class="td-comp">
+          {{ linea.componente_nombre }}
+          <small>{{ linea.componente_codigo }}</small>
+        </td>
+        <td class="td-sq">{{ linea.subconjunto_nombre }}</td>
+        <td class="td-cant">{{ linea.cantidad_calculada }}</td>
+        <td class="td-und">{{ linea.unidad }}</td>
+        <td>
+          {% if linea.producto_nombre %}
+            <span class="fw-semibold" style="font-size:13px">{{ linea.producto_nombre }}</span>
+            <small class="d-block text-muted" style="font-size:11px">{{ linea.producto_codigo }}</small>
+          {% else %}
+            <span class="text-sin-prod">Sin producto</span>
+          {% endif %}
+        </td>
+        <td class="td-precio">
+          {% if linea.precio_unitario is not None %}
+            ${{ linea.precio_unitario }}
+            {% if linea.moneda %}<small class="td-und">{{ linea.moneda }}</small>{% endif %}
+          {% else %}
+            <span class="text-sin-precio">Sin precio</span>
+          {% endif %}
+        </td>
+        <td class="td-precio">
+          {% if linea.precio_total is not None %}
+            ${{ linea.precio_total }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td class="td-fecha">
+          {% if linea.fecha_precio %}
+            {{ linea.fecha_precio|date:"d/m/Y" }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    {% endfor %}
+  </tbody>
+  {% with total=despiece.lineas.all %}
+  <tfoot>
+    <tr class="dp-total-row">
+      <td colspan="6" class="text-end" style="font-size:12px;color:#888;padding-right:8px">Total valorizado</td>
+      <td class="td-precio">
+        {# Calcular total en template — suma de precio_total de líneas con precio #}
+        {% with t=0 %}
+        {% for grupo in lineas_por_subconjunto %}{% for l in grupo.lineas %}{% if l.precio_total %}
+          {# Django templates no suman decimales nativamente — mostramos indicador #}
+        {% endif %}{% endfor %}{% endfor %}
+        {% endwith %}
+        <span id="totalGuardado">—</span>
+      </td>
+      <td colspan="1"></td>
+    </tr>
+  </tfoot>
+  {% endwith %}
+</table>
+</div>
+
+<script>
+// Calcular total desde las líneas guardadas
+(function() {
+  {% for grupo in lineas_por_subconjunto %}{% for l in grupo.lineas %}{% if l.precio_total %}
+  (function() {
+    var el = document.getElementById('totalGuardado');
+    var cur = parseFloat(el.dataset.acc || '0');
+    cur += {{ l.precio_total }};
+    el.dataset.acc = cur;
+    el.textContent = '$' + cur.toLocaleString('es-CO', {minimumFractionDigits:2, maximumFractionDigits:2});
+  })();
+  {% endif %}{% endfor %}{% endfor %}
+})();
+</script>

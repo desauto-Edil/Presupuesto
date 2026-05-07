@@ -6,190 +6,376 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Acceso · Andicost</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap"
-        rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Epilogue:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --ink:    #0e0e0e;
+      --ink-2:  #1c1c1c;
+      --ink-3:  #2e2e2e;
+      --accent: #d0d0d0;
+      --surface:#f5f5f5;
+      --white:  #ffffff;
+      --muted:  #888888;
+      --border: rgba(0,0,0,0.10);
+      --border-strong: rgba(0,0,0,0.18);
+    }
+
     body {
-      font-family: 'DM Sans', sans-serif;
-      background: #f2f2f2;
+      font-family: 'Epilogue', sans-serif;
+      background: var(--ink);
       min-height: 100vh;
+      display: flex;
+      align-items: stretch;
+    }
+
+    /* ── LEFT PANEL ── */
+    .panel-left {
+      flex: 0 0 420px;
+      background: var(--ink-2);
+      padding: 56px 52px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Geometric background lines */
+    .panel-left::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        repeating-linear-gradient(
+          90deg,
+          transparent,
+          transparent 39px,
+          rgba(255,255,255,0.025) 39px,
+          rgba(255,255,255,0.025) 40px
+        ),
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 39px,
+          rgba(255,255,255,0.025) 39px,
+          rgba(255,255,255,0.025) 40px
+        );
+      pointer-events: none;
+    }
+
+    /* Accent bar */
+    .panel-left::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px;
+      height: 100%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 100%);
+    }
+
+    .brand {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      animation: fadeUp .5s ease both;
+    }
+
+    .brand__name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 72px;
+      font-weight: 400;
+      color: var(--white);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .brand__divider {
+      width: 40px;
+      height: 1px;
+      background: rgba(255,255,255,0.25);
+      margin: 18px auto;
+    }
+
+    .brand__tagline {
+      font-size: 11px;
+      font-weight: 300;
+      color: var(--muted);
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+    }
+
+    .panel-left__body {
+      position: relative;
+      z-index: 1;
+      animation: fadeUp .5s .1s ease both;
+    }
+
+    .panel-left__headline {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 38px;
+      font-weight: 700;
+      color: var(--white);
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+
+    .panel-left__headline span {
+      color: var(--accent);
+    }
+
+    .panel-left__desc {
+      font-size: 13.5px;
+      font-weight: 300;
+      color: var(--muted);
+      line-height: 1.75;
+      max-width: 280px;
+    }
+
+    .panel-left__stats {
+      display: flex;
+      gap: 28px;
+      margin-top: 36px;
+      animation: fadeUp .5s .15s ease both;
+      position: relative;
+      z-index: 1;
+    }
+
+    .stat {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 14px;
+    }
+
+    .stat__n {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--white);
+    }
+
+    .stat__l {
+      font-size: 11px;
+      font-weight: 300;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      margin-top: 2px;
+      text-transform: uppercase;
+    }
+
+    .panel-left__footer {
+      font-size: 10px;
+      font-weight: 300;
+      color: rgba(255,255,255,0.18);
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      position: absolute;
+      bottom: 32px;
+      z-index: 1;
+    }
+
+    /* ── RIGHT PANEL ── */
+    .panel-right {
+      flex: 1;
+      background: var(--surface);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: 48px 32px;
     }
 
-    .login-wrap {
+    .form-wrap {
       width: 100%;
-      max-width: 380px;
+      max-width: 360px;
+      animation: fadeUp .5s .25s ease both;
     }
 
-    /* Encabezado / marca */
-    .login-brand {
-      text-align: center;
+    .form-eyebrow {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .form-title {
+      font-family: 'Epilogue', sans-serif;
+      font-size: 26px;
+      font-weight: 500;
+      color: var(--ink);
       margin-bottom: 32px;
+      line-height: 1.2;
     }
 
-    .login-brand__logo {
-      width: 56px;
-      height: 56px;
-      border-radius: 14px;
-      background: #1a1a1a;
-      display: inline-flex;
+    /* Alert */
+    .login-alert {
+      background: #fff0ef;
+      border-left: 3px solid #d9534f;
+      color: #8b2020;
+      border-radius: 0 8px 8px 0;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+
+    /* Fields */
+    .field {
+      margin-bottom: 20px;
+    }
+
+    .field__label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin-bottom: 8px;
+    }
+
+    .field__input {
+      width: 100%;
+      padding: 13px 16px;
+      border: 1.5px solid var(--border-strong);
+      border-radius: 10px;
+      background: var(--white);
+      font-family: 'Epilogue', sans-serif;
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--ink);
+      outline: none;
+      transition: border-color .18s, box-shadow .18s;
+    }
+
+    .field__input::placeholder {
+      color: #bbb;
+    }
+
+    .field__input:focus {
+      border-color: var(--ink);
+      box-shadow: 0 0 0 4px rgba(0,0,0,0.08);
+    }
+
+    /* Submit button */
+    .submit-btn {
+      width: 100%;
+      margin-top: 10px;
+      padding: 14px 20px;
+      background: var(--ink);
+      color: var(--white);
+      font-family: 'Epilogue', sans-serif;
+      font-size: 13.5px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 14px;
+      gap: 10px;
+      transition: background .18s, transform .12s;
+      position: relative;
+      overflow: hidden;
     }
 
-    .login-brand__logo svg {
-      width: 28px;
-      height: 28px;
-      fill: #fff;
-      opacity: 0.9;
+    .submit-btn::after {
+      content: '→';
+      font-size: 15px;
+      transition: transform .2s;
     }
 
-    .login-brand__name {
-      font-family: 'Syne', sans-serif;
-      font-size: 20px;
-      font-weight: 800;
-      color: #1a1a1a;
+    .submit-btn:hover {
+      background: var(--ink-3);
+    }
+
+    .submit-btn:hover::after {
+      transform: translateX(4px);
+    }
+
+    .submit-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* Divider */
+    .form-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    .form-divider::before,
+    .form-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .form-divider__txt {
+      font-size: 11px;
+      color: #bbb;
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
 
-    .login-brand__sub {
-      font-size: 12px;
-      color: #888;
-      margin-top: 3px;
+    .form-footer {
+      font-size: 11.5px;
+      color: #aaa;
+      text-align: center;
+      margin-top: 28px;
       letter-spacing: 0.04em;
     }
 
-    /* Card */
-    .login-card {
-      background: #fff;
-      border-radius: 16px;
-      padding: 32px;
-      border: 1px solid rgba(0,0,0,0.08);
-      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
-    }
-
-    .login-card__title {
-      font-size: 15px;
-      font-weight: 500;
-      color: #333;
-      margin-bottom: 22px;
-      text-align: center;
-    }
-
-    /* Alertas */
-    .login-alert {
-      background: #fef2f2;
-      border: 1px solid rgba(220,60,60,0.25);
-      color: #b91c1c;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 13px;
-      margin-bottom: 16px;
-    }
-
-    /* Campos */
-    .login-field {
-      margin-bottom: 16px;
-    }
-
-    .login-label {
-      display: block;
-      font-size: 12px;
-      font-weight: 500;
-      color: #555;
-      margin-bottom: 6px;
-      letter-spacing: 0.03em;
-    }
-
-    .login-input {
-      width: 100%;
-      padding: 10px 14px;
-      border: 1px solid #ddd;
-      border-radius: 9px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      color: #1a1a1a;
-      background: #fafafa;
-      outline: none;
-      transition: border-color .15s, box-shadow .15s;
-    }
-
-    .login-input:focus {
-      border-color: #666;
-      background: #fff;
-      box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
-    }
-
-    /* Botón */
-    .login-btn {
-      width: 100%;
-      padding: 11px;
-      margin-top: 8px;
-      background: #1a1a1a;
-      color: #fff;
-      border: none;
-      border-radius: 9px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      letter-spacing: 0.03em;
-      transition: background .15s, transform .1s;
-    }
-
-    .login-btn:hover {
-      background: #333;
-    }
-
-    .login-btn:active {
-      transform: scale(0.99);
-    }
-
-    /* Pie */
-    .login-footer {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 11.5px;
-      color: #bbb;
-    }
-
-    /* Animación de entrada */
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(16px); }
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    .login-wrap {
-      animation: slideUp .35s ease both;
+    /* ── RESPONSIVE ── */
+    @media (max-width: 780px) {
+      body { flex-direction: column; }
+
+      .panel-left {
+        flex: none;
+        padding: 36px 28px 32px;
+        min-height: auto;
+      }
+
+      .panel-left__body,
+      .panel-left__stats { display: none; }
+
+      .panel-right {
+        padding: 36px 24px;
+        background: var(--surface);
+      }
     }
   </style>
 </head>
 <body>
-  <div class="login-wrap">
 
-    <!-- Marca -->
-    <div class="login-brand">
-      <div class="login-brand__logo">
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <rect x="3"  y="2"  width="4" height="20" rx="1"/>
-          <rect x="10" y="6"  width="4" height="16" rx="1"/>
-          <rect x="17" y="10" width="4" height="12" rx="1"/>
-        </svg>
-      </div>
-      <div class="login-brand__name">Andicost</div>
-      <div class="login-brand__sub">Sistema de presupuestación</div>
+  <!-- LEFT PANEL -->
+  <aside class="panel-left">
+    <div class="brand">
+      <div class="brand__name">Andicost</div>
+      <div class="brand__divider"></div>
+      <div class="brand__tagline">Sistema de presupuestación</div>
     </div>
 
-    <!-- Card de login -->
-    <div class="login-card">
-      <div class="login-card__title">Ingresa tus credenciales</div>
+    <div class="panel-left__footer">© Edil Andina · Uso interno</div>
+  </aside>
+
+  <!-- RIGHT PANEL: FORM -->
+  <main class="panel-right">
+    <div class="form-wrap">
+
+      <div class="form-eyebrow">Acceso al sistema</div>
+      <h2 class="form-title">Bienvenido de vuelta</h2>
 
       {% if messages %}
         {% for m in messages %}
@@ -200,33 +386,34 @@
       <form method="post" autocomplete="on">
         {% csrf_token %}
 
-        <div class="login-field">
-          <label class="login-label" for="loginEmail">Email</label>
+        <div class="field">
+          <label class="field__label" for="loginEmail">Email</label>
           <input id="loginEmail"
                  type="email"
                  name="email"
-                 class="login-input"
+                 class="field__input"
                  placeholder="usuario@edilandina.com"
                  autocomplete="email"
                  required>
         </div>
 
-        <div class="login-field">
-          <label class="login-label" for="loginPassword">Contraseña</label>
+        <div class="field">
+          <label class="field__label" for="loginPassword">Contraseña</label>
           <input id="loginPassword"
                  type="password"
                  name="password"
-                 class="login-input"
+                 class="field__input"
                  placeholder="••••••••"
                  autocomplete="current-password"
                  required>
         </div>
 
-        <button type="submit" class="login-btn">Entrar al Sistema</button>
+        <button type="submit" class="submit-btn">Entrar al Sistema</button>
       </form>
-    </div>
 
-    <div class="login-footer">Edil Andina · Andicost v3</div>
-  </div>
+      <div class="form-footer">Edil Andina · Plataforma interna</div>
+    </div>
+  </main>
+
 </body>
 </html>

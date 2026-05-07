@@ -1,0 +1,707 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ despiece.nombre|default:"Despiece" }} — Workbench{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Despiece Maestro{% endblock %}
+{% block breadcrumb %}{{ despiece.subsistema.sistema.codigo }} · {{ despiece.subsistema.codigo }}{% endblock %}
+
+{% block topbar_actions %}
+<span class="badge {% if despiece.esta_guardado %}bg-success{% else %}bg-warning text-dark{% endif %} me-2">
+  {{ despiece.estado }}
+</span>
+{% if despiece.esta_guardado %}
+<a href="{% url 'ingenieria:apu_despiece_maestro' despiece.pk %}"
+   class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1">
+  <i class="bi bi-file-earmark-bar-graph"></i> Ver APU
+</a>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.wb-layout {
+  display: grid;
+  grid-template-columns: 272px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 900px) { .wb-layout { grid-template-columns: 1fr; } }
+
+/* ── Panel de variables ─────────────────────────────────────────────────── */
+.wb-panel {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden;
+  position: sticky;
+  top: 72px;
+}
+.wb-panel__head {
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(0,0,0,.08);
+  background: linear-gradient(135deg, var(--theme-accent-pale,#e8f0fe) 0%, rgba(255,255,255,0) 80%);
+  border-top: 3px solid var(--theme-accent);
+}
+.wb-panel__title {
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--theme-accent);
+}
+.wb-panel__sub { font-size: 11px; color: #666; margin-top: 2px; }
+.wb-panel__body { padding: 14px 16px; }
+
+.var-row { margin-bottom: 12px; }
+.var-row label {
+  font-size: 12px; font-weight: 600; color: #555;
+  margin-bottom: 3px; display: flex; justify-content: space-between;
+}
+.var-unit { font-weight: 400; color: #999; font-size: 11px; }
+.var-input {
+  border-radius: 7px; border: 1.5px solid rgba(0,0,0,.12);
+  font-size: 14px; height: 34px; text-align: right; font-weight: 600;
+  transition: border-color .15s;
+}
+.var-input:focus { border-color: var(--theme-accent); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+
+.wb-actions {
+  padding: 12px 16px; border-top: 1px solid rgba(0,0,0,.08);
+  display: flex; flex-direction: column; gap: 7px;
+}
+.btn-calcular {
+  background: var(--theme-accent); color: #fff; border: none; border-radius: 8px;
+  padding: 9px 0; font-size: 13px; font-weight: 600; width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  cursor: pointer; transition: opacity .15s;
+}
+.btn-calcular:hover { opacity: .88; }
+.btn-calcular:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-guardar {
+  background: #198754; color: #fff; border: none; border-radius: 8px;
+  padding: 8px 0; font-size: 13px; font-weight: 600; width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  cursor: pointer; transition: opacity .15s;
+}
+.btn-guardar:hover { opacity: .88; }
+.btn-guardar:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.wb-spinner {
+  display: none; width: 15px; height: 15px;
+  border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Panel de resultados ─────────────────────────────────────────────────── */
+.wb-result {
+  background: #fff; border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08); box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden;
+}
+.wb-result__head {
+  padding: 13px 20px; border-bottom: 1px solid rgba(0,0,0,.08);
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+}
+.wb-result__title { font-size: 14px; font-weight: 700; color: #222; }
+.wb-result__count { font-size: 12px; color: #888; }
+
+.sq-tags-bar {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  padding: 8px 20px; border-bottom: 1px solid rgba(0,0,0,.06);
+  background: rgba(0,0,0,.015);
+}
+.sq-tag {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px;
+  background: var(--theme-accent-pale,#e8f0fe); color: var(--theme-accent);
+}
+
+/* ── Tabla de resultados ─────────────────────────────────────────────────── */
+.dp-table-wrap { overflow-x: auto; }
+.dp-table {
+  width: 100%; font-size: 13px; border-collapse: collapse;
+  min-width: 860px;
+}
+.dp-table th {
+  padding: 9px 12px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: #999;
+  background: rgba(0,0,0,.02); border-bottom: 1px solid rgba(0,0,0,.07);
+  white-space: nowrap;
+}
+.dp-table td {
+  padding: 8px 12px; border-bottom: 1px solid rgba(0,0,0,.045); vertical-align: middle;
+}
+.dp-table tr:last-child td { border-bottom: none; }
+.dp-table tr:hover td { background: rgba(0,0,0,.012); }
+
+.td-comp         { font-weight: 600; color: #222; }
+.td-comp small   { font-size: 11px; color: #999; font-weight: 400; display: block; }
+.td-sq           { font-size: 11px; color: #888; white-space: nowrap; }
+.td-cant         { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-und          { color: #888; font-size: 12px; white-space: nowrap; }
+.td-precio       { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-fecha        { font-size: 11px; color: #aaa; white-space: nowrap; }
+.text-sin-precio { color: #dc3545; font-size: 11px; font-style: italic; }
+.text-pendiente  { color: #e0a800; font-size: 11px; font-style: italic; }
+
+/* ── Fila de total ───────────────────────────────────────────────────────── */
+.dp-total-row td {
+  background: rgba(0,0,0,.025); font-weight: 700;
+  border-top: 2px solid rgba(0,0,0,.08); border-bottom: none;
+}
+
+/* ── Selector de producto inline ─────────────────────────────────────────── */
+.prod-selector { position: relative; min-width: 210px; }
+
+.prod-input {
+  width: 100%; border-radius: 7px; border: 1.5px solid rgba(0,0,0,.12);
+  font-size: 12px; height: 30px; padding: 0 26px 0 8px;
+  background: #fafafa; transition: border-color .15s; color: #333;
+}
+.prod-input::placeholder { color: #bbb; }
+.prod-input:focus { outline: none; border-color: var(--theme-accent); background: #fff; }
+.prod-input.has-product {
+  border-color: #198754; background: rgba(25,135,84,.04); font-weight: 600;
+}
+
+.prod-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: #bbb; cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 0;
+  display: none;
+}
+.prod-clear.visible { display: block; }
+.prod-clear:hover { color: #dc3545; }
+
+.prod-dropdown {
+  position: absolute; top: 33px; left: 0; right: 0; z-index: 1050;
+  background: #fff; border: 1px solid rgba(0,0,0,.15); border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.13); max-height: 220px; overflow-y: auto;
+  display: none;
+}
+.prod-dropdown.open { display: block; }
+
+.prod-option {
+  padding: 8px 11px; cursor: pointer;
+  border-bottom: 1px solid rgba(0,0,0,.05); transition: background .1s;
+}
+.prod-option:last-child { border-bottom: none; }
+.prod-option:hover { background: rgba(0,0,0,.04); }
+.prod-opt-nombre { font-size: 12px; font-weight: 600; color: #222; }
+.prod-opt-meta   { font-size: 11px; color: #888; margin-top: 2px; }
+.prod-opt-empty  { padding: 10px 12px; text-align: center; color: #bbb; font-size: 12px; }
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.wb-empty {
+  padding: 52px 20px; text-align: center; color: #bbb;
+}
+.wb-empty i { font-size: 38px; margin-bottom: 10px; opacity: .4; display: block; }
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+.wb-toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: #222; color: #fff; border-radius: 10px;
+  padding: 11px 18px; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; z-index: 9999;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  transform: translateY(20px); opacity: 0;
+  transition: all .3s ease; pointer-events: none;
+}
+.wb-toast.show { transform: translateY(0); opacity: 1; }
+.wb-toast.ok   { background: #198754; }
+.wb-toast.err  { background: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wb-layout">
+
+  <!-- ── Panel izquierdo: variables ── -->
+  <div class="wb-panel">
+    <div class="wb-panel__head">
+      <div class="wb-panel__title">Variables de entrada</div>
+      <div class="wb-panel__sub">{{ despiece.subsistema.codigo }} · {{ despiece.subsistema.nombre }}</div>
+    </div>
+
+    <div class="wb-panel__body">
+      {% if variables_requeridas %}
+        {% for v in variables_requeridas %}
+        <div class="var-row">
+          <label for="var_{{ v.variable }}">
+            {{ v.label|default:v.variable }}
+            {% if v.unidad %}<span class="var-unit">{{ v.unidad }}</span>{% endif %}
+          </label>
+          <input type="number" id="var_{{ v.variable }}"
+                 class="form-control var-input"
+                 data-var="{{ v.variable }}"
+                 value="{{ v.valor_actual }}"
+                 step="any" autocomplete="off">
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="text-muted small text-center py-3">Sin variables configuradas.</div>
+      {% endif %}
+    </div>
+
+    <div class="wb-actions">
+      <button type="button" id="btnCalcular" class="btn-calcular" onclick="calcular()">
+        <span id="calcIcon"><i class="bi bi-play-fill"></i></span>
+        <span class="wb-spinner" id="calcSpinner"></span>
+        <span>Calcular</span>
+      </button>
+      <button type="button" id="btnGuardar" class="btn-guardar" onclick="guardar()"
+              {% if not despiece.tiene_lineas %}disabled{% endif %}>
+        <span id="guardarIcon"><i class="bi bi-floppy"></i></span>
+        <span class="wb-spinner" id="guardarSpinner"></span>
+        <span id="guardarText">Guardar despiece</span>
+      </button>
+      {% if despiece.esta_guardado %}
+      <a href="{% url 'ingenieria:apu_despiece_maestro' despiece.pk %}"
+         class="btn btn-outline-primary btn-sm text-center">
+        <i class="bi bi-file-earmark-bar-graph"></i> Generar APU
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Panel derecho: tabla ── -->
+  <div class="wb-result">
+    <div class="wb-result__head">
+      <div class="wb-result__title">
+        {{ despiece.nombre|default:"Despiece" }}
+        <span class="text-muted fw-normal" style="font-size:13px">#{{ despiece.pk }}</span>
+      </div>
+      <div class="wb-result__count" id="resultCount">Cargando…</div>
+    </div>
+
+    {% if subconjuntos_seleccionados %}
+    <div class="sq-tags-bar">
+      {% for sq in subconjuntos_seleccionados %}
+      <span class="sq-tag">{{ sq.nombre }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div id="resultBody"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="wb-toast" id="wbToast"></div>
+
+{# Datos iniciales para JS #}
+<script>
+const CALCULAR_URL  = "{% url 'ingenieria:calcular_despiece_maestro' despiece.pk %}";
+const GUARDAR_URL   = "{% url 'ingenieria:guardar_despiece_maestro' despiece.pk %}";
+const PRODUCTOS_URL = "{% url 'ingenieria:buscar_productos' %}";
+const CSRF          = "{{ csrf_token }}";
+
+// Líneas guardadas del despiece (vacío si es borrador sin cálculo previo)
+const LINEAS_INIT   = {{ lineas_json|safe }};
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Estado global de la tabla
+──────────────────────────────────────────────────────────────────────────── */
+let filasCalc      = [];   // [{...campo, _prod: {...} | null}]
+let variablesUsadas = null; // variables_entrada del último cálculo
+
+/* ── Helpers básicos ─────────────────────────────────────────────────────── */
+function getVariables() {
+  const v = {};
+  document.querySelectorAll('.var-input[data-var]').forEach(inp => {
+    const n = parseFloat(inp.value);
+    if (!isNaN(n)) v[inp.dataset.var] = n;
+  });
+  return v;
+}
+
+function fmt(n, dec) {
+  if (n === null || n === undefined || isNaN(Number(n))) return '—';
+  return Number(n).toLocaleString('es-CO', {
+    minimumFractionDigits:  dec ?? 2,
+    maximumFractionDigits:  dec ?? 2,
+  });
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('wbToast');
+  t.textContent = msg;
+  t.className = 'wb-toast show ' + (type || '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function setLoading(btnId, spinnerId, iconId, on) {
+  const btn  = document.getElementById(btnId);
+  const spin = document.getElementById(spinnerId);
+  const icon = document.getElementById(iconId);
+  if (btn)  btn.disabled          = on;
+  if (spin) spin.style.display    = on ? 'block' : 'none';
+  if (icon) icon.style.display    = on ? 'none'  : 'block';
+}
+
+/* ── Recalcular total general ────────────────────────────────────────────── */
+function recalcularTotal() {
+  let total = 0, hayTotal = false;
+  filasCalc.forEach(f => {
+    if (f._prod && f._prod.precio_unitario != null) {
+      total += f.cantidad_calculada * f._prod.precio_unitario;
+      hayTotal = true;
+    }
+  });
+  const el = document.getElementById('totalGeneral');
+  if (el) el.textContent = hayTotal ? `$${fmt(total)}` : '—';
+}
+
+/* ── Recalcular precio total de una fila ─────────────────────────────────── */
+function recalcularFilaTotal(fila, tr) {
+  const totalEl = tr.querySelector('.td-total-val');
+  if (!totalEl) return;
+  if (fila._prod && fila._prod.precio_unitario != null) {
+    const t = fila.cantidad_calculada * fila._prod.precio_unitario;
+    totalEl.textContent = `$${fmt(t)}`;
+  } else {
+    totalEl.innerHTML = '<span class="text-pendiente">—</span>';
+  }
+  recalcularTotal();
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Autocomplete de productos
+──────────────────────────────────────────────────────────────────────────── */
+let _searchTimer = null;
+
+function cerrarTodosDropdowns(excepto) {
+  document.querySelectorAll('.prod-dropdown.open').forEach(d => {
+    if (d !== excepto) d.classList.remove('open');
+  });
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.prod-selector')) {
+    document.querySelectorAll('.prod-dropdown.open').forEach(d => d.classList.remove('open'));
+  }
+});
+
+function initSelector(tr, fila) {
+  const inp   = tr.querySelector('.prod-input');
+  const clear = tr.querySelector('.prod-clear');
+  const drop  = tr.querySelector('.prod-dropdown');
+
+  // Si la fila ya trae producto guardado, pre-rellenar
+  if (fila._prod && fila._prod.producto_nombre) {
+    inp.value = fila._prod.producto_nombre;
+    inp.classList.add('has-product');
+    clear.classList.add('visible');
+  }
+
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim();
+    clearTimeout(_searchTimer);
+    if (!q) { drop.classList.remove('open'); return; }
+    _searchTimer = setTimeout(() => buscarYMostrar(q, fila.categoria_nombre || '', drop, tr, fila), 260);
+  });
+
+  inp.addEventListener('focus', () => {
+    const q = inp.value.trim();
+    if (q) buscarYMostrar(q, fila.categoria_nombre || '', drop, tr, fila);
+  });
+
+  clear.addEventListener('click', e => {
+    e.stopPropagation();
+    limpiarProducto(inp, clear, drop, tr, fila);
+  });
+}
+
+async function buscarYMostrar(q, categoria, drop, tr, fila) {
+  drop.innerHTML = '<div class="prod-opt-empty">Buscando…</div>';
+  drop.classList.add('open');
+  cerrarTodosDropdowns(drop);
+
+  const url = `${PRODUCTOS_URL}?q=${encodeURIComponent(q)}&categoria=${encodeURIComponent(categoria)}`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.productos || !data.productos.length) {
+      drop.innerHTML = '<div class="prod-opt-empty">Sin resultados</div>';
+      return;
+    }
+    drop.innerHTML = '';
+    data.productos.forEach(p => {
+      const opt = document.createElement('div');
+      opt.className = 'prod-option';
+      opt.innerHTML = `
+        <div class="prod-opt-nombre">${esc(p.nombre)}</div>
+        <div class="prod-opt-meta">${esc(p.codigo)} &nbsp;·&nbsp; ${esc(p.unidad)} &nbsp;·&nbsp; $${fmt(p.precio_unitario)}</div>
+      `;
+      opt.addEventListener('click', () => {
+        seleccionarProducto(p, tr, fila);
+        drop.classList.remove('open');
+      });
+      drop.appendChild(opt);
+    });
+  } catch(e) {
+    drop.innerHTML = '<div class="prod-opt-empty">Error al buscar</div>';
+  }
+}
+
+function seleccionarProducto(prod, tr, fila) {
+  const inp   = tr.querySelector('.prod-input');
+  const clear = tr.querySelector('.prod-clear');
+
+  inp.value = prod.nombre;
+  inp.classList.add('has-product');
+  clear.classList.add('visible');
+
+  fila._prod = {
+    producto_id:      prod.id,
+    producto_codigo:  prod.codigo,
+    producto_nombre:  prod.nombre,
+    precio_unitario:  prod.precio_unitario,
+    moneda:           prod.moneda,
+    fecha_precio:     prod.fecha_actualizacion_precio,
+  };
+
+  // Actualizar celdas de precio y fecha en la fila
+  const precioEl = tr.querySelector('.td-precio-val');
+  const fechaEl  = tr.querySelector('.td-fecha-val');
+  if (precioEl) {
+    precioEl.innerHTML = prod.precio_unitario != null
+      ? `$${fmt(prod.precio_unitario)} <small class="td-und" style="font-weight:400">${esc(prod.moneda)}</small>`
+      : '<span class="text-sin-precio">Sin precio</span>';
+  }
+  if (fechaEl) {
+    fechaEl.textContent = prod.fecha_actualizacion_precio
+      ? prod.fecha_actualizacion_precio.substring(0, 10)
+      : '—';
+  }
+  recalcularFilaTotal(fila, tr);
+}
+
+function limpiarProducto(inp, clear, drop, tr, fila) {
+  inp.value = '';
+  inp.classList.remove('has-product');
+  clear.classList.remove('visible');
+  drop.classList.remove('open');
+  fila._prod = null;
+
+  const precioEl = tr.querySelector('.td-precio-val');
+  const fechaEl  = tr.querySelector('.td-fecha-val');
+  const totalEl  = tr.querySelector('.td-total-val');
+  if (precioEl) precioEl.innerHTML  = '<span class="text-pendiente">Sin producto</span>';
+  if (fechaEl)  fechaEl.textContent = '—';
+  if (totalEl)  totalEl.innerHTML   = '<span class="text-pendiente">—</span>';
+  recalcularTotal();
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Render de la tabla
+──────────────────────────────────────────────────────────────────────────── */
+/**
+ * lineas: array plano de objetos con {componente_codigo, componente_nombre,
+ *   subconjunto_nombre, cantidad_calculada, unidad, categoria_nombre,
+ *   subconjunto_id, formula_texto, variable_salida, variable_referencia_apu,
+ *   unidad_apu,
+ *   + opcionales de producto guardado: producto_id, producto_nombre, ...}
+ */
+function renderTabla(lineas) {
+  filasCalc = lineas.map(l => ({
+    ...l,
+    _prod: (l.producto_id || l.producto_nombre) ? {
+      producto_id:     l.producto_id,
+      producto_codigo: l.producto_codigo || '',
+      producto_nombre: l.producto_nombre || '',
+      precio_unitario: l.precio_unitario,
+      moneda:          l.moneda || '',
+      fecha_precio:    l.fecha_precio || null,
+    } : null,
+  }));
+
+  const body   = document.getElementById('resultBody');
+  const count  = document.getElementById('resultCount');
+  count.textContent = `${filasCalc.length} componente${filasCalc.length !== 1 ? 's' : ''}`;
+
+  if (!filasCalc.length) {
+    body.innerHTML = `<div class="wb-empty"><i class="bi bi-inbox"></i><div>Sin componentes calculados</div></div>`;
+    return;
+  }
+
+  const html = `
+    <div class="dp-table-wrap">
+    <table class="dp-table">
+      <thead><tr>
+        <th>Componente</th>
+        <th>Subconjunto</th>
+        <th class="text-end">Cantidad</th>
+        <th>Und</th>
+        <th style="min-width:220px">Producto seleccionado</th>
+        <th class="text-end">P. unitario</th>
+        <th class="text-end">P. total</th>
+        <th>Actualización</th>
+      </tr></thead>
+      <tbody id="dpTbody">
+        ${filasCalc.map((f, i) => {
+          const prod = f._prod;
+          const precioHtml = prod
+            ? (prod.precio_unitario != null
+                ? `$${fmt(prod.precio_unitario)} <small class="td-und" style="font-weight:400">${esc(prod.moneda)}</small>`
+                : '<span class="text-sin-precio">Sin precio</span>')
+            : '<span class="text-pendiente">Sin producto</span>';
+          const totalHtml = (prod && prod.precio_unitario != null)
+            ? `$${fmt(f.cantidad_calculada * prod.precio_unitario)}`
+            : '<span class="text-pendiente">—</span>';
+          const fechaHtml = (prod && prod.fecha_precio)
+            ? String(prod.fecha_precio).substring(0, 10)
+            : '—';
+          return `<tr data-idx="${i}">
+            <td class="td-comp">
+              ${esc(f.componente_nombre)}
+              <small>${esc(f.componente_codigo)}</small>
+            </td>
+            <td class="td-sq">${esc(f.subconjunto_nombre || '—')}</td>
+            <td class="td-cant">${fmt(f.cantidad_calculada, 4)}</td>
+            <td class="td-und">${esc(f.unidad)}</td>
+            <td>
+              <div class="prod-selector">
+                <input type="text" class="prod-input" placeholder="Buscar producto…" autocomplete="off">
+                <button type="button" class="prod-clear">×</button>
+                <div class="prod-dropdown"></div>
+              </div>
+            </td>
+            <td class="td-precio"><span class="td-precio-val">${precioHtml}</span></td>
+            <td class="td-precio"><span class="td-total-val">${totalHtml}</span></td>
+            <td class="td-fecha"><span class="td-fecha-val">${esc(fechaHtml)}</span></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+      <tfoot>
+        <tr class="dp-total-row">
+          <td colspan="6" class="text-end" style="font-size:12px;color:#888;padding-right:8px;font-weight:600">
+            Total valorizado
+          </td>
+          <td class="td-precio" id="totalGeneral">—</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+    </div>`;
+
+  body.innerHTML = html;
+
+  // Inicializar selectores en cada fila
+  document.querySelectorAll('#dpTbody tr').forEach((tr, i) => {
+    initSelector(tr, filasCalc[i]);
+  });
+
+  recalcularTotal();
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Calcular (AJAX, sin guardar)
+──────────────────────────────────────────────────────────────────────────── */
+async function calcular() {
+  setLoading('btnCalcular', 'calcSpinner', 'calcIcon', true);
+  const vars = getVariables();
+
+  try {
+    const resp = await fetch(CALCULAR_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body:    JSON.stringify({ variables_entrada: vars }),
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      // Aplanar de subconjuntos a lista plana
+      const lineas = [];
+      data.subconjuntos.forEach(sq => sq.lineas.forEach(l => lineas.push(l)));
+
+      variablesUsadas = vars;
+      renderTabla(lineas);
+      document.getElementById('btnGuardar').disabled = false;
+
+      if (data.errores && data.errores.length) {
+        showToast(`⚠ ${data.errores.length} componente(s) con error`, 'err');
+      } else {
+        showToast(`✓ ${lineas.length} componentes calculados`, 'ok');
+      }
+    } else {
+      showToast('Error: ' + (data.error || 'desconocido'), 'err');
+    }
+  } catch(e) {
+    showToast('Error de red: ' + e.message, 'err');
+  } finally {
+    setLoading('btnCalcular', 'calcSpinner', 'calcIcon', false);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Guardar
+──────────────────────────────────────────────────────────────────────────── */
+async function guardar() {
+  if (!filasCalc.length) return;
+
+  setLoading('btnGuardar', 'guardarSpinner', 'guardarIcon', true);
+  document.getElementById('guardarText').style.opacity = '.6';
+
+  const seleccion = {};
+  filasCalc.forEach(f => {
+    if (f._prod) seleccion[f.componente_codigo] = f._prod;
+  });
+
+  const payload = {
+    variables_entrada:   variablesUsadas || getVariables(),
+    seleccion_productos: seleccion,
+  };
+
+  try {
+    const resp = await fetch(GUARDAR_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body:    JSON.stringify(payload),
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      showToast('✓ Despiece guardado correctamente', 'ok');
+      setTimeout(() => window.location.href = data.redirect_url, 900);
+    } else {
+      showToast('Error al guardar: ' + (data.error || 'desconocido'), 'err');
+    }
+  } catch(e) {
+    showToast('Error de red: ' + e.message, 'err');
+  } finally {
+    setLoading('btnGuardar', 'guardarSpinner', 'guardarIcon', false);
+    document.getElementById('guardarText').style.opacity = '1';
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Inicialización: cargar líneas guardadas si existen
+──────────────────────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  if (LINEAS_INIT.length > 0) {
+    // El despiece ya tiene líneas guardadas: mostrarlas con sus productos
+    variablesUsadas = {{ despiece.variables_entrada|default:"{}"|safe }};
+    renderTabla(LINEAS_INIT);
+    document.getElementById('btnGuardar').disabled = false;
+  } else {
+    // Borrador sin cálculo previo: mostrar estado vacío
+    document.getElementById('resultBody').innerHTML = `
+      <div class="wb-empty">
+        <i class="bi bi-calculator"></i>
+        <div class="fw-semibold mb-1">Ingresa las variables y presiona Calcular</div>
+        <div class="small text-muted">Los resultados aparecerán aquí.</div>
+      </div>`;
+    document.getElementById('resultCount').textContent = 'Pendiente de calcular';
+  }
+});
+</script>
+{% endblock %}

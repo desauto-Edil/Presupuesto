@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Calculador de Sistemas{% endblock %}
+{% block nav_despiece %}active{% endblock %}
+{% block page_title %}Calculador de Sistemas{% endblock %}
+{% block breadcrumb %}Presupuestos → Calculador de Sistemas{% endblock %}
+
+{% block extra_head %}
+<style>
+.dp-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+.dp-card .table thead th {
+    background: var(--surface);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 14px 16px;
+    color: var(--ink-soft);
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+}
+.dp-card .table tbody td {
+    padding: 12px 16px;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(14,17,23,0.04);
+    font-size: 13px;
+}
+.dp-card .table tbody tr:last-child td { border-bottom: none; }
+.dp-card .table tbody tr:hover td { background: var(--theme-accent-pale); }
+
+.dp-consecutivo {
+    font-family: monospace;
+    font-weight: 700;
+    color: var(--theme-accent);
+    font-size: 13px;
+}
+.dp-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(var(--theme-accent-rgb, 86,83,148), .1);
+    color: var(--theme-accent);
+}
+.dp-count-badge--empty {
+    background: rgba(14,17,23,.06);
+    color: var(--ink-soft);
+}
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<form method="post" action="{% url 'presupuestos:despiece_nuevo' %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary btn-sm">+ Nuevo despiece</button>
+</form>
+{% endblock %}
+
+{% block content %}
+<div class="dp-card fade-up">
+    {% if proyectos %}
+    <table class="table mb-0">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th style="text-align:center;">Sistemas</th>
+                <th style="text-align:center;">Líneas</th>
+                <th>Estado</th>
+                <th class="text-end">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in proyectos %}
+            <tr>
+                <td><span class="dp-consecutivo">{{ p.consecutivo }}</span></td>
+                <td style="font-weight:500;color:{% if p.nombre %}var(--ink){% else %}var(--ink-soft){% endif %};">
+                    {% if p.nombre %}{{ p.nombre }}{% else %}<em>Sin nombre</em>{% endif %}
+                </td>
+                <td style="text-align:center;">
+                    <span class="dp-count-badge {% if p.num_sistemas == 0 %}dp-count-badge--empty{% endif %}">
+                        {{ p.num_sistemas }}
+                    </span>
+                </td>
+                <td style="text-align:center;">
+                    <span class="dp-count-badge {% if p.num_lineas == 0 %}dp-count-badge--empty{% endif %}">
+                        {{ p.num_lineas }}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge-status
+                        {% if p.estado == 'SOLICITUD' %}bs-pendiente
+                        {% elif p.estado == 'DESPIECE' %}bs-apu
+                        {% elif p.estado == 'APU_GENERADO' %}bs-validado
+                        {% elif p.estado == 'APROBADO' %}bs-validado
+                        {% elif p.estado == 'CANCELADO' %}bs-cerrado
+                        {% else %}bs-inactivo{% endif %}">
+                        {{ p.get_estado_display }}
+                    </span>
+                </td>
+                <td class="text-end" style="white-space:nowrap;">
+                    <a href="{% url 'presupuestos:despiece_proyecto' p.pk %}"
+                       class="btn btn-primary btn-xs d-inline-flex align-items-center gap-1"
+                       title="Despiece constructivo">
+                        <i class="bi bi-grid-3x3-gap"></i>
+                        Despiece
+                    </a>
+                    <a href="{% url 'presupuestos:despiece_proyecto' p.pk %}#consumo"
+                       class="btn btn-ghost btn-xs d-inline-flex align-items-center gap-1"
+                       title="Calculador de consumo">
+                        <i class="bi bi-calculator"></i>
+                        Consumo
+                    </a>
+                    {% if p.num_lineas > 0 %}
+                    <a href="{% url 'presupuestos:despiece_csv' p.pk %}"
+                       class="btn btn-ghost btn-xs d-inline-flex align-items-center gap-1"
+                       title="Descargar resumen CSV">
+                        <i class="bi bi-download"></i>
+                        CSV
+                    </a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" style="padding:60px 24px;text-align:center;">
+        <i class="bi bi-layers" style="font-size:38px;color:var(--theme-accent);opacity:.4;display:block;margin-bottom:12px;"></i>
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px;">Sin proyectos con despiece</div>
+        <div style="font-size:13px;color:var(--ink-soft);margin-bottom:20px;">
+            Crea un nuevo despiece para comenzar.
+        </div>
+        <form method="post" action="{% url 'presupuestos:despiece_nuevo' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-sm">+ Nuevo despiece</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

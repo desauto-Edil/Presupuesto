@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Nuevo Despiece — {{ sistema.codigo }}{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Calculador{% endblock %}
+{% block breadcrumb %}{{ sistema.codigo }} · Configurar despiece{% endblock %}
+
+{% block extra_head %}
+<style>
+.sel-wrap { max-width: 860px; margin: 0 auto; }
+
+/* ── Pasos ──────────────────────────────────────────────────────────────── */
+.sel-steps {
+  display: flex;
+  gap: 0;
+  margin-bottom: 28px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.08);
+  overflow: hidden;
+}
+.sel-step {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #888;
+  border-right: 1px solid rgba(0,0,0,.08);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sel-step:last-child { border-right: none; }
+.sel-step.active { color: var(--theme-accent); }
+.sel-step__num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.08);
+  color: #888;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.sel-step.active .sel-step__num {
+  background: var(--theme-accent);
+  color: #fff;
+}
+
+/* ── Card de subsistema ─────────────────────────────────────────────────── */
+.sub-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 2px solid rgba(0,0,0,.08);
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+  overflow: hidden;
+}
+.sub-card:has(.sub-radio:checked),
+.sub-card.selected {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 3px rgba(var(--theme-accent-rgb, 59,130,246),.12);
+}
+.sub-card__head {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sub-radio {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--theme-accent);
+  flex-shrink: 0;
+}
+.sub-info { flex: 1; }
+.sub-codigo {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--theme-accent);
+}
+.sub-nombre {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+}
+.sub-badge {
+  font-size: 11px;
+  color: #888;
+  background: rgba(0,0,0,.05);
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+.sub-card__body {
+  padding: 0 16px 14px 46px;
+  display: none;
+}
+.sub-card:has(.sub-radio:checked) .sub-card__body,
+.sub-card.selected .sub-card__body {
+  display: block;
+}
+
+/* ── Subconjuntos dentro del subsistema ────────────────────────────────── */
+.sq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.sq-check-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(0,0,0,.03);
+  border: 1.5px solid rgba(0,0,0,.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color .15s, background .15s;
+}
+.sq-check-label:has(input:checked) {
+  background: var(--theme-accent-pale, #e8f0fe);
+  border-color: var(--theme-accent);
+}
+.sq-check-label input {
+  margin-top: 2px;
+  accent-color: var(--theme-accent);
+  flex-shrink: 0;
+}
+.sq-nombre { font-weight: 600; color: #333; }
+.sq-desc { font-size: 11px; color: #888; margin-top: 2px; }
+
+/* ── Botones ────────────────────────────────────────────────────────────── */
+.sel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(0,0,0,.08);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sel-wrap">
+
+  <!-- Pasos -->
+  <div class="sel-steps">
+    <div class="sel-step">
+      <span class="sel-step__num">✓</span> Sistema
+    </div>
+    <div class="sel-step active">
+      <span class="sel-step__num">2</span> Subsistema y subconjuntos
+    </div>
+    <div class="sel-step">
+      <span class="sel-step__num">3</span> Calcular
+    </div>
+  </div>
+
+  <!-- Cabecera del sistema -->
+  <div class="mb-3">
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span class="fw-bold fs-5" style="color:var(--theme-accent)">{{ sistema.codigo }}</span>
+      <span class="text-muted">·</span>
+      <span class="fw-semibold">{{ sistema.nombre }}</span>
+    </div>
+    <div class="text-muted small">Selecciona el subsistema que quieres calcular y los subconjuntos a incluir.</div>
+  </div>
+
+  <form method="post" action="" id="selForm">
+    {% csrf_token %}
+
+    <!-- Campo nombre opcional -->
+    <div class="mb-3">
+      <label class="form-label fw-semibold small">Nombre del despiece <span class="text-muted fw-normal">(opcional)</span></label>
+      <input type="text" name="nombre" class="form-control form-control-sm"
+             placeholder="Ej: Cubierta oficinas – Lote Norte" maxlength="200">
+    </div>
+
+    <!-- Lista de subsistemas -->
+    <div class="mb-2 fw-semibold small text-uppercase text-muted" style="letter-spacing:.05em">Subsistemas disponibles</div>
+
+    {% for sub in subsistemas %}
+    <div class="sub-card" id="subCard{{ sub.pk }}" onclick="selectSub({{ sub.pk }}, this)">
+      <div class="sub-card__head">
+        <input type="radio" name="subsistema_pk" value="{{ sub.pk }}"
+               class="sub-radio" id="sub{{ sub.pk }}"
+               onclick="event.stopPropagation()">
+        <div class="sub-info">
+          <div class="sub-codigo">{{ sub.codigo }}</div>
+          <div class="sub-nombre">{{ sub.nombre }}</div>
+        </div>
+        {% with cnt=sub.subconjuntos_receta.count %}
+        {% if cnt %}
+        <span class="sub-badge"><i class="bi bi-puzzle"></i> {{ cnt }} subconjunto{{ cnt|pluralize:"s" }}</span>
+        {% endif %}
+        {% endwith %}
+      </div>
+
+      {% if sub.subconjuntos_receta.count %}
+      <div class="sub-card__body">
+        <div class="text-muted small mb-1">Elige los subconjuntos a incluir en el despiece:</div>
+        <div class="sq-grid">
+          {% for sq in sub.subconjuntos_receta.all %}
+          {% if sq.activo %}
+          <label class="sq-check-label">
+            <input type="checkbox" name="subconjuntos[]" value="{{ sq.pk }}">
+            <div>
+              <div class="sq-nombre">{{ sq.nombre }}</div>
+              {% if sq.descripcion %}<div class="sq-desc">{{ sq.descripcion }}</div>{% endif %}
+            </div>
+          </label>
+          {% endif %}
+          {% endfor %}
+        </div>
+        <div class="mt-2">
+          <button type="button" class="btn btn-link btn-sm p-0 text-muted"
+                  onclick="toggleAll(this, {{ sub.pk }})">Marcar todos</button>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% empty %}
+    <div class="text-muted text-center py-4">Este sistema no tiene subsistemas activos.</div>
+    {% endfor %}
+
+    <div class="sel-footer">
+      <a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Volver
+      </a>
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-arrow-right"></i> Ir al calculador
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+function selectSub(pk, card) {
+  // Deselect all
+  document.querySelectorAll('.sub-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.sub-radio').forEach(r => r.checked = false);
+  // Select clicked
+  card.classList.add('selected');
+  document.getElementById('sub' + pk).checked = true;
+}
+
+function toggleAll(btn, subPk) {
+  const card = document.getElementById('subCard' + subPk);
+  const checks = card.querySelectorAll('input[type=checkbox]');
+  const allChecked = Array.from(checks).every(c => c.checked);
+  checks.forEach(c => c.checked = !allChecked);
+  btn.textContent = allChecked ? 'Marcar todos' : 'Desmarcar todos';
+}
+</script>
+{% endblock %}

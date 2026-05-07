@@ -255,8 +255,8 @@
              data-prod-nombre="{{ prod.nombre }}"
              data-prod-codigo="{{ prod.codigo }}"
              data-prod-categoria="{{ cat.nombre }}"
-             data-prod-precio="{{ prod.precio_actual|floatformat:0 }}"
-             data-prod-moneda="{{ prod.moneda }}"
+             data-prod-precio="{{ prod.precio_para_display|floatformat:2 }}"
+             data-prod-moneda="{{ prod.moneda_para_display }}"
              data-prod-proveedor="{{ prod.proveedor.nombre|default:'—' }}"
              data-prod-unidad="{{ prod.unidad.abreviatura|default:'—' }}"
              data-prod-marca="{{ prod.marca|default:'—' }}"
@@ -269,7 +269,10 @@
           </div>
           <div class="cat-prod-item__right">
             {% if prod.precio_actual %}
-            <span class="cat-prod-item__price">${{ prod.precio_actual|floatformat:0 }} <span class="cat-prod-item__moneda">{{ prod.moneda }}</span></span>
+            <span class="cat-prod-item__price">
+              {{ prod.precio_para_display|floatformat:2 }}
+              <span class="cat-prod-item__moneda">{{ prod.moneda_para_display }}</span>
+            </span>
             {% else %}<span class="cat-prod-item__no-price">Sin precio</span>{% endif %}
           </div>
         </div>
@@ -281,7 +284,7 @@
                 data-bs-target="#modalListaProductos"
                 data-cat-nombre="{{ cat.nombre }}"
                 data-cat-pk="{{ cat.pk }}"
-                data-productos='[{% for prod in cat.productos.all %}{"nombre":"{{ prod.nombre|escapejs }}","codigo":"{{ prod.codigo|escapejs }}","precio":"{{ prod.precio_actual|floatformat:0 }}","moneda":"{{ prod.moneda }}","proveedor":"{{ prod.proveedor.nombre|default:'—'|escapejs }}","unidad":"{{ prod.unidad.abreviatura|default:'—'|escapejs }}","marca":"{{ prod.marca|default:'—'|escapejs }}","activo":{{ prod.activo|yesno:"true,false" }},"edit_url":"{% url 'catalogos:producto_update' prod.pk %}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
+                data-productos='[{% for prod in cat.productos.all %}{"nombre":"{{ prod.nombre|escapejs }}","codigo":"{{ prod.codigo|escapejs }}","precio":"{{ prod.precio_para_display|floatformat:2 }}","moneda":"{{ prod.moneda_para_display }}","proveedor":"{{ prod.proveedor.nombre|default:'—'|escapejs }}","unidad":"{{ prod.unidad.abreviatura|default:'—'|escapejs }}","marca":"{{ prod.marca|default:'—'|escapejs }}","activo":{{ prod.activo|yesno:"true,false" }},"edit_url":"{% url 'catalogos:producto_update' prod.pk %}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
           + {{ cat.cantidad_productos|add:"-5" }} más — Ver todos
         </button>
         {% endif %}

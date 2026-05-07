@@ -9,16 +9,165 @@
   · {% if form.instance.pk %}Editar{% else %}Nuevo{% endif %}
 {% endblock %}
 
+{% block extra_head %}
+<style>
+
+/* ══ Tarjetas de tipo ════════════════════════════════════════════════════════ */
+.tipo-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.tipo-card {
+  position: relative;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px 14px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+  background: var(--card);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.tipo-card input[type=radio] {
+  position: absolute; opacity: 0; width: 0; height: 0;
+}
+.tipo-card:has(input:checked) {
+  border-color: var(--theme-accent);
+  background: var(--theme-accent-pale);
+  box-shadow: 0 0 0 3px var(--theme-accent-glow);
+}
+.tipo-card:hover:not(:has(input:checked)) {
+  border-color: var(--theme-accent-border);
+  background: var(--surface);
+}
+.tipo-card__radio {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--card);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: all .15s;
+}
+.tipo-card:has(input:checked) .tipo-card__radio {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+}
+.tipo-card__radio::after {
+  content: '';
+  display: none;
+  width: 5px; height: 8px;
+  border: 2px solid #fff;
+  border-top: none; border-left: none;
+  transform: rotate(42deg) translateY(-1px);
+}
+.tipo-card:has(input:checked) .tipo-card__radio::after { display: block; }
+.tipo-card__body {}
+.tipo-card__icon {
+  font-size: 20px;
+  display: block;
+  margin-bottom: 6px;
+}
+.tipo-card__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.tipo-card__desc {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+/* ══ Secciones del form ══════════════════════════════════════════════════════ */
+.sf-block {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.sf-block__head {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sf-block__head-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--theme-accent);
+  flex-shrink: 0;
+}
+.sf-block__head-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-soft);
+}
+.sf-block__body {
+  padding: 18px 20px 16px;
+}
+
+/* ══ Campo con label flotante (estilo moderno) ═══════════════════════════════ */
+.sf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sf-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  letter-spacing: .02em;
+}
+.sf-label span { color: var(--theme-accent); }
+
+/* ══ Tipo pill en header (edición) ══════════════════════════════════════════ */
+.tipo-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  background: var(--theme-accent-pale);
+  color: var(--theme-accent);
+  border: 1px solid var(--theme-accent-border);
+}
+
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-12 col-md-8 col-lg-6">
+  <div class="col-12 col-md-9 col-lg-7">
+
     <div class="panel fade-up">
-      <div class="panel-header d-flex align-items-center gap-2">
-        <span style="font-size:16px; font-weight:700; color:var(--ink);">
-          {% if form.instance.pk %}Editar: {{ form.instance.nombre }}{% else %}Nuevo sistema{% endif %}
-        </span>
+      <div class="panel-header d-flex align-items-center justify-content-between">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:15px;font-weight:700;color:var(--ink);">
+            {% if form.instance.pk %}{{ form.instance.nombre }}{% else %}Nuevo sistema{% endif %}
+          </span>
+          {% if form.instance.pk %}
+          <span class="tipo-pill">{{ form.instance.get_tipo_sistema_display }}</span>
+          {% endif %}
+        </div>
+        <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
       </div>
-      <div style="padding:24px;">
+
+      <div style="padding:22px 24px 24px;">
         <form method="post">
           {% csrf_token %}
 
@@ -26,37 +175,98 @@
           <div class="msg-bar msg-error mb-3">{{ form.non_field_errors }}</div>
           {% endif %}
 
-          <div class="row g-3 mb-3">
-            <div class="col-4">
-              <label class="form-label" style="font-size:12.5px;font-weight:600;">Código *</label>
-              {{ form.codigo }}
-              {% if form.codigo.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.codigo.errors.0 }}</div>{% endif %}
+          <!-- ── Tipo de sistema ────────────────────────────────────────── -->
+          <div class="sf-block">
+            <div class="sf-block__head">
+              <span class="sf-block__head-dot"></span>
+              <span class="sf-block__head-label">Tipo de sistema</span>
             </div>
-            <div class="col-8">
-              <label class="form-label" style="font-size:12.5px;font-weight:600;">Nombre *</label>
-              {{ form.nombre }}
-              {% if form.nombre.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.nombre.errors.0 }}</div>{% endif %}
+            <div class="sf-block__body">
+              <div class="tipo-cards">
+                <label class="tipo-card">
+                  <input type="radio" name="tipo_sistema" value="CONSTRUCTIVO"
+                    {% if not form.instance.pk or form.instance.tipo_sistema == 'CONSTRUCTIVO' %}checked{% endif %}>
+                  <div class="tipo-card__radio"></div>
+                  <div class="tipo-card__body">
+                    <span class="tipo-card__icon">◈</span>
+                    <div class="tipo-card__title">Sistema constructivo</div>
+                    <div class="tipo-card__desc">
+                      Receta técnica con componentes, fórmulas Python y variables de entrada. Genera el despiece de materiales.
+                    </div>
+                  </div>
+                </label>
+                <label class="tipo-card">
+                  <input type="radio" name="tipo_sistema" value="CONSUMO"
+                    {% if form.instance.tipo_sistema == 'CONSUMO' %}checked{% endif %}>
+                  <div class="tipo-card__radio"></div>
+                  <div class="tipo-card__body">
+                    <span class="tipo-card__icon">◉</span>
+                    <div class="tipo-card__title">Sistema de consumo</div>
+                    <div class="tipo-card__desc">
+                      Tabla de capas con datos técnicos: función, estado, resistencia y número de capas por tipo de área.
+                    </div>
+                  </div>
+                </label>
+              </div>
+              {% if form.tipo_sistema.errors %}
+              <div class="text-danger" style="font-size:11.5px;margin-top:6px;">{{ form.tipo_sistema.errors.0 }}</div>
+              {% endif %}
             </div>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label" style="font-size:12.5px;font-weight:600;">Línea de negocio *</label>
-            {{ form.linea_negocio }}
-            {% if form.linea_negocio.errors %}<div class="text-danger" style="font-size:11.5px;margin-top:4px;">{{ form.linea_negocio.errors.0 }}</div>{% endif %}
-          </div>
+          <!-- ── Identificación ─────────────────────────────────────────── -->
+          <div class="sf-block">
+            <div class="sf-block__head">
+              <span class="sf-block__head-dot"></span>
+              <span class="sf-block__head-label">Identificación</span>
+            </div>
+            <div class="sf-block__body">
 
-          <div class="mb-3">
-            <label class="form-label" style="font-size:12.5px;font-weight:600;">Descripción</label>
-            {{ form.descripcion }}
-          </div>
+              <!-- Código + Nombre en la misma fila -->
+              <div class="row g-3 mb-3">
+                <div class="col-4">
+                  <div class="sf-field">
+                    <label class="sf-label">Código <span>*</span></label>
+                    {{ form.codigo }}
+                    {% if form.codigo.errors %}<div class="text-danger" style="font-size:11px;margin-top:2px;">{{ form.codigo.errors.0 }}</div>{% endif %}
+                  </div>
+                </div>
+                <div class="col-8">
+                  <div class="sf-field">
+                    <label class="sf-label">Nombre <span>*</span></label>
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}<div class="text-danger" style="font-size:11px;margin-top:2px;">{{ form.nombre.errors.0 }}</div>{% endif %}
+                  </div>
+                </div>
+              </div>
 
-          <div class="mb-4">
-            <div class="form-check">
-              {{ form.activo }}
-              <label class="form-check-label" style="font-size:13px;">Sistema activo</label>
+              <!-- Línea de negocio + Activo en la misma fila -->
+              <div class="row g-3 mb-3">
+                <div class="col-8">
+                  <div class="sf-field">
+                    <label class="sf-label">Línea de negocio <span>*</span></label>
+                    {{ form.linea_negocio }}
+                    {% if form.linea_negocio.errors %}<div class="text-danger" style="font-size:11px;margin-top:2px;">{{ form.linea_negocio.errors.0 }}</div>{% endif %}
+                  </div>
+                </div>
+                <div class="col-4 d-flex align-items-end pb-1">
+                  <div class="form-check" style="margin-bottom:0;">
+                    {{ form.activo }}
+                    <label class="form-check-label" style="font-size:13px;font-weight:500;">Sistema activo</label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Descripción -->
+              <div class="sf-field">
+                <label class="sf-label">Descripción</label>
+                {{ form.descripcion }}
+              </div>
+
             </div>
           </div>
 
+          <!-- Acciones -->
           <div class="d-flex gap-2 justify-content-end">
             <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
             <button type="submit" class="btn btn-primary btn-sm">
@@ -67,6 +277,7 @@
         </form>
       </div>
     </div>
+
   </div>
 </div>
 {% endblock %}

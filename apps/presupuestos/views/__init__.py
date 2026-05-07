@@ -1,5 +1,6 @@
 """apps/presupuestos/views — Vistas del módulo de presupuestos."""
 
+import csv
 import io
 import json
 import logging
@@ -31,6 +32,8 @@ from apps.presupuestos.forms import (
     CategoriaItemAPUForm, ItemCatalogoAPUForm,
     CuadrillaPresetForm, CuadrillaPresetItemFormSet,
 )
+from apps.comercial.forms import SolicitudForm
+from apps.common.mixins import UnidadFilterMixin, WithCreateFormMixin
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +82,112 @@ class ProyectoSistemaDeleteView(DeleteView):
         return reverse("presupuestos:despiece_proyecto", args=[self.object.proyecto_id])
 
 
+# ── Despiece — Módulo lista ───────────────────────────────────────────────────
+
+class DespieceListView(UnidadFilterMixin, ListView):
+    """Módulo Despiece — lista proyectos con despieces. Visible para todas las unidades."""
+    model = Proyecto
+    template_name = "presupuestos/despiece_list.html"
+    context_object_name = "proyectos"
+    unidad_field = "creado_por__unidad_negocio"
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return (
+            qs
+            .filter(es_version_actual=True)
+            .select_related("cliente", "solicitud", "creado_por")
+            .annotate(
+                num_sistemas=Count("proyecto_sistemas", distinct=True),
+                num_lineas=Count("proyecto_sistemas__despiece_lineas", distinct=True),
+            )
+            .order_by("-created_at")
+        )
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(**kwargs)
+
+
+class NuevoDespieceView(View):
+    """POST — crea un Proyecto de despiece con ID autogenerado, sin datos adicionales."""
+
+    def post(self, request):
+        from apps.common.choices import EstadoProyecto
+
+        consecutivo = Proyecto.siguiente_consecutivo()
+        proyecto = Proyecto.objects.create(
+            consecutivo=consecutivo,
+            nombre="",
+            estado=EstadoProyecto.DESPIECE,
+        )
+        return redirect("presupuestos:despiece_proyecto", pk=proyecto.pk)
+
+
+class DespieceCSVDownloadView(View):
+    """GET /presupuestos/despiece/<pk>/csv/ — descarga CSV de DespieceLineas del proyecto."""
+
+    def get(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+
+        unidad = request.session.get("unidad_negocio", "") or ""
+        if unidad and proyecto.creado_por and proyecto.creado_por.unidad_negocio != unidad:
+            messages.error(request, "No tiene acceso a este proyecto.")
+            return redirect("presupuestos:despiece_list")
+
+        lineas = (
+            DespieceLinea.objects
+            .filter(proyecto=proyecto)
+            .select_related(
+                "proyecto_sistema__sistema",
+                "proyecto_sistema__subsistema",
+                "categoria_producto",
+                "producto",
+            )
+            .order_by(
+                "proyecto_sistema__sistema__nombre",
+                "proyecto_sistema__subsistema__nombre",
+                "componente_codigo",
+            )
+        )
+
+        filename = f"despiece_{proyecto.consecutivo}.csv"
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response.write("\ufeff")  # BOM para Excel en Windows
+
+        writer = csv.writer(response)
+        writer.writerow([
+            "Sistema", "Subsistema", "Componente", "Categoría",
+            "Producto asignado", "Cantidad final", "Unidad",
+            "Precio unitario (COP)", "Subtotal (COP)",
+        ])
+
+        for linea in lineas:
+            ps = linea.proyecto_sistema
+            sistema = ps.sistema.nombre if ps and ps.sistema_id else "—"
+            subsistema = ps.subsistema.nombre if ps and ps.subsistema_id else "—"
+            categoria = linea.categoria_producto.nombre if linea.categoria_producto_id else "—"
+            producto = linea.producto.nombre if linea.producto_id else "Sin asignar"
+            cantidad = linea.cantidad_final
+            precio = linea.precio_snapshot or 0
+            subtotal = round(float(cantidad) * float(precio), 2) if precio else 0
+
+            writer.writerow([
+                sistema, subsistema, linea.componente_codigo or "—",
+                categoria, producto, cantidad, "und",
+                precio, subtotal,
+            ])
+
+        registrar_log(
+            request,
+            accion="DESCARGAR_DESPIECE_CSV",
+            descripcion=f"CSV despiece — {proyecto.consecutivo}",
+            modelo_afectado="Proyecto",
+            objeto_id=proyecto.pk,
+        )
+        return response
+
+
 # ── Despiece — Vista principal ─────────────────────────────────────────────────
 
 class DespieceProyectoView(DetailView):
@@ -88,6 +197,8 @@ class DespieceProyectoView(DetailView):
     context_object_name = "proyecto"
 
     def get_context_data(self, **kwargs):
+        from apps.presupuestos.models import CalculoConsumoLinea
+
         ctx = super().get_context_data(**kwargs)
         ctx["sistemas"] = self.object.proyecto_sistemas.select_related(
             "sistema", "subsistema"
@@ -95,6 +206,13 @@ class DespieceProyectoView(DetailView):
             "despiece_lineas__producto",
             "despiece_lineas__categoria_producto",
             "despiece_lineas__regla",
+            Prefetch(
+                "calculo_consumo_lineas",
+                queryset=CalculoConsumoLinea.objects.filter(
+                    es_componente_quimico=False
+                ).select_related("producto", "categoria_producto").order_by("orden"),
+                to_attr="consumo_lineas_prefetch",
+            ),
         ).order_by("sistema__nombre")
         ctx["all_sistemas"]    = Sistema.objects.filter(activo=True).order_by("nombre")
         ctx["all_subsistemas"] = (
@@ -165,6 +283,18 @@ class CalcularDespiecePSView(View):
             )
             ps.parametros_entrada = parametros
             ps.save(update_fields=["parametros_entrada"])
+
+            # ── Routing por tipo de sistema ───────────────────────────────────
+            from apps.common.choices import TipoSistema
+            if sistema.tipo_sistema == TipoSistema.CONSUMO:
+                # Para sistemas de CONSUMO: redirigir al panel de consumo.
+                # El usuario ejecuta el cálculo explícitamente desde allí.
+                messages.info(
+                    request,
+                    f"Sistema de consumo «{sistema.nombre}» agregado. "
+                    "Usa el panel de consumo para calcular cantidades.",
+                )
+                return redirect(reverse("presupuestos:consumo_maestro", args=[ps.pk]))
 
             from apps.presupuestos.services.despiece_service import DespieceService
 
@@ -1371,3 +1501,166 @@ class APUEnviarRevisionView(View):
             logger.exception("[APUEnviarRevisionView] Error APU %s", pk)
 
         return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MÓDULO CONSUMO — Calculadora técnica para sistemas de CONSUMO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CalculoConsumoView(View):
+    """
+    GET /presupuestos/consumo/<pk>/ — Panel de cálculo de consumo para un ProyectoSistema.
+
+    Muestra:
+    - Definición del sistema (capas, tipo_producto)
+    - Parámetros de entrada (area_m2 del proyecto)
+    - Resultados existentes (CalculoConsumoLinea)
+    - Botón para recalcular
+    """
+
+    template_name = "presupuestos/consumo_maestro.html"
+
+    def get(self, request, pk):
+        from apps.presupuestos.models import CalculoConsumoLinea
+        from apps.ingenieria.models import CapaConsumo, ComponenteQuimico
+        from apps.common.choices import TipoSistema
+
+        ps = get_object_or_404(
+            ProyectoSistema.objects.select_related(
+                "proyecto", "sistema", "subsistema"
+            ),
+            pk=pk,
+        )
+
+        if ps.sistema.tipo_sistema != TipoSistema.CONSUMO:
+            messages.error(
+                request,
+                f"El sistema «{ps.sistema.nombre}» es CONSTRUCTIVO. "
+                "Use el módulo de Despiece.",
+            )
+            return redirect("presupuestos:despiece_proyecto", pk=ps.proyecto_id)
+
+        capas = list(
+            CapaConsumo.objects.filter(subsistema=ps.subsistema)
+            .select_related("categoria")
+            .order_by("orden")
+        ) if ps.subsistema else []
+
+        componentes_quimicos = list(
+            ComponenteQuimico.objects.filter(subsistema=ps.subsistema).order_by("orden")
+        ) if ps.subsistema else []
+
+        lineas = list(
+            CalculoConsumoLinea.objects
+            .filter(proyecto_sistema=ps, es_componente_quimico=False)
+            .select_related("producto", "categoria_producto")
+            .prefetch_related(
+                "componentes_quimicos__producto",
+                "componentes_quimicos__categoria_producto",
+            )
+            .order_by("orden")
+        )
+
+        from apps.catalogos.models import CategoriaProducto
+        categorias_disponibles = CategoriaProducto.objects.filter(activa=True).order_by("nombre")
+
+        ctx = {
+            "ps": ps,
+            "proyecto": ps.proyecto,
+            "capas": capas,
+            "componentes_quimicos": componentes_quimicos,
+            "lineas": lineas,
+            "categorias_disponibles": categorias_disponibles,
+            "area_m2": ps.proyecto.area_total_m2,
+            "tiene_resultados": bool(lineas),
+            "sin_capas_definidas": not capas,
+        }
+        return render(request, self.template_name, ctx)
+
+
+class EjecutarCalculoConsumoView(View):
+    """
+    POST /presupuestos/consumo/<pk>/ejecutar/ — Ejecuta ConsumoService.
+    """
+
+    def post(self, request, pk):
+        from apps.presupuestos.services import ConsumoService
+        from apps.common.choices import TipoSistema
+
+        ps = get_object_or_404(ProyectoSistema, pk=pk)
+
+        if ps.sistema.tipo_sistema != TipoSistema.CONSUMO:
+            messages.error(request, "Solo se puede calcular consumo en sistemas de tipo CONSUMO.")
+            return redirect("presupuestos:despiece_proyecto", pk=ps.proyecto_id)
+
+        try:
+            servicio = ConsumoService(ps)
+            resultados = servicio.ejecutar()
+            messages.success(
+                request,
+                f"Cálculo completado: {len(resultados)} capa(s) procesada(s).",
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        except Exception as exc:
+            messages.error(request, f"Error en el cálculo: {exc}")
+            logger.exception("[EjecutarCalculoConsumoView] Error PS %s", pk)
+
+        return redirect("presupuestos:consumo_maestro", pk=pk)
+
+
+class AsignarProductoConsumoAPIView(View):
+    """
+    POST JSON /presupuestos/consumo/api/asignar-producto/<pk>/
+    Body: { "producto_pk": 123 }
+    Asigna un producto a una CalculoConsumoLinea.
+    """
+
+    def post(self, request, pk):
+        from apps.presupuestos.models import CalculoConsumoLinea
+        from apps.catalogos.models import Producto
+        from django.core.exceptions import ValidationError
+
+        try:
+            data = json.loads(request.body)
+            producto_pk = int(data.get("producto_pk", 0))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return JsonResponse({"ok": False, "error": "Datos inválidos."}, status=400)
+
+        try:
+            linea = get_object_or_404(CalculoConsumoLinea, pk=pk)
+            producto = get_object_or_404(Producto, pk=producto_pk, activo=True)
+            linea.resolver_producto(producto)
+            return JsonResponse({
+                "ok": True,
+                "producto_nombre": producto.nombre,
+                "precio_snapshot": float(linea.precio_snapshot) if linea.precio_snapshot else None,
+            })
+        except ValidationError as exc:
+            return JsonResponse({"ok": False, "error": exc.message}, status=400)
+        except Exception as exc:
+            logger.exception("[AsignarProductoConsumoAPIView] Línea %s", pk)
+            return JsonResponse({"ok": False, "error": str(exc)}, status=500)
+
+
+class ProductosPorCategoriaConsumoAPIView(View):
+    """
+    GET /presupuestos/consumo/api/productos-linea/<pk>/
+    Retorna productos de la categoría de la línea dada.
+    """
+
+    def get(self, request, pk):
+        from apps.presupuestos.models import CalculoConsumoLinea
+        from apps.catalogos.models import Producto
+
+        linea = get_object_or_404(CalculoConsumoLinea, pk=pk)
+        if not linea.categoria_producto_id:
+            return JsonResponse({"productos": []})
+
+        productos = (
+            Producto.objects
+            .filter(categoria=linea.categoria_producto, activo=True)
+            .order_by("nombre")
+            .values("pk", "nombre", "precio_actual", "moneda", "unidad__abreviatura")
+        )
+        return JsonResponse({"productos": list(productos)})

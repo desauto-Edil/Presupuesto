@@ -226,7 +226,56 @@
   .db-secondary-grid { grid-template-columns: 1fr; }
   .db-pendientes-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Offcanvas nueva solicitud (dashboard) ── */
+#offcanvasSol { width: 480px; }
+#offcanvasSol .offcanvas-header {
+    padding: 18px 22px 16px;
+    border-bottom: 1px solid var(--border);
+    border-top: 3px solid var(--theme-accent);
+}
+#offcanvasSol .offcanvas-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px; font-weight: 700; color: var(--ink);
+}
+#offcanvasSol .offcanvas-body { padding: 22px; overflow-y: auto; }
+.sol-sys-info {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 18px;
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+    font-size: 12px;
+}
+.sol-sys-info-label {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--ink-soft); margin-bottom: 3px;
+}
+.sol-sys-info-val { font-weight: 600; color: var(--ink); }
+.oc-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sol-oc-footer {
+    position: sticky; bottom: 0;
+    background: var(--card);
+    padding: 14px 0 0;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 10px; justify-content: flex-end;
+}
+@media (max-width: 600px) {
+    #offcanvasSol { width: 100vw; }
+    .oc-grid2 { grid-template-columns: 1fr; }
+}
 </style>
+{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm"
+        data-bs-toggle="offcanvas" data-bs-target="#offcanvasSol">
+    + Nueva solicitud
+</button>
 {% endblock %}
 
 {% block content %}
@@ -492,4 +541,72 @@ document.getElementById('taskInput').addEventListener('keypress', e => {
   if (e.key === 'Enter') addTask();
 });
 </script>
+
+<!-- ═══════════════════════════════════════
+     OFFCANVAS — Nueva solicitud
+═══════════════════════════════════════ -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasSol">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title">+ Nueva solicitud</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="sol-sys-info">
+            <div>
+                <div class="sol-sys-info-label">Consecutivo</div>
+                <div class="sol-sys-info-val">Asignado por Salesforce</div>
+            </div>
+            <div>
+                <div class="sol-sys-info-label">Estado inicial</div>
+                <span class="badge-status bs-pendiente">En gestión</span>
+            </div>
+            <div>
+                <div class="sol-sys-info-label">Creado por</div>
+                <div class="sol-sys-info-val">Usuario activo</div>
+            </div>
+        </div>
+        <form method="post" action="{% url 'comercial:solicitud_create' %}">
+            {% csrf_token %}
+            <div class="section-heading">Referencia Salesforce</div>
+            <div class="oc-grid2" style="margin-bottom:14px;">
+                <div>
+                    <label class="form-label">Consecutivo <span style="color:var(--brand-red)">*</span></label>
+                    {{ create_form.consecutivo }}
+                </div>
+                <div>
+                    <label class="form-label">Link Salesforce <span style="color:var(--brand-red)">*</span></label>
+                    {{ create_form.link_salesforce }}
+                </div>
+            </div>
+            <div class="section-heading">Cliente y proyecto</div>
+            <div class="oc-grid2" style="margin-bottom:14px;">
+                <div>
+                    <label class="form-label">Cliente <span style="color:var(--brand-red)">*</span></label>
+                    {{ create_form.cliente }}
+                </div>
+                <div>
+                    <label class="form-label">Fecha de entrega <span style="color:var(--brand-red)">*</span></label>
+                    {{ create_form.fecha_entrega }}
+                </div>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label class="form-label">Nombre del proyecto <span style="color:var(--brand-red)">*</span></label>
+                {{ create_form.nombre }}
+            </div>
+            <div class="section-heading">Detalle</div>
+            <div style="margin-bottom:14px;">
+                <label class="form-label">Descripción <span style="color:var(--brand-red)">*</span></label>
+                {{ create_form.descripcion }}
+            </div>
+            <div style="margin-bottom:14px;">
+                <label class="form-label">Observaciones <span style="color:var(--brand-red)">*</span></label>
+                {{ create_form.observaciones }}
+            </div>
+            <div class="sol-oc-footer">
+                <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="offcanvas">Cancelar</button>
+                <button type="submit" class="btn btn-primary btn-sm">Registrar solicitud</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

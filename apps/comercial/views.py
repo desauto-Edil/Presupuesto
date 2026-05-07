@@ -152,37 +152,56 @@ class DashboardView(TemplateView):
                 ctx["total_despieces"] = 0
                 ctx["total_apus"] = 0
 
-            # ── Pendientes de sistema ──────────────────────────────────────
+            # ── Pendientes de sistema (filtrados por rol) ──────────────────
+            rol = self.request.session.get("rol", "")
             pendientes = []
-            # Solicitudes sin proyecto vinculado
-            sin_proyecto = qs.filter(proyectos__isnull=True).count()
-            if sin_proyecto:
-                from django.urls import reverse
-                pendientes.append({
-                    "titulo": f"{sin_proyecto} solicitud{'es' if sin_proyecto > 1 else ''} sin proyecto",
-                    "descripcion": "Requieren creación de proyecto de presupuesto.",
-                    "nivel": "aviso",
-                    "url": reverse("comercial:solicitud_list"),
-                })
-            # Proyectos en estado SOLICITUD (sin despiece)
-            sin_despiece = proy_qs.filter(estado="SOLICITUD").count()
-            if sin_despiece:
-                pendientes.append({
-                    "titulo": f"{sin_despiece} proyecto{'s' if sin_despiece > 1 else ''} sin despiece",
-                    "descripcion": "Aún no se ha iniciado el despiece de materiales.",
-                    "nivel": "aviso",
-                    "url": None,
-                })
-            # Proyectos con despiece pero sin APU
-            sin_apu = proy_qs.filter(estado="DESPIECE").count()
-            if sin_apu:
-                pendientes.append({
-                    "titulo": f"{sin_apu} proyecto{'s' if sin_apu > 1 else ''} pendiente{'s' if sin_apu > 1 else ''} de APU",
-                    "descripcion": "El despiece está completo, falta generar el APU.",
-                    "nivel": "critico" if sin_apu > 2 else "aviso",
-                    "url": None,
-                })
+            from django.urls import reverse as _reverse
+
+            # ── Para ASESOR_COMERCIAL y ADMINISTRADOR: solicitudes sin proyecto
+            if rol in ("ASESOR_COMERCIAL", "ADMINISTRADOR", "PRESUPUESTOS"):
+                sin_proyecto = qs.filter(proyectos__isnull=True).count()
+                if sin_proyecto:
+                    pendientes.append({
+                        "titulo": f"{sin_proyecto} solicitud{'es' if sin_proyecto > 1 else ''} sin proyecto",
+                        "descripcion": "Requieren creación de proyecto de presupuesto.",
+                        "nivel": "aviso",
+                        "url": _reverse("comercial:solicitud_list"),
+                    })
+
+            # ── Para PRESUPUESTOS: proyectos listos para iniciar despiece
+            if rol == "PRESUPUESTOS":
+                sin_despiece = proy_qs.filter(estado="SOLICITUD").count()
+                if sin_despiece:
+                    pendientes.append({
+                        "titulo": f"{sin_despiece} proyecto{'s' if sin_despiece > 1 else ''} para despiece",
+                        "descripcion": "Tienes proyectos asignados listos para iniciar el despiece de materiales.",
+                        "nivel": "critico" if sin_despiece > 2 else "aviso",
+                        "url": None,
+                    })
+                # Proyectos con despiece en curso (estado DESPIECE)
+                en_despiece = proy_qs.filter(estado="DESPIECE").count()
+                if en_despiece:
+                    pendientes.append({
+                        "titulo": f"{en_despiece} proyecto{'s' if en_despiece > 1 else ''} en despiece",
+                        "descripcion": "Despiece en progreso. Genera el APU cuando esté listo.",
+                        "nivel": "aviso",
+                        "url": None,
+                    })
+
+            # ── Para ADMINISTRADOR: APUs generados pendientes de aprobación
+            if rol == "ADMINISTRADOR":
+                pendiente_aprobacion = proy_qs.filter(estado="APU_GENERADO").count()
+                if pendiente_aprobacion:
+                    pendientes.append({
+                        "titulo": f"{pendiente_aprobacion} APU{'s' if pendiente_aprobacion > 1 else ''} pendiente{'s' if pendiente_aprobacion > 1 else ''} de aprobación",
+                        "descripcion": "El área de Presupuestos confirmó los APUs. Requieren tu aprobación.",
+                        "nivel": "critico",
+                        "url": None,
+                    })
+
             ctx["pendientes_sistema"] = pendientes
+            ctx["rol_usuario"] = rol
+            ctx["create_form"] = SolicitudForm()
 
         except Exception as e:
             logger.error(f"Error en DashboardView.get_context_data: {e}", exc_info=True)
@@ -210,6 +229,10 @@ class ClienteListView(UnidadFilterMixin, WithCreateFormMixin, ListView):
     unidad_field = "unidad_negocio"
 
     def get_queryset(self):
+        # ADMINISTRADOR ve todos los clientes sin filtro de unidad
+        rol = self.request.session.get("rol", "")
+        if rol == "ADMINISTRADOR":
+            return Cliente.objects.order_by("razon_social").prefetch_related("contactos")
         return super().get_queryset().prefetch_related("contactos")
 
 
@@ -422,8 +445,13 @@ class SolicitudCreateView(CreateView):
             modelo_afectado="Solicitud",
             objeto_id=self.object.pk,
         )
-        messages.success(self.request, f"Solicitud {self.object.consecutivo} creada.")
-        return HttpResponseRedirect(self.get_success_url())
+        messages.success(
+            self.request,
+            f"Solicitud {self.object.consecutivo} creada. Ahora puede adjuntar archivos."
+        )
+        # Redirigir al formulario de edición para permitir adjuntar archivos
+        from django.urls import reverse
+        return redirect(reverse("comercial:solicitud_update", kwargs={"pk": self.object.pk}))
 
 
 class SolicitudUpdateView(UpdateView):

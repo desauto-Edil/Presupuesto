@@ -3,6 +3,7 @@ apps/presupuestos/models — Exportaciones públicas del paquete de modelos de p
 """
 
 from .despiece import ProyectoSistema, DespieceLinea
+from .consumo import CalculoConsumoLinea
 from .apu import (
     ConfiguracionAPU,
     APU,
@@ -20,6 +21,7 @@ APUProyecto = APU
 __all__ = [
     "ProyectoSistema",
     "DespieceLinea",
+    "CalculoConsumoLinea",
     "ConfiguracionAPU",
     "APU",
     "APUProyecto",   # alias → APU

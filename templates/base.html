@@ -88,6 +88,15 @@
       <span>Clientes</span>
     </a>
 
+    <a href="{% url 'ingenieria:calculador_sistemas' %}"
+       class="nav-item {% block nav_despiece %}{% endblock %}"
+       data-tip="Calculador de Sistemas">
+      <span class="nav-icon">
+        <i class="bi bi-layers" style="font-size:18px;line-height:1;"></i>
+      </span>
+      <span>Calculador de Sistemas</span>
+    </a>
+
     <a href="{% url 'catalogos:catalogo' %}"
        class="nav-item {% block nav_catalogos %}{% endblock %}{% block nav_proveedores %}{% endblock %}"
        data-tip="Catálogos">
@@ -122,6 +131,7 @@
     {% endif %}
     {% endwith %}
 
+    {% if request.session.rol == "ADMINISTRADOR" %}
     <a href="{% url 'configuracion:configuracion' %}"
        class="nav-item {% block nav_configuracion %}{% endblock %}"
        data-tip="Configuración">
@@ -132,6 +142,7 @@
       </span>
       <span>Configuración</span>
     </a>
+    {% endif %}
 
     <a href="{% url 'comercial:log_list' %}"
        class="nav-item {% block nav_logs %}{% endblock %}"

@@ -1,5 +1,28 @@
 """apps/common/mixins.py — Mixins reutilizables para vistas Django."""
 
+from django.contrib import messages
+from django.shortcuts import redirect
+
+
+# ---------------------------------------------------------------------------
+# Mixin: acceso exclusivo para rol ADMINISTRADOR
+# ---------------------------------------------------------------------------
+
+class AdminRequiredMixin:
+    """
+    Requiere que el usuario en sesión tenga rol ADMINISTRADOR.
+    Redirige al dashboard con mensaje de error si no cumple.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        rol = request.session.get("rol", "")
+        if rol != "ADMINISTRADOR":
+            messages.error(
+                request,
+                "Solo el rol Administrador puede acceder a esta sección."
+            )
+            return redirect("comercial:dashboard")
+        return super().dispatch(request, *args, **kwargs)
+
 
 # ---------------------------------------------------------------------------
 # Mixin: aislamiento por unidad de negocio
