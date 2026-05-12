@@ -138,8 +138,6 @@ class TipoProyectoForm(forms.ModelForm):
 _PROYECTO_WIDGETS = {
     "nombre":               forms.TextInput(attrs={"class": "form-control"}),
     "descripcion":          forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-    "area_total_m2":        forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
-    "perimetro_ml":         forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
     "dias_duracion":        forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     "num_personas":         forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     "trm":                  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
@@ -157,7 +155,7 @@ class ProyectoForm(forms.ModelForm):
         model = Proyecto
         fields = [
             "cliente", "nombre", "descripcion",
-            "area_total_m2", "perimetro_ml", "dias_duracion", "num_personas",
+            "dias_duracion", "num_personas",
             "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
@@ -170,7 +168,7 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
         model = Proyecto
         fields = [
             "nombre", "descripcion",
-            "area_total_m2", "perimetro_ml", "dias_duracion", "num_personas",
+            "dias_duracion", "num_personas",
             "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]

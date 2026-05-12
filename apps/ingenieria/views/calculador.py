@@ -74,6 +74,7 @@ class CalculadorSistemaView(TemplateView):
         ctx["linea_choices"]     = LineaNegocio.choices
         ctx["total_guardados"]   = DespieceMaestro.objects.filter(estado=DespieceMaestro.GUARDADO).count()
         ctx["total_borradores"]  = DespieceMaestro.objects.filter(estado=DespieceMaestro.BORRADOR).count()
+        ctx["proyecto_pk"]       = self.request.GET.get("proyecto_pk", "").strip()
         return ctx
 
 
@@ -86,6 +87,17 @@ class CalculadorSeleccionarView(View):
     """
     template_name = "ingenieria/calculador_seleccionar.html"
 
+    def _get_proyecto(self, request):
+        """Retorna el Proyecto asociado si viene `proyecto_pk` en GET/POST, o None."""
+        pk = (request.POST.get("proyecto_pk") or request.GET.get("proyecto_pk", "")).strip()
+        if pk and pk.isdigit():
+            try:
+                from apps.comercial.models import Proyecto
+                return Proyecto.objects.get(pk=int(pk))
+            except Exception:
+                pass
+        return None
+
     def get(self, request, sistema_pk):
         from django.shortcuts import render
         sistema = get_object_or_404(Sistema, pk=sistema_pk, tipo_sistema=TipoSistema.CONSTRUCTIVO)
@@ -95,9 +107,11 @@ class CalculadorSeleccionarView(View):
             .prefetch_related("subconjuntos_receta", "variables_db")
             .order_by("codigo")
         )
+        proyecto = self._get_proyecto(request)
         return render(request, self.template_name, {
             "sistema":     sistema,
             "subsistemas": subsistemas,
+            "proyecto":    proyecto,
         })
 
     def post(self, request, sistema_pk):
@@ -124,7 +138,12 @@ class CalculadorSeleccionarView(View):
             messages.error(request, "Selecciona al menos un subconjunto de la receta técnica.")
             return redirect("ingenieria:calculador_seleccionar", sistema_pk=sistema_pk)
 
-        nombre = request.POST.get("nombre", "").strip()
+        nombre   = request.POST.get("nombre", "").strip()
+        proyecto = self._get_proyecto(request)
+
+        # Auto-name when coming from a project and the user left the field empty
+        if not nombre and proyecto:
+            nombre = f"Despiece - {proyecto.consecutivo}"
 
         with transaction.atomic():
             dm = DespieceMaestro.objects.create(
@@ -132,6 +151,7 @@ class CalculadorSeleccionarView(View):
                 nombre=nombre,
                 estado=DespieceMaestro.BORRADOR,
                 variables_entrada={},
+                proyecto=proyecto,
             )
             if subconjuntos_pks:
                 subconjuntos = SubconjuntoRecetaTecnica.objects.filter(
@@ -157,13 +177,13 @@ class DespieceMaestroView(DetailView):
       - Botón Generar APU (solo si estado=GUARDADO)
     """
     model = DespieceMaestro
-    template_name = "ingenieria/despiece_maestro_nuevo.html"
+    template_name = "ingenieria/despiece_maestro.html"
     context_object_name = "despiece"
 
     def get_queryset(self):
         return (
             super().get_queryset()
-            .select_related("subsistema__sistema")
+            .select_related("subsistema__sistema", "proyecto")
             .prefetch_related("subconjuntos", "lineas__subconjunto")
         )
 
@@ -183,14 +203,46 @@ class DespieceMaestroView(DetailView):
             dm.subconjuntos.order_by("orden", "id")
         )
 
+        # Proyecto asociado (si existe) para mostrar vínculo de regreso
+        ctx["proyecto"] = dm.proyecto
+
+        # Controla visibilidad del botón APU:
+        # solo despieces guardados Y asociados a un proyecto pueden generar APU.
+        ctx["puede_generar_apu"] = dm.esta_guardado and dm.proyecto_id is not None
+
+        # Si ya existe un APU para este despiece, exponer su pk para enlace directo.
+        ctx["apu_pk"] = None
+        if dm.proyecto_id and dm.subsistema_id:
+            try:
+                from apps.presupuestos.models import ProyectoSistema, APUProyecto
+                ps = ProyectoSistema.objects.filter(
+                    proyecto_id=dm.proyecto_id,
+                    sistema=dm.subsistema.sistema,
+                    subsistema=dm.subsistema,
+                ).first()
+                if ps:
+                    apu = APUProyecto.objects.filter(proyecto_sistema=ps).first()
+                    if apu:
+                        ctx["apu_pk"] = apu.pk
+            except Exception:
+                pass
+
         # Serialización JSON de líneas guardadas para inicializar la tabla en JS
+        import math as _math
         lineas_data = []
         for linea in dm.lineas.order_by("orden"):
+            cant_calc = float(linea.cantidad_calculada)
+            cant_red  = (
+                linea.cantidad_redondeada
+                if linea.cantidad_redondeada is not None
+                else _math.ceil(cant_calc)
+            )
             lineas_data.append({
                 "subconjunto_nombre":    linea.subconjunto_nombre,
                 "componente_codigo":     linea.componente_codigo,
                 "componente_nombre":     linea.componente_nombre,
-                "cantidad_calculada":    float(linea.cantidad_calculada),
+                "cantidad_calculada":    cant_calc,
+                "cantidad_redondeada":   cant_red,
                 "unidad":                linea.unidad,
                 "categoria_nombre":      linea.categoria_nombre,
                 "formula_texto":         linea.formula_texto,
@@ -198,15 +250,11 @@ class DespieceMaestroView(DetailView):
                 "variable_referencia_apu": linea.variable_referencia_apu,
                 "unidad_apu":            linea.unidad_apu,
                 "subconjunto_id":        linea.subconjunto_id,
-                # Snapshot de producto guardado (puede ser null)
                 "producto_id":           linea.producto_id,
                 "producto_codigo":       linea.producto_codigo,
                 "producto_nombre":       linea.producto_nombre,
                 "precio_unitario": (
                     float(linea.precio_unitario) if linea.precio_unitario is not None else None
-                ),
-                "precio_total": (
-                    float(linea.precio_total) if linea.precio_total is not None else None
                 ),
                 "moneda":      linea.moneda,
                 "fecha_precio": (
@@ -359,35 +407,46 @@ class GuardarDespieceMaestroView(View):
 class DespiecesGuardadosView(ListView):
     """Lista todos los despieces (guardados y borradores)."""
     model = DespieceMaestro
-    template_name = "ingenieria/despieces_guardados.html"
+    template_name = "ingenieria/despiece_list.html"
     context_object_name = "despieces"
     paginate_by = 30
 
     def get_queryset(self):
         qs = (
             DespieceMaestro.objects
-            .select_related("subsistema__sistema")
-            .prefetch_related("subconjuntos")
+            .select_related("subsistema__sistema", "proyecto")
             .order_by("-created_at")
         )
 
-        estado = self.request.GET.get("estado", "").strip()
-        q      = self.request.GET.get("q", "").strip()
+        estado      = self.request.GET.get("estado", "").strip()
+        q           = self.request.GET.get("q", "").strip()
+        proyecto_pk = self.request.GET.get("proyecto_pk", "").strip()
 
         if estado in (DespieceMaestro.BORRADOR, DespieceMaestro.GUARDADO):
             qs = qs.filter(estado=estado)
         if q:
             qs = qs.filter(nombre__icontains=q) | qs.filter(subsistema__nombre__icontains=q)
             qs = qs.distinct()
+        if proyecto_pk and proyecto_pk.isdigit():
+            qs = qs.filter(proyecto_id=int(proyecto_pk))
 
         return qs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["estado_filtro"] = self.request.GET.get("estado", "")
-        ctx["q"] = self.request.GET.get("q", "")
-        ctx["BORRADOR"] = DespieceMaestro.BORRADOR
-        ctx["GUARDADO"] = DespieceMaestro.GUARDADO
+        ctx["q"]             = self.request.GET.get("q", "")
+        ctx["proyecto_pk"]   = self.request.GET.get("proyecto_pk", "")
+        ctx["BORRADOR"]      = DespieceMaestro.BORRADOR
+        ctx["GUARDADO"]      = DespieceMaestro.GUARDADO
+        # Si viene proyecto_pk, cargar el proyecto para mostrarlo en la cabecera
+        proyecto_pk = ctx["proyecto_pk"]
+        if proyecto_pk and proyecto_pk.isdigit():
+            try:
+                from apps.comercial.models import Proyecto
+                ctx["proyecto_filtro"] = Proyecto.objects.get(pk=int(proyecto_pk))
+            except Exception:
+                pass
         return ctx
 
 
@@ -400,52 +459,47 @@ class EliminarDespieceMaestroView(View):
         dm = get_object_or_404(DespieceMaestro, pk=pk)
         dm.delete()
         messages.success(request, "Despiece eliminado correctamente.")
-        return redirect("ingenieria:despieces_guardados")
+        return redirect("ingenieria:despiece_list")
 
 
-# ── 8. APU básico desde despiece guardado ────────────────────────────────────
+# ── 8. APU desde despiece guardado — redirige a presupuestos:apu_list ────────
 
-class APUDespieceMaestroView(DetailView):
+class APUDespieceMaestroView(View):
     """
-    Vista de APU básico calculado a partir de un DespieceMaestro guardado.
+    Redirige al módulo APU de presupuestos validando que el despiece sea apto.
 
-    Valida que el despiece esté en estado GUARDADO antes de mostrar el APU.
-    Usa ReglaAPUSubsistema para calcular el costo por tipo de APU.
+    Validaciones backend (tarea 11):
+      - El despiece debe estar en estado GUARDADO.
+      - El despiece debe tener un proyecto asociado (despieces rápidos no generan APU).
+      - El despiece debe tener líneas calculadas.
     """
-    model = DespieceMaestro
-    template_name = "ingenieria/despiece_apu_basico.html"
-    context_object_name = "despiece"
 
-    def get(self, request, *args, **kwargs):
-        dm = get_object_or_404(DespieceMaestro, pk=kwargs["pk"])
+    def get(self, request, pk):
+        dm = get_object_or_404(DespieceMaestro, pk=pk)
+
         if not dm.esta_guardado:
             messages.error(
                 request,
-                "El despiece debe estar guardado antes de generar el APU. "
-                "Guarda el despiece primero."
+                "El despiece debe estar guardado antes de generar el APU."
             )
             return redirect("ingenieria:despiece_maestro", pk=dm.pk)
-        return super().get(request, *args, **kwargs)
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        dm = self.object
+        if not dm.proyecto_id:
+            messages.error(
+                request,
+                "Solo los despieces asociados a un proyecto pueden generar APU. "
+                "Este despiece fue creado desde el calculador rápido."
+            )
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
 
-        # Cargar líneas agrupadas por subconjunto
-        ctx["lineas_por_subconjunto"] = _agrupar_lineas(dm.lineas.all())
+        if not dm.lineas.exists():
+            messages.error(
+                request,
+                "El despiece no tiene líneas calculadas. Calcula y guarda primero."
+            )
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
 
-        # Cargar reglas APU del subsistema para mostrar fórmulas
-        from apps.presupuestos.models import ReglaAPUSubsistema
-        ctx["reglas_apu"] = list(
-            ReglaAPUSubsistema.objects.filter(subsistema=dm.subsistema)
-            .order_by("orden")
-        )
-
-        # Contexto del cálculo (para evaluar reglas APU si existen)
-        svc = DespieceMaestroService(dm)
-        ctx["variables_entrada"] = svc.get_variables_requeridas()
-
-        return ctx
+        return redirect("presupuestos:apu_list")
 
 
 # ── 9. Búsqueda de productos (AJAX autocomplete) ──────────────────────────
@@ -485,7 +539,10 @@ class BuscarProductosView(View):
                 "codigo":                    p.codigo,
                 "nombre":                    p.nombre,
                 "unidad":                    p.unidad.abreviatura if p.unidad else "",
-                "precio_unitario":           float(p.precio_actual),
+                # precio_unitario = precio real por unidad (precio_actual / unidades_por_presentacion)
+                "precio_unitario":           float(p.precio_unitario_real),
+                "precio_presentacion":       float(p.precio_actual),
+                "unidades_por_presentacion": p.unidades_por_presentacion or 1,
                 "moneda":                    p.moneda,
                 "fecha_actualizacion_precio": (
                     p.fecha_actualizacion_precio.strftime("%Y-%m-%dT%H:%M:%S")

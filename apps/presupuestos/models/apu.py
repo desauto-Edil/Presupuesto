@@ -434,6 +434,53 @@ class APUProyecto(models.Model):
         help_text="Suma de todos los valor_total (con margen de venta).",
     )
 
+    # -- AIU del proyecto (tres porcentajes separados del AIU del contratista) --
+    aiu_proyecto_admin_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("10"),
+        help_text="Administración del proyecto (%). Se aplica sobre los costos directos para la modalidad AIU del proyecto.",
+    )
+    aiu_proyecto_imprevistos_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("5"),
+        help_text="Imprevistos del proyecto (%).",
+    )
+    aiu_proyecto_utilidad_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("8"),
+        help_text="Utilidad del proyecto (%).",
+    )
+
+    # -- Flujo de revisión --
+    revisor = models.ForeignKey(
+        "configuracion.ConfiguracionSistema",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="apus_en_revision",
+        verbose_name="Revisor asignado",
+    )
+    fecha_envio_revision = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name="Fecha de envío a revisión",
+    )
+    MODALIDAD_CHOICES = [
+        ("1", "Modalidad 1 — AIU sobre todos los costos directos"),
+        ("2", "Modalidad 2 — AIU sobre costos directos sin materiales"),
+    ]
+    modalidad_aiu_seleccionada = models.CharField(
+        max_length=2, blank=True, null=True,
+        choices=MODALIDAD_CHOICES,
+        verbose_name="Modalidad AIU seleccionada",
+    )
+    aprobado_por = models.ForeignKey(
+        "configuracion.ConfiguracionSistema",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="apus_aprobados",
+        verbose_name="Aprobado por",
+    )
+    fecha_aprobacion = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name="Fecha de aprobación",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -501,6 +548,81 @@ class APUProyecto(models.Model):
             "subtotal_administracion",
             "total_costo", "total_valor_venta", "updated_at",
         ])
+
+    def calcular_modalidades_aiu(self) -> dict:
+        """
+        Calcula las dos modalidades de AIU del proyecto.
+
+        Modalidad 1 — AIU sobre todos los costos directos:
+          base = materiales + herramientas + transporte + mano_obra + administracion
+
+        Modalidad 2 — AIU sobre costos directos sin materiales:
+          base_aiu = herramientas + transporte + mano_obra + administracion
+          gran_total = subtotal_costos_directos + total_aiu_modal2
+
+        Devuelve un dict con ambas modalidades y el desglose de subtotales.
+        """
+        mat  = self.subtotal_materiales
+        herr = self.subtotal_herramientas
+        tran = self.subtotal_transporte
+        mo   = self.subtotal_mano_obra
+        adm  = self.subtotal_administracion
+
+        pct_a = Decimal(str(self.aiu_proyecto_admin_pct))
+        pct_i = Decimal(str(self.aiu_proyecto_imprevistos_pct))
+        pct_u = Decimal(str(self.aiu_proyecto_utilidad_pct))
+
+        subtotal = mat + herr + tran + mo + adm
+
+        # Modalidad 1: base = todos los costos directos
+        base1 = subtotal
+        a1 = (base1 * pct_a / 100).quantize(Decimal("0.01"))
+        i1 = (base1 * pct_i / 100).quantize(Decimal("0.01"))
+        u1 = (base1 * pct_u / 100).quantize(Decimal("0.01"))
+        total_aiu1 = a1 + i1 + u1
+        gran_total1 = subtotal + total_aiu1
+
+        # Modalidad 2: base AIU = costos directos sin materiales
+        base2 = herr + tran + mo + adm
+        a2 = (base2 * pct_a / 100).quantize(Decimal("0.01"))
+        i2 = (base2 * pct_i / 100).quantize(Decimal("0.01"))
+        u2 = (base2 * pct_u / 100).quantize(Decimal("0.01"))
+        total_aiu2 = a2 + i2 + u2
+        gran_total2 = subtotal + total_aiu2
+
+        return {
+            "subtotales": {
+                "materiales":    mat,
+                "herramientas":  herr,
+                "transporte":    tran,
+                "mano_obra":     mo,
+                "administracion": adm,
+                "total":         subtotal,
+            },
+            "porcentajes": {
+                "admin":       pct_a,
+                "imprevistos": pct_i,
+                "utilidad":    pct_u,
+            },
+            "modalidad1": {
+                "label":       "AIU sobre todos los costos directos",
+                "base":        base1,
+                "admin":       a1,
+                "imprevistos": i1,
+                "utilidad":    u1,
+                "total_aiu":   total_aiu1,
+                "gran_total":  gran_total1,
+            },
+            "modalidad2": {
+                "label":       "AIU sobre costos directos sin materiales",
+                "base":        base2,
+                "admin":       a2,
+                "imprevistos": i2,
+                "utilidad":    u2,
+                "total_aiu":   total_aiu2,
+                "gran_total":  gran_total2,
+            },
+        }
 
 
 # backward compatibility alias

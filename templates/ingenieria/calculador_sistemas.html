@@ -7,7 +7,7 @@
 {% block breadcrumb %}Catálogo de Sistemas{% endblock %}
 
 {% block topbar_actions %}
-<a href="{% url 'ingenieria:despieces_guardados' %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+<a href="{% url 'ingenieria:despiece_list' %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
   <i class="bi bi-archive"></i>
   <span>Guardados</span>
   {% if total_guardados %}<span class="badge bg-secondary ms-1">{{ total_guardados }}</span>{% endif %}
@@ -192,6 +192,7 @@
 {% block content %}
 <div class="calc-search-wrap">
   <form method="get" action="">
+    {% if proyecto_pk %}<input type="hidden" name="proyecto_pk" value="{{ proyecto_pk }}">{% endif %}
     <div class="position-relative">
       <i class="bi bi-search calc-search-icon"></i>
       <input type="text" name="q" value="{{ q }}"
@@ -201,12 +202,12 @@
     </div>
     <!-- Chips de filtro por línea -->
     <div class="calc-filter-chips">
-      <a href="?{% if q %}q={{ q }}{% endif %}"
+      <a href="?{% if q %}q={{ q }}&{% endif %}{% if proyecto_pk %}proyecto_pk={{ proyecto_pk }}{% endif %}"
          class="calc-chip calc-chip--all {% if not linea_activa %}{% else %}inactive{% endif %}">
         <i class="bi bi-grid-3x3-gap"></i> Todos
       </a>
       {% for val, label in linea_choices %}
-      <a href="?linea={{ val }}{% if q %}&q={{ q }}{% endif %}"
+      <a href="?linea={{ val }}{% if q %}&q={{ q }}{% endif %}{% if proyecto_pk %}&proyecto_pk={{ proyecto_pk }}{% endif %}"
          class="calc-chip calc-chip--linea {% if linea_activa == val %}active{% endif %}">
         {{ label }}
       </a>
@@ -239,7 +240,8 @@
         {% endfor %}
         {% if sistema.subsistemas.count > 3 %}…{% endif %}
       </span>
-      <a href="{% url 'ingenieria:calculador_seleccionar' sistema.pk %}" class="btn-calc-primary">
+      <a href="{% url 'ingenieria:calculador_seleccionar' sistema.pk %}{% if proyecto_pk %}?proyecto_pk={{ proyecto_pk }}{% endif %}"
+         class="btn-calc-primary">
         <i class="bi bi-calculator"></i> Calcular
       </a>
     </div>
@@ -259,7 +261,7 @@
 
 {% if total_borradores %}
 <div class="mt-4 text-end">
-  <a href="{% url 'ingenieria:despieces_guardados' %}?estado=BORRADOR" class="text-muted small">
+  <a href="{% url 'ingenieria:despiece_list' %}?estado=BORRADOR" class="text-muted small">
     <i class="bi bi-file-earmark-text"></i> {{ total_borradores }} borrador{{ total_borradores|pluralize:"es" }} pendiente{{ total_borradores|pluralize:"s" }}
   </a>
 </div>

@@ -393,6 +393,40 @@ class SolicitudListView(UnidadFilterMixin, WithCreateFormMixin, ListView):
     context_object_name = "solicitudes"
     ordering = ["-created_at"]
     unidad_field = "creado_por__unidad_negocio"
+    paginate_by = 50
+
+    def get_queryset(self):
+        from django.db.models import Q as _Q
+        qs = super().get_queryset().select_related("cliente", "creado_por")
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(
+                _Q(consecutivo__icontains=q)
+                | _Q(nombre__icontains=q)
+                | _Q(cliente__razon_social__icontains=q)
+            )
+        estado = self.request.GET.get("estado", "").strip()
+        if estado:
+            qs = qs.filter(estado=estado)
+        responsable = self.request.GET.get("responsable", "").strip()
+        if responsable:
+            qs = qs.filter(creado_por__pk=responsable)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        from apps.configuracion.models import ConfiguracionSistema
+        ctx["q"] = self.request.GET.get("q", "")
+        ctx["estado_filtro"] = self.request.GET.get("estado", "")
+        ctx["responsable_filtro"] = self.request.GET.get("responsable", "")
+        ctx["estados"] = EstadoSolicitud.choices
+        ctx["responsables"] = (
+            ConfiguracionSistema.objects
+            .filter(solicitudes_creadas__isnull=False)
+            .distinct()
+            .order_by("nombre_completo")
+        )
+        return ctx
 
 
 class SolicitudDetailView(DetailView):
@@ -405,17 +439,42 @@ class SolicitudDetailView(DetailView):
         solicitud = self.object
         ctx["archivos"] = solicitud.archivos.select_related("configuracion").all()
 
-        # Proyectos / versiones vinculadas a esta solicitud
-        ctx["proyectos"] = solicitud.proyectos.select_related(
-            "tipo_proyecto", "creado_por"
-        ).order_by("-version")
-        ctx["proyecto_actual"] = solicitud.proyectos.filter(
-            es_version_actual=True
-        ).first()
+        # Proyectos con sus despieces y APUs — estructura sin atributos privados
+        from apps.ingenieria.models import DespieceMaestro
+        from apps.presupuestos.models import ProyectoSistema, APUProyecto
+        proyectos_qs = list(
+            solicitud.proyectos.select_related("tipo_proyecto", "creado_por").order_by("-version")
+        )
+        proyectos_data = []
+        for p in proyectos_qs:
+            despieces_raw = list(
+                DespieceMaestro.objects.filter(proyecto=p)
+                .select_related("subsistema", "subsistema__sistema")
+                .order_by("-updated_at")
+            )
+            despieces_data = []
+            for dm in despieces_raw:
+                try:
+                    ps = ProyectoSistema.objects.filter(
+                        proyecto=p,
+                        sistema=dm.subsistema.sistema,
+                        subsistema=dm.subsistema,
+                    ).first()
+                    apu_pk = (
+                        APUProyecto.objects.filter(proyecto_sistema=ps)
+                        .values_list("pk", flat=True).first()
+                    ) if ps else None
+                except Exception:
+                    apu_pk = None
+                despieces_data.append({"dm": dm, "apu_pk": apu_pk})
+            proyectos_data.append({"proy": p, "despieces": despieces_data})
+        ctx["proyectos"] = proyectos_qs
+        ctx["proyectos_data"] = proyectos_data
+        ctx["proyecto_actual"] = next((p for p in proyectos_qs if p.es_version_actual), None)
 
-        # Logs directos de la solicitud + logs de cualquier proyecto vinculado
+        # Logs directos de la solicitud + logs de proyectos vinculados
         from django.db.models import Q as _Q
-        proyecto_pks = list(solicitud.proyectos.values_list("pk", flat=True))
+        proyecto_pks = [p.pk for p in proyectos_qs]
         ctx["logs"] = (
             LogSistema.objects.filter(
                 _Q(modelo_afectado="Solicitud", objeto_id=solicitud.pk)
@@ -431,34 +490,48 @@ class SolicitudCreateView(CreateView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_form.html"
-    success_url = reverse_lazy("comercial:solicitud_list")
 
     def form_valid(self, form):
+        archivos = self.request.FILES.getlist("archivos")
+        if not archivos:
+            form.add_error(None, "Debe adjuntar al menos un archivo para crear la solicitud.")
+            return self.form_invalid(form)
         self.object = form.save(commit=False)
         self.object.creado_por = _usuario_sistema(self.request)
         self.object.save()
         form.save_m2m()
+        usuario = _usuario_sistema(self.request)
+        for archivo in archivos:
+            SolicitudArchivo.objects.create(
+                solicitud=self.object,
+                archivo=archivo,
+                nombre=archivo.name,
+                configuracion=usuario,
+            )
         registrar_log(
             self.request,
             accion="CREAR_SOLICITUD",
-            descripcion=f"Solicitud {self.object.consecutivo} — {self.object.nombre}",
+            descripcion=(
+                f"Solicitud {self.object.consecutivo} — {self.object.nombre} "
+                f"({len(archivos)} archivo(s) adjunto(s))"
+            ),
             modelo_afectado="Solicitud",
             objeto_id=self.object.pk,
         )
         messages.success(
             self.request,
-            f"Solicitud {self.object.consecutivo} creada. Ahora puede adjuntar archivos."
+            f"Solicitud {self.object.consecutivo} creada con {len(archivos)} archivo(s).",
         )
-        # Redirigir al formulario de edición para permitir adjuntar archivos
-        from django.urls import reverse
-        return redirect(reverse("comercial:solicitud_update", kwargs={"pk": self.object.pk}))
+        return redirect("comercial:solicitud_detail", pk=self.object.pk)
 
 
 class SolicitudUpdateView(UpdateView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_form.html"
-    success_url = reverse_lazy("comercial:solicitud_list")
+
+    def get_success_url(self):
+        return reverse_lazy("comercial:solicitud_detail", kwargs={"pk": self.object.pk})
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -605,12 +678,10 @@ class TipoProyectoDeleteView(DeleteView):
 # Proyectos
 # ---------------------------------------------------------------------------
 
-class ProyectoListView(UnidadFilterMixin, ListView):
-    model = Proyecto
-    template_name = "comercial/proyecto_list.html"
-    context_object_name = "proyectos"
-    ordering = ["-created_at"]
-    unidad_field = "creado_por__unidad_negocio"
+class ProyectoListView(View):
+    """Redirige a solicitudes — los proyectos viven dentro de solicitudes."""
+    def get(self, request, *args, **kwargs):
+        return redirect("comercial:solicitud_list")
 
 
 class ProyectoDetailView(DetailView):
@@ -620,22 +691,42 @@ class ProyectoDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        # ProyectoSistemas (despieces) de este proyecto
+        proyecto = self.object
+
+        # ── Despieces Maestro asociados al proyecto ────────────────────────────
         try:
-            from apps.presupuestos.models import ProyectoSistema
-            ctx["proyecto_sistemas"] = (
-                self.object.proyecto_sistemas
-                .select_related("sistema", "subsistema")
-                .prefetch_related("despiece_lineas")
-                .order_by("sistema__nombre")
+            from apps.ingenieria.models import DespieceMaestro
+            from apps.presupuestos.models import ProyectoSistema, APUProyecto
+            despieces_raw = list(
+                proyecto.despieces_maestro
+                .select_related("subsistema", "subsistema__sistema")
+                .order_by("-updated_at")
             )
+            despieces_maestro = []
+            for dm in despieces_raw:
+                try:
+                    ps = ProyectoSistema.objects.filter(
+                        proyecto=proyecto,
+                        sistema=dm.subsistema.sistema,
+                        subsistema=dm.subsistema,
+                    ).first()
+                    apu_pk = (
+                        APUProyecto.objects.filter(proyecto_sistema=ps)
+                        .values_list("pk", flat=True)
+                        .first()
+                    ) if ps else None
+                except Exception:
+                    apu_pk = None
+                despieces_maestro.append({"dm": dm, "apu_pk": apu_pk})
+            ctx["despieces_maestro"] = despieces_maestro
         except Exception:
-            ctx["proyecto_sistemas"] = []
-        # Otras versiones de la misma solicitud
-        if self.object.solicitud_id:
+            ctx["despieces_maestro"] = []
+
+        # ── Otras versiones de la misma solicitud ─────────────────────────────
+        if proyecto.solicitud_id:
             ctx["otras_versiones"] = (
-                self.object.solicitud.proyectos
-                .exclude(pk=self.object.pk)
+                proyecto.solicitud.proyectos
+                .exclude(pk=proyecto.pk)
                 .order_by("-version")
             )
         else:
@@ -647,7 +738,11 @@ class ProyectoCreateView(CreateView):
     model = Proyecto
     form_class = ProyectoForm
     template_name = "comercial/proyecto_form.html"
-    success_url = reverse_lazy("comercial:proyecto_list")
+
+    def get_success_url(self):
+        if self.object.solicitud_id:
+            return reverse_lazy("comercial:solicitud_detail", kwargs={"pk": self.object.solicitud_id})
+        return reverse_lazy("comercial:proyecto_detail", kwargs={"pk": self.object.pk})
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
@@ -668,7 +763,11 @@ class ProyectoUpdateView(UpdateView):
     model = Proyecto
     form_class = ProyectoForm
     template_name = "comercial/proyecto_form.html"
-    success_url = reverse_lazy("comercial:proyecto_list")
+
+    def get_success_url(self):
+        if self.object.solicitud_id:
+            return reverse_lazy("comercial:solicitud_detail", kwargs={"pk": self.object.solicitud_id})
+        return reverse_lazy("comercial:proyecto_detail", kwargs={"pk": self.object.pk})
 
     def form_valid(self, form):
         self.object = form.save(commit=False)
@@ -678,8 +777,6 @@ class ProyectoUpdateView(UpdateView):
         diff = _diff_campos(original, self.object, {
             "nombre": "Nombre",
             "trm": "TRM",
-            "area_total_m2": "Área (m²)",
-            "perimetro_ml": "Perímetro (ml)",
             "dias_duracion": "Días",
             "num_personas": "Personas",
             "margen_comercial_pct": "Margen comercial",
@@ -726,7 +823,7 @@ class ProyectoUpdateView(UpdateView):
 class ProyectoDeleteView(DeleteView):
     model = Proyecto
     template_name = "confirm_delete.html"
-    success_url = reverse_lazy("comercial:proyecto_list")
+    success_url = reverse_lazy("comercial:solicitud_list")
 
 
 class CrearProyectoDesdeSolicitudView(CreateView):

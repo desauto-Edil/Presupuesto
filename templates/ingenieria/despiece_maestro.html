@@ -1,13 +1,21 @@
-{# OBSOLETO — reemplazado por despiece_maestro.html (2026-05).
-   Ninguna vista apunta a este archivo. Conservado como respaldo temporal.
-   Puede eliminarse de forma segura cuando se confirme estabilidad. #}
 {% extends "base.html" %}
 {% load static %}
 
 {% block title %}{{ despiece.nombre|default:"Despiece" }} — Workbench{% endblock %}
 {% block nav_ingenieria %}active{% endblock %}
 {% block page_title %}Despiece Maestro{% endblock %}
-{% block breadcrumb %}{{ despiece.subsistema.sistema.codigo }} · {{ despiece.subsistema.codigo }}{% endblock %}
+{% block breadcrumb %}
+  {% if despiece.proyecto %}
+    <a href="{% url 'comercial:solicitud_list' %}" style="color:inherit;text-decoration:none;">Solicitudes</a>
+    {% if despiece.proyecto.solicitud %}
+      → <a href="{% url 'comercial:solicitud_detail' despiece.proyecto.solicitud.pk %}" style="color:inherit;text-decoration:none;">{{ despiece.proyecto.solicitud.consecutivo }}</a>
+    {% endif %}
+    → <a href="{% url 'comercial:proyecto_detail' despiece.proyecto.pk %}" style="color:inherit;text-decoration:none;">{{ despiece.proyecto.consecutivo }}</a>
+    → Despiece
+  {% else %}
+    Despiece rápido — {{ despiece.subsistema.sistema.codigo }} · {{ despiece.subsistema.codigo }}
+  {% endif %}
+{% endblock %}
 
 {% block topbar_actions %}
 {% if proyecto %}
@@ -15,15 +23,15 @@
   <i class="bi bi-arrow-left"></i> {{ proyecto.consecutivo }}
 </a>
 {% else %}
-<a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
-  <i class="bi bi-arrow-left"></i> Catálogo
+<a href="{% url 'ingenieria:despiece_list' %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+  <i class="bi bi-arrow-left"></i> Despieces
 </a>
 {% endif %}
 <span class="badge {% if despiece.esta_guardado %}bg-success{% else %}bg-warning text-dark{% endif %} ms-1">
   {{ despiece.estado }}
 </span>
-{% if despiece.esta_guardado %}
-<a href="{% url 'presupuestos:apu_list' %}"
+{% if apu_pk %}
+<a href="{% url 'presupuestos:apu_detail' apu_pk %}"
    class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 ms-1">
   <i class="bi bi-file-earmark-bar-graph"></i> Ver APU
 </a>
@@ -259,19 +267,28 @@
         <span class="wb-spinner" id="guardarSpinner"></span>
         <span id="guardarText">Guardar despiece</span>
       </button>
-      {% if despiece.esta_guardado %}
-      <a href="{% url 'presupuestos:apu_list' %}"
+      {% if puede_generar_apu %}
+      <form method="post" action="{% url 'presupuestos:apu_generar_despiece' despiece.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1">
+          <i class="bi bi-file-earmark-bar-graph"></i>
+          {% if apu_pk %}Actualizar APU{% else %}Generar APU{% endif %}
+        </button>
+      </form>
+      {% if apu_pk %}
+      <a href="{% url 'presupuestos:apu_detail' apu_pk %}"
          class="btn btn-outline-primary btn-sm text-center">
-        <i class="bi bi-file-earmark-bar-graph"></i> Generar APU
+        <i class="bi bi-box-arrow-right"></i> Ver APU
       </a>
+      {% endif %}
       {% endif %}
       {% if proyecto %}
       <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-outline-secondary btn-sm text-center">
         <i class="bi bi-arrow-left"></i> Volver al proyecto
       </a>
       {% else %}
-      <a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-outline-secondary btn-sm text-center">
-        <i class="bi bi-arrow-left"></i> Volver al catálogo
+      <a href="{% url 'ingenieria:despiece_list' %}" class="btn btn-outline-secondary btn-sm text-center">
+        <i class="bi bi-arrow-left"></i> Volver a despieces
       </a>
       {% endif %}
     </div>
@@ -303,11 +320,12 @@
 <div class="wb-toast" id="wbToast"></div>
 
 <script>
-const CALCULAR_URL  = "{% url 'ingenieria:calcular_despiece_maestro' despiece.pk %}";
-const GUARDAR_URL   = "{% url 'ingenieria:guardar_despiece_maestro' despiece.pk %}";
+const CALCULAR_URL  = "{% url 'ingenieria:despiece_calcular' despiece.pk %}";
+const GUARDAR_URL   = "{% url 'ingenieria:despiece_guardar' despiece.pk %}";
 const PRODUCTOS_URL = "{% url 'ingenieria:buscar_productos' %}";
 const CSRF          = "{{ csrf_token }}";
 const LINEAS_INIT   = {{ lineas_json|safe }};
+const PUEDE_APU     = {{ puede_generar_apu|yesno:"true,false" }};
 
 /* ── Estado ──────────────────────────────────────────────────────────────── */
 let filasCalc       = [];
@@ -394,7 +412,6 @@ async function buscarYMostrar(q, categoria, drop, tr, fila) {
   drop.innerHTML = '<div class="prod-opt-empty">Buscando…</div>';
   drop.classList.add('open');
 
-  // Cerrar otros dropdowns
   document.querySelectorAll('.prod-dropdown.open').forEach(d => {
     if (d !== drop) d.classList.remove('open');
   });
@@ -558,7 +575,6 @@ async function calcular() {
     const data = await resp.json();
 
     if (data.ok) {
-      // Aplanar subconjuntos → lista plana de líneas
       const lineas = [];
       data.subconjuntos.forEach(sq => sq.lineas.forEach(l => lineas.push(l)));
 

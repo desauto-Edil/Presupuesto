@@ -50,19 +50,6 @@
         {{ form.descripcion }}
       </div>
 
-      <div class="section-heading" style="margin-top:18px;">Métricas técnicas</div>
-
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label>Área total (m²)</label>
-          {{ form.area_total_m2 }}
-        </div>
-        <div class="form-group">
-          <label>Perímetro (ml)</label>
-          {{ form.perimetro_ml }}
-        </div>
-      </div>
-
       <div class="form-grid-2">
         <div class="form-group">
           <label>Días de duración estimada</label>
@@ -72,9 +59,7 @@
         <div class="form-group">
           <label>Número de personas <span style="font-size:10px;color:var(--ink-soft);">(equipo de trabajo)</span></label>
           {{ form.num_personas }}
-          <small style="color:var(--ink-soft);font-size:10.5px;">
-            7 = cuadrilla de instalación estándar. Otro valor: seleccione quiénes.
-          </small>
+          <small style="color:var(--ink-soft);font-size:10.5px;">Personas en el equipo de trabajo.</small>
         </div>
       </div>
 
@@ -104,7 +89,7 @@
 
       <div class="form-grid-2">
         <div class="form-group">
-          <label>AIU (%)</label>
+          <label>AIU Contratista(%)</label>
           {{ form.aiu_pct }}
         </div>
         <div class="form-group" style="padding-top:32px;">

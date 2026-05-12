@@ -6,7 +6,7 @@
 {% block page_title %}Cálculo de Consumo{% endblock %}
 {% block breadcrumb %}
   <a href="{% url 'presupuestos:despiece_list' %}" style="color:inherit;text-decoration:none;">Proyectos</a>
-  · <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}" style="color:inherit;text-decoration:none;">{{ proyecto.consecutivo }}</a>
+  · <a href="{% url 'ingenieria:despiece_list' %}?proyecto_pk={{ proyecto.pk }}" style="color:inherit;text-decoration:none;">{{ proyecto.consecutivo }}</a>
   · {{ ps.sistema.nombre }}
 {% endblock %}
 
@@ -229,7 +229,7 @@
     </div>
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
-    <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}" class="btn btn-ghost btn-sm">← Volver al proyecto</a>
+    <a href="{% url 'ingenieria:despiece_list' %}?proyecto_pk={{ proyecto.pk }}" class="btn btn-ghost btn-sm">← Volver al proyecto</a>
     <form method="post" action="{% url 'presupuestos:consumo_ejecutar' ps.pk %}" style="margin:0;">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary btn-sm">

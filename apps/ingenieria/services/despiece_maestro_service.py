@@ -13,6 +13,7 @@ Diferencias respecto a DespieceService:
 from __future__ import annotations
 
 import logging
+import math
 from decimal import Decimal, ROUND_HALF_UP
 from typing import TYPE_CHECKING
 
@@ -117,13 +118,15 @@ class DespieceMaestroService:
                     comp.codigo, self.subsistema.codigo, exc,
                 )
 
+            cantidad_f = float(cantidad)
             resultados.append({
                 "subconjunto_id":          comp.subconjunto_id,
                 "subconjunto_nombre":      comp.subconjunto.nombre if comp.subconjunto else "General",
                 "componente_codigo":       comp.codigo,
                 "componente_nombre":       comp.nombre,
                 "formula_texto":           comp.formula_texto,
-                "cantidad_calculada":      float(cantidad),
+                "cantidad_calculada":      cantidad_f,
+                "cantidad_redondeada":     math.ceil(cantidad_f) if not error else 0,
                 "unidad":                  comp.unidad,
                 "variable_salida":         comp.variable_salida,
                 "variable_referencia_apu": comp.variable_referencia_apu,
@@ -199,6 +202,9 @@ class DespieceMaestroService:
                 from django.utils.dateparse import parse_datetime
                 fecha_precio = parse_datetime(str(prod_data["fecha_precio"]))
 
+            import math as _math
+            cant_redondeada = _math.ceil(float(cantidad)) if not r.get("error") else 0
+
             lineas.append(DespieceMaestroLinea(
                 despiece=dm,
                 subconjunto_id=r["subconjunto_id"],
@@ -207,6 +213,7 @@ class DespieceMaestroService:
                 componente_nombre=r["componente_nombre"],
                 formula_texto=r["formula_texto"],
                 cantidad_calculada=cantidad,
+                cantidad_redondeada=cant_redondeada,
                 unidad=r["unidad"],
                 variable_salida=r["variable_salida"],
                 variable_referencia_apu=r["variable_referencia_apu"],

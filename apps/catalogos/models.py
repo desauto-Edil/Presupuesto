@@ -123,6 +123,22 @@ class Producto(models.Model):
         return f"{self.codigo} — {self.nombre}"
 
     @property
+    def precio_unitario_real(self):
+        """
+        Precio por unidad individual = precio_actual / unidades_por_presentacion.
+
+        Es el valor correcto para usar en cálculos de despiece y APU.
+        Ejemplo: precio_actual=205, unidades_por_presentacion=1000 → 0.205
+        """
+        from decimal import Decimal
+        divisor = self.unidades_por_presentacion or 1
+        if divisor <= 0:
+            divisor = 1
+        return (self.precio_actual / Decimal(str(divisor))).quantize(
+            Decimal("0.000001")
+        )
+
+    @property
     def precio_para_display(self):
         """Precio de referencia a mostrar en catálogo."""
         from decimal import Decimal

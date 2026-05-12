@@ -120,6 +120,15 @@
       <span>APU</span>
     </a>
 
+    <a href="{% url 'presupuestos:apu_list' %}?revision=pendiente"
+       class="nav-item {% block nav_revisiones %}{% endblock %}"
+       data-tip="Revisiones">
+      <span class="nav-icon">
+        <i class="bi bi-check2-circle" style="font-size:18px;line-height:1;"></i>
+      </span>
+      <span>Revisiones</span>
+    </a>
+
     <a href="{% url 'ingenieria:sistema_list' %}"
        class="nav-item {% block nav_ingenieria %}{% endblock %}"
        data-tip="Sistemas">
@@ -172,7 +181,7 @@
   <!-- Logo completo -->
   <div class="topbar-logo">
     <div class="topbar-logo-text">
-      <div class="andicots-wordmark">ANDI<span>COTS</span></div>
+      <div class="andicots-wordmark">ANDINA<span>COTS</span></div>
       <div class="andicots-unit">{{ request.session.unidad_negocio|default:"APP"|upper }}</div>
     </div>
   </div>

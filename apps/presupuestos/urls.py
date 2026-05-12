@@ -17,14 +17,16 @@ from apps.presupuestos.views import (
     ConfiguracionAPUListView, ConfiguracionAPUCreateView, ConfiguracionAPUUpdateView,
     # APU — proyectos
     APUListView, APUProyectoDetailView, APUProyectoUpdateView, APUGenerarView,
+    APUGenerarDesdeDespiece,
     APUManoObraView, APUHerramientasView, APUTransporteView, APUAdminView,
     APULineaUpdateView, APULineaDeleteView,
     APUPDFInternoView, APUPDFClienteView, APUEnviarRevisionView,
+    APURevisarView, APUAprobarModalidadView,
     # Catálogo APU
     CatalogoAPUView,
     CategoriaItemAPUCreateView, CategoriaItemAPUUpdateView, CategoriaItemAPUDeleteView,
     ItemCatalogoAPUCreateView, ItemCatalogoAPUUpdateView, ItemCatalogoAPUDeleteView,
-    CuadrillaPresetCreateView, CuadrillaPresetUpdateView, CuadrillaPresetDeleteView,
+    # CuadrillaPresetCreateView, CuadrillaPresetUpdateView, CuadrillaPresetDeleteView,  # oculto
     ItemsCatalogoAPIView,
     # Consumo
     CalculoConsumoView, EjecutarCalculoConsumoView,
@@ -75,9 +77,10 @@ urlpatterns = [
     path("catalogo-apu/item/nuevo/",                   ItemCatalogoAPUCreateView.as_view(),  name="catalogo_item_create"),
     path("catalogo-apu/item/<int:pk>/editar/",         ItemCatalogoAPUUpdateView.as_view(),  name="catalogo_item_update"),
     path("catalogo-apu/item/<int:pk>/eliminar/",       ItemCatalogoAPUDeleteView.as_view(),  name="catalogo_item_delete"),
-    path("catalogo-apu/cuadrilla/nueva/",              CuadrillaPresetCreateView.as_view(),  name="catalogo_cuadrilla_create"),
-    path("catalogo-apu/cuadrilla/<int:pk>/editar/",    CuadrillaPresetUpdateView.as_view(),  name="catalogo_cuadrilla_update"),
-    path("catalogo-apu/cuadrilla/<int:pk>/eliminar/",  CuadrillaPresetDeleteView.as_view(),  name="catalogo_cuadrilla_delete"),
+    # Cuadrilla presets: ocultos de la interfaz (modelos conservados en BD)
+    # path("catalogo-apu/cuadrilla/nueva/",              CuadrillaPresetCreateView.as_view(),  name="catalogo_cuadrilla_create"),
+    # path("catalogo-apu/cuadrilla/<int:pk>/editar/",    CuadrillaPresetUpdateView.as_view(),  name="catalogo_cuadrilla_update"),
+    # path("catalogo-apu/cuadrilla/<int:pk>/eliminar/",  CuadrillaPresetDeleteView.as_view(),  name="catalogo_cuadrilla_delete"),
 
     # ── Consumo ───────────────────────────────────────────────────────────────
     path("consumo/<int:pk>/",                           CalculoConsumoView.as_view(),                  name="consumo_maestro"),
@@ -89,7 +92,8 @@ urlpatterns = [
     path("apu/",                         APUListView.as_view(),           name="apu_list"),
     path("apu/<int:pk>/",                APUProyectoDetailView.as_view(), name="apu_detail"),
     path("apu/<int:pk>/editar/",         APUProyectoUpdateView.as_view(), name="apu_update"),
-    path("apu/generar/<int:pk>/",        APUGenerarView.as_view(),        name="apu_generar"),
+    path("apu/generar/<int:pk>/",              APUGenerarView.as_view(),          name="apu_generar"),
+    path("apu/generar-despiece/<int:pk>/",     APUGenerarDesdeDespiece.as_view(), name="apu_generar_despiece"),
     path("apu/<int:pk>/mano-obra/",      APUManoObraView.as_view(),       name="apu_mano_obra"),
     path("apu/<int:pk>/herramientas/",   APUHerramientasView.as_view(),   name="apu_herramientas"),
     path("apu/<int:pk>/transporte/",     APUTransporteView.as_view(),     name="apu_transporte"),
@@ -98,5 +102,7 @@ urlpatterns = [
     path("apu/linea/<int:pk>/eliminar/", APULineaDeleteView.as_view(),    name="apu_linea_delete"),
     path("apu/<int:pk>/pdf-interno/",    APUPDFInternoView.as_view(),     name="apu_pdf_interno"),
     path("apu/<int:pk>/pdf-cliente/",    APUPDFClienteView.as_view(),     name="apu_pdf_cliente"),
-    path("apu/<int:pk>/enviar-revision/", APUEnviarRevisionView.as_view(), name="apu_enviar_revision"),
+    path("apu/<int:pk>/enviar-revision/",    APUEnviarRevisionView.as_view(),    name="apu_enviar_revision"),
+    path("apu/<int:pk>/revisar/",             APURevisarView.as_view(),           name="apu_revisar"),
+    path("apu/<int:pk>/aprobar-modalidad/",   APUAprobarModalidadView.as_view(),  name="apu_aprobar_modalidad"),
 ]

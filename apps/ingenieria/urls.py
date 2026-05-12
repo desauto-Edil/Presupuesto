@@ -53,12 +53,16 @@ urlpatterns = [
 
     # ── Calculador de sistemas (standalone) ───────────────────────────────────
     path("calculador/", CalculadorSistemaView.as_view(), name="calculador_sistemas"),
+    # Flujo rápido (sin proyecto) y flujo de proyecto (con proyecto_pk en GET/POST)
     path("calculador/<int:sistema_pk>/nuevo/", CalculadorSeleccionarView.as_view(), name="calculador_seleccionar"),
+    path("calculador/despieces/", DespiecesGuardadosView.as_view(), name="despiece_list"),
+    # Alias de compatibilidad (redirige a la misma vista)
     path("calculador/guardados/", DespiecesGuardadosView.as_view(), name="despieces_guardados"),
     path("calculador/despiece/<int:pk>/", DespieceMaestroView.as_view(), name="despiece_maestro"),
-    path("calculador/despiece/<int:pk>/calcular/", CalcularDespieceMaestroView.as_view(), name="calcular_despiece_maestro"),
-    path("calculador/despiece/<int:pk>/guardar/", GuardarDespieceMaestroView.as_view(), name="guardar_despiece_maestro"),
-    path("calculador/despiece/<int:pk>/eliminar/", EliminarDespieceMaestroView.as_view(), name="eliminar_despiece_maestro"),
+    path("calculador/despiece/<int:pk>/calcular/", CalcularDespieceMaestroView.as_view(), name="despiece_calcular"),
+    path("calculador/despiece/<int:pk>/guardar/", GuardarDespieceMaestroView.as_view(), name="despiece_guardar"),
+    path("calculador/despiece/<int:pk>/eliminar/", EliminarDespieceMaestroView.as_view(), name="despiece_delete"),
+    # APU: redirige al módulo presupuestos (apu_despiece_maestro obsoleto)
     path("calculador/despiece/<int:pk>/apu/", APUDespieceMaestroView.as_view(), name="apu_despiece_maestro"),
     path("calculador/productos/buscar/", BuscarProductosView.as_view(), name="buscar_productos"),
 ]

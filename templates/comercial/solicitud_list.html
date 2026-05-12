@@ -96,6 +96,31 @@
 {% endblock %}
 
 {% block content %}
+
+<!-- ── Barra de búsqueda y filtros ── -->
+<form method="get" class="fade-up" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <input type="text" name="q" value="{{ q }}" placeholder="Buscar por consecutivo, nombre o cliente…"
+           class="form-control form-control-sm" style="max-width:280px;">
+    <select name="estado" class="form-select form-select-sm" style="max-width:170px;">
+        <option value="">Todos los estados</option>
+        {% for val, label in estados %}
+        <option value="{{ val }}" {% if estado_filtro == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    <select name="responsable" class="form-select form-select-sm" style="max-width:180px;">
+        <option value="">Todos los responsables</option>
+        {% for r in responsables %}
+        <option value="{{ r.pk }}" {% if responsable_filtro == r.pk|stringformat:"s" %}selected{% endif %}>
+            {{ r.nombre_completo|default:r.email }}
+        </option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-ghost btn-sm">Filtrar</button>
+    {% if q or estado_filtro or responsable_filtro %}
+    <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm" style="color:var(--ink-soft);">✕ Limpiar</a>
+    {% endif %}
+</form>
+
 <div class="sol-card fade-up">
     {% if solicitudes %}
     <table class="table mb-0">
@@ -106,6 +131,7 @@
                 <th>Nombre</th>
                 <th>F. entrega</th>
                 <th>Estado</th>
+                <th>Responsable</th>
                 <th>Creada</th>
                 <th class="text-end">Acciones</th>
             </tr>
@@ -127,50 +153,66 @@
                         {{ s.get_estado_display }}
                     </span>
                 </td>
+                <td style="font-size:12px;color:var(--ink-soft);">
+                    {{ s.creado_por.nombre_completo|default:s.creado_por.email|default:"—" }}
+                </td>
                 <td style="font-size:12px;color:var(--ink-soft);">{{ s.created_at|date:"d/m/Y" }}</td>
                 <td class="text-end">
-                    <a href="{% url 'comercial:solicitud_detail' s.pk %}" 
+                    <a href="{% url 'comercial:solicitud_detail' s.pk %}"
                         class="btn btn-ghost btn-xs d-inline-flex align-items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-eye-fill me-1" viewBox="0 0 16 16">
                             <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0"/>
                             <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8m8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7"/>
                         </svg>
                     </a>
-
-                    <a href="{% url 'comercial:solicitud_update' s.pk %}" 
+                    <a href="{% url 'comercial:solicitud_update' s.pk %}"
                         class="btn btn-ghost btn-xs d-inline-flex align-items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-pencil-fill me-1" viewBox="0 0 16 16">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-pencil-fill" viewBox="0 0 16 16">
                             <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/>
                         </svg>
-                        
                     </a>
                     <button type="button" class="btn btn-ghost btn-xs d-inline-flex align-items-center"
                             style="color:var(--danger);"
-                            data-bs-toggle="modal" 
+                            data-bs-toggle="modal"
                             data-bs-target="#modalDeleteSolicitud"
                             data-sol-pk="{{ s.pk }}"
                             data-sol-nombre="{{ s.consecutivo }} — {{ s.cliente.razon_social }}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash3 me-1" viewBox="0 0 16 16">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
                             <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
                         </svg>
-                        
                     </button>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    {% if is_paginated %}
+    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+        {% if page_obj.has_previous %}
+        <a href="?{% if q %}q={{ q }}&{% endif %}{% if estado_filtro %}estado={{ estado_filtro }}&{% endif %}{% if responsable_filtro %}responsable={{ responsable_filtro }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-ghost btn-xs">← Anterior</a>
+        {% endif %}
+        <span style="font-size:12px;color:var(--ink-soft);">Pág. {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?{% if q %}q={{ q }}&{% endif %}{% if estado_filtro %}estado={{ estado_filtro }}&{% endif %}{% if responsable_filtro %}responsable={{ responsable_filtro }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-ghost btn-xs">Siguiente →</a>
+        {% endif %}
+    </div>
+    {% endif %}
     {% else %}
     <div class="empty-state" style="padding:60px 24px;">
         <div class="empty-state-icon">◷</div>
-        <div style="font-size:15px;font-weight:600;margin-bottom:6px;">Sin solicitudes registradas</div>
-        <div class="empty-state-text" style="margin-bottom:20px;">
-            Las solicitudes provienen del sistema Salesforce. Registra la primera.
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px;">
+            {% if q or estado_filtro or responsable_filtro %}Sin resultados para los filtros aplicados{% else %}Sin solicitudes registradas{% endif %}
         </div>
-        <button class="btn btn-primary btn-sm"
-                data-bs-toggle="offcanvas" data-bs-target="#offcanvasSol">
-            + Nueva solicitud
-        </button>
+        <div class="empty-state-text" style="margin-bottom:20px;">
+            {% if q or estado_filtro or responsable_filtro %}
+            <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">Limpiar filtros</a>
+            {% else %}
+            Las solicitudes provienen del sistema Salesforce. Registra la primera.
+            <div style="margin-top:16px;">
+                <a href="{% url 'comercial:solicitud_create' %}" class="btn btn-primary btn-sm">+ Nueva solicitud</a>
+            </div>
+            {% endif %}
+        </div>
     </div>
     {% endif %}
 </div>
@@ -203,7 +245,7 @@
             </div>
         </div>
 
-        <form method="post" action="{% url 'comercial:solicitud_create' %}">
+        <form method="post" action="{% url 'comercial:solicitud_create' %}" enctype="multipart/form-data">
             {% csrf_token %}
 
             <!-- Referencia Salesforce -->
@@ -250,6 +292,15 @@
             <div style="margin-bottom:14px;">
                 <label class="form-label">Observaciones <span style="color:var(--brand-red)">*</span></label>
                 {{ create_form.observaciones }}
+            </div>
+
+            <!-- Archivos adjuntos — obligatorio para crear -->
+            <div style="margin-bottom:14px;">
+                <label class="form-label">Archivos adjuntos <span style="color:var(--brand-red)">*</span></label>
+                <input type="file" name="archivos" class="form-control form-control-sm" multiple required>
+                <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
+                    Obligatorio. Puede seleccionar varios archivos.
+                </div>
             </div>
 
             <div class="sol-oc-footer">

@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{# OBSOLETO — renombrado a proyecto_despiece_dashboard.html (2026-05).
-   DespieceListView ahora usa ese template. Puede eliminarse. #}
-{% block title %}Calculador de Sistemas{% endblock %}
+{# Panel de proyectos con despiece — vista legacy del módulo presupuestos.
+   Redirige al nuevo calculador de ingeniería para abrir/crear despieces.
+   Renombrado desde despiece_list.html (obsoleto como lista oficial de despieces).
+#}
+{% block title %}Proyectos con Despiece{% endblock %}
 {% block nav_despiece %}active{% endblock %}
-{% block page_title %}Calculador de Sistemas{% endblock %}
-{% block breadcrumb %}Presupuestos → Calculador de Sistemas{% endblock %}
+{% block page_title %}Proyectos con Despiece{% endblock %}
+{% block breadcrumb %}Presupuestos → Proyectos{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -60,10 +62,9 @@
 {% endblock %}
 
 {% block topbar_actions %}
-<form method="post" action="{% url 'presupuestos:despiece_nuevo' %}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary btn-sm">+ Nuevo despiece</button>
-</form>
+<a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-primary btn-sm">
+  <i class="bi bi-plus-lg"></i> Nuevo despiece
+</a>
 {% endblock %}
 
 {% block content %}
@@ -111,9 +112,9 @@
                 <td class="text-end" style="white-space:nowrap;">
                     <a href="{% url 'ingenieria:despiece_list' %}?proyecto_pk={{ p.pk }}"
                        class="btn btn-primary btn-xs d-inline-flex align-items-center gap-1"
-                       title="Despiece constructivo">
+                       title="Ver despieces del proyecto">
                         <i class="bi bi-grid-3x3-gap"></i>
-                        Despiece
+                        Despieces
                     </a>
                     {% if p.num_lineas > 0 %}
                     <a href="{% url 'presupuestos:despiece_csv' p.pk %}"
@@ -133,12 +134,11 @@
         <i class="bi bi-layers" style="font-size:38px;color:var(--theme-accent);opacity:.4;display:block;margin-bottom:12px;"></i>
         <div style="font-size:15px;font-weight:600;margin-bottom:6px;">Sin proyectos con despiece</div>
         <div style="font-size:13px;color:var(--ink-soft);margin-bottom:20px;">
-            Crea un nuevo despiece para comenzar.
+            Crea un nuevo despiece desde el Calculador de Sistemas.
         </div>
-        <form method="post" action="{% url 'presupuestos:despiece_nuevo' %}">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-primary btn-sm">+ Nuevo despiece</button>
-        </form>
+        <a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-primary btn-sm">
+          <i class="bi bi-plus-lg"></i> Nuevo despiece
+        </a>
     </div>
     {% endif %}
 </div>

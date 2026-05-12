@@ -176,6 +176,9 @@
 
   <form method="post" action="" id="selForm">
     {% csrf_token %}
+    {% if proyecto %}
+    <input type="hidden" name="proyecto_pk" value="{{ proyecto.pk }}">
+    {% endif %}
 
     <!-- Campo nombre opcional -->
     <div class="mb-3">
@@ -232,9 +235,15 @@
     {% endfor %}
 
     <div class="sel-footer">
+      {% if proyecto %}
+      <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Volver al proyecto
+      </a>
+      {% else %}
       <a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left"></i> Volver
       </a>
+      {% endif %}
       <button type="submit" class="btn btn-primary">
         <i class="bi bi-arrow-right"></i> Ir al calculador
       </button>

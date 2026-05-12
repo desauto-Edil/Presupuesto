@@ -79,7 +79,7 @@ class ProyectoSistemaDeleteView(DeleteView):
     template_name = "confirm_delete.html"
 
     def get_success_url(self):
-        return reverse("presupuestos:despiece_proyecto", args=[self.object.proyecto_id])
+        return reverse("ingenieria:despiece_list") + f"?proyecto_pk={self.object.proyecto_id}"
 
 
 # ── Despiece — Módulo lista ───────────────────────────────────────────────────
@@ -87,7 +87,7 @@ class ProyectoSistemaDeleteView(DeleteView):
 class DespieceListView(UnidadFilterMixin, ListView):
     """Módulo Despiece — lista proyectos con despieces. Visible para todas las unidades."""
     model = Proyecto
-    template_name = "presupuestos/despiece_list.html"
+    template_name = "presupuestos/proyecto_despiece_dashboard.html"
     context_object_name = "proyectos"
     unidad_field = "creado_por__unidad_negocio"
 
@@ -109,18 +109,10 @@ class DespieceListView(UnidadFilterMixin, ListView):
 
 
 class NuevoDespieceView(View):
-    """POST — crea un Proyecto de despiece con ID autogenerado, sin datos adicionales."""
+    """POST — redirige al nuevo calculador de sistemas."""
 
     def post(self, request):
-        from apps.common.choices import EstadoProyecto
-
-        consecutivo = Proyecto.siguiente_consecutivo()
-        proyecto = Proyecto.objects.create(
-            consecutivo=consecutivo,
-            nombre="",
-            estado=EstadoProyecto.DESPIECE,
-        )
-        return redirect("presupuestos:despiece_proyecto", pk=proyecto.pk)
+        return redirect("ingenieria:calculador_sistemas")
 
 
 class DespieceCSVDownloadView(View):
@@ -190,37 +182,12 @@ class DespieceCSVDownloadView(View):
 
 # ── Despiece — Vista principal ─────────────────────────────────────────────────
 
-class DespieceProyectoView(DetailView):
-    """Workbench principal del despiece de un proyecto."""
-    model = Proyecto
-    template_name = "presupuestos/despiece_maestro.html"
-    context_object_name = "proyecto"
+class DespieceProyectoView(View):
+    """Redirige al nuevo calculador — reemplazado por DespieceMaestro en ingenieria."""
 
-    def get_context_data(self, **kwargs):
-        from apps.presupuestos.models import CalculoConsumoLinea
-
-        ctx = super().get_context_data(**kwargs)
-        ctx["sistemas"] = self.object.proyecto_sistemas.select_related(
-            "sistema", "subsistema"
-        ).prefetch_related(
-            "despiece_lineas__producto",
-            "despiece_lineas__categoria_producto",
-            "despiece_lineas__regla",
-            Prefetch(
-                "calculo_consumo_lineas",
-                queryset=CalculoConsumoLinea.objects.filter(
-                    es_componente_quimico=False
-                ).select_related("producto", "categoria_producto").order_by("orden"),
-                to_attr="consumo_lineas_prefetch",
-            ),
-        ).order_by("sistema__nombre")
-        ctx["all_sistemas"]    = Sistema.objects.filter(activo=True).order_by("nombre")
-        ctx["all_subsistemas"] = (
-            Subsistema.objects.select_related("sistema")
-            .filter(activo=True)
-            .order_by("sistema__nombre", "nombre")
-        )
-        return ctx
+    def get(self, request, pk):
+        url = reverse("ingenieria:despiece_list") + f"?proyecto_pk={pk}"
+        return redirect(url)
 
 
 # ── Despiece — AJAX: variables requeridas por subsistema ──────────────────────
@@ -270,7 +237,7 @@ class CalcularDespiecePSView(View):
 
         if not sistema_id:
             messages.error(request, "Debe indicar un sistema.")
-            return redirect(reverse("presupuestos:despiece_proyecto", args=[pk]))
+            return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={pk}")
 
         try:
             sistema    = Sistema.objects.get(pk=sistema_id)
@@ -315,7 +282,7 @@ class CalcularDespiecePSView(View):
         except Exception as exc:
             messages.error(request, f"Error al calcular despiece: {exc}")
 
-        return redirect(reverse("presupuestos:despiece_proyecto", args=[pk]))
+        return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={pk}")
 
 
 # ── Despiece — POST clásico: re-ejecutar cálculo de un PS existente ───────────
@@ -343,7 +310,7 @@ class DespieceEjecutarView(View):
             )
         except Exception as exc:
             messages.error(request, f"Error al ejecutar despiece: {exc}")
-        return redirect(reverse("presupuestos:despiece_proyecto", args=[ps.proyecto_id]))
+        return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={ps.proyecto_id}")
 
 
 # ── Despiece — AJAX: ajuste de cantidad ───────────────────────────────────────
@@ -392,7 +359,7 @@ class DespieceLineaAjusteView(UpdateView):
     template_name = "presupuestos/despiece_ajuste_form.html"
 
     def get_success_url(self):
-        return reverse("presupuestos:despiece_proyecto", args=[self.object.proyecto_id])
+        return reverse("ingenieria:despiece_list") + f"?proyecto_pk={self.object.proyecto_id}"
 
 
 class AsignarProductoLineaAPIView(View):
@@ -487,12 +454,13 @@ class APUListView(ListView):
     context_object_name = "apus"
 
     def get_queryset(self):
-        return (
+        qs = (
             APUProyecto.objects
             .select_related(
                 "proyecto_sistema__proyecto__cliente",
                 "proyecto_sistema__sistema",
                 "proyecto_sistema__subsistema",
+                "revisor",
             )
             .annotate(
                 total_lineas=Count("lineas"),
@@ -505,6 +473,14 @@ class APUListView(ListView):
             .filter(total_lineas__gt=0)
             .order_by("-updated_at")
         )
+        if self.request.GET.get("revision") == "pendiente":
+            qs = qs.filter(fecha_envio_revision__isnull=False, modalidad_aiu_seleccionada__isnull=True)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["filtro_revision"] = self.request.GET.get("revision", "")
+        return ctx
 
 
 def _build_categorias_context(apu) -> list:
@@ -688,6 +664,13 @@ class APUProyectoDetailView(DetailView):
             .exclude(item_catalogo=None)
             .values_list("item_catalogo_id", flat=True)
         )
+        # Modalidades AIU del proyecto
+        ctx["modalidades_aiu"] = self.object.calcular_modalidades_aiu()
+
+        # Revisores disponibles (usuarios del sistema excepto el actual)
+        from apps.configuracion.models import ConfiguracionSistema
+        ctx["revisores"] = ConfiguracionSistema.objects.filter(activo=True).order_by("nombre_completo")
+        ctx["ya_en_revision"] = bool(self.object.fecha_envio_revision)
         return ctx
 
 
@@ -799,24 +782,136 @@ class APUGenerarView(View):
             return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
         except Exception as exc:
             messages.error(request, f"Error al generar APU: {exc}")
-            return redirect(reverse("presupuestos:despiece_proyecto", args=[ps.proyecto_id]))
+            return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={ps.proyecto_id}")
 
 
-# PowerGripWizardView y CalcularPowerGripView eliminados (2026-04).
-# El despiece ahora se maneja directamente en DespieceProyectoView (despiece_maestro.html)
-# con soporte completo de sistemas/subsistemas definidos en DB.
+class APUGenerarDesdeDespiece(View):
+    """
+    POST: genera o actualiza el APU a partir de un DespieceMaestro asociado a proyecto.
 
-# Stub de compatibilidad para imports históricos que puedan existir
+    Flujo:
+      1. Valida que el despiece esté guardado, tenga proyecto y tenga líneas.
+      2. Obtiene o crea el ProyectoSistema (proyecto × sistema × subsistema).
+      3. Sincroniza variables_entrada del DespieceMaestro → parametros_entrada del PS.
+      4. Sincroniza DespieceMaestroLinea → DespieceLinea del PS (upsert por componente).
+      5. Llama a APUService.generar(ps) — internamente hace get_or_create del APU.
+      6. Redirige a apu_detail con mensaje de éxito (creado vs. actualizado).
+    """
+    def post(self, request, pk):
+        from apps.ingenieria.models import DespieceMaestro
+        from django.db import transaction as db_transaction
+
+        dm = get_object_or_404(DespieceMaestro, pk=pk)
+
+        # ── Validaciones ──────────────────────────────────────────────────────
+        if not dm.esta_guardado:
+            messages.error(request, "El despiece debe estar guardado antes de generar el APU.")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+        if not dm.proyecto_id:
+            messages.error(request, "Solo los despieces asociados a un proyecto pueden generar APU.")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+        lineas_dm = list(dm.lineas.select_related("producto", "producto__unidad"))
+        if not lineas_dm:
+            messages.error(request, "El despiece no tiene líneas calculadas. Calcula y guarda primero.")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        try:
+            with db_transaction.atomic():
+                # ── 1. Obtener o crear ProyectoSistema ────────────────────────
+                ps, _ = ProyectoSistema.objects.get_or_create(
+                    proyecto=dm.proyecto,
+                    sistema=dm.subsistema.sistema,
+                    subsistema=dm.subsistema,
+                )
+
+                # ── 2. Sincronizar variables_entrada → parametros_entrada ──────
+                # Esto permite que APUService._get_total_unidades() calcule bien
+                # el denominador (ej: total_powergrip) usando los valores reales
+                # que el usuario ingresó en el DespieceMaestro.
+                if dm.variables_entrada:
+                    ps.parametros_entrada = {
+                        **(ps.parametros_entrada or {}),
+                        **dm.variables_entrada,
+                    }
+                    ps.save(update_fields=["parametros_entrada"])
+
+                # ── 3. Sincronizar DespieceMaestroLinea → DespieceLinea ────────
+                # APUService.generar_materiales() lee desde ps.despiece_lineas
+                # (modelo DespieceLinea del flujo legacy).  Como el DespieceMaestro
+                # usa DespieceMaestroLinea, debemos puente-sincronizarlas.
+                codigos_dm = set()
+                for dml in lineas_dm:
+                    codigos_dm.add(dml.componente_codigo)
+
+                    # precio_snapshot debe ser el precio unitario REAL
+                    # (precio_actual / unidades_por_presentacion).
+                    # Prioridad: recalcular desde el producto vivo para evitar
+                    # que snapshots viejos (guardados antes de esta corrección)
+                    # propaguen el precio de presentación completo al APU.
+                    if dml.producto_id and dml.producto:
+                        precio_snapshot = dml.producto.precio_unitario_real
+                    else:
+                        # Fallback: usar lo guardado en el snapshot del despiece
+                        precio_snapshot = dml.precio_unitario
+
+                    defaults = {
+                        "proyecto": dm.proyecto,
+                        "cantidad_calculada": dml.cantidad_calculada,
+                        "precio_snapshot": precio_snapshot,
+                        "producto": dml.producto,
+                    }
+                    DespieceLinea.objects.update_or_create(
+                        proyecto_sistema=ps,
+                        componente_codigo=dml.componente_codigo,
+                        defaults=defaults,
+                    )
+
+                # Eliminar líneas obsoletas (componentes que ya no están en el despiece)
+                DespieceLinea.objects.filter(
+                    proyecto_sistema=ps
+                ).exclude(componente_codigo__in=codigos_dm).delete()
+
+                # ── 4. Detectar creación vs. actualización ────────────────────
+                apu_existia = APUProyecto.objects.filter(proyecto_sistema=ps).exists()
+
+                # ── 5. Generar APU ────────────────────────────────────────────
+                from apps.presupuestos.services.apu_service import APUService
+                apu = APUService.generar(ps)
+
+        except Exception as exc:
+            messages.error(request, f"Error al generar APU: {exc}")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        if apu_existia:
+            messages.success(request, "APU actualizado correctamente.")
+        else:
+            messages.success(request, "APU generado correctamente.")
+
+        registrar_log(
+            request,
+            accion="GENERAR_APU",
+            descripcion=(
+                f"APU {'actualizado' if apu_existia else 'generado'} desde despiece maestro "
+                f"#{dm.pk} — {ps.proyecto.consecutivo} / {ps.sistema.nombre}"
+                + (f" / {ps.subsistema.nombre}" if ps.subsistema_id else "")
+            ),
+            modelo_afectado="Proyecto",
+            objeto_id=ps.proyecto_id,
+        )
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
+# Stubs de compatibilidad para imports históricos
 class PowerGripWizardView(View):
-    """Redirige al despiece general del proyecto."""
+    """Redirige al calculador de sistemas."""
     def get(self, request, pk):
-        return redirect(reverse("presupuestos:despiece_proyecto", args=[pk]))
+        return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={pk}")
 
 
 class CalcularPowerGripView(View):
-    """Redirige al despiece general del proyecto."""
+    """Redirige al calculador de sistemas."""
     def post(self, request, pk):
-        return redirect(reverse("presupuestos:despiece_proyecto", args=[pk]))
+        return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={pk}")
 
 
 # ── API: productos por categoría (para el wizard) ──────────────────────────
@@ -1473,34 +1568,117 @@ class APUPDFClienteView(View):
 class APUEnviarRevisionView(View):
     """
     POST /presupuestos/apu/<pk>/enviar-revision/
-    Marca el APU (y su proyecto) como enviado a revisión/aprobación.
-    Cambia proyecto.estado → APU_GENERADO si el modelo lo soporta.
+    Asigna revisor, marca el APU como enviado a revisión y avanza el estado del proyecto.
     """
     def post(self, request, pk):
+        from django.utils import timezone as tz
+        from apps.configuracion.models import ConfiguracionSistema
         apu = get_object_or_404(APUProyecto, pk=pk)
         try:
-            # Actualizar el estado del proyecto si tiene proyecto_sistema
+            revisor_pk = request.POST.get("revisor_id", "").strip()
+            revisor = None
+            if revisor_pk:
+                revisor = ConfiguracionSistema.objects.filter(pk=revisor_pk).first()
+
+            update_fields = ["fecha_envio_revision", "updated_at"]
+            apu.fecha_envio_revision = tz.now()
+            if revisor:
+                apu.revisor = revisor
+                update_fields.append("revisor")
+            apu.save(update_fields=update_fields)
+
             if apu.proyecto_sistema:
                 proyecto = apu.proyecto_sistema.proyecto
-                # Intentar avanzar estado (si el campo existe y el valor es válido)
-                from apps.common.choices import EstadoProyecto
-                if hasattr(EstadoProyecto, "APU_GENERADO"):
-                    proyecto.estado = EstadoProyecto.APU_GENERADO
-                    proyecto.save(update_fields=["estado"])
-                    messages.success(
-                        request,
-                        f"APU «{apu.nombre}» enviado a revisión. "
-                        f"Proyecto {proyecto.consecutivo} marcado como APU_GENERADO."
-                    )
-                else:
-                    messages.success(request, f"APU «{apu.nombre}» marcado para revisión.")
-            else:
-                messages.success(request, f"APU «{apu.nombre}» marcado para revisión.")
+                from apps.common.choices import EstadoProyecto, EstadoSolicitud
+                proyecto.estado = EstadoProyecto.APU_GENERADO
+                proyecto.save(update_fields=["estado"])
+                # Avanzar estado de la solicitud si existe
+                if proyecto.solicitud_id:
+                    proyecto.solicitud.estado = EstadoSolicitud.EN_REVISION
+                    proyecto.solicitud.save(update_fields=["estado"])
+
+            revisor_txt = f" Revisor: {revisor}." if revisor else ""
+            messages.success(
+                request,
+                f"APU «{apu.nombre}» enviado a revisión.{revisor_txt}",
+            )
         except Exception as exc:
             messages.error(request, f"Error al enviar a revisión: {exc}")
             logger.exception("[APUEnviarRevisionView] Error APU %s", pk)
 
         return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
+
+class APURevisarView(View):
+    """
+    GET /presupuestos/apu/<pk>/revisar/
+    Vista del revisor asignado: muestra el APU y permite seleccionar la modalidad AIU oficial.
+    Solo accesible si el APU tiene fecha_envio_revision asignada.
+    """
+    template_name = "presupuestos/apu_revisar.html"
+
+    def get(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        if not apu.fecha_envio_revision:
+            messages.warning(request, "Este APU aún no ha sido enviado a revisión.")
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+        from apps.configuracion.models import ConfiguracionSistema
+        ctx = {
+            "apu": apu,
+            "modalidades_aiu": apu.calcular_modalidades_aiu(),
+            "revisores": ConfiguracionSistema.objects.filter(activo=True).order_by("nombre_completo"),
+            "ya_aprobado": bool(apu.modalidad_aiu_seleccionada),
+        }
+        return render(request, self.template_name, ctx)
+
+
+class APUAprobarModalidadView(View):
+    """
+    POST /presupuestos/apu/<pk>/aprobar-modalidad/
+    Guarda la modalidad AIU seleccionada por el revisor y avanza el estado del proyecto a COTIZADO.
+    """
+    def post(self, request, pk):
+        from django.utils import timezone as tz
+        from apps.configuracion.models import ConfiguracionSistema
+        from apps.common.choices import EstadoProyecto, EstadoSolicitud
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            modalidad = request.POST.get("modalidad_aiu", "").strip()
+            if modalidad not in ("1", "2"):
+                messages.error(request, "Seleccione una modalidad AIU válida (1 o 2).")
+                return redirect(reverse("presupuestos:apu_revisar", args=[pk]))
+
+            aprobador_pk = request.POST.get("aprobado_por_id", "").strip()
+            aprobador = None
+            if aprobador_pk:
+                aprobador = ConfiguracionSistema.objects.filter(pk=aprobador_pk).first()
+
+            apu.modalidad_aiu_seleccionada = modalidad
+            apu.fecha_aprobacion = tz.now()
+            update_fields = ["modalidad_aiu_seleccionada", "fecha_aprobacion", "updated_at"]
+            if aprobador:
+                apu.aprobado_por = aprobador
+                update_fields.append("aprobado_por")
+            apu.save(update_fields=update_fields)
+
+            # Avanzar estado proyecto → COTIZADO y solicitud → APROBADA
+            if apu.proyecto_sistema:
+                proyecto = apu.proyecto_sistema.proyecto
+                proyecto.estado = EstadoProyecto.COTIZADO
+                proyecto.save(update_fields=["estado"])
+                if proyecto.solicitud_id:
+                    proyecto.solicitud.estado = EstadoSolicitud.APROBADA
+                    proyecto.solicitud.save(update_fields=["estado"])
+
+            messages.success(
+                request,
+                f"Modalidad AIU {modalidad} aprobada para el APU «{apu.nombre}».",
+            )
+        except Exception as exc:
+            messages.error(request, f"Error al aprobar modalidad: {exc}")
+            logger.exception("[APUAprobarModalidadView] Error APU %s", pk)
+
+        return redirect(reverse("presupuestos:apu_revisar", args=[pk]))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1538,7 +1716,7 @@ class CalculoConsumoView(View):
                 f"El sistema «{ps.sistema.nombre}» es CONSTRUCTIVO. "
                 "Use el módulo de Despiece.",
             )
-            return redirect("presupuestos:despiece_proyecto", pk=ps.proyecto_id)
+            return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={ps.proyecto_id}")
 
         capas = list(
             CapaConsumo.objects.filter(subsistema=ps.subsistema)
@@ -1591,7 +1769,7 @@ class EjecutarCalculoConsumoView(View):
 
         if ps.sistema.tipo_sistema != TipoSistema.CONSUMO:
             messages.error(request, "Solo se puede calcular consumo en sistemas de tipo CONSUMO.")
-            return redirect("presupuestos:despiece_proyecto", pk=ps.proyecto_id)
+            return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={ps.proyecto_id}")
 
         try:
             servicio = ConsumoService(ps)

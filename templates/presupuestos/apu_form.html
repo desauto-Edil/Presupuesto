@@ -108,6 +108,33 @@
 
           </div>
 
+          <!-- AIU del proyecto -->
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                      color:rgba(14,17,23,0.38);margin-bottom:14px;padding-bottom:6px;
+                      border-bottom:1px solid var(--sidebar-light-border);">
+            AIU del proyecto
+          </div>
+          <div style="font-size:11.5px;color:rgba(14,17,23,0.45);margin-bottom:14px;">
+            Porcentajes usados para calcular las modalidades de AIU del proyecto (A·I·U independientes del AIU del contratista).
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-4">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.aiu_proyecto_admin_pct.label }}</label>
+              {{ form.aiu_proyecto_admin_pct }}
+              {% if form.aiu_proyecto_admin_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.aiu_proyecto_admin_pct.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-4">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.aiu_proyecto_imprevistos_pct.label }}</label>
+              {{ form.aiu_proyecto_imprevistos_pct }}
+              {% if form.aiu_proyecto_imprevistos_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.aiu_proyecto_imprevistos_pct.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-4">
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.aiu_proyecto_utilidad_pct.label }}</label>
+              {{ form.aiu_proyecto_utilidad_pct }}
+              {% if form.aiu_proyecto_utilidad_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.aiu_proyecto_utilidad_pct.errors.0 }}</div>{% endif %}
+            </div>
+          </div>
+
           <div class="d-flex gap-2 justify-content-end">
             <a href="{% url 'presupuestos:apu_detail' object.pk %}" class="btn btn-ghost btn-sm">Cancelar</a>
             <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>

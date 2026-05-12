@@ -28,6 +28,14 @@ class DespieceMaestro(models.Model):
         related_name="despieces_maestro",
         verbose_name="Subsistema",
     )
+    proyecto = models.ForeignKey(
+        "comercial.Proyecto",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="despieces_maestro",
+        verbose_name="Proyecto asociado",
+        help_text="Proyecto comercial desde el que se originó este despiece (opcional).",
+    )
     subconjuntos = models.ManyToManyField(
         "ingenieria.SubconjuntoRecetaTecnica",
         blank=True,
@@ -102,7 +110,11 @@ class DespieceMaestroLinea(models.Model):
     componente_codigo  = models.CharField(max_length=80)
     componente_nombre  = models.CharField(max_length=200, blank=True)
     formula_texto      = models.TextField(blank=True)
-    cantidad_calculada = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    cantidad_calculada  = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    cantidad_redondeada = models.IntegerField(
+        null=True, blank=True,
+        help_text="math.ceil(cantidad_calculada): unidades comerciales necesarias.",
+    )
     unidad             = models.CharField(max_length=40, blank=True)
     variable_salida    = models.CharField(max_length=80, blank=True)
     variable_referencia_apu = models.CharField(max_length=80, blank=True)

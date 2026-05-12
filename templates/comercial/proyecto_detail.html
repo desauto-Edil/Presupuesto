@@ -10,7 +10,12 @@
 {% endblock %}
 
 {% block topbar_actions %}
-  <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}" class="btn btn-primary btn-sm">⊞ Ir al despiece</a>
+  <a href="{% url 'ingenieria:despiece_list' %}?proyecto_pk={{ proyecto.pk }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-grid-3x3-gap"></i> Despieces
+  </a>
+  <a href="{% url 'ingenieria:calculador_sistemas' %}?proyecto_pk={{ proyecto.pk }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-plus-lg"></i> Nuevo despiece
+  </a>
   <a href="{% url 'comercial:crear_proyecto_desde_solicitud' proyecto.solicitud.pk %}" class="btn btn-ghost btn-sm">+ Nueva versión</a>
   <a href="{% url 'comercial:proyecto_update' proyecto.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
 {% endblock %}
@@ -99,24 +104,8 @@
       <div class="summary-line">
         <span class="s-label">Número de personas</span>
         <span class="s-value">
-          {% if proyecto.num_personas %}
-            {{ proyecto.num_personas }} pers.
-            {% if proyecto.num_personas == 7 %}
-            <span style="font-size:10px;background:rgba(23,168,94,.12);color:#17a85e;
-                         border-radius:4px;padding:1px 6px;margin-left:4px;font-weight:600;">
-              cuadrilla estándar
-            </span>
-            {% endif %}
-          {% else %}—{% endif %}
+          {% if proyecto.num_personas %}{{ proyecto.num_personas }} pers.{% else %}—{% endif %}
         </span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Área total (m²)</span>
-        <span class="s-value">{{ proyecto.area_total_m2|default:"—" }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Perímetro (ml)</span>
-        <span class="s-value">{{ proyecto.perimetro_ml|default:"—" }}</span>
       </div>
     </div>
 
@@ -136,7 +125,7 @@
         <span class="s-value">{{ proyecto.iva_pct }}</span>
       </div>
       <div class="summary-line">
-        <span class="s-label">AIU (%)</span>
+        <span class="s-label">AIU Contratista (%)</span>
         <span class="s-value">{{ proyecto.aiu_pct }}</span>
       </div>
       <div class="summary-line">
@@ -154,65 +143,75 @@
     </div>
     {% endif %}
 
-    <!-- ── DESPIECES / SISTEMAS ── -->
+    <!-- ── DESPIECES ── -->
     <div class="panel">
       <div class="panel-header accent-top-theme" style="border-radius:var(--radius) var(--radius) 0 0;">
-        <span class="panel-title">Sistemas y despiece</span>
-        {% if proyecto_sistemas %}
-        <span style="font-size:11px;color:var(--ink-soft);">{{ proyecto_sistemas|length }} sistema{{ proyecto_sistemas|length|pluralize }}</span>
+        <span class="panel-title">Despieces</span>
+        {% if despieces_maestro %}
+        <span style="font-size:11px;color:var(--ink-soft);">{{ despieces_maestro|length }}</span>
         {% endif %}
-        <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}"
+        <a href="{% url 'ingenieria:calculador_sistemas' %}?proyecto_pk={{ proyecto.pk }}"
            class="btn btn-primary btn-xs" style="margin-left:auto;">
-          ⊞ Abrir despiece
+          + Nuevo despiece
         </a>
       </div>
 
-      {% if proyecto_sistemas %}
+      {% if despieces_maestro %}
       <div>
-        {% for ps in proyecto_sistemas %}
+        {% for item in despieces_maestro %}
+        {% with dm=item.dm apu_pk=item.apu_pk %}
         <div style="padding:12px 18px;border-bottom:1px solid var(--border);
                     display:flex;align-items:center;gap:12px;">
-          <!-- ícono sistema -->
           <div style="width:32px;height:32px;border-radius:8px;flex-shrink:0;
                       background:var(--theme-accent-pale);
                       display:flex;align-items:center;justify-content:center;
                       font-size:15px;">◱</div>
           <div style="flex:1;min-width:0;">
             <div style="font-size:13px;font-weight:600;color:var(--ink);">
-              {{ ps.sistema.nombre }}
-              {% if ps.subsistema %}
-              <span style="font-size:11px;color:var(--ink-soft);font-weight:400;">
-                / {{ ps.subsistema.nombre }}
-              </span>
-              {% endif %}
+              {{ dm.nombre|default:dm.subsistema.sistema.nombre }}
             </div>
             <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
-              {{ ps.despiece_lineas.count }} línea{{ ps.despiece_lineas.count|pluralize }} de despiece
+              {{ dm.subsistema.sistema.nombre }} / {{ dm.subsistema.nombre }}
+              · {{ dm.updated_at|date:"d/m/Y" }}
             </div>
           </div>
-          <!-- estado lineas -->
-          {% with total=ps.despiece_lineas.count %}
-          {% if total > 0 %}
-          <span style="font-size:11px;background:var(--theme-accent-pale);
-                       color:var(--theme-accent);padding:2px 8px;border-radius:4px;
-                       font-weight:600;">Calculado</span>
+          {% if dm.esta_guardado %}
+          <span style="font-size:11px;background:rgba(23,168,94,.12);color:#17a85e;
+                       padding:2px 8px;border-radius:4px;font-weight:600;">Guardado</span>
           {% else %}
           <span style="font-size:11px;background:var(--surface-2);
-                       color:var(--ink-soft);padding:2px 8px;border-radius:4px;">Pendiente</span>
+                       color:var(--ink-soft);padding:2px 8px;border-radius:4px;">Borrador</span>
           {% endif %}
-          {% endwith %}
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <a href="{% url 'ingenieria:despiece_maestro' dm.pk %}"
+               class="btn btn-ghost btn-xs">Abrir</a>
+            {% if dm.esta_guardado %}
+              {% if apu_pk %}
+              <a href="{% url 'presupuestos:apu_detail' apu_pk %}"
+                 class="btn btn-xs" style="background:var(--theme-accent);color:#fff;">Ver APU</a>
+              {% else %}
+              <form method="post" action="{% url 'presupuestos:apu_generar_despiece' dm.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-xs" style="background:var(--theme-accent);color:#fff;">
+                  Generar APU
+                </button>
+              </form>
+              {% endif %}
+            {% endif %}
+          </div>
         </div>
+        {% endwith %}
         {% endfor %}
       </div>
       {% else %}
       <div class="empty-state" style="padding:28px 20px;">
         <div class="empty-state-icon" style="font-size:22px;">◱</div>
         <div class="empty-state-text" style="font-size:12.5px;margin-bottom:14px;">
-          Aún no se ha ejecutado el despiece para este proyecto.
+          Aún no hay despieces para este proyecto.
         </div>
-        <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}"
+        <a href="{% url 'ingenieria:calculador_sistemas' %}?proyecto_pk={{ proyecto.pk }}"
            class="btn btn-primary btn-sm">
-          ⊞ Ejecutar despiece
+          ⊞ Nuevo despiece
         </a>
       </div>
       {% endif %}

@@ -172,8 +172,8 @@ class APUService:
                 except (ValueError, TypeError):
                     pass
 
-        # 3. Fallback área
-        fallback = float(self.ps.proyecto.area_total_m2 or 1) or 1.0
+        # 3. Fallback: usar 1 como denominador neutro
+        fallback = 1.0
         logger.debug(
             "[APUService] _get_total_unidades: fallback area_m2=%.4f (PS %s)",
             fallback, self.ps.pk,

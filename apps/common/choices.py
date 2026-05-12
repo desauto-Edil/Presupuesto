@@ -26,6 +26,8 @@ class RolSistema(models.TextChoices):
 class EstadoSolicitud(models.TextChoices):
     BORRADOR = "BORRADOR", "Borrador"
     EN_GESTION = "EN_GESTION", "En gestión"
+    EN_PRESUPUESTO = "EN_PRESUPUESTO", "En presupuesto"
+    EN_REVISION = "EN_REVISION", "En revisión"
     APROBADA = "APROBADA", "Aprobada"
     RECHAZADA = "RECHAZADA", "Rechazada"
     CERRADA = "CERRADA", "Cerrada"

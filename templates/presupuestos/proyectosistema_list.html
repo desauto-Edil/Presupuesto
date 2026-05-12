@@ -35,10 +35,10 @@
         <td style="text-align:center;">{{ ps.despiece_lineas.count }}</td>
         <td>
           {% if ps.sistema.codigo == "POWERGRIP" %}
-          <a href="{% url 'presupuestos:despiece_proyecto' ps.proyecto_id %}"
+          <a href="{% url 'ingenieria:despiece_list' %}?proyecto_pk={{ ps.proyecto_id }}"
              class="btn btn-primary btn-xs">Despiece</a>
           {% else %}
-          <a href="{% url 'presupuestos:despiece_proyecto' ps.proyecto_id %}"
+          <a href="{% url 'ingenieria:despiece_list' %}?proyecto_pk={{ ps.proyecto_id }}"
              class="btn btn-ghost btn-xs">Ver despiece</a>
           {% endif %}
         </td>

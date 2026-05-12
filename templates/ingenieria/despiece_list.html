@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Despieces Guardados{% endblock %}
+{% block title %}Despieces{% endblock %}
 {% block nav_ingenieria %}active{% endblock %}
 {% block page_title %}Calculador{% endblock %}
-{% block breadcrumb %}Despieces Guardados{% endblock %}
+{% block breadcrumb %}Despieces{% endblock %}
 
 {% block topbar_actions %}
 <a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-sm btn-primary d-flex align-items-center gap-1">
@@ -119,7 +119,14 @@
   <a href="{% url 'comercial:proyecto_detail' proyecto_filtro.pk %}" class="btn btn-sm btn-outline-secondary">
     <i class="bi bi-arrow-left"></i> Volver a {{ proyecto_filtro.consecutivo }}
   </a>
-  <span class="fw-semibold">Despieces del proyecto <strong>{{ proyecto_filtro.consecutivo }}</strong> — {{ proyecto_filtro.nombre|default:"Sin nombre" }}</span>
+  <span class="fw-semibold">
+    Despieces del proyecto <strong>{{ proyecto_filtro.consecutivo }}</strong>
+    {% if proyecto_filtro.nombre %} — {{ proyecto_filtro.nombre|truncatechars:50 }}{% endif %}
+  </span>
+  <a href="{% url 'ingenieria:calculador_sistemas' %}?proyecto_pk={{ proyecto_filtro.pk }}"
+     class="btn btn-sm btn-primary ms-auto">
+    <i class="bi bi-plus-lg"></i> Nuevo despiece del proyecto
+  </a>
 </div>
 {% endif %}
 
@@ -188,13 +195,18 @@
             <a href="{% url 'ingenieria:despiece_maestro' d.pk %}" class="btn-dg btn-dg--view">
               <i class="bi bi-pencil-square"></i> Abrir
             </a>
-            {% if d.estado == GUARDADO %}
-            <a href="{% url 'ingenieria:apu_despiece_maestro' d.pk %}" class="btn-dg btn-dg--apu">
-              <i class="bi bi-file-earmark-bar-graph"></i> APU
-            </a>
+            {% if d.estado == GUARDADO and d.proyecto_id %}
+            <form method="post" action="{% url 'presupuestos:apu_generar_despiece' d.pk %}" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn-dg btn-dg--apu" title="Generar o actualizar APU">
+                <i class="bi bi-file-earmark-bar-graph"></i> APU
+              </button>
+            </form>
             {% endif %}
             <button type="button" class="btn-dg btn-dg--del"
-                    onclick="confirmarEliminar({{ d.pk }}, '{{ d.nombre|default:'Despiece #'|add:d.pk|escapejs }}')">
+                    data-pk="{{ d.pk }}"
+                    data-nombre="{{ d.nombre|default:'Despiece'|escapejs }}"
+                    onclick="confirmarEliminar(this.dataset.pk, this.dataset.nombre)">
               <i class="bi bi-trash"></i>
             </button>
           </div>
@@ -207,7 +219,7 @@
   {% if is_paginated %}
   <div class="dg-pagination">
     {% if page_obj.has_previous %}
-    <a href="?page={{ page_obj.previous_page_number }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}" class="dg-page-btn">
+    <a href="?page={{ page_obj.previous_page_number }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if proyecto_pk %}&proyecto_pk={{ proyecto_pk }}{% endif %}" class="dg-page-btn">
       <i class="bi bi-chevron-left"></i>
     </a>
     {% endif %}
@@ -215,11 +227,11 @@
       {% if num == page_obj.number %}
       <span class="dg-page-btn active">{{ num }}</span>
       {% elif num|add:"-2" <= page_obj.number and page_obj.number <= num|add:"2" %}
-      <a href="?page={{ num }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}" class="dg-page-btn">{{ num }}</a>
+      <a href="?page={{ num }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if proyecto_pk %}&proyecto_pk={{ proyecto_pk }}{% endif %}" class="dg-page-btn">{{ num }}</a>
       {% endif %}
     {% endfor %}
     {% if page_obj.has_next %}
-    <a href="?page={{ page_obj.next_page_number }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}" class="dg-page-btn">
+    <a href="?page={{ page_obj.next_page_number }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}{% if proyecto_pk %}&proyecto_pk={{ proyecto_pk }}{% endif %}" class="dg-page-btn">
       <i class="bi bi-chevron-right"></i>
     </a>
     {% endif %}
@@ -260,9 +272,11 @@
 </div>
 
 <script>
+const DELETE_URL_TEMPLATE = "{% url 'ingenieria:despiece_delete' 0 %}".replace('/0/', '/{pk}/');
+
 function confirmarEliminar(pk, nombre) {
   document.getElementById('delNombre').textContent = nombre;
-  document.getElementById('delForm').action = `/ingenieria/calculador/despiece/${pk}/eliminar/`;
+  document.getElementById('delForm').action = DELETE_URL_TEMPLATE.replace('{pk}', pk);
   new bootstrap.Modal(document.getElementById('delModal')).show();
 }
 </script>

@@ -240,13 +240,28 @@
 
             <div>
                 <label class="form-label">
-                    Observaciones <span class="req">*</span>
+                    Observaciones
                 </label>
                 {{ form.observaciones }}
                 {% if form.observaciones.errors %}
                 <div class="invalid-feedback d-block">{{ form.observaciones.errors.0 }}</div>
                 {% endif %}
             </div>
+
+            {% if not object %}
+            <!-- ─── ARCHIVOS — solo en creación (obligatorio) ─── -->
+            <div style="margin-top:22px;">
+                <div class="section-heading">Archivos adjuntos <span class="req">*</span></div>
+                <div style="margin-bottom:6px;">
+                    <input type="file" name="archivos" id="archivosInput"
+                           class="form-control form-control-sm" multiple required
+                           style="margin-bottom:6px;">
+                    <div class="field-help">
+                        Obligatorio. Puede seleccionar varios archivos. Formatos: PDF, Word, Excel, imágenes, etc.
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
         </div>
 
@@ -260,7 +275,8 @@
 
     </form>
 
-    <!-- ─── SECCIÓN ARCHIVOS ─── -->
+    <!-- ─── ARCHIVOS — solo en edición ─── -->
+    {% if object %}
     <div style="border-top:1px solid var(--border);">
         <div style="padding:18px 28px 8px;">
             <div class="section-heading" style="margin-bottom:14px;">
@@ -304,8 +320,6 @@
             </div>
             {% endif %}
 
-            <!-- Subir nuevo archivo (solo si ya existe la solicitud) -->
-            {% if object.pk %}
             <form method="post"
                   action="{% url 'comercial:solicitud_archivo_create' object.pk %}"
                   enctype="multipart/form-data"
@@ -323,18 +337,9 @@
                     <button type="submit" class="btn btn-primary btn-sm">Adjuntar</button>
                 </div>
             </form>
-            {% else %}
-            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;
-                        background:rgba(var(--theme-accent-rgb,86,83,148),.06);
-                        border-radius:8px;border:1px dashed var(--border);margin-bottom:20px;">
-                <i class="bi bi-info-circle" style="color:var(--theme-accent);font-size:16px;flex-shrink:0;"></i>
-                <span style="font-size:12.5px;color:var(--ink-soft);">
-                    Guarda la solicitud primero y podrás adjuntar archivos desde el formulario de edición.
-                </span>
-            </div>
-            {% endif %}
         </div>
     </div>
+    {% endif %}
 
 </div>
 {% endblock %}

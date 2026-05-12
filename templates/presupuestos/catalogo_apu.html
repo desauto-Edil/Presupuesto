@@ -21,10 +21,6 @@
        class="btn btn-sm btn-primary">
       <i class="bi bi-plus-circle me-1"></i>Nuevo ítem
     </a>
-    <a href="{% url 'presupuestos:catalogo_cuadrilla_create' %}"
-       class="btn btn-sm btn-outline-success">
-      <i class="bi bi-people me-1"></i>Nueva cuadrilla
-    </a>
     
   </div>
 </div>
@@ -208,84 +204,6 @@
   {% endfor %}
 
   {% endwith %}{% endwith %}
-
-  <!-- ══════════════════════════════════════════════════════════
-       CUADRILLAS PRESET (sección aparte)
-       ══════════════════════════════════════════════════════════ -->
-  <div class="d-flex align-items-center gap-2 mb-3 mt-4">
-    <span class="badge rounded-pill text-bg-success px-3 py-2 fs-6">
-      <i class="bi bi-diagram-3-fill me-1"></i>Cuadrillas preset
-    </span>
-    <a href="{% url 'presupuestos:catalogo_cuadrilla_create' %}"
-       class="btn btn-xs btn-outline-success ms-auto">
-      <i class="bi bi-plus"></i> Nueva cuadrilla
-    </a>
-  </div>
-
-  {% if presets %}
-  <div class="row g-3">
-    {% for preset in presets %}
-    <div class="col-12 col-md-6 col-xl-4">
-      <div class="card h-100 shadow-sm border-0 {% if not preset.activo %}opacity-50{% endif %}">
-
-        <div class="card-header d-flex align-items-center justify-content-between py-2 bg-success bg-opacity-10">
-          <div>
-            <span class="fw-semibold">{{ preset.nombre }}</span>
-            {% if not preset.activo %}
-              <span class="badge bg-secondary ms-2 small">inactivo</span>
-            {% endif %}
-            {% if preset.descripcion %}
-              <div class="text-muted small mt-1">{{ preset.descripcion }}</div>
-            {% endif %}
-          </div>
-          <div class="d-flex gap-1">
-            <a href="{% url 'presupuestos:catalogo_cuadrilla_update' preset.pk %}"
-               class="btn btn-xs btn-outline-secondary" title="Editar">
-              <i class="bi bi-pencil"></i>
-            </a>
-          </div>
-        </div>
-
-        <div class="card-body p-0">
-          {% if preset.items.all %}
-          <ul class="list-group list-group-flush">
-            {% for pi in preset.items.all %}
-            <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3">
-              <div>
-                <div class="fw-medium">{{ pi.item.nombre }}</div>
-                <div class="small text-muted">
-                  ${{ pi.item.total_mes_personal|floatformat:0 }}/mes
-                </div>
-              </div>
-              <span class="badge bg-primary rounded-pill">×{{ pi.cantidad }}</span>
-            </li>
-            {% endfor %}
-          </ul>
-          {% else %}
-          <div class="text-center py-3 text-muted small">Sin ítems configurados.</div>
-          {% endif %}
-        </div>
-
-        <div class="card-footer bg-transparent d-flex justify-content-between align-items-center py-2 px-3">
-          <span class="text-muted small">
-            {{ preset.total_personas }} persona{{ preset.total_personas|pluralize }}
-          </span>
-          <a href="{% url 'presupuestos:catalogo_cuadrilla_delete' preset.pk %}"
-             class="btn btn-xs btn-link text-danger p-0"
-             onclick="return confirm('¿Eliminar la cuadrilla «{{ preset.nombre }}»?')">
-            <i class="bi bi-trash3 small"></i>
-          </a>
-        </div>
-
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="text-muted small ps-1">
-    <i class="bi bi-info-circle me-1"></i>No hay cuadrillas configuradas todavía.
-  </div>
-  {% endif %}
 
 {% endif %}
 {% endblock %}
