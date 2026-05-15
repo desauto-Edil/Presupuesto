@@ -201,7 +201,7 @@ class DashboardView(TemplateView):
 
             ctx["pendientes_sistema"] = pendientes
             ctx["rol_usuario"] = rol
-            ctx["create_form"] = SolicitudForm()
+            ctx["create_form"] = SolicitudForm(unidad_negocio=unidad)
 
         except Exception as e:
             logger.error(f"Error en DashboardView.get_context_data: {e}", exc_info=True)
@@ -426,6 +426,9 @@ class SolicitudListView(UnidadFilterMixin, WithCreateFormMixin, ListView):
             .distinct()
             .order_by("nombre_completo")
         )
+        # Sobrescribir create_form con filtro de unidad de negocio
+        unidad = self.request.session.get("unidad_negocio", "") or ""
+        ctx["create_form"] = SolicitudForm(unidad_negocio=unidad)
         return ctx
 
 
@@ -483,6 +486,12 @@ class SolicitudDetailView(DetailView):
             .select_related("configuracion")
             .order_by("-created_at")[:100]
         )
+        ctx["proyecto_form"] = ProyectoFromSolicitudForm(
+            initial={"nombre": solicitud.nombre, "descripcion": solicitud.descripcion}
+        )
+        # Próxima versión para el modal
+        ultima = solicitud.proyectos.order_by("-version").first()
+        ctx["proxima_version"] = (ultima.version + 1) if ultima else 1
         return ctx
 
 
@@ -490,6 +499,11 @@ class SolicitudCreateView(CreateView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_form.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["unidad_negocio"] = self.request.session.get("unidad_negocio", "") or ""
+        return kwargs
 
     def form_valid(self, form):
         archivos = self.request.FILES.getlist("archivos")
@@ -529,6 +543,11 @@ class SolicitudUpdateView(UpdateView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_form.html"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["unidad_negocio"] = self.request.session.get("unidad_negocio", "") or ""
+        return kwargs
 
     def get_success_url(self):
         return reverse_lazy("comercial:solicitud_detail", kwargs={"pk": self.object.pk})
@@ -877,6 +896,31 @@ class CrearProyectoDesdeSolicitudView(CreateView):
             f"Proyecto {self.object.consecutivo} (v{self.object.version}) creado correctamente.",
         )
         return redirect("comercial:proyecto_detail", pk=self.object.pk)
+
+
+# ---------------------------------------------------------------------------
+# Clonar proyecto como nueva versión
+# ---------------------------------------------------------------------------
+
+class ClonarProyectoComoVersionView(View):
+    """
+    POST /comercial/proyectos/<pk>/clonar/
+    Clona el proyecto indicado como nueva versión dentro de la misma solicitud.
+    Redirige al detalle del nuevo proyecto.
+    """
+    def post(self, request, pk, *args, **kwargs):
+        proyecto_base = get_object_or_404(Proyecto, pk=pk)
+        if not proyecto_base.solicitud_id:
+            messages.error(request, "Este proyecto no está vinculado a una solicitud y no puede clonarse como versión.")
+            return redirect("comercial:proyecto_detail", pk=pk)
+        from apps.presupuestos.services.proyecto_service import clonar_proyecto_como_version
+        usuario = _usuario_sistema(request)
+        nuevo = clonar_proyecto_como_version(proyecto_base, usuario)
+        messages.success(
+            request,
+            f"Versión {nuevo.consecutivo} v{nuevo.version} creada como copia de v{proyecto_base.version}.",
+        )
+        return redirect("comercial:proyecto_detail", pk=nuevo.pk)
 
 
 # ---------------------------------------------------------------------------

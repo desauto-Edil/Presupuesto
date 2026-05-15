@@ -488,11 +488,21 @@ class APUService:
         Genera APULineas tipo MATERIALES desde las DespieceLineas resueltas.
         rendimiento = total_unidades / cantidad_final
         Omite líneas pendientes_seleccion o sin producto.
+
+        Tarea 10: elimina automáticamente las líneas de materiales generadas
+        desde despiece (despiece_linea IS NOT NULL) antes de regenerar, para
+        evitar duplicados cuando se llama varias veces.
         """
         from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
         from apps.ingenieria.models import ComponenteSubsistema
+
+        # ── Tarea 10: limpiar líneas de materiales auto-generadas anteriores ──
+        self.apu.lineas.filter(
+            tipo=TipoAPU.MATERIALES,
+            despiece_linea__isnull=False,
+        ).delete()
 
         lineas_despiece = self.ps.despiece_lineas.select_related(
             "producto", "producto__unidad", "categoria_producto",

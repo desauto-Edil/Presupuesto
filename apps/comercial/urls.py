@@ -52,6 +52,7 @@ urlpatterns = [
     path("proyectos/<int:pk>/", views.ProyectoDetailView.as_view(), name="proyecto_detail"),
     path("proyectos/<int:pk>/editar/", views.ProyectoUpdateView.as_view(), name="proyecto_update"),
     path("proyectos/<int:pk>/eliminar/", views.ProyectoDeleteView.as_view(), name="proyecto_delete"),
+    path("proyectos/<int:pk>/clonar/", views.ClonarProyectoComoVersionView.as_view(), name="proyecto_clonar"),
 
     # ── Logs ──────────────────────────────────────────────────────────────────
     path("logs/", views.LogListView.as_view(), name="log_list"),

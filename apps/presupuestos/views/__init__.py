@@ -835,41 +835,53 @@ class APUGenerarDesdeDespiece(View):
                     }
                     ps.save(update_fields=["parametros_entrada"])
 
-                # ── 3. Sincronizar DespieceMaestroLinea → DespieceLinea ────────
-                # APUService.generar_materiales() lee desde ps.despiece_lineas
-                # (modelo DespieceLinea del flujo legacy).  Como el DespieceMaestro
-                # usa DespieceMaestroLinea, debemos puente-sincronizarlas.
-                codigos_dm = set()
-                for dml in lineas_dm:
-                    codigos_dm.add(dml.componente_codigo)
+                # ── 3. Consolidar TODOS los despieces guardados del proyecto ──
+                # Tarea 9: recoge líneas de TODOS los DespieceMaestro guardados
+                # del mismo proyecto (no sólo el que disparó el POST) y suma
+                # cantidades cuando el mismo producto aparece en varios despieces.
+                todos_dm = DespieceMaestro.objects.filter(
+                    proyecto=dm.proyecto,
+                    estado=DespieceMaestro.GUARDADO,
+                ).prefetch_related("lineas__producto__unidad")
 
-                    # precio_snapshot debe ser el precio unitario REAL
-                    # (precio_actual / unidades_por_presentacion).
-                    # Prioridad: recalcular desde el producto vivo para evitar
-                    # que snapshots viejos (guardados antes de esta corrección)
-                    # propaguen el precio de presentación completo al APU.
-                    if dml.producto_id and dml.producto:
-                        precio_snapshot = dml.producto.precio_unitario_real
-                    else:
-                        # Fallback: usar lo guardado en el snapshot del despiece
-                        precio_snapshot = dml.precio_unitario
+                # Dict: componente_codigo → {datos acumulados}
+                consolidado: dict = {}
+                for dm_iter in todos_dm:
+                    for dml in dm_iter.lineas.select_related("producto", "producto__unidad"):
+                        if dml.producto_id is None:
+                            continue  # sin producto vinculado, no se puede consolidar
+                        clave = dml.componente_codigo
+                        if clave in consolidado:
+                            consolidado[clave]["cantidad"] += (dml.cantidad_calculada or 0)
+                        else:
+                            precio_snapshot = (
+                                dml.producto.precio_unitario_real
+                                if dml.producto_id and dml.producto
+                                else dml.precio_unitario
+                            )
+                            consolidado[clave] = {
+                                "cantidad": dml.cantidad_calculada or 0,
+                                "precio_snapshot": precio_snapshot,
+                                "producto": dml.producto,
+                            }
 
-                    defaults = {
-                        "proyecto": dm.proyecto,
-                        "cantidad_calculada": dml.cantidad_calculada,
-                        "precio_snapshot": precio_snapshot,
-                        "producto": dml.producto,
-                    }
+                # Sync consolidado → DespieceLinea del ProyectoSistema
+                for codigo, datos in consolidado.items():
                     DespieceLinea.objects.update_or_create(
                         proyecto_sistema=ps,
-                        componente_codigo=dml.componente_codigo,
-                        defaults=defaults,
+                        componente_codigo=codigo,
+                        defaults={
+                            "proyecto": dm.proyecto,
+                            "cantidad_calculada": datos["cantidad"],
+                            "precio_snapshot": datos["precio_snapshot"],
+                            "producto": datos["producto"],
+                        },
                     )
 
-                # Eliminar líneas obsoletas (componentes que ya no están en el despiece)
+                # Eliminar líneas obsoletas (productos que ya no están en ningún despiece)
                 DespieceLinea.objects.filter(
                     proyecto_sistema=ps
-                ).exclude(componente_codigo__in=codigos_dm).delete()
+                ).exclude(componente_codigo__in=consolidado.keys()).delete()
 
                 # ── 4. Detectar creación vs. actualización ────────────────────
                 apu_existia = APUProyecto.objects.filter(proyecto_sistema=ps).exists()

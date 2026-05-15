@@ -54,9 +54,9 @@
 /* ── Card de subsistema ─────────────────────────────────────────────────── */
 .sub-card {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 2px solid rgba(0,0,0,.08);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   cursor: pointer;
   transition: border-color .15s, box-shadow .15s;
   overflow: hidden;
@@ -67,83 +67,110 @@
   box-shadow: 0 0 0 3px rgba(var(--theme-accent-rgb, 59,130,246),.12);
 }
 .sub-card__head {
-  padding: 14px 16px;
+  padding: 11px 14px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .sub-radio {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   accent-color: var(--theme-accent);
   flex-shrink: 0;
 }
 .sub-info { flex: 1; }
-.sub-codigo {
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--theme-accent);
-}
-.sub-nombre {
-  font-size: 14px;
-  font-weight: 600;
-  color: #222;
-}
+.sub-codigo { font-weight: 700; font-size: 12px; color: var(--theme-accent); }
+.sub-nombre { font-size: 13px; font-weight: 600; color: #222; }
 .sub-badge {
-  font-size: 11px;
-  color: #888;
-  background: rgba(0,0,0,.05);
-  border-radius: 20px;
-  padding: 2px 8px;
+  font-size: 10.5px; color: #888;
+  background: rgba(0,0,0,.05); border-radius: 20px; padding: 2px 7px;
 }
-.sub-card__body {
-  padding: 0 16px 14px 46px;
-  display: none;
-}
+/* Cuerpo: dos columnas cuando está seleccionado */
+.sub-card__body { display: none; }
 .sub-card:has(.sub-radio:checked) .sub-card__body,
-.sub-card.selected .sub-card__body {
-  display: block;
+.sub-card.selected .sub-card__body { display: block; }
+
+.sub-body-cols {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 0;
+  border-top: 1px solid rgba(0,0,0,.06);
+}
+.sub-body-left { padding: 12px 16px 14px; }
+.sub-body-right {
+  border-left: 1px solid rgba(0,0,0,.06);
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  min-height: 140px;
+}
+.sub-imagen-tecnica {
+  max-width: 100%; max-height: 160px;
+  object-fit: contain; border-radius: 6px;
+  cursor: zoom-in;
+  transition: opacity .15s;
+}
+.sub-imagen-tecnica:hover { opacity: .88; }
+.sub-imagen-placeholder {
+  text-align: center; color: #aaa; font-size: 11.5px; line-height: 1.5;
+}
+.sub-imagen-placeholder i { font-size: 28px; display: block; margin-bottom: 4px; opacity: .4; }
+
+/* ── Lightbox overlay ─────────────────────────────────────────────────── */
+#img-lightbox {
+  display: none;
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.82);
+  align-items: center; justify-content: center;
+  cursor: zoom-out;
+  animation: lbFadeIn .15s ease;
+}
+#img-lightbox.open { display: flex; }
+@keyframes lbFadeIn {
+  from { opacity: 0; } to { opacity: 1; }
+}
+#img-lightbox img {
+  max-width: 90vw; max-height: 88vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  pointer-events: none;
+}
+#img-lightbox-caption {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,.7); font-size: 12px; letter-spacing: .04em;
+  pointer-events: none;
 }
 
 /* ── Subconjuntos dentro del subsistema ────────────────────────────────── */
 .sq-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-  margin-top: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
 }
 .sq-check-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  background: rgba(0,0,0,.03);
-  border: 1.5px solid rgba(0,0,0,.08);
-  border-radius: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: border-color .15s, background .15s;
+  display: flex; align-items: flex-start; gap: 7px;
+  background: rgba(0,0,0,.03); border: 1.5px solid rgba(0,0,0,.08);
+  border-radius: 7px; padding: 7px 9px; cursor: pointer;
+  font-size: 12px; transition: border-color .15s, background .15s;
 }
 .sq-check-label:has(input:checked) {
   background: var(--theme-accent-pale, #e8f0fe);
   border-color: var(--theme-accent);
 }
 .sq-check-label input {
-  margin-top: 2px;
-  accent-color: var(--theme-accent);
-  flex-shrink: 0;
+  margin-top: 2px; accent-color: var(--theme-accent); flex-shrink: 0;
 }
 .sq-nombre { font-weight: 600; color: #333; }
-.sq-desc { font-size: 11px; color: #888; margin-top: 2px; }
+.sq-desc { font-size: 10.5px; color: #888; margin-top: 1px; }
 
 /* ── Botones ────────────────────────────────────────────────────────────── */
 .sel-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(0,0,0,.08);
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(0,0,0,.08);
 }
 </style>
 {% endblock %}
@@ -207,28 +234,53 @@
         {% endwith %}
       </div>
 
-      {% if sub.subconjuntos_receta.count %}
       <div class="sub-card__body">
-        <div class="text-muted small mb-1">Elige los subconjuntos a incluir en el despiece:</div>
-        <div class="sq-grid">
-          {% for sq in sub.subconjuntos_receta.all %}
-          {% if sq.activo %}
-          <label class="sq-check-label">
-            <input type="checkbox" name="subconjuntos[]" value="{{ sq.pk }}">
-            <div>
-              <div class="sq-nombre">{{ sq.nombre }}</div>
-              {% if sq.descripcion %}<div class="sq-desc">{{ sq.descripcion }}</div>{% endif %}
+        <div class="sub-body-cols">
+          <!-- Columna izquierda: subconjuntos -->
+          <div class="sub-body-left">
+            {% with sq_activos=sub.subconjuntos_receta.all %}
+            {% if sq_activos %}
+            <div class="text-muted small mb-1" style="font-size:11px;">Selecciona los subconjuntos a incluir:</div>
+            <div class="sq-grid">
+              {% for sq in sq_activos %}
+              {% if sq.activo %}
+              <label class="sq-check-label">
+                <input type="checkbox" name="subconjuntos[]" value="{{ sq.pk }}">
+                <div>
+                  <div class="sq-nombre">{{ sq.nombre }}</div>
+                  {% if sq.descripcion %}<div class="sq-desc">{{ sq.descripcion }}</div>{% endif %}
+                </div>
+              </label>
+              {% endif %}
+              {% endfor %}
             </div>
-          </label>
-          {% endif %}
-          {% endfor %}
-        </div>
-        <div class="mt-2">
-          <button type="button" class="btn btn-link btn-sm p-0 text-muted"
-                  onclick="toggleAll(this, {{ sub.pk }})">Marcar todos</button>
+            <div class="mt-2">
+              <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="font-size:11px;"
+                      onclick="toggleAll(this, {{ sub.pk }})">Marcar todos</button>
+            </div>
+            {% else %}
+            <div style="color:#aaa;font-size:12px;padding:8px 0;">
+              <i class="bi bi-info-circle"></i> Componentes generales — sin subconjuntos definidos.
+            </div>
+            {% endif %}
+            {% endwith %}
+          </div>
+          <!-- Columna derecha: imagen técnica -->
+          <div class="sub-body-right">
+            {% if sub.imagen_tecnica %}
+            <img src="{{ sub.imagen_tecnica.url }}" alt="Imagen técnica {{ sub.nombre }}"
+                 class="sub-imagen-tecnica"
+                 onclick="event.stopPropagation(); abrirLightbox(this)"
+                 title="Click para ampliar">
+            {% else %}
+            <div class="sub-imagen-placeholder">
+              <i class="bi bi-image"></i>
+              Sin imagen técnica
+            </div>
+            {% endif %}
+          </div>
         </div>
       </div>
-      {% endif %}
     </div>
     {% empty %}
     <div class="text-muted text-center py-4">Este sistema no tiene subsistemas activos.</div>
@@ -251,7 +303,27 @@
   </form>
 </div>
 
+<!-- Lightbox overlay -->
+<div id="img-lightbox" onclick="cerrarLightbox()">
+  <img id="img-lightbox-img" src="" alt="">
+  <div id="img-lightbox-caption">Click para cerrar</div>
+</div>
+
 <script>
+function abrirLightbox(img) {
+  const lb = document.getElementById('img-lightbox');
+  document.getElementById('img-lightbox-img').src = img.src;
+  lb.classList.add('open');
+}
+
+function cerrarLightbox() {
+  document.getElementById('img-lightbox').classList.remove('open');
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') cerrarLightbox();
+});
+
 function selectSub(pk, card) {
   // Deselect all
   document.querySelectorAll('.sub-card').forEach(c => c.classList.remove('selected'));
@@ -260,6 +332,14 @@ function selectSub(pk, card) {
   card.classList.add('selected');
   document.getElementById('sub' + pk).checked = true;
 }
+
+document.getElementById('selForm').addEventListener('submit', function(e) {
+  const selected = document.querySelector('input[name="subsistema_pk"]:checked');
+  if (!selected) {
+    e.preventDefault();
+    alert('Selecciona un subsistema antes de continuar.');
+  }
+});
 
 function toggleAll(btn, subPk) {
   const card = document.getElementById('subCard' + subPk);

@@ -2,26 +2,166 @@
 {% block nav_apu %}active{% endblock %}
 {% block title %}Catálogo APU{% endblock %}
 
+{% block extra_head %}
+<style>
+.capu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 0.5px solid var(--border, #e2e8f0);
+  margin-bottom: 14px;
+  gap: 8px;
+}
+.capu-header h1 { font-size: 14px; font-weight: 600; margin: 0; color: var(--color-text, #0f172a); }
+.capu-header .sub { font-size: 11px; color: var(--color-text-muted, #94a3b8); margin: 2px 0 0; }
+.capu-header-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.capu-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; font-size: 11.5px; font-weight: 500;
+  border-radius: 5px; border: 0.5px solid var(--border, #e2e8f0);
+  background: transparent; color: var(--color-text, #0f172a);
+  text-decoration: none; white-space: nowrap; cursor: pointer;
+  transition: background 0.1s;
+}
+.capu-btn:hover { background: var(--color-background-secondary, #f8fafc); color: inherit; }
+.capu-btn-primary { background: var(--color-primary, #3b82f6); color: #fff !important; border-color: var(--color-primary, #3b82f6); }
+.capu-btn-primary:hover { background: #2563eb; }
+
+/* Sección */
+.capu-section { margin-bottom: 16px; }
+
+.capu-section-head {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 8px; cursor: pointer; user-select: none;
+}
+.capu-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; line-height: 1.7;
+}
+.capu-pill.labor  { background: #dcfce7; color: #166534; }
+.capu-pill.tools  { background: #fef9c3; color: #854d0e; }
+.capu-pill.transp { background: #dbeafe; color: #1e40af; }
+.capu-pill.admin  { background: #f1f5f9; color: #475569; }
+.capu-pill.mats   { background: #f0fdf4; color: #14532d; }
+
+.capu-section-add {
+  font-size: 10.5px; color: var(--color-text-muted, #94a3b8); text-decoration: none;
+  padding: 1px 6px; border-radius: 4px; border: 0.5px solid var(--border, #e2e8f0);
+  display: inline-flex; align-items: center; gap: 2px;
+}
+.capu-section-add:hover { background: var(--color-background-secondary, #f8fafc); color: inherit; }
+
+.capu-chevron {
+  margin-left: auto; font-size: 13px;
+  color: var(--color-text-muted, #94a3b8); transition: transform 0.18s ease; flex-shrink: 0;
+}
+.capu-section.collapsed .capu-chevron { transform: rotate(-90deg); }
+.capu-section.collapsed .capu-section-body { display: none; }
+
+/* Grid responsive: 1 → 2 → 3 → 4 columnas */
+.capu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+/* Tarjeta */
+.capu-card {
+  border: 0.5px solid var(--border, #e2e8f0); border-radius: 6px;
+  background: var(--color-background, #fff);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.capu-card.inactive { opacity: 0.5; }
+
+.capu-card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; border-bottom: 0.5px solid var(--border, #e2e8f0); gap: 4px;
+}
+.capu-card-head-name {
+  font-size: 11.5px; font-weight: 500; color: var(--color-text, #0f172a);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;
+}
+.capu-card-head-name .badge-inactive { font-size: 9.5px; font-weight: 400; color: #94a3b8; margin-left: 3px; }
+.capu-card-head-actions { display: flex; gap: 2px; flex-shrink: 0; }
+
+.capu-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 4px; border: none;
+  background: transparent; color: var(--color-text-muted, #94a3b8);
+  text-decoration: none; font-size: 12px; transition: background 0.1s, color 0.1s; cursor: pointer;
+}
+.capu-icon-btn:hover { background: var(--color-background-secondary, #f1f5f9); color: var(--color-text, #0f172a); }
+.capu-icon-btn.danger:hover { color: #ef4444; background: #fff1f2; }
+
+/* Ítems */
+.capu-item {
+  display: flex; align-items: center;
+  padding: 5px 10px; border-bottom: 0.5px solid var(--border, #f1f5f9);
+  font-size: 11.5px; position: relative;
+}
+.capu-item:last-child { border-bottom: none; }
+.capu-item:hover { background: var(--color-background-secondary, #f8fafc); }
+.capu-item:hover .capu-item-actions { opacity: 1; }
+
+.capu-item-main { flex: 1; min-width: 0; }
+.capu-item-name {
+  font-size: 11.5px; font-weight: 450; color: var(--color-text, #0f172a);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.capu-item-code { font-size: 9.5px; font-family: monospace; color: #94a3b8; margin-right: 3px; }
+
+.capu-item-meta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 1px;
+}
+.capu-meta-price { font-size: 10.5px; color: var(--color-text-muted, #94a3b8); }
+.capu-meta-days {
+  font-size: 9.5px; font-weight: 500; background: #fef3c7; color: #92400e;
+  padding: 0 4px; border-radius: 3px; display: inline-flex; align-items: center; gap: 2px;
+}
+.capu-meta-rate { font-size: 10.5px; color: #16a34a; font-weight: 500; }
+
+.capu-item-actions {
+  display: flex; gap: 1px; flex-shrink: 0; margin-left: 6px;
+  opacity: 0; transition: opacity 0.12s;
+}
+
+.capu-card-empty {
+  padding: 10px; text-align: center;
+  font-size: 10.5px; color: var(--color-text-muted, #94a3b8);
+}
+.capu-card-empty a { font-size: 10.5px; color: var(--color-primary, #3b82f6); }
+
+.capu-card-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 10px; background: var(--color-background-secondary, #f8fafc);
+  border-top: 0.5px solid var(--border, #e2e8f0);
+  font-size: 10.5px; color: var(--color-text-muted, #94a3b8);
+}
+
+.capu-global-empty { text-align: center; padding: 50px 20px; color: var(--color-text-muted, #94a3b8); }
+.capu-global-empty .icon { font-size: 28px; margin-bottom: 8px; display: block; }
+.capu-global-empty h5 { font-size: 13px; font-weight: 500; margin-bottom: 5px; color: var(--color-text, #0f172a); }
+.capu-global-empty p { font-size: 11.5px; margin-bottom: 12px; }
+.capu-section-empty { font-size: 11px; color: var(--color-text-muted, #94a3b8); padding: 0 0 6px; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between mb-4">
+
+<div class="capu-header">
   <div>
-    <h1 class="page-title mb-0">
-      Catálogo APU
-    </h1>
-    <p class="text-muted small mb-0 mt-1">
-      Ítems reutilizables organizados por tipo de análisis de precios unitarios
-    </p>
+    <h1>Catálogo APU</h1>
+    <p class="sub">Ítems reutilizables por tipo de análisis de precios unitarios</p>
   </div>
-  <div class="d-flex gap-2 flex-wrap">
-    <a href="{% url 'presupuestos:catalogo_categoria_create' %}"
-       class="btn btn-sm btn-outline-primary">
-      <i class="bi bi-folder-plus me-1"></i>Nueva categoría
+  <div class="capu-header-actions">
+    <a href="{% url 'presupuestos:catalogo_categoria_create' %}" class="capu-btn">
+      <i class="bi bi-folder-plus"></i> Nueva categoría
     </a>
-    <a href="{% url 'presupuestos:catalogo_item_create' %}"
-       class="btn btn-sm btn-primary">
-      <i class="bi bi-plus-circle me-1"></i>Nuevo ítem
+    <a href="{% url 'presupuestos:catalogo_item_create' %}" class="capu-btn capu-btn-primary">
+      <i class="bi bi-plus-lg"></i> Nuevo ítem
     </a>
-    
   </div>
 </div>
 
@@ -33,177 +173,121 @@
   {% endfor %}
 {% endif %}
 
-<!-- ══════════════════════════════════════════════════════════
-     SECCIONES POR TIPO APU
-     ══════════════════════════════════════════════════════════ -->
+{% if not grupos %}
+<div class="capu-global-empty">
+  <i class="bi bi-inbox icon"></i>
+  <h5>El catálogo está vacío</h5>
+  <p>Cree categorías e ítems para empezar a construir APUs.</p>
+  <a href="{% url 'presupuestos:catalogo_categoria_create' %}" class="capu-btn capu-btn-primary">
+    <i class="bi bi-folder-plus"></i> Crear primera categoría
+  </a>
+</div>
 
-{% if not grupos and not presets %}
-  <div class="empty-state text-center py-5">
-    <i class="bi bi-inbox display-4 text-muted d-block mb-3"></i>
-    <h5 class="text-muted">El catálogo está vacío</h5>
-    <p class="text-muted small">Cree categorías e ítems para empezar a construir APUs.</p>
-    <a href="{% url 'presupuestos:catalogo_categoria_create' %}" class="btn btn-primary mt-2">
-      <i class="bi bi-folder-plus me-1"></i>Crear primera categoría
-    </a>
-  </div>
 {% else %}
+{% for grupo in grupos %}
+{% with tipo=grupo.tipo label=grupo.label %}
 
-  <!-- Iconos y colores por tipo -->
-  {% with tipo_icons="MANO_DE_OBRA:people-fill,HERRAMIENTAS_EQUIPOS:tools,TRANSPORTE:truck,ADMINISTRACION:briefcase,MATERIALES:boxes" %}
-  {% with tipo_colors="MANO_DE_OBRA:primary,HERRAMIENTAS_EQUIPOS:warning,TRANSPORTE:info,ADMINISTRACION:secondary,MATERIALES:success" %}
+<div class="capu-section" id="section-{{ tipo }}">
 
-  {% for grupo in grupos %}
-    {% with tipo=grupo.tipo label=grupo.label %}
+  <div class="capu-section-head" onclick="toggleSection('{{ tipo }}')">
+    <span class="capu-pill {% if tipo == 'MANO_DE_OBRA' %}labor{% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}tools{% elif tipo == 'TRANSPORTE' %}transp{% elif tipo == 'ADMINISTRACION' %}admin{% else %}mats{% endif %}">
+      <i class="bi bi-{% if tipo == 'MANO_DE_OBRA' %}people-fill{% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}tools{% elif tipo == 'TRANSPORTE' %}truck{% elif tipo == 'ADMINISTRACION' %}briefcase{% else %}box{% endif %}"></i>
+      {{ label }}
+    </span>
+    <a href="{% url 'presupuestos:catalogo_categoria_create' %}?tipo={{ tipo }}"
+       class="capu-section-add" onclick="event.stopPropagation()">
+      <i class="bi bi-plus"></i> Categoría
+    </a>
+    <i class="bi bi-chevron-down capu-chevron"></i>
+  </div>
 
-    <!-- Encabezado de sección tipo APU -->
-    <div class="d-flex align-items-center gap-2 mb-3 mt-{% if forloop.first %}0{% else %}4{% endif %}">
-      <span class="badge rounded-pill bg-opacity-15
-        {% if tipo == 'MANO_DE_OBRA' %}text-bg-primary
-        {% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}text-bg-warning
-        {% elif tipo == 'TRANSPORTE' %}text-bg-info
-        {% elif tipo == 'ADMINISTRACION' %}text-bg-secondary
-        {% else %}text-bg-success{% endif %}
-        px-3 py-2 fs-6">
-        <i class="bi bi-{% if tipo == 'MANO_DE_OBRA' %}people-fill{% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}tools{% elif tipo == 'TRANSPORTE' %}truck{% elif tipo == 'ADMINISTRACION' %}briefcase{% else %}boxes{% endif %} me-1"></i>
-        {{ label }}
-      </span>
-      <a href="{% url 'presupuestos:catalogo_categoria_create' %}?tipo={{ tipo }}"
-         class="btn btn-xs btn-outline-secondary ms-auto"
-         title="Nueva categoría de {{ label }}">
-        <i class="bi bi-plus"></i> Categoría
-      </a>
-    </div>
-
-    <!-- Grid de tarjetas de categoría -->
+  <div class="capu-section-body">
     {% if grupo.categorias %}
-    <div class="row g-3 mb-2">
+    <div class="capu-grid">
       {% for cat in grupo.categorias %}
-      <div class="col-12 col-md-6 col-xl-4">
-        <div class="card h-100 shadow-sm border-0 {% if not cat.activa %}opacity-50{% endif %}">
+      <div class="capu-card{% if not cat.activa %} inactive{% endif %}">
 
-          <!-- Cabecera de la tarjeta (categoría) -->
-          <div class="card-header d-flex align-items-center justify-content-between py-2
-            {% if tipo == 'MANO_DE_OBRA' %}bg-primary bg-opacity-10
-            {% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}bg-warning bg-opacity-10
-            {% elif tipo == 'TRANSPORTE' %}bg-info bg-opacity-10
-            {% elif tipo == 'ADMINISTRACION' %}bg-secondary bg-opacity-10
-            {% else %}bg-success bg-opacity-10{% endif %}">
-            <div>
-              <span class="fw-semibold">{{ cat.nombre }}</span>
-              {% if not cat.activa %}
-                <span class="badge bg-secondary ms-2 small">inactiva</span>
-              {% endif %}
-              {% if cat.descripcion %}
-                <div class="text-muted small mt-1">{{ cat.descripcion }}</div>
-              {% endif %}
-            </div>
-            <div class="d-flex gap-1">
-              <a href="{% url 'presupuestos:catalogo_item_create' %}?categoria={{ cat.pk }}"
-                 class="btn btn-xs btn-outline-primary" title="Agregar ítem">
-                <i class="bi bi-plus-lg"></i>
-              </a>
-              <a href="{% url 'presupuestos:catalogo_categoria_update' cat.pk %}"
-                 class="btn btn-xs btn-outline-secondary" title="Editar categoría">
-                <i class="bi bi-pencil"></i>
-              </a>
-            </div>
-          </div>
-
-          <!-- Lista de ítems -->
-          <div class="card-body p-0">
-            {% if cat.items.all %}
-            <ul class="list-group list-group-flush">
-              {% for item in cat.items.all %}
-              <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3
-                          {% if not item.activo %}text-muted{% endif %}">
-                <div class="flex-grow-1 me-2" style="min-width:0;">
-                  <div class="fw-medium text-truncate">
-                    {% if item.codigo %}<code class="small text-muted me-1">{{ item.codigo }}</code>{% endif %}
-                    {{ item.nombre }}
-                  </div>
-                  <div class="small text-muted">
-                    <!-- Precio base -->
-                    <span class="me-2">
-                      <i class="bi bi-tag-fill me-1 opacity-50"></i>
-                      ${{ item.precio_base|floatformat:0 }} / {{ item.get_unidad_display }}
-                    </span>
-                    <!-- Salario (personal) -->
-                    {% if item.salario_base %}
-                      <span class="me-2 text-primary">
-                        <i class="bi bi-wallet2 me-1 opacity-50"></i>
-                        Sal. ${{ item.salario_base|floatformat:0 }}
-                      </span>
-                    {% endif %}
-                    <!-- Fabricante / tienda de referencia -->
-                    {% if item.tienda_referencia %}
-                      <span class="me-2">
-                        <i class="bi bi-shop me-1 opacity-50"></i>
-                        {{ item.tienda_referencia }}
-                      </span>
-                    {% endif %}
-                    <!-- Vida útil (herramientas) -->
-                    {% if item.vida_util_dias %}
-                      <span class="me-1 text-warning">
-                        <i class="bi bi-clock me-1 opacity-50"></i>
-                        {{ item.vida_util_dias }} días útiles
-                      </span>
-                      <span class="text-success fw-semibold">
-                        <i class="bi bi-calendar-day me-1 opacity-75"></i>
-                        ${{ item.costo_por_dia|floatformat:2 }}/día
-                      </span>
-                    {% endif %}
-                    {% if not item.activo %}
-                      <span class="badge bg-secondary ms-1">inactivo</span>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="d-flex gap-1 flex-shrink-0">
-                  <a href="{% url 'presupuestos:catalogo_item_update' item.pk %}"
-                     class="btn btn-xs btn-outline-secondary" title="Editar">
-                    <i class="bi bi-pencil"></i>
-                  </a>
-                  <a href="{% url 'presupuestos:catalogo_item_delete' item.pk %}"
-                     class="btn btn-xs btn-outline-danger" title="Eliminar">
-                    <i class="bi bi-trash"></i>
-                  </a>
-                </div>
-              </li>
-              {% endfor %}
-            </ul>
-            {% else %}
-            <div class="text-center py-3 text-muted small">
-              <i class="bi bi-inbox me-1"></i>Sin ítems —
-              <a href="{% url 'presupuestos:catalogo_item_create' %}?categoria={{ cat.pk }}">agregar</a>
-            </div>
-            {% endif %}
-          </div>
-
-          <!-- Footer de la tarjeta -->
-          <div class="card-footer bg-transparent d-flex justify-content-between align-items-center py-2 px-3">
-            <span class="text-muted small">
-              {{ cat.items.count }} ítem{{ cat.items.count|pluralize }}
-            </span>
-            <a href="{% url 'presupuestos:catalogo_categoria_delete' cat.pk %}"
-               class="btn btn-xs btn-link text-danger p-0"
-               onclick="return confirm('¿Eliminar la categoría «{{ cat.nombre }}»?')">
-              <i class="bi bi-trash3 small"></i>
+        <div class="capu-card-head">
+          <span class="capu-card-head-name">
+            {{ cat.nombre }}
+            {% if not cat.activa %}<span class="badge-inactive">(inactiva)</span>{% endif %}
+          </span>
+          <div class="capu-card-head-actions">
+            <a href="{% url 'presupuestos:catalogo_item_create' %}?categoria={{ cat.pk }}"
+               class="capu-icon-btn" title="Agregar ítem">
+              <i class="bi bi-plus-lg"></i>
+            </a>
+            <a href="{% url 'presupuestos:catalogo_categoria_update' cat.pk %}"
+               class="capu-icon-btn" title="Editar">
+              <i class="bi bi-pencil"></i>
             </a>
           </div>
-
         </div>
+
+        <div class="capu-items">
+          {% for item in cat.items.all %}
+          <div class="capu-item">
+            <div class="capu-item-main">
+              <div class="capu-item-name">
+                {% if item.codigo %}<span class="capu-item-code">{{ item.codigo }}</span>{% endif %}
+                {{ item.nombre }}{% if not item.activo %}<span style="font-size:9.5px;color:#94a3b8;"> · inactivo</span>{% endif %}
+              </div>
+              <div class="capu-item-meta">
+                <span class="capu-meta-price">${{ item.precio_base|floatformat:0 }} / {{ item.get_unidad_display }}</span>
+                {% if item.vida_util_dias %}
+                  <span class="capu-meta-days"><i class="bi bi-clock" style="font-size:9px;"></i> {{ item.vida_util_dias }}d</span>
+                  <span class="capu-meta-rate">${{ item.costo_por_dia|floatformat:2 }}/día</span>
+                {% endif %}
+                {% if item.salario_base %}
+                  <span class="capu-meta-price">Sal. ${{ item.salario_base|floatformat:0 }}</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="capu-item-actions">
+              <a href="{% url 'presupuestos:catalogo_item_update' item.pk %}" class="capu-icon-btn" title="Editar">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <a href="{% url 'presupuestos:catalogo_item_delete' item.pk %}" class="capu-icon-btn danger" title="Eliminar">
+                <i class="bi bi-trash"></i>
+              </a>
+            </div>
+          </div>
+          {% empty %}
+          <div class="capu-card-empty">
+            <i class="bi bi-inbox"></i> Sin ítems —
+            <a href="{% url 'presupuestos:catalogo_item_create' %}?categoria={{ cat.pk }}">agregar</a>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="capu-card-foot">
+          <span>{{ cat.items.count }} ítem{{ cat.items.count|pluralize }}</span>
+          <a href="{% url 'presupuestos:catalogo_categoria_delete' cat.pk %}"
+             class="capu-icon-btn danger" title="Eliminar categoría"
+             onclick="return confirm('¿Eliminar la categoría «{{ cat.nombre }}»?')">
+            <i class="bi bi-trash3" style="font-size:11px;"></i>
+          </a>
+        </div>
+
       </div>
       {% endfor %}
     </div>
     {% else %}
-    <div class="text-muted small mb-2 ps-1">
-      <i class="bi bi-info-circle me-1"></i>No hay categorías de este tipo todavía.
-    </div>
+    <p class="capu-section-empty"><i class="bi bi-info-circle"></i> No hay categorías de este tipo todavía.</p>
     {% endif %}
+  </div>
 
-    {% endwith %}
-  {% endfor %}
-
-  {% endwith %}{% endwith %}
-
+</div>
+{% endwith %}
+{% endfor %}
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleSection(tipo) {
+  const sec = document.getElementById('section-' + tipo);
+  if (sec) sec.classList.toggle('collapsed');
+}
+</script>
 {% endblock %}

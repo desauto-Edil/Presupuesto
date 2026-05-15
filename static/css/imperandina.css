@@ -747,7 +747,23 @@ table.data-table tbody tr:hover td { background: var(--surface); }
   font-weight: 700;
   color: var(--theme-accent);
 }
-.form-page-body   { padding: 22px 24px; }
+.form-page-body   { padding: 18px 22px; }
+
+/* ── FORM GRID LAYOUTS ── */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.form-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .form-grid-2,
+  .form-grid-3 { grid-template-columns: 1fr; }
+}
 .form-page-footer {
   padding: 14px 24px;
   border-top: 1px solid var(--border);

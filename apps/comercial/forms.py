@@ -83,6 +83,7 @@ class SolicitudForm(forms.ModelForm):
     Formulario de Solicitud.
     · Todos los campos son obligatorios (backend + frontend).
     · estado y creado_por son controlados por el sistema (excluidos).
+    · El campo cliente se filtra por unidad_negocio si se provee.
     """
 
     class Meta:
@@ -118,10 +119,28 @@ class SolicitudForm(forms.ModelForm):
             }),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, unidad_negocio=None, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.required = True
+        self._unidad_negocio = unidad_negocio
+        if unidad_negocio:
+            self.fields["cliente"].queryset = Cliente.objects.filter(
+                unidad_negocio=unidad_negocio, activo=True
+            ).order_by("razon_social")
+        else:
+            self.fields["cliente"].queryset = Cliente.objects.filter(
+                activo=True
+            ).order_by("razon_social")
+
+    def clean_cliente(self):
+        cliente = self.cleaned_data.get("cliente")
+        if cliente and self._unidad_negocio:
+            if cliente.unidad_negocio != self._unidad_negocio:
+                raise ValidationError(
+                    "El cliente seleccionado no pertenece a la unidad de negocio actual."
+                )
+        return cliente
 
 
 class TipoProyectoForm(forms.ModelForm):

@@ -63,20 +63,13 @@
         </div>
       </div>
 
-      <div class="section-heading" style="margin-top:18px;">Variables financieras</div>
+      <div class="section-heading" style="margin-top:14px;">Variables financieras</div>
 
-      <div class="form-grid-2">
+      <div class="form-grid-3">
         <div class="form-group">
           <label>TRM (COP/USD)</label>
           {{ form.trm }}
         </div>
-        <div class="form-group">
-          <label>Moneda</label>
-          {{ form.moneda }}
-        </div>
-      </div>
-
-      <div class="form-grid-2">
         <div class="form-group">
           <label>Margen comercial (%)</label>
           {{ form.margen_comercial_pct }}
@@ -87,15 +80,19 @@
         </div>
       </div>
 
-      <div class="form-grid-2">
+      <div class="form-grid-3">
         <div class="form-group">
-          <label>AIU Contratista(%)</label>
+          <label>AIU Contratista (%)</label>
           {{ form.aiu_pct }}
         </div>
-        <div class="form-group" style="padding-top:32px;">
+        <div class="form-group">
+          <label>Moneda</label>
+          {{ form.moneda }}
+        </div>
+        <div class="form-group" style="padding-top:26px;">
           <div class="form-check">
             {{ form.aplica_exencion_iva }}
-            <label class="form-check-label" style="font-size:13px;">Aplica exención de IVA</label>
+            <label class="form-check-label" style="font-size:13px;">Exención de IVA</label>
           </div>
         </div>
       </div>

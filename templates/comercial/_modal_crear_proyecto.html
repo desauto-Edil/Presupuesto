@@ -1,0 +1,109 @@
+{# Partial: modal para crear proyecto desde solicitud_detail #}
+{# Requiere en context: solicitud, proyecto_form, proxima_version #}
+
+<div class="modal fade" id="modalCrearProyecto" tabindex="-1" aria-labelledby="modalCrearProyectoLabel">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+      <form method="post" action="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}" novalidate>
+        {% csrf_token %}
+
+        <div class="modal-header" style="border-bottom:1px solid var(--border);border-top:3px solid var(--theme-accent);">
+          <div>
+            <h5 class="modal-title" id="modalCrearProyectoLabel"
+                style="font-size:14px;font-weight:700;margin:0;">
+              Nuevo proyecto — {{ solicitud.consecutivo }}
+            </h5>
+            <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
+              Cliente: <strong>{{ solicitud.cliente.razon_social }}</strong>
+              &nbsp;·&nbsp; Versión: <strong>v{{ proxima_version }}</strong>
+            </div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body" style="padding:20px 24px;">
+
+          {% if proyecto_form.non_field_errors %}
+          <div class="msg-bar msg-error" style="margin-bottom:14px;">
+            ✕ {{ proyecto_form.non_field_errors|join:", " }}
+          </div>
+          {% endif %}
+
+          <div class="section-heading">Identificación</div>
+
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label fw-semibold" style="font-size:12px;">
+              Nombre del proyecto <span style="color:var(--brand-red)">*</span>
+            </label>
+            {{ proyecto_form.nombre }}
+            {% if proyecto_form.nombre.errors %}
+            <div class="invalid-feedback d-block">{{ proyecto_form.nombre.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label fw-semibold" style="font-size:12px;">Descripción</label>
+            {{ proyecto_form.descripcion }}
+          </div>
+
+          <div class="form-grid-2" style="margin-bottom:16px;">
+            <div class="form-group">
+              <label class="form-label fw-semibold" style="font-size:12px;">Días estimados</label>
+              {{ proyecto_form.dias_duracion }}
+            </div>
+            <div class="form-group">
+              <label class="form-label fw-semibold" style="font-size:12px;">N.º personas</label>
+              {{ proyecto_form.num_personas }}
+            </div>
+          </div>
+
+          <div class="section-heading">Variables financieras</div>
+
+          <div class="form-grid-3" style="margin-bottom:10px;">
+            <div class="form-group">
+              <label class="form-label fw-semibold" style="font-size:12px;">TRM (COP/USD)</label>
+              {{ proyecto_form.trm }}
+            </div>
+            <div class="form-group">
+              <label class="form-label fw-semibold" style="font-size:12px;">Margen comercial (%)</label>
+              {{ proyecto_form.margen_comercial_pct }}
+            </div>
+            <div class="form-group">
+              <label class="form-label fw-semibold" style="font-size:12px;">IVA (%)</label>
+              {{ proyecto_form.iva_pct }}
+            </div>
+          </div>
+
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label fw-semibold" style="font-size:12px;">AIU contratista (%)</label>
+              {{ proyecto_form.aiu_pct }}
+            </div>
+            <div class="form-group">
+              <label class="form-label fw-semibold" style="font-size:12px;">Moneda</label>
+              {{ proyecto_form.moneda }}
+            </div>
+            <div class="form-group" style="padding-top:26px;">
+              <div class="form-check">
+                {{ proyecto_form.aplica_exencion_iva }}
+                <label class="form-check-label" style="font-size:12px;">Exención de IVA</label>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="modal-footer" style="border-top:1px solid var(--border);padding:12px 24px;">
+          <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
+             class="btn btn-ghost btn-sm me-auto" style="font-size:11.5px;">
+            Abrir formulario completo ↗
+          </a>
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Crear proyecto</button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>

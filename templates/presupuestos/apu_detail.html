@@ -539,6 +539,22 @@
 
 </div><!-- /.apu-kpi-row -->
 
+<!-- ── Barra de búsqueda APU ──────────────────────────────────────────── -->
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+  <div style="position:relative;flex:1;">
+    <i class="bi bi-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#aaa;font-size:13px;pointer-events:none;"></i>
+    <input type="text" id="apuSearchInput" placeholder="Buscar ítem, categoría, código, descripción…"
+           oninput="apuFiltrar()"
+           style="width:100%;padding:6px 10px 6px 32px;font-size:12.5px;border:1px solid rgba(0,0,0,.12);
+                  border-radius:7px;background:#fff;outline:none;">
+  </div>
+  <button type="button" onclick="apuLimpiar()" id="apuBtnLimpiar"
+          style="display:none;padding:5px 11px;font-size:12px;border:1px solid rgba(0,0,0,.1);
+                 border-radius:7px;background:#fff;cursor:pointer;color:#666;white-space:nowrap;">
+    <i class="bi bi-x"></i> Limpiar
+  </button>
+  <span id="apuResultCount" style="font-size:11px;color:#aaa;white-space:nowrap;"></span>
+</div>
 
 <div class="apu-tabs-wrap fade-up">
 
@@ -1345,5 +1361,41 @@ document.querySelectorAll('.apu-confirmado-btn').forEach(function(btn) {
   }
 });
 checkAllConfirmed();
+
+/* ── Búsqueda en APU ──────────────────────────────────────────────────── */
+function apuFiltrar() {
+  const q = document.getElementById('apuSearchInput').value.toLowerCase().trim();
+  const btnLimpiar = document.getElementById('apuBtnLimpiar');
+  const countEl = document.getElementById('apuResultCount');
+  btnLimpiar.style.display = q ? 'inline-block' : 'none';
+
+  // Buscar en filas principales de líneas APU (excluye sub-filas de detalle colapsables)
+  const filas = document.querySelectorAll('tr[id^="apu-linea-"]:not(.apu-cat-detail)');
+  let visibles = 0;
+
+  filas.forEach(function(row) {
+    const texto = row.textContent.toLowerCase();
+    const match = !q || texto.includes(q);
+    row.style.display = match ? '' : 'none';
+    if (match) visibles++;
+  });
+
+  // Si hay búsqueda activa, mostrar todos los tabs para que el usuario vea resultados
+  if (q) {
+    document.querySelectorAll('.apu-tab-pane').forEach(p => p.classList.add('active'));
+    countEl.textContent = visibles + ' resultado' + (visibles !== 1 ? 's' : '');
+  } else {
+    // Restaurar: solo el primer tab activo
+    document.querySelectorAll('.apu-tab-pane').forEach((p, i) => {
+      p.classList.toggle('active', i === 0);
+    });
+    countEl.textContent = '';
+  }
+}
+
+function apuLimpiar() {
+  document.getElementById('apuSearchInput').value = '';
+  apuFiltrar();
+}
 </script>
 {% endblock %}

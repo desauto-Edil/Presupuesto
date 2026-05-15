@@ -16,7 +16,16 @@
   <a href="{% url 'ingenieria:calculador_sistemas' %}?proyecto_pk={{ proyecto.pk }}" class="btn btn-sm btn-outline-secondary">
     <i class="bi bi-plus-lg"></i> Nuevo despiece
   </a>
-  <a href="{% url 'comercial:crear_proyecto_desde_solicitud' proyecto.solicitud.pk %}" class="btn btn-ghost btn-sm">+ Nueva versión</a>
+  {% if proyecto.solicitud %}
+  <form method="post" action="{% url 'comercial:proyecto_clonar' proyecto.pk %}" style="display:inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-ghost btn-sm"
+            onclick="return confirm('¿Crear una nueva versión copiando los datos de {{ proyecto.consecutivo }} v{{ proyecto.version }}?')">
+      <i class="bi bi-copy"></i> Clonar versión
+    </button>
+  </form>
+  <a href="{% url 'comercial:crear_proyecto_desde_solicitud' proyecto.solicitud.pk %}" class="btn btn-ghost btn-sm">+ Nueva vacía</a>
+  {% endif %}
   <a href="{% url 'comercial:proyecto_update' proyecto.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
 {% endblock %}
 

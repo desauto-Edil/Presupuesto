@@ -8,8 +8,10 @@
 {% endblock %}
 
 {% block topbar_actions %}
-  <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
-     class="btn btn-primary btn-sm">+ Nuevo proyecto / versión</a>
+  <button type="button" class="btn btn-primary btn-sm"
+          data-bs-toggle="modal" data-bs-target="#modalCrearProyecto">
+    + Nuevo proyecto
+  </button>
   <a href="{% url 'comercial:solicitud_update' solicitud.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
   <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger);"
           data-bs-toggle="modal" data-bs-target="#modalDeleteSolicitud">
@@ -195,54 +197,6 @@
             {% endif %}
         </div>
 
-        <!-- ── HISTORIAL DE ACTIVIDAD ── -->
-        <div class="panel">
-            <div class="panel-header">
-                <span class="panel-title">Historial de actividad</span>
-                <span style="font-size:11px;color:var(--ink-soft);">
-                    {% if logs %}Últimos {{ logs|length }} eventos{% else %}Sin eventos registrados{% endif %}
-                </span>
-            </div>
-            {% if logs %}
-            <div>
-                {% for log in logs %}
-                <div style="padding:10px 20px;border-bottom:1px solid var(--border);
-                            display:flex;align-items:flex-start;gap:12px;">
-                    <!-- Dot de color según origen -->
-                    <div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;
-                                background:{% if log.modelo_afectado == 'Proyecto' %}var(--theme-accent){% elif log.modelo_afectado == 'Solicitud' %}#1470e6{% else %}#64748b{% endif %};">
-                    </div>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:12.5px;font-weight:500;line-height:1.4;">
-                            {{ log.descripcion|default:log.accion }}
-                        </div>
-                        <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                            <span>{{ log.configuracion.nombre_completo|default:"Sistema" }}</span>
-                            <span style="color:rgba(14,17,23,0.25);">·</span>
-                            <span>{{ log.created_at|date:"d/m/Y H:i" }}</span>
-                            {% if log.modelo_afectado %}
-                            <span style="color:rgba(14,17,23,0.25);">·</span>
-                            <span style="font-size:10px;background:rgba(0,0,0,0.05);padding:1px 6px;border-radius:4px;font-family:monospace;">
-                                {{ log.modelo_afectado }}
-                            </span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <span style="font-size:10px;font-family:monospace;background:rgba(86,83,148,0.08);
-                                 color:rgba(86,83,148,0.80);padding:2px 7px;border-radius:4px;
-                                 white-space:nowrap;align-self:flex-start;margin-top:2px;">
-                        {{ log.accion }}
-                    </span>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div style="padding:30px 20px;text-align:center;color:var(--ink-soft);font-size:13px;">
-                No hay actividad registrada para esta solicitud todavía.
-            </div>
-            {% endif %}
-        </div>
-
         <!-- Observaciones -->
         {% if solicitud.observaciones %}
         <div class="panel">
@@ -310,8 +264,8 @@
             <div class="panel-header accent-top-theme" style="border-radius:var(--radius) var(--radius) 0 0;">
                 <span class="panel-title">Proyectos</span>
                 <span style="font-size:10px;color:rgba(14,17,23,.35);">{{ proyectos|length }}</span>
-                <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
-                   class="btn btn-primary btn-xs" style="margin-left:auto;">+ Nuevo</a>
+                <button type="button" class="btn btn-primary btn-xs" style="margin-left:auto;"
+                        data-bs-toggle="modal" data-bs-target="#modalCrearProyecto">+ Nuevo</button>
             </div>
 
             {% if proyectos_data %}
@@ -399,8 +353,10 @@
                 <div class="empty-state-text" style="font-size:12px;color:rgba(14,17,23,0.5);margin-bottom:12px;">
                     Sin proyectos creados para esta solicitud.
                 </div>
-                <a href="{% url 'comercial:crear_proyecto_desde_solicitud' solicitud.pk %}"
-                   class="btn btn-primary btn-sm">+ Crear primer proyecto</a>
+                <button type="button" class="btn btn-primary btn-sm"
+                        data-bs-toggle="modal" data-bs-target="#modalCrearProyecto">
+                  + Crear primer proyecto
+                </button>
             </div>
             {% endif %}
         </div>
@@ -437,6 +393,94 @@
     </div>
 </div>
 
+<!-- ── HISTORIAL DE ACTIVIDAD (ancho completo, colapsable) ── -->
+<div class="panel fade-up-2" style="margin-top:14px;">
+    <div class="panel-header" style="cursor:pointer;" onclick="toggleHistorial()" id="historial-header">
+        <span class="panel-title">Historial de actividad</span>
+        <span style="font-size:11px;color:var(--ink-soft);margin-right:auto;">
+            {% if logs %}{{ logs|length }} evento{{ logs|length|pluralize }}{% else %}Sin eventos{% endif %}
+        </span>
+        <span id="historial-chevron" style="font-size:13px;color:var(--ink-soft);transition:transform .18s;">▾</span>
+    </div>
+
+    {% if logs %}
+    <!-- Últimos 3 siempre visibles -->
+    <div id="historial-preview">
+        {% for log in logs|slice:":3" %}
+        <div style="padding:9px 20px;border-bottom:1px solid var(--border);
+                    display:flex;align-items:flex-start;gap:12px;">
+            <div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;
+                        background:{% if log.modelo_afectado == 'Proyecto' %}var(--theme-accent){% elif log.modelo_afectado == 'Solicitud' %}#1470e6{% else %}#64748b{% endif %};">
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:500;line-height:1.4;">
+                    {{ log.descripcion|default:log.accion }}
+                </div>
+                <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <span>{{ log.configuracion.nombre_completo|default:"Sistema" }}</span>
+                    <span style="color:rgba(14,17,23,0.25);">·</span>
+                    <span>{{ log.created_at|date:"d/m/Y H:i" }}</span>
+                    {% if log.modelo_afectado %}
+                    <span style="font-size:10px;background:rgba(0,0,0,0.05);padding:1px 5px;border-radius:4px;font-family:monospace;">{{ log.modelo_afectado }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <span style="font-size:10px;font-family:monospace;background:rgba(86,83,148,0.08);color:rgba(86,83,148,0.80);padding:2px 6px;border-radius:4px;white-space:nowrap;align-self:flex-start;margin-top:2px;">{{ log.accion }}</span>
+        </div>
+        {% endfor %}
+        {% if logs|length > 3 %}
+        <div style="padding:8px 20px;text-align:center;border-top:1px solid var(--border);">
+            <button type="button" onclick="toggleHistorialCompleto()" id="btn-ver-mas"
+                    style="background:none;border:none;cursor:pointer;font-size:11.5px;color:var(--theme-accent);font-weight:500;">
+                Ver {{ logs|length|add:"-3" }} evento{{ logs|length|add:"-3"|pluralize }} más ▾
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Resto del historial (oculto por defecto) -->
+    {% if logs|length > 3 %}
+    <div id="historial-completo" style="display:none;">
+        {% for log in logs|slice:"3:" %}
+        <div style="padding:9px 20px;border-bottom:1px solid var(--border);
+                    display:flex;align-items:flex-start;gap:12px;">
+            <div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;
+                        background:{% if log.modelo_afectado == 'Proyecto' %}var(--theme-accent){% elif log.modelo_afectado == 'Solicitud' %}#1470e6{% else %}#64748b{% endif %};">
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:500;line-height:1.4;">
+                    {{ log.descripcion|default:log.accion }}
+                </div>
+                <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <span>{{ log.configuracion.nombre_completo|default:"Sistema" }}</span>
+                    <span style="color:rgba(14,17,23,0.25);">·</span>
+                    <span>{{ log.created_at|date:"d/m/Y H:i" }}</span>
+                    {% if log.modelo_afectado %}
+                    <span style="font-size:10px;background:rgba(0,0,0,0.05);padding:1px 5px;border-radius:4px;font-family:monospace;">{{ log.modelo_afectado }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <span style="font-size:10px;font-family:monospace;background:rgba(86,83,148,0.08);color:rgba(86,83,148,0.80);padding:2px 6px;border-radius:4px;white-space:nowrap;align-self:flex-start;margin-top:2px;">{{ log.accion }}</span>
+        </div>
+        {% endfor %}
+        <div style="padding:8px 20px;text-align:center;border-top:1px solid var(--border);">
+            <button type="button" onclick="toggleHistorialCompleto()"
+                    style="background:none;border:none;cursor:pointer;font-size:11.5px;color:var(--ink-soft);">
+                Mostrar menos ▴
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="padding:24px 20px;text-align:center;color:var(--ink-soft);font-size:13px;">
+        No hay actividad registrada todavía.
+    </div>
+    {% endif %}
+</div>
+
+{% include "comercial/_modal_crear_proyecto.html" %}
+
 {# ── Modal: Confirmar eliminación ─────────────────────────────── #}
 <div class="modal fade" id="modalDeleteSolicitud" tabindex="-1">
   <div class="modal-dialog modal-sm">
@@ -459,4 +503,33 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleHistorial() {
+  const preview = document.getElementById('historial-preview');
+  const completo = document.getElementById('historial-completo');
+  const chevron = document.getElementById('historial-chevron');
+  if (!preview) return;
+  const hidden = preview.style.display === 'none';
+  preview.style.display = hidden ? '' : 'none';
+  if (completo) completo.style.display = 'none';
+  chevron.style.transform = hidden ? '' : 'rotate(-90deg)';
+}
+
+function toggleHistorialCompleto() {
+  const completo = document.getElementById('historial-completo');
+  const btn = document.getElementById('btn-ver-mas');
+  if (!completo) return;
+  const visible = completo.style.display !== 'none';
+  completo.style.display = visible ? 'none' : '';
+  if (btn) btn.textContent = visible ? btn.dataset.labelMas : 'Mostrar menos ▴';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('btn-ver-mas');
+  if (btn) btn.dataset.labelMas = btn.textContent;
+});
+</script>
 {% endblock %}

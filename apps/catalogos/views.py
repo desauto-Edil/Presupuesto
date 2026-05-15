@@ -1,6 +1,7 @@
 """apps/catalogos/views.py — Vistas CRUD para catálogos maestros."""
 
 from django.contrib import messages
+from django.http import HttpResponseRedirect
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, RedirectView
 )
@@ -125,6 +126,7 @@ class ProductoListView(ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["create_form"] = ProductoForm()
+        ctx["categorias"] = CategoriaProducto.objects.order_by("nombre")
         return ctx
 
 
@@ -142,7 +144,12 @@ class ProductoCreateView(CreateView):
         return initial
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        producto = form.save(commit=False)
+        if not producto.codigo:
+            producto.codigo = Producto.generar_codigo(producto.categoria)
+        producto.save()
+        form.save_m2m()
+        self.object = producto
         ProductoProveedor.objects.update_or_create(
             producto=self.object,
             proveedor=self.object.proveedor,
@@ -153,7 +160,7 @@ class ProductoCreateView(CreateView):
             }
         )
         messages.success(self.request, "Producto y precio registrados correctamente.")
-        return response
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class ProductoUpdateView(UpdateView):

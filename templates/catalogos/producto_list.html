@@ -11,89 +11,150 @@
   </button>
 {% endblock %}
 
+{% block extra_head %}
+<style>
+.pl-table { width:100%;border-collapse:collapse; }
+.pl-table thead th {
+  padding:8px 12px;font-size:10.5px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--ink-soft);background:var(--surface);
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+.pl-table tbody td {
+  padding:6px 12px;font-size:12.5px;border-bottom:1px solid rgba(14,17,23,.04);
+  vertical-align:middle;
+}
+.pl-table tbody tr:last-child td { border-bottom:none; }
+.pl-table tbody tr:hover td { background:var(--theme-accent-pale); }
+.pl-code { font-family:monospace;font-size:11px;color:var(--theme-accent);font-weight:700; }
+.pl-price { font-weight:700;font-size:12.5px;font-variant-numeric:tabular-nums; }
+.pl-moneda { font-size:10px;color:var(--ink-soft);margin-left:2px; }
+
+/* Barra de búsqueda */
+.pl-toolbar {
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);
+}
+.pl-search { flex:1;min-width:200px;max-width:320px; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="panel fade-up">
-  <div class="panel-header">
-    <span class="panel-title">Catálogo de productos</span>
-    <span class="text-muted" style="font-size:12px;">{{ productos|length }} productos</span>
+<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;" class="fade-up">
+
+  <!-- Toolbar -->
+  <div class="pl-toolbar">
+    <input type="text" id="plSearch" class="form-control form-control-sm pl-search"
+           placeholder="Buscar nombre, código, categoría…" autocomplete="off">
+    <select id="plFilterCat" class="form-select form-select-sm" style="max-width:160px;">
+      <option value="">Todas las categorías</option>
+      {% for cat in categorias %}<option value="{{ cat.nombre|lower }}">{{ cat.nombre }}</option>{% endfor %}
+    </select>
+    <select id="plFilterEstado" class="form-select form-select-sm" style="max-width:130px;">
+      <option value="">Todos</option>
+      <option value="activo">Activos</option>
+      <option value="inactivo">Inactivos</option>
+    </select>
+    <span id="plCount" style="font-size:11.5px;color:var(--ink-soft);margin-left:4px;"></span>
+    <a href="{% url 'catalogos:catalogo' %}" class="btn btn-ghost btn-sm ms-auto">← Catálogos</a>
   </div>
 
   {% if productos %}
-  <table class="imp-table">
+  <div style="overflow-x:auto;">
+  <table class="pl-table" id="plTable">
     <thead>
       <tr>
         <th>Código</th>
         <th>Nombre</th>
         <th>Categoría</th>
+        <th>Unidad</th>
         <th>Proveedor</th>
-        <th>Precio actual</th>
+        <th style="text-align:right;">Precio</th>
         <th>Actualizado</th>
-        <th>Estado</th>
+        <th style="text-align:center;">Estado</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       {% for p in productos %}
-      <tr>
-        <td class="td-mono" style="color:var(--brand-violet);font-weight:600;">{{ p.codigo }}</td>
-        <td>
-          <div style="font-weight:500;">{{ p.nombre }}</div>
-          {% if p.unidad %}<div style="font-size:11px;color:var(--ink-soft);">{{ p.unidad.abreviatura }}</div>{% endif %}
-        </td>
-        <td style="font-size:12px;">{{ p.categoria.nombre|default:"—" }}</td>
-        <td style="font-size:12px;">{{ p.proveedor.nombre|default:"—" }}</td>
-        <td>
+      <tr data-nombre="{{ p.nombre|lower }}" data-codigo="{{ p.codigo|lower }}"
+          data-cat="{{ p.categoria.nombre|lower|default:'' }}"
+          data-estado="{% if p.activo %}activo{% else %}inactivo{% endif %}">
+        <td><span class="pl-code">{{ p.codigo }}</span></td>
+        <td style="font-weight:500;max-width:240px;">{{ p.nombre }}</td>
+        <td style="color:var(--ink-soft);">{{ p.categoria.nombre|default:"—" }}</td>
+        <td style="color:var(--ink-soft);">{{ p.unidad.abreviatura|default:"—" }}</td>
+        <td style="color:var(--ink-soft);">{{ p.proveedor.nombre|default:"—" }}</td>
+        <td style="text-align:right;white-space:nowrap;">
           {% if p.precio_actual %}
-          <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;">
-            ${{ p.precio_actual|floatformat:0 }}
-          </span>
-          <span style="font-size:10px;color:var(--ink-soft);margin-left:2px;">{{ p.moneda }}</span>
-          {% else %}
-          <span style="color:var(--brand-red);font-size:12px;">Sin precio</span>
-          {% endif %}
+          <span class="pl-price">${{ p.precio_actual|floatformat:0 }}</span>
+          <span class="pl-moneda">{{ p.moneda }}</span>
+          {% else %}<span style="color:var(--brand-red);font-size:11px;">Sin precio</span>{% endif %}
         </td>
-        <td style="font-size:11px;color:var(--ink-soft);">
-          {{ p.fecha_actualizacion_precio|date:"d/m/Y"|default:"—" }}
-        </td>
-        <td>
-          <span class="badge-status {% if p.activo %}bs-activo{% else %}bs-inactivo{% endif %}">
+        <td style="color:var(--ink-soft);white-space:nowrap;">{{ p.fecha_actualizacion_precio|date:"d/m/Y"|default:"—" }}</td>
+        <td style="text-align:center;">
+          <span class="badge-status {% if p.activo %}bs-activo{% else %}bs-inactivo{% endif %}" style="font-size:10px;padding:2px 8px;">
             {% if p.activo %}Activo{% else %}Inactivo{% endif %}
           </span>
         </td>
-        <td class="td-actions">
-          <div class="d-inline-flex align-items-center gap-1">
-            <a href="{% url 'catalogos:producto_update' p.pk %}" 
-               class="btn btn-ghost btn-xs d-inline-flex align-items-center" 
-               title="Editar">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil me-1" viewBox="0 0 16 16">
-                <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325"/>
-              </svg>
-            </a>
-
-            <button class="btn btn-ghost btn-xs d-inline-flex align-items-center"
-                    data-bs-toggle="modal" 
-                    data-bs-target="#deleteModal"
-                    data-delete-url="{% url 'catalogos:producto_delete' p.pk %}"
-                    data-delete-name="{{ p.nombre }}"
-                    title="Eliminar"
-                    style="color:rgba(14,17,23,0.3);">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
-                <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
-              </svg>
-            </button>
-          </div>
+        <td style="text-align:right;white-space:nowrap;">
+          <a href="{% url 'catalogos:producto_update' p.pk %}" class="btn btn-ghost btn-xs" title="Editar">✎</a>
+          <button class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.3);"
+                  data-bs-toggle="modal" data-bs-target="#deleteModal"
+                  data-delete-url="{% url 'catalogos:producto_delete' p.pk %}"
+                  data-delete-name="{{ p.nombre }}" title="Eliminar">✕</button>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  <div id="plEmpty" style="display:none;padding:40px;text-align:center;font-size:13px;color:var(--ink-soft);">
+    Sin resultados para los filtros aplicados.
+  </div>
   {% else %}
-  <div class="empty-state">
+  <div class="empty-state" style="padding:60px 24px;">
     <div class="empty-state-icon">◈</div>
     <div class="empty-state-text">Sin productos registrados.</div>
   </div>
   {% endif %}
 </div>
+
+{% block extra_js %}
+<script>
+(function(){
+  const rows   = Array.from(document.querySelectorAll('#plTable tbody tr'));
+  const search = document.getElementById('plSearch');
+  const fCat   = document.getElementById('plFilterCat');
+  const fEst   = document.getElementById('plFilterEstado');
+  const count  = document.getElementById('plCount');
+  const empty  = document.getElementById('plEmpty');
+  const table  = document.getElementById('plTable');
+
+  function filter(){
+    const q   = (search?.value || '').toLowerCase().trim();
+    const cat = (fCat?.value  || '').toLowerCase();
+    const est = (fEst?.value  || '').toLowerCase();
+    let vis = 0;
+    rows.forEach(r => {
+      const ok =
+        (!q   || r.dataset.nombre.includes(q) || r.dataset.codigo.includes(q) || r.dataset.cat.includes(q)) &&
+        (!cat || r.dataset.cat === cat) &&
+        (!est || r.dataset.estado === est);
+      r.style.display = ok ? '' : 'none';
+      if(ok) vis++;
+    });
+    count.textContent = vis + ' producto' + (vis !== 1 ? 's' : '');
+    empty.style.display  = vis === 0 ? '' : 'none';
+    table.style.display  = vis === 0 ? 'none' : '';
+  }
+
+  search?.addEventListener('input', filter);
+  fCat?.addEventListener('change', filter);
+  fEst?.addEventListener('change', filter);
+  filter();
+})();
+</script>
+{% endblock %}
 
 <!-- ── MODAL CREAR PRODUCTO ── -->
 {% if create_form %}
