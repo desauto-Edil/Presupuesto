@@ -10,7 +10,7 @@ from .sistemas import (
 )
 from .reglas import ReglaCalculo
 from .dependencias import DependenciaTecnica
-from .despiece_maestro import DespieceMaestro, DespieceMaestroLinea
+from .despiece_maestro import DespieceMaestro, DespieceMaestroLinea, ConsolidacionDespieceMaestro
 
 __all__ = [
     "Sistema",
@@ -28,4 +28,5 @@ __all__ = [
     "DependenciaTecnica",
     "DespieceMaestro",
     "DespieceMaestroLinea",
+    "ConsolidacionDespieceMaestro",
 ]

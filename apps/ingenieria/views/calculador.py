@@ -29,6 +29,7 @@ from apps.ingenieria.models import (
     VariableSubsistema,
     DespieceMaestro,
     DespieceMaestroLinea,
+    ConsolidacionDespieceMaestro,
 )
 from apps.ingenieria.services.despiece_maestro_service import DespieceMaestroService
 from apps.common.choices import TipoSistema, LineaNegocio
@@ -238,6 +239,7 @@ class DespieceMaestroView(DetailView):
                 else _math.ceil(cant_calc)
             )
             lineas_data.append({
+                "pk":                    linea.pk,
                 "subconjunto_nombre":    linea.subconjunto_nombre,
                 "componente_codigo":     linea.componente_codigo,
                 "componente_nombre":     linea.componente_nombre,
@@ -262,6 +264,30 @@ class DespieceMaestroView(DetailView):
                 ),
             })
         ctx["lineas_json"] = json.dumps(lineas_data, ensure_ascii=False)
+
+        # Consolidaciones guardadas para inicializar el estado JS
+        consolidaciones_data = []
+        for c in dm.consolidaciones.order_by("orden"):
+            consolidaciones_data.append({
+                "id":                 c.pk,
+                "label":              c.label,
+                "lineas_ids":         c.lineas_ids,
+                "cantidad_total":     float(c.cantidad_total),
+                "cantidad_redondeada": c.cantidad_redondeada,
+                "unidad":             c.unidad,
+                "orden":              c.orden,
+                "producto_id":        c.producto_id,
+                "producto_codigo":    c.producto_codigo,
+                "producto_nombre":    c.producto_nombre,
+                "precio_unitario": (
+                    float(c.precio_unitario) if c.precio_unitario is not None else None
+                ),
+                "moneda":      c.moneda,
+                "fecha_precio": (
+                    c.fecha_precio.strftime("%Y-%m-%d") if c.fecha_precio else None
+                ),
+            })
+        ctx["consolidaciones_json"] = json.dumps(consolidaciones_data, ensure_ascii=False)
 
         return ctx
 
@@ -340,12 +366,16 @@ class CalcularDespieceMaestroView(View):
 
 
 def _agrupar_resultados(resultados: list[dict]) -> list[dict]:
-    """Agrupa resultados de cálculo por subconjunto para la respuesta AJAX."""
-    grupos: dict[str, dict] = {}
+    """Agrupa resultados de cálculo por subconjunto_id para la respuesta AJAX.
+
+    Usa subconjunto_id (no el nombre) para evitar colisiones entre subconjuntos
+    distintos con el mismo nombre y garantizar orden estable.
+    """
+    grupos: dict = {}
     for r in resultados:
-        key = r["subconjunto_nombre"] or "General"
+        key = r["subconjunto_id"]  # None para componentes sin subconjunto
         if key not in grupos:
-            grupos[key] = {"nombre": key, "lineas": []}
+            grupos[key] = {"nombre": r["subconjunto_nombre"] or "General", "lineas": []}
         grupos[key]["lineas"].append(r)
     return list(grupos.values())
 
@@ -372,14 +402,18 @@ class GuardarDespieceMaestroView(View):
             body = json.loads(request.body)
             variables_entrada    = body.get("variables_entrada", {})
             seleccion_productos  = body.get("seleccion_productos", {})
+            consolidaciones_data = body.get("consolidaciones", [])
         except (json.JSONDecodeError, TypeError):
-            variables_entrada   = {}
-            seleccion_productos = {}
+            variables_entrada    = {}
+            seleccion_productos  = {}
+            consolidaciones_data = []
 
         if not isinstance(variables_entrada, dict):
             variables_entrada = {}
         if not isinstance(seleccion_productos, dict):
             seleccion_productos = {}
+        if not isinstance(consolidaciones_data, list):
+            consolidaciones_data = []
 
         dm.variables_entrada = variables_entrada
         svc = DespieceMaestroService(dm)
@@ -393,6 +427,59 @@ class GuardarDespieceMaestroView(View):
             svc.guardar(resultados, variables_entrada, seleccion_productos)
         except Exception as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=500)
+
+        # ── Guardar consolidaciones ───────────────────────────────────────────
+        if consolidaciones_data:
+            lineas_guardadas = list(dm.lineas.order_by("orden"))
+            dm.consolidaciones.all().delete()
+            from decimal import Decimal as _D
+            from django.utils.dateparse import parse_datetime
+
+            nuevas_cons = []
+            for idx_c, c in enumerate(consolidaciones_data):
+                indices  = [i for i in (c.get("indices") or []) if isinstance(i, int)]
+                lineas_pks = [
+                    lineas_guardadas[i].pk
+                    for i in indices
+                    if 0 <= i < len(lineas_guardadas)
+                ]
+                prod_data   = c.get("_prod") or {}
+                precio_u    = None
+                precio_t    = None
+                fecha_precio = None
+
+                if prod_data.get("precio_unitario") is not None:
+                    try:
+                        precio_u = _D(str(prod_data["precio_unitario"]))
+                        cantidad = _D(str(c.get("cantidad_total") or 0))
+                        precio_t = (cantidad * precio_u).quantize(_D("0.01"))
+                    except Exception:
+                        pass
+
+                if prod_data.get("fecha_precio"):
+                    fecha_precio = parse_datetime(str(prod_data["fecha_precio"]))
+
+                nuevas_cons.append(ConsolidacionDespieceMaestro(
+                    despiece=dm,
+                    label=str(c.get("label") or "Consolidado")[:200],
+                    lineas_ids=lineas_pks,
+                    cantidad_total=_D(str(c.get("cantidad_total") or 0)),
+                    cantidad_redondeada=int(c.get("cantidad_redondeada") or 0),
+                    unidad=str(c.get("unidad") or "")[:40],
+                    orden=idx_c + 1,
+                    producto_id=prod_data.get("producto_id") or None,
+                    producto_codigo=str(prod_data.get("producto_codigo") or "")[:50],
+                    producto_nombre=str(prod_data.get("producto_nombre") or "")[:300],
+                    precio_unitario=precio_u,
+                    precio_total=precio_t,
+                    moneda=str(prod_data.get("moneda") or "")[:3],
+                    fecha_precio=fecha_precio,
+                ))
+
+            ConsolidacionDespieceMaestro.objects.bulk_create(nuevas_cons)
+        else:
+            # Si no hay consolidaciones, limpiar las anteriores
+            dm.consolidaciones.all().delete()
 
         return JsonResponse({
             "ok": True,

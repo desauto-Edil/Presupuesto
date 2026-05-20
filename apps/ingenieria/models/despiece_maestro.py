@@ -147,3 +147,54 @@ class DespieceMaestroLinea(models.Model):
 
     def __str__(self):
         return f"[{self.despiece_id}] {self.componente_codigo} → {self.cantidad_calculada}"
+
+
+class ConsolidacionDespieceMaestro(models.Model):
+    """
+    Agrupación manual de líneas técnicas para presupuesto.
+
+    El usuario consolida varias DespieceMaestroLinea con la misma unidad
+    en una sola línea de presupuesto (con un nombre y producto únicos).
+    Las líneas técnicas originales se conservan intactas para trazabilidad.
+    """
+    despiece = models.ForeignKey(
+        DespieceMaestro,
+        on_delete=models.CASCADE,
+        related_name="consolidaciones",
+    )
+    label = models.CharField(
+        max_length=200,
+        help_text="Nombre final del material consolidado (editable por el usuario).",
+    )
+    lineas_ids = models.JSONField(
+        default=list,
+        help_text="PKs de DespieceMaestroLinea incluidas en este consolidado.",
+    )
+    cantidad_total = models.DecimalField(max_digits=18, decimal_places=6, default=0)
+    cantidad_redondeada = models.IntegerField(default=0)
+    unidad = models.CharField(max_length=40, blank=True)
+    orden = models.PositiveIntegerField(default=1)
+
+    # ── Snapshot de producto seleccionado ─────────────────────────────────────
+    producto = models.ForeignKey(
+        "catalogos.Producto",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="consolidaciones_despiece",
+    )
+    producto_codigo = models.CharField(max_length=50, blank=True)
+    producto_nombre = models.CharField(max_length=300, blank=True)
+    precio_unitario = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
+    precio_total    = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
+    moneda          = models.CharField(max_length=3, blank=True)
+    fecha_precio    = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "ingenieria"
+        db_table = "despieces_maestro_consolidaciones"
+        ordering = ["orden"]
+        verbose_name = "Consolidación de Despiece"
+        verbose_name_plural = "Consolidaciones de Despiece"
+
+    def __str__(self):
+        return f"[{self.despiece_id}] {self.label} → {self.cantidad_total} {self.unidad}"

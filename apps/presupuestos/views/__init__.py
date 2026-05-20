@@ -842,14 +842,25 @@ class APUGenerarDesdeDespiece(View):
                 todos_dm = DespieceMaestro.objects.filter(
                     proyecto=dm.proyecto,
                     estado=DespieceMaestro.GUARDADO,
-                ).prefetch_related("lineas__producto__unidad")
+                ).prefetch_related("lineas__producto__unidad", "consolidaciones__producto__unidad")
 
-                # Dict: componente_codigo → {datos acumulados}
+                # Dict: clave → {datos acumulados}
+                # Para líneas individuales (sin consolidar): clave = componente_codigo
+                # Para líneas consolidadas: clave = "CONS_{producto_id}" para agrupar
+                # mismo producto en distintos despieces.
                 consolidado: dict = {}
                 for dm_iter in todos_dm:
+                    # PKs de líneas incluidas en alguna consolidación → se saltan abajo
+                    pks_consolidados: set = set()
+                    for c in dm_iter.consolidaciones.all():
+                        pks_consolidados.update(c.lineas_ids or [])
+
+                    # ── Líneas técnicas individuales (no consolidadas) ──────────
                     for dml in dm_iter.lineas.select_related("producto", "producto__unidad"):
+                        if dml.pk in pks_consolidados:
+                            continue  # manejada por consolidación
                         if dml.producto_id is None:
-                            continue  # sin producto vinculado, no se puede consolidar
+                            continue
                         clave = dml.componente_codigo
                         if clave in consolidado:
                             consolidado[clave]["cantidad"] += (dml.cantidad_calculada or 0)
@@ -863,6 +874,25 @@ class APUGenerarDesdeDespiece(View):
                                 "cantidad": dml.cantidad_calculada or 0,
                                 "precio_snapshot": precio_snapshot,
                                 "producto": dml.producto,
+                            }
+
+                    # ── Líneas consolidadas ────────────────────────────────────
+                    for c in dm_iter.consolidaciones.select_related("producto", "producto__unidad"):
+                        if c.producto_id is None:
+                            continue
+                        # Mismo producto en varios despieces → suma bajo la misma clave
+                        clave = f"CONS_{c.producto_id}"
+                        precio_snapshot = (
+                            c.precio_unitario
+                            or (c.producto.precio_unitario_real if c.producto else None)
+                        )
+                        if clave in consolidado:
+                            consolidado[clave]["cantidad"] += (c.cantidad_total or 0)
+                        else:
+                            consolidado[clave] = {
+                                "cantidad": c.cantidad_total or 0,
+                                "precio_snapshot": precio_snapshot,
+                                "producto": c.producto,
                             }
 
                 # Sync consolidado → DespieceLinea del ProyectoSistema
