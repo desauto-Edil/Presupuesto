@@ -38,12 +38,132 @@
       background: var(--surface);
       overflow-x: hidden;
     }
+
+  /* ── Dock de asistencia — botones flotantes inferior derecha ──────────────
+     Agrupa Ayuda, Resumen y Progreso como FAB tipo chat. Colapsados muestran
+     solo el ícono; al pasar el cursor se expanden mostrando su etiqueta.
+     Liberan la franja lateral derecha para que la tabla sea protagonista. */
+  .assist-dock {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 1060;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: none;          /* el contenedor no captura clics */
+  }
+  .assist-dock > * { pointer-events: auto; }
+
+  .assist-fab {
+    display: inline-flex;
+    align-items: center;
+    height: 44px;
+    max-width: 44px;
+    border: none;
+    border-radius: 22px;
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,.20);
+    overflow: hidden;
+    white-space: nowrap;
+    font-family: inherit;
+    transition: max-width .22s ease, box-shadow .15s, background .15s;
+  }
+  .assist-fab:hover { max-width: 240px; box-shadow: 0 6px 20px rgba(0,0,0,.28); }
+  .assist-fab__icon {
+    flex: 0 0 44px; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+  }
+  .assist-fab__label {
+    font-size: 12px; font-weight: 700; letter-spacing: .02em; padding-right: 16px;
+  }
+  .assist-fab--help    { order: 3; background: var(--blue, #1a4fa0); }
+  .assist-fab--help:hover    { background: #153d80; }
+  .assist-fab--resumen { order: 2; background: #6b21a8; }
+  .assist-fab--resumen:hover { background: #581c87; }
+
+  /* ── Help Offcanvas ───────────────────────────────────── */
+  #helpOffcanvas { width: 370px; max-width: 96vw; }
+  #helpOffcanvas .offcanvas-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border, rgba(0,0,0,.09));
+    background: var(--blue-bg, #e8eef8);
+  }
+  #helpOffcanvas .offcanvas-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--blue, #1a4fa0);
+  }
+  .help-search-wrap {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border, rgba(0,0,0,.09));
+    background: var(--card, #fff);
+  }
+  .help-search-inner { position: relative; display: flex; align-items: center; }
+  .help-search-inner i {
+    position: absolute; left: 9px;
+    color: var(--ink-soft, #888); font-size: 12px; pointer-events: none;
+  }
+  .help-search-inner input {
+    width: 100%;
+    padding: 7px 10px 7px 30px;
+    border: 1px solid var(--border, rgba(0,0,0,.12));
+    border-radius: 8px;
+    font-size: 12.5px;
+    background: var(--surface, #f5f5f7);
+    outline: none;
+    font-family: inherit;
+    transition: border-color .15s, background .15s;
+    color: var(--ink, #0e1117);
+  }
+  .help-search-inner input:focus { border-color: var(--blue, #1a4fa0); background: #fff; }
+  #helpOffcanvasBody { overflow-y: auto; }
+  .help-tip {
+    margin: 8px 14px 0;
+    background: var(--blue-bg, #e8eef8);
+    border-left: 3px solid var(--blue, #1a4fa0);
+    border-radius: 0 8px 8px 0;
+    padding: 8px 11px;
+    font-size: 12px;
+    color: var(--ink-soft, #444);
+    line-height: 1.5;
+  }
+  .help-tip:last-of-type { margin-bottom: 4px; }
+  .help-tip code { background: rgba(26,79,160,.12); border-radius: 4px; padding: 1px 4px; font-size: 11px; }
+  .help-section-label {
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--ink-soft, #888);
+    padding: 12px 14px 5px;
+  }
+  .help-accordion { border-top: 1px solid var(--border, rgba(0,0,0,.08)); }
+  .help-accordion .accordion-item { border: none; border-bottom: 1px solid var(--border, rgba(0,0,0,.07)); }
+  .help-accordion .accordion-button {
+    font-size: 12.5px; font-weight: 600; padding: 11px 14px;
+    background: transparent; color: var(--ink, #0e1117); box-shadow: none; line-height: 1.4;
+  }
+  .help-accordion .accordion-button:not(.collapsed) {
+    color: var(--blue, #1a4fa0); background: var(--blue-bg, #e8eef8); box-shadow: none;
+  }
+  .help-accordion .accordion-body {
+    font-size: 12.5px; color: var(--ink-soft, #444);
+    padding: 9px 14px 13px; line-height: 1.6;
+    background: var(--surface, #f5f5f7);
+  }
+  .help-accordion .accordion-body code {
+    background: rgba(26,79,160,.10); border-radius: 4px;
+    padding: 1px 4px; font-size: 11px; color: var(--blue, #1a4fa0);
+  }
+  .help-empty { padding: 28px 16px; text-align: center; font-size: 13px; color: var(--ink-soft, #888); }
+  @media (max-width: 480px) { .assist-dock { right: 12px; bottom: 12px; gap: 8px; } }
   </style>
   {% block extra_head %}{% endblock %}
 </head>
 
 {% with unidad_slug=request.session.unidad_negocio|lower|default:"imperandina" %}
-<body class="theme-{{ unidad_slug }}">
+<body class="theme-{{ unidad_slug }}" data-page="{{ request.resolver_match.view_name }}">
 
 <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 <aside class="sidebar" id="appSidebar">
@@ -260,6 +380,40 @@
   </div>
 </div>
 
+<!-- ── DOCK DE ASISTENCIA (inferior derecha) — Ayuda · Resumen · Progreso ──
+     Los botones de Resumen (Despiece) y Progreso (partial checkpoint) se
+     reubican aquí por JS cuando existen en la página. -->
+<div class="assist-dock" id="assistDock">
+  <button class="assist-fab assist-fab--help" type="button" onclick="abrirAyuda()"
+          title="Ayuda rápida">
+    <span class="assist-fab__icon"><i class="bi bi-question-circle-fill"></i></span>
+    <span class="assist-fab__label">Ayuda</span>
+  </button>
+</div>
+
+<!-- ── HELP OFFCANVAS ── -->
+<div class="offcanvas offcanvas-end" id="helpOffcanvas" tabindex="-1"
+     aria-labelledby="helpOffcanvasTitle">
+  <div class="offcanvas-header">
+    <div>
+      <h6 class="offcanvas-title mb-0" id="helpOffcanvasTitle">Ayuda rápida</h6>
+      <p style="font-size:11px;color:var(--blue,#1a4fa0);margin:2px 0 0;opacity:.7;">
+        Información contextual de esta pantalla
+      </p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="help-search-wrap">
+    <div class="help-search-inner">
+      <i class="bi bi-search"></i>
+      <input type="search" id="helpSearch" placeholder="Buscar en ayuda…" autocomplete="off">
+    </div>
+  </div>
+  <div class="offcanvas-body p-0" id="helpOffcanvasBody">
+    <!-- Llenado por JS al abrir -->
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{% static 'js/modals.js' %}"></script>
 
@@ -343,6 +497,161 @@ document.querySelectorAll('[data-auto-dismiss]').forEach(function (bar) {
     setTimeout(function () { if (bar.parentNode) bar.parentNode.removeChild(bar); }, 400);
   }, 4000);
 });
+</script>
+
+<script src="{% static 'js/help_faq.js' %}"></script>
+<script>
+/* ── HELP SYSTEM ─────────────────────────────────────────────────────────── */
+(function () {
+  'use strict';
+
+  function _escH(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ── Sistema único de paneles flotantes ──────────────────────────────────
+     Las tres pestañas (Ayuda, Progreso, Resumen) comparten un solo sistema:
+     abrir una cierra las otras dos; volver a tocar la abierta la cierra. */
+  var _FLOATING_PANELS = ['helpOffcanvas', 'cpOffcanvas', 'resumenOffcanvas'];
+
+  window.closeAllFloatingPanels = function (exceptId) {
+    if (!window.bootstrap) return;
+    _FLOATING_PANELS.forEach(function (id) {
+      if (id === exceptId) return;
+      var el = document.getElementById(id);
+      if (!el) return;
+      var inst = bootstrap.Offcanvas.getInstance(el);
+      if (inst) inst.hide();
+    });
+  };
+
+  /* Devuelve true si el panel solicitado YA estaba abierto (toggle → se cierra
+     y el llamador debe abortar la apertura). Si estaba cerrado, cierra los
+     demás y devuelve false para que el llamador continúe abriéndolo. */
+  window.toggleFloatingPanel = function (id) {
+    var el = document.getElementById(id);
+    if (el && el.classList.contains('show') && window.bootstrap) {
+      var inst = bootstrap.Offcanvas.getInstance(el);
+      if (inst) inst.hide();
+      return true;
+    }
+    window.closeAllFloatingPanels(id);
+    return false;
+  };
+
+  window.abrirAyuda = function () {
+    /* Toggle excluyente: si ya está abierta se cierra; si no, cierra las otras. */
+    if (window.toggleFloatingPanel && window.toggleFloatingPanel('helpOffcanvas')) return;
+
+    var pageKey = document.body.dataset.page || '_default';
+    var faq     = (typeof HELP_FAQ !== 'undefined' && HELP_FAQ) ? HELP_FAQ : {};
+    var data    = faq[pageKey] || faq['_default'] || {};
+    var preguntas = data.preguntas || [];
+    var tips      = data.tips      || [];
+    var titulo    = data.titulo    || 'Ayuda rápida';
+
+    /* título del offcanvas */
+    var titleEl = document.getElementById('helpOffcanvasTitle');
+    if (titleEl) titleEl.textContent = titulo;
+
+    /* limpiar buscador */
+    var searchEl = document.getElementById('helpSearch');
+    if (searchEl) searchEl.value = '';
+
+    /* construir cuerpo */
+    var body = document.getElementById('helpOffcanvasBody');
+    if (!body) return;
+
+    var html = '';
+
+    /* tips */
+    if (tips.length) {
+      html += '<div class="help-section-label">Tips rápidos</div>';
+      tips.forEach(function (t) {
+        html += '<div class="help-tip">' + t + '</div>';
+      });
+    }
+
+    /* preguntas frecuentes */
+    if (preguntas.length) {
+      html += '<div class="help-section-label">Preguntas frecuentes</div>';
+      html += '<div class="accordion help-accordion" id="helpAccordion">';
+      preguntas.forEach(function (item, i) {
+        var id = 'helpQ' + i;
+        var searchData = _escH((item.q + ' ' + (item.a || '').replace(/<[^>]+>/g, '')).toLowerCase());
+        html +=
+          '<div class="accordion-item help-faq-item" data-search="' + searchData + '">' +
+            '<h2 class="accordion-header">' +
+              '<button class="accordion-button collapsed" type="button"' +
+                      ' data-bs-toggle="collapse" data-bs-target="#' + id + '"' +
+                      ' aria-expanded="false" aria-controls="' + id + '">' +
+                _escH(item.q) +
+              '</button>' +
+            '</h2>' +
+            '<div id="' + id + '" class="accordion-collapse collapse"' +
+                 ' data-bs-parent="#helpAccordion">' +
+              '<div class="accordion-body">' + (item.a || '') + '</div>' +
+            '</div>' +
+          '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (!tips.length && !preguntas.length) {
+      html = '<div class="help-empty">No hay ayuda disponible para esta pantalla.</div>';
+    }
+
+    body.innerHTML = html;
+
+    /* mostrar todas las items (reset filtro) */
+    body.querySelectorAll('.help-faq-item').forEach(function (el) { el.style.display = ''; });
+
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('helpOffcanvas')).show();
+  };
+
+  /* Reubicar al dock de asistencia los botones definidos en otras plantillas
+     (p. ej. Resumen del Despiece). El orden visual lo controla la propiedad
+     CSS `order`, no el orden de inserción. */
+  document.addEventListener('DOMContentLoaded', function () {
+    var dock = document.getElementById('assistDock');
+    if (!dock) return;
+    document.querySelectorAll('.assist-fab').forEach(function (el) {
+      if (el.parentElement !== dock) dock.appendChild(el);
+    });
+  });
+
+  /* buscador: se activa sobre los items renderizados dinámicamente */
+  document.addEventListener('DOMContentLoaded', function () {
+    var searchEl = document.getElementById('helpSearch');
+    if (!searchEl) return;
+    searchEl.addEventListener('input', function () {
+      var q    = this.value.trim().toLowerCase();
+      var body = document.getElementById('helpOffcanvasBody');
+      if (!body) return;
+      var items   = body.querySelectorAll('.help-faq-item');
+      var visible = 0;
+      items.forEach(function (item) {
+        var match = !q || (item.dataset.search || '').includes(q);
+        item.style.display = match ? '' : 'none';
+        if (match) visible++;
+      });
+      /* mensaje sin resultados */
+      var noRes = body.querySelector('.help-no-results-dyn');
+      if (q && visible === 0) {
+        if (!noRes) {
+          noRes = document.createElement('p');
+          noRes.className = 'help-empty help-no-results-dyn';
+          body.appendChild(noRes);
+        }
+        noRes.textContent = 'Sin resultados para «' + q + '»';
+        noRes.style.display = '';
+      } else if (noRes) {
+        noRes.style.display = 'none';
+      }
+    });
+  });
+})();
 </script>
 
 {% block extra_js %}{% endblock %}

@@ -241,6 +241,44 @@ html, body { overflow-y: auto !important; height: auto !important; }
   padding: 24px 0 8px;
 }
 
+/* ══ Botones de agregar — más visibles ═══════════════════════════════════ */
+#btnAddSubconjunto,
+#btnAddVar {
+  background: var(--theme-accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+#btnAddSubconjunto:hover,
+#btnAddVar:hover { opacity: .88; }
+.sq-add-comp-btn {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-accent);
+  background: var(--theme-accent-pale, rgba(59,130,246,.08));
+  border: 1.5px solid var(--theme-accent-border, rgba(59,130,246,.25));
+  border-radius: 7px;
+  padding: 5px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.sq-add-comp-btn:hover {
+  background: var(--theme-accent-pale, rgba(59,130,246,.15));
+  border-color: var(--theme-accent);
+}
+
 </style>
 {% endblock %}
 
@@ -269,7 +307,7 @@ html, body { overflow-y: auto !important; height: auto !important; }
           {% endif %}
 
           <!-- ══ 1. DATOS BÁSICOS ══════════════════════════════════════════ -->
-          <div class="sf-block">
+          <div class="sf-block" id="anchorDatos">
             <div class="sf-block__head">
               <div class="sf-block__head-left">
                 <span class="sf-block__num">1</span>
@@ -338,6 +376,25 @@ html, body { overflow-y: auto !important; height: auto !important; }
                 {% if form.imagen_tecnica.errors %}<div class="text-danger" style="font-size:11px;">{{ form.imagen_tecnica.errors.0 }}</div>{% endif %}
               </div>
 
+            </div>
+          </div>
+
+          <!-- ══ NOTAS TÉCNICAS — consulta para el usuario final ════════════ -->
+          <div class="sf-block" id="anchorNotas">
+            <div class="sf-block__head">
+              <div class="sf-block__head-left">
+                <span class="sf-block__num"><i class="bi bi-journal-text"></i></span>
+                <span class="sf-block__label">Notas</span>
+              </div>
+            </div>
+            <div class="sf-block__body">
+              <div class="sf-field">
+                <label class="sf-label">Notas técnicas
+                  <span style="font-weight:400;font-size:10.5px;">(consulta para el usuario final — se muestran en el Despiece Maestro)</span>
+                </label>
+                {{ form.notas_tecnicas }}
+                {% if form.notas_tecnicas.errors %}<div class="text-danger" style="font-size:11px;">{{ form.notas_tecnicas.errors.0 }}</div>{% endif %}
+              </div>
             </div>
           </div>
 
@@ -611,27 +668,33 @@ html, body { overflow-y: auto !important; height: auto !important; }
           <div id="seccionConstructivo">
 
             <!-- 2. Variables de entrada -->
-            <div class="sf-block">
+            <div class="sf-block" id="anchorVariables">
               <div class="sf-block__head">
                 <div class="sf-block__head-left">
                   <span class="sf-block__num">2</span>
                   <span class="sf-block__label">Variables de entrada</span>
                 </div>
-                <button type="button" class="btn btn-ghost btn-xs" id="btnAddVar">+ Variable</button>
+                <button type="button" id="btnAddVar">
+                  <i class="bi bi-plus"></i> Agregar variable
+                </button>
               </div>
               <div class="sf-block__body">
                 <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
                   Parámetros que el usuario ingresará al calcular el despiece.
                   Ej: <code>total_powergrip</code>, <code>desperdicio</code>.
+                  Para <strong>Opción única</strong>, separa las opciones con punto y coma.
+                  Ej: <code>4; 6</code>
                 </p>
                 <div style="overflow-x:auto;">
                   <table class="rows-table" id="tbVars">
                     <thead>
                       <tr>
-                        <th style="width:160px;">Variable *</th>
+                        <th style="width:150px;">Variable *</th>
                         <th>Etiqueta *</th>
-                        <th style="width:90px;">Unidad</th>
-                        <th style="width:120px;">Valor por defecto</th>
+                        <th style="width:80px;">Unidad</th>
+                        <th style="width:110px;">Valor por defecto</th>
+                        <th style="width:110px;">Tipo</th>
+                        <th style="width:140px;">Opciones <span style="font-weight:400;font-size:9px;letter-spacing:0;">(si Opción única)</span></th>
                         <th style="width:36px;"></th>
                       </tr>
                     </thead>
@@ -642,6 +705,20 @@ html, body { overflow-y: auto !important; height: auto !important; }
                         <td><input type="text" name="var_label[]" class="form-control form-control-sm" value="{{ v.label }}" placeholder="Etiqueta legible" required></td>
                         <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" value="{{ v.unidad }}" placeholder="und"></td>
                         <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="{{ v.valor_default }}"></td>
+                        <td>
+                          <select name="var_tipo[]" class="form-select form-select-sm var-tipo-sel"
+                                  onchange="toggleVarOpciones(this)">
+                            {% for val, lbl in tipo_entrada_choices %}
+                            <option value="{{ val }}"{% if v.tipo_entrada == val %} selected{% endif %}>{{ lbl }}</option>
+                            {% endfor %}
+                          </select>
+                        </td>
+                        <td>
+                          <input type="text" name="var_opciones[]" class="form-control form-control-sm var-opciones-inp"
+                                 value="{{ v.opciones|join:'; ' }}"
+                                 placeholder="Ej: 4; 6"
+                                 {% if v.tipo_entrada != 'OPCION_UNICA' %}style="display:none;"{% endif %}>
+                        </td>
                         <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
                       </tr>
                       {% endfor %}
@@ -657,7 +734,7 @@ html, body { overflow-y: auto !important; height: auto !important; }
             </div>
 
             <!-- 3. Receta técnica del subsistema — SUBCONJUNTOS -->
-            <div class="sf-block">
+            <div class="sf-block" id="anchorReceta">
               <div class="sf-block__head">
                 <div class="sf-block__head-left">
                   <span class="sf-block__num">3</span>
@@ -687,7 +764,7 @@ html, body { overflow-y: auto !important; height: auto !important; }
             </div>
 
             <!-- 4. Reglas APU -->
-            <div class="sf-block">
+            <div class="sf-block" id="anchorReglas">
               <div class="sf-block__head">
                 <div class="sf-block__head-left">
                   <span class="sf-block__num">4</span>
@@ -758,6 +835,159 @@ html, body { overflow-y: auto !important; height: auto !important; }
     </div>
   </div>
 </div>
+<!-- ══ Checkpoint: configuración + panel reutilizable ════════════════════ -->
+<script>
+window.CP_TITULO    = "{% if form.instance.pk %}Progreso del subsistema{% else %}Nuevo subsistema{% endif %}";
+window.CP_FORM_ID   = "formSubsistema";
+window.CP_WATCH_IDS = ["contenedorSubconjuntos", "varRows", "reglaRows", "ptRows", "cqRows"];
+
+function _esConsumoActivo() {
+  const el = document.getElementById('seccionConstructivo');
+  return el ? el.style.display === 'none' : false;
+}
+function evalDatosGenerales() {
+  const errores = [], advertencias = [];
+  let puntaje = 0;
+  const sistema = document.querySelector('select[name="sistema"]');
+  const codigo  = document.querySelector('input[name="codigo"]');
+  const nombre  = document.querySelector('input[name="nombre"]');
+  if (sistema && sistema.value)        puntaje += 7; else errores.push('Sistema no seleccionado');
+  if (codigo  && codigo.value.trim())  puntaje += 7; else errores.push('Código obligatorio');
+  if (nombre  && nombre.value.trim())  puntaje += 6; else errores.push('Nombre obligatorio');
+  return { puntaje, maximo: 20, estado: errores.length ? 'error' : 'ok', errores, advertencias };
+}
+function evalImagen() {
+  const wrap   = document.getElementById('imgPreviewWrap');
+  const imgInp = document.querySelector('input[name="imagen_tecnica"]');
+  const tieneNuevo  = imgInp && imgInp.files && imgInp.files.length > 0;
+  const tieneActual = wrap && wrap.style.display !== 'none';
+  if (tieneNuevo || tieneActual)
+    return { puntaje: 10, maximo: 10, estado: 'ok', errores: [], advertencias: [] };
+  return { puntaje: 5, maximo: 10, estado: 'advertencia', errores: [],
+           advertencias: ['Se recomienda cargar una imagen técnica del sistema'] };
+}
+function evalVariables() {
+  if (_esConsumoActivo()) return { puntaje: 20, maximo: 20, estado: 'ok', errores: [], advertencias: [] };
+  const errores = [], advertencias = [];
+  const filas = document.querySelectorAll('#varRows .var-row');
+  if (filas.length === 0)
+    return { puntaje: 0, maximo: 20, estado: 'error',
+             errores: ['No hay variables de entrada definidas'], advertencias: [] };
+  const vistos = new Set();
+  filas.forEach((tr, i) => {
+    const v    = ((tr.querySelector('input[name="var_variable[]"]')  || {}).value || '').trim();
+    const l    = ((tr.querySelector('input[name="var_label[]"]')     || {}).value || '').trim();
+    const d    = ((tr.querySelector('input[name="var_default[]"]')   || {}).value || '').trim();
+    const tipo = ((tr.querySelector('select[name="var_tipo[]"]')     || {}).value || 'NUMERO');
+    const ops  = ((tr.querySelector('input[name="var_opciones[]"]')  || {}).value || '').trim();
+    if (!v) { errores.push(`Variable #${i+1}: nombre interno obligatorio`); return; }
+    if (/\s/.test(v))                              errores.push(`"${v}": no puede tener espacios`);
+    else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(v)) errores.push(`"${v}": solo letras, números y guión bajo`);
+    if (vistos.has(v)) errores.push(`"${v}": nombre duplicado`); else vistos.add(v);
+    if (!l)            errores.push(`"${v}": etiqueta obligatoria`);
+    if (d.includes(',')) errores.push(`"${v}": valor "${d}" usa coma — cambiar a punto decimal`);
+    if (tipo === 'OPCION_UNICA') {
+      if (!ops) { errores.push(`"${v}": Opción única requiere al menos una opción`); return; }
+      const lista = ops.split(';').map(o => o.trim()).filter(o => o !== '');
+      if (lista.length === 0) { errores.push(`"${v}": las opciones no pueden estar vacías`); return; }
+      const opSet = new Set(lista.map(o => o.toLowerCase()));
+      if (opSet.size !== lista.length) errores.push(`"${v}": opciones duplicadas`);
+      lista.forEach(op => { if (/\d,\d/.test(op)) errores.push(`"${v}": opción "${op}" usa coma decimal`); });
+      if (d !== '') {
+        const enOpciones = lista.some(op => op === d || (parseFloat(op) === parseFloat(d) && !isNaN(parseFloat(op))));
+        if (!enOpciones) errores.push(`"${v}": valor por defecto "${d}" no está en las opciones`);
+      }
+    }
+  });
+  const puntaje = errores.length === 0 ? 20 : Math.max(0, 20 - errores.length * 4);
+  return { puntaje, maximo: 20, estado: errores.length ? 'error' : 'ok', errores, advertencias };
+}
+function evalSubconjuntos() {
+  if (_esConsumoActivo()) return { puntaje: 15, maximo: 15, estado: 'ok', errores: [], advertencias: [] };
+  const errores = [], advertencias = [];
+  const cards = document.querySelectorAll('#contenedorSubconjuntos .sq-card');
+  if (cards.length === 0)
+    return { puntaje: 0, maximo: 15, estado: 'error',
+             errores: ['No hay subconjuntos — la receta técnica está vacía'], advertencias: [] };
+  const vistos = new Set();
+  cards.forEach((card, i) => {
+    const n = ((card.querySelector('.sq-nombre') || {}).value || '').trim();
+    if (!n) { errores.push(`Subconjunto #${i+1}: nombre obligatorio`); return; }
+    if (vistos.has(n.toLowerCase())) errores.push(`"${n}": nombre duplicado`);
+    else vistos.add(n.toLowerCase());
+  });
+  const puntaje = errores.length === 0 ? 15 : Math.max(0, 15 - errores.length * 5);
+  return { puntaje, maximo: 15, estado: errores.length ? 'error' : 'ok', errores, advertencias };
+}
+function evalComponentes() {
+  if (_esConsumoActivo()) return { puntaje: 25, maximo: 25, estado: 'ok', errores: [], advertencias: [] };
+  const errores = [], advertencias = [];
+  const cards = document.querySelectorAll('#contenedorSubconjuntos .sq-card');
+  let totalComps = 0;
+  const codigos = new Set();
+  cards.forEach((card, si) => {
+    const sqLabel = ((card.querySelector('.sq-nombre') || {}).value || '').trim() || `Subconjunto #${si+1}`;
+    const filas = card.querySelectorAll('.sq-comp-row');
+    if (filas.length === 0) advertencias.push(`"${sqLabel}": sin componentes`);
+    filas.forEach((tr, ci) => {
+      totalComps++;
+      const cod  = ((tr.querySelector('.comp-f-codigo')  || {}).value || '').trim();
+      const nom  = ((tr.querySelector('.comp-f-nombre')  || {}).value || '').trim();
+      const form = ((tr.querySelector('.comp-f-formula') || {}).value || '').trim();
+      const und  = ((tr.querySelector('.comp-f-unidad')  || {}).value || '').trim();
+      const lbl  = cod || `comp #${ci+1}`;
+      if (!cod) errores.push(`"${sqLabel}" › comp #${ci+1}: código obligatorio`);
+      else if (codigos.has(cod)) errores.push(`Código "${cod}": duplicado en la receta`);
+      else codigos.add(cod);
+      if (!nom)  errores.push(`"${sqLabel}" › "${lbl}": nombre obligatorio`);
+      if (!form) errores.push(`"${sqLabel}" › "${lbl}": fórmula obligatoria`);
+      else if (/\d,\d/.test(form)) errores.push(`"${sqLabel}" › "${lbl}": fórmula usa coma decimal`);
+      if (!und) advertencias.push(`"${sqLabel}" › "${lbl}": sin unidad`);
+    });
+  });
+  if (totalComps === 0 && cards.length > 0) errores.push('Los subconjuntos no tienen componentes');
+  const puntaje = errores.length === 0 ? 25 : Math.max(0, 25 - Math.min(errores.length * 5, 25));
+  return { puntaje, maximo: 25,
+           estado: errores.length ? 'error' : advertencias.length ? 'advertencia' : 'ok',
+           errores, advertencias };
+}
+function evalReglasAPU() {
+  if (_esConsumoActivo()) return { puntaje: 10, maximo: 10, estado: 'ok', errores: [], advertencias: [] };
+  const errores = [], advertencias = [];
+  const filas = document.querySelectorAll('#reglaRows .regla-row');
+  if (filas.length === 0)
+    return { puntaje: 5, maximo: 10, estado: 'advertencia', errores: [],
+             advertencias: ['Sin reglas APU — el subsistema no generará análisis de precios'] };
+  filas.forEach((tr, i) => {
+    const tipo    = ((tr.querySelector('select[name="regla_tipo_apu[]"]') || {}).value || '');
+    const formula = ((tr.querySelector('input[name="regla_formula[]"]')   || {}).value || '').trim();
+    if (!tipo)    errores.push(`Regla #${i+1}: tipo APU no seleccionado`);
+    if (!formula) errores.push(`Regla #${i+1}: fórmula vacía`);
+    else if (/\d,\d/.test(formula)) errores.push(`Regla #${i+1}: fórmula usa coma decimal`);
+  });
+  const puntaje = errores.length === 0 ? 10 : Math.max(0, 10 - errores.length * 3);
+  return { puntaje, maximo: 10, estado: errores.length ? 'error' : 'ok', errores, advertencias };
+}
+function evalNotas() {
+  const ta = document.querySelector('#anchorNotas textarea');
+  const txt = (ta && ta.value || '').trim();
+  if (txt)
+    return { puntaje: 5, maximo: 5, estado: 'ok', errores: [], advertencias: [] };
+  return { puntaje: 0, maximo: 5, estado: 'advertencia', errores: [],
+           advertencias: ['Sin notas técnicas — se mostrarán al usuario en el Despiece Maestro'] };
+}
+window.CP_SECCIONES = [
+  { label: 'Datos generales',      anchor: 'anchorDatos',     fn: evalDatosGenerales },
+  { label: 'Imagen técnica',       anchor: 'anchorDatos',     fn: evalImagen },
+  { label: 'Notas técnicas',       anchor: 'anchorNotas',     fn: evalNotas },
+  { label: 'Variables de entrada', anchor: 'anchorVariables', fn: evalVariables },
+  { label: 'Subconjuntos',         anchor: 'anchorReceta',    fn: evalSubconjuntos },
+  { label: 'Componentes',          anchor: 'anchorReceta',    fn: evalComponentes },
+  { label: 'Reglas APU',           anchor: 'anchorReglas',    fn: evalReglasAPU },
+];
+</script>
+{% include "ingenieria/_checkpoint_panel.html" %}
+
 {% endblock %}
 
 {% block extra_js %}
@@ -1061,6 +1291,13 @@ html, body { overflow-y: auto !important; height: auto !important; }
   /* ─────────────────────────────────────────────────────────────────────────
      VARIABLES DE ENTRADA (constructivo)
   ───────────────────────────────────────────────────────────────────────── */
+  /* Mostrar/ocultar el campo de opciones según tipo seleccionado */
+  window.toggleVarOpciones = function(sel) {
+    const inp = sel.closest('tr').querySelector('.var-opciones-inp');
+    if (!inp) return;
+    inp.style.display = sel.value === 'OPCION_UNICA' ? '' : 'none';
+  };
+
   document.getElementById('btnAddVar').addEventListener('click', () => {
     const m = document.getElementById('noVarsMsg');
     if (m) m.style.display = 'none';
@@ -1071,6 +1308,16 @@ html, body { overflow-y: auto !important; height: auto !important; }
       <td><input type="text" name="var_label[]" class="form-control form-control-sm" placeholder="Etiqueta legible" required></td>
       <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" placeholder="und"></td>
       <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="0"></td>
+      <td>
+        <select name="var_tipo[]" class="form-select form-select-sm var-tipo-sel" onchange="toggleVarOpciones(this)">
+          <option value="NUMERO">Número</option>
+          <option value="OPCION_UNICA">Opción única</option>
+        </select>
+      </td>
+      <td>
+        <input type="text" name="var_opciones[]" class="form-control form-control-sm var-opciones-inp"
+               placeholder="Ej: 4; 6" style="display:none;">
+      </td>
       <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
     `;
     document.getElementById('varRows').appendChild(tr);
@@ -1177,5 +1424,10 @@ html, body { overflow-y: auto !important; height: auto !important; }
   });
 
 })();
+
+/* El motor del checkpoint vive en _checkpoint_panel.html */
+/* Trigger recálculo después de que el formulario se inicialice */
+if (window.calcularProgreso) window.calcularProgreso();
+
 </script>
 {% endblock %}

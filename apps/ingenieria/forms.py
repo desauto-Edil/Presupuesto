@@ -32,7 +32,7 @@ class SubsistemaForm(forms.ModelForm):
     class Meta:
         model = Subsistema
         fields = [
-            "sistema", "codigo", "nombre", "descripcion", "activo",
+            "sistema", "codigo", "nombre", "descripcion", "notas_tecnicas", "activo",
             "imagen_tecnica",
             # Constructivo
             "variable_referencia_apu", "unidad_apu",
@@ -46,6 +46,10 @@ class SubsistemaForm(forms.ModelForm):
             "codigo": forms.TextInput(attrs={"class": "form-control"}),
             "nombre": forms.TextInput(attrs={"class": "form-control"}),
             "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "notas_tecnicas": forms.Textarea(attrs={
+                "class": "form-control", "rows": 4,
+                "placeholder": "Notas técnicas de consulta para el usuario final. Se mostrarán en el Despiece Maestro.",
+            }),
             "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "variable_referencia_apu": forms.TextInput(attrs={
                 "class": "form-control",

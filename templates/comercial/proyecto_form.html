@@ -118,4 +118,49 @@
     </div>
   </form>
 </div>
+
+<!-- Checkpoint proyecto -->
+<script>
+window.CP_TITULO  = "{% if object %}Editar proyecto{% else %}Nuevo proyecto{% endif %}";
+window.CP_SECCIONES = [
+  {
+    label: 'Datos del proyecto', anchor: '', fn: function() {
+      const cliente = document.querySelector('select[name="cliente"]');
+      const nombre  = document.querySelector('input[name="nombre"]');
+      const errores = [];
+      if (!cliente || !cliente.value) errores.push('Cliente obligatorio');
+      if (!nombre  || !nombre.value.trim()) errores.push('Nombre del proyecto obligatorio');
+      const puntaje = errores.length === 0 ? 40 : Math.max(0, 40 - errores.length * 18);
+      return { puntaje, maximo: 40, estado: errores.length ? 'error' : 'ok', errores, advertencias: [] };
+    }
+  },
+  {
+    label: 'Variables financieras', anchor: '', fn: function() {
+      const trm    = document.querySelector('input[name="trm"]');
+      const margen = document.querySelector('input[name="margen_comercial_pct"]');
+      const iva    = document.querySelector('input[name="iva_pct"]');
+      const advertencias = [];
+      if (!trm    || !trm.value)    advertencias.push('TRM no ingresada');
+      if (!margen || !margen.value) advertencias.push('Margen comercial no ingresado');
+      if (!iva    || !iva.value)    advertencias.push('IVA no ingresado');
+      const puntaje = advertencias.length === 0 ? 35 : Math.max(10, 35 - advertencias.length * 8);
+      return { puntaje, maximo: 35,
+               estado: advertencias.length ? 'advertencia' : 'ok', errores: [], advertencias };
+    }
+  },
+  {
+    label: 'Configuración operativa', anchor: '', fn: function() {
+      const dias = document.querySelector('input[name="dias_duracion"]');
+      const pers = document.querySelector('input[name="num_personas"]');
+      const advertencias = [];
+      if (!dias || !dias.value || Number(dias.value) <= 0) advertencias.push('Días de duración recomendados');
+      if (!pers || !pers.value || Number(pers.value) <= 0) advertencias.push('Número de personas recomendado');
+      const puntaje = advertencias.length === 0 ? 25 : Math.max(5, 25 - advertencias.length * 8);
+      return { puntaje, maximo: 25,
+               estado: advertencias.length ? 'advertencia' : 'ok', errores: [], advertencias };
+    }
+  },
+];
+</script>
+{% include "ingenieria/_checkpoint_panel.html" %}
 {% endblock %}

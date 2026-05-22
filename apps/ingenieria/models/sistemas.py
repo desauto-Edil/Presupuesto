@@ -121,6 +121,14 @@ class Subsistema(models.Model):
     codigo = models.CharField(max_length=50, unique=True)
     nombre = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True, null=True)
+    notas_tecnicas = models.TextField(
+        blank=True, default="",
+        verbose_name="Notas técnicas",
+        help_text=(
+            "Notas técnicas de consulta para el usuario final. Se definen aquí "
+            "y se muestran en el Despiece Maestro de este subsistema."
+        ),
+    )
     activo = models.BooleanField(default=True)
     imagen_tecnica = models.ImageField(
         upload_to="ingenieria/subsistemas/imagenes_tecnicas/",
@@ -244,6 +252,16 @@ class VariableSubsistema(models.Model):
     Variable de entrada que el usuario debe ingresar para un subsistema.
     Equivalente a VariableRequerida en system_defs pero persistida en DB.
     """
+
+    NUMERO     = "NUMERO"
+    TEXTO      = "TEXTO"
+    OPCION_UNICA = "OPCION_UNICA"
+    TIPO_ENTRADA_CHOICES = [
+        (NUMERO,      "Número"),
+        (TEXTO,       "Texto"),
+        (OPCION_UNICA, "Opción única"),
+    ]
+
     subsistema = models.ForeignKey(
         Subsistema, on_delete=models.CASCADE, related_name="variables_db",
     )
@@ -256,6 +274,19 @@ class VariableSubsistema(models.Model):
     valor_default = models.DecimalField(
         max_digits=18, decimal_places=6, default=0,
         help_text="Valor por defecto si el usuario no lo modifica",
+    )
+    tipo_entrada = models.CharField(
+        max_length=20,
+        choices=TIPO_ENTRADA_CHOICES,
+        default=NUMERO,
+        verbose_name="Tipo de entrada",
+        help_text="NUMERO: campo numérico libre. TEXTO: campo texto libre. OPCION_UNICA: lista de opciones.",
+    )
+    opciones = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Opciones",
+        help_text='Lista de valores permitidos para OPCION_UNICA. Ej: ["4", "6"]',
     )
     orden = models.PositiveIntegerField(default=1)
 

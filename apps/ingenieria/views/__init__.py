@@ -160,18 +160,33 @@ def _guardar_reglas_apu(subsistema, post):
             )
 
 
+def _parsear_opciones(raw: str) -> list:
+    """
+    Parsea un string de opciones separadas por punto y coma.
+    Ej: "4; 6"  →  ["4", "6"]
+    Limpia espacios y filtra entradas vacías.
+    """
+    if not raw:
+        return []
+    return [o.strip() for o in raw.split(";") if o.strip()]
+
+
 def _guardar_variables(subsistema, post):
     """
     Guarda las variables de entrada del subsistema desde arrays POST.
-    POST arrays: var_variable[], var_label[], var_unidad[], var_default[]
+    POST arrays: var_variable[], var_label[], var_unidad[], var_default[],
+                 var_tipo[], var_opciones[]
 
-    El campo valor_default persiste el valor numérico por defecto de la variable.
-    Si el valor está vacío se guarda 0.
+    - tipo_entrada: NUMERO | TEXTO | OPCION_UNICA (default: NUMERO)
+    - opciones: string "4; 6" → lista ["4", "6"] (solo para OPCION_UNICA)
+    - valor_default: se guarda siempre; debe ser numérico para NUMERO/OPCION_UNICA
     """
     var_variables = post.getlist("var_variable[]")
     var_labels    = post.getlist("var_label[]")
     var_unidades  = post.getlist("var_unidad[]")
     var_defaults  = post.getlist("var_default[]")
+    var_tipos     = post.getlist("var_tipo[]")
+    var_opciones  = post.getlist("var_opciones[]")
 
     VariableSubsistema.objects.filter(subsistema=subsistema).delete()
     for idx, (variable, label) in enumerate(zip(var_variables, var_labels)):
@@ -184,12 +199,22 @@ def _guardar_variables(subsistema, post):
             default_val = float(raw_default) if raw_default else 0
         except ValueError:
             default_val = 0
+
+        tipo = (var_tipos[idx].strip() if idx < len(var_tipos) else "").upper()
+        if tipo not in ("NUMERO", "TEXTO", "OPCION_UNICA"):
+            tipo = VariableSubsistema.NUMERO
+
+        raw_ops = var_opciones[idx].strip() if idx < len(var_opciones) else ""
+        opciones = _parsear_opciones(raw_ops) if tipo == VariableSubsistema.OPCION_UNICA else []
+
         VariableSubsistema.objects.create(
             subsistema=subsistema,
             variable=variable,
             label=label,
             unidad=var_unidades[idx].strip() if idx < len(var_unidades) else "",
             valor_default=default_val,
+            tipo_entrada=tipo,
+            opciones=opciones,
             orden=idx + 1,
         )
 
@@ -492,6 +517,12 @@ class SubsistemaCreateView(CreateView):
         ctx["productos_tecnicos_existentes"] = []
         ctx["componentes_quimicos_existentes"] = []
         ctx["variables_existentes"] = []
+        # Solo NUMERO y OPCION_UNICA disponibles en el formulario (TEXTO se conserva
+        # en el modelo por compatibilidad con datos existentes, pero no se ofrece).
+        ctx["tipo_entrada_choices"] = [
+            (val, lbl) for val, lbl in VariableSubsistema.TIPO_ENTRADA_CHOICES
+            if val != VariableSubsistema.TEXTO
+        ]
         ctx["subconjuntos_receta"] = []
         ctx["componentes_legacy"] = []
         ctx["subconjuntos_json"] = "[]"
@@ -547,10 +578,16 @@ class SubsistemaUpdateView(UpdateView):
 
         ctx["categorias_producto"] = CategoriaProducto.objects.filter(activa=True).order_by("nombre")
 
-        # Variables de entrada
+        # Variables de entrada (incluye tipo_entrada y opciones para el template)
         ctx["variables_existentes"] = list(
             VariableSubsistema.objects.filter(subsistema=self.object).order_by("orden")
         )
+        # Solo NUMERO y OPCION_UNICA disponibles en el formulario (TEXTO se conserva
+        # en el modelo por compatibilidad con datos existentes, pero no se ofrece).
+        ctx["tipo_entrada_choices"] = [
+            (val, lbl) for val, lbl in VariableSubsistema.TIPO_ENTRADA_CHOICES
+            if val != VariableSubsistema.TEXTO
+        ]
 
         # Subconjuntos con componentes (estructura nueva) + legacy
         subconjuntos, componentes_legacy = _subconjuntos_context(self.object)

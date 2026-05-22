@@ -303,6 +303,45 @@
   </form>
 </div>
 
+<!-- Checkpoint calculador seleccionar -->
+<script>
+window.CP_TITULO  = "Configurar despiece";
+window.CP_FORM_ID = "selForm";
+window.CP_SECCIONES = [
+  {
+    label: 'Sistema confirmado', anchor: '', fn: function() {
+      /* El sistema ya fue seleccionado antes de llegar a esta vista */
+      return { puntaje: 25, maximo: 25, estado: 'ok', errores: [], advertencias: [] };
+    }
+  },
+  {
+    label: 'Subsistema seleccionado', anchor: '', fn: function() {
+      const sel = document.querySelector('input[name="subsistema_pk"]:checked');
+      if (sel) return { puntaje: 40, maximo: 40, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: 0, maximo: 40, estado: 'error',
+               errores: ['Selecciona un subsistema para continuar'], advertencias: [] };
+    }
+  },
+  {
+    label: 'Subconjuntos seleccionados', anchor: '', fn: function() {
+      const subSel = document.querySelector('input[name="subsistema_pk"]:checked');
+      if (!subSel) return { puntaje: 0, maximo: 35, estado: 'error',
+                            errores: ['Selecciona primero un subsistema'], advertencias: [] };
+      const checks = document.querySelectorAll('input[name="subconjuntos[]"]');
+      if (checks.length === 0)
+        return { puntaje: 35, maximo: 35, estado: 'ok', errores: [],
+                 advertencias: ['Este subsistema no tiene subconjuntos definidos'] };
+      const checked = document.querySelectorAll('input[name="subconjuntos[]"]:checked');
+      if (checked.length === 0)
+        return { puntaje: 5, maximo: 35, estado: 'advertencia', errores: [],
+                 advertencias: ['Selecciona al menos un subconjunto'] };
+      return { puntaje: 35, maximo: 35, estado: 'ok', errores: [], advertencias: [] };
+    }
+  },
+];
+</script>
+{% include "ingenieria/_checkpoint_panel.html" %}
+
 <!-- Lightbox overlay -->
 <div id="img-lightbox" onclick="cerrarLightbox()">
   <img id="img-lightbox-img" src="" alt="">

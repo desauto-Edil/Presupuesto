@@ -280,4 +280,33 @@
 
   </div>
 </div>
+
+<!-- Checkpoint sistema -->
+<script>
+window.CP_TITULO  = "{% if form.instance.pk %}Editar sistema{% else %}Nuevo sistema{% endif %}";
+window.CP_SECCIONES = [
+  {
+    label: 'Tipo de sistema', anchor: '', fn: function() {
+      const sel = document.querySelector('input[name="tipo_sistema"]:checked');
+      if (sel) return { puntaje: 20, maximo: 20, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: 0, maximo: 20, estado: 'error',
+               errores: ['Selecciona el tipo de sistema'], advertencias: [] };
+    }
+  },
+  {
+    label: 'Identificación', anchor: '', fn: function() {
+      const codigo = document.querySelector('input[name="codigo"]');
+      const nombre = document.querySelector('input[name="nombre"]');
+      const linea  = document.querySelector('select[name="linea_negocio"]');
+      const errores = [];
+      if (!codigo || !codigo.value.trim()) errores.push('Código obligatorio');
+      if (!nombre || !nombre.value.trim()) errores.push('Nombre obligatorio');
+      if (!linea  || !linea.value)         errores.push('Línea de negocio obligatoria');
+      const puntaje = errores.length === 0 ? 80 : Math.max(0, 80 - errores.length * 26);
+      return { puntaje, maximo: 80, estado: errores.length ? 'error' : 'ok', errores, advertencias: [] };
+    }
+  },
+];
+</script>
+{% include "ingenieria/_checkpoint_panel.html" %}
 {% endblock %}

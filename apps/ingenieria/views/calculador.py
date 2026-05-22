@@ -194,7 +194,14 @@ class DespieceMaestroView(DetailView):
         svc = DespieceMaestroService(dm)
 
         # Variables de entrada para el formulario
-        ctx["variables_requeridas"] = svc.get_variables_requeridas()
+        # Si hay subconjuntos seleccionados, mostrar solo las variables que usan esos subconjuntos.
+        todas_variables = svc.get_variables_requeridas()
+        variables_filtradas = svc.get_variables_para_subconjuntos()
+        vars_filtradas_nombres = {v["variable"] for v in variables_filtradas}
+        variables_extra = [v for v in todas_variables if v["variable"] not in vars_filtradas_nombres]
+        ctx["variables_requeridas"] = variables_filtradas
+        ctx["variables_extra"]      = variables_extra
+        ctx["variables_filtradas"]  = bool(variables_extra)
 
         # Líneas agrupadas por subconjunto (si ya fue guardado)
         ctx["lineas_por_subconjunto"] = _agrupar_lineas(dm.lineas.all())
@@ -206,6 +213,9 @@ class DespieceMaestroView(DetailView):
 
         # Proyecto asociado (si existe) para mostrar vínculo de regreso
         ctx["proyecto"] = dm.proyecto
+
+        # Notas técnicas del subsistema (consulta para el usuario final)
+        ctx["notas_tecnicas"] = (dm.subsistema.notas_tecnicas or "").strip()
 
         # Controla visibilidad del botón APU:
         # solo despieces guardados Y asociados a un proyecto pueden generar APU.
@@ -248,6 +258,7 @@ class DespieceMaestroView(DetailView):
                 "unidad":                linea.unidad,
                 "categoria_nombre":      linea.categoria_nombre,
                 "formula_texto":         linea.formula_texto,
+                "valores_usados":        linea.valores_usados or {},
                 "variable_salida":       linea.variable_salida,
                 "variable_referencia_apu": linea.variable_referencia_apu,
                 "unidad_apu":            linea.unidad_apu,

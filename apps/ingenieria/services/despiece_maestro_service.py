@@ -24,6 +24,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Nombres matemáticos seguros expuestos al evaluar fórmulas (math.*).
+# Se excluyen al capturar valores_usados para no ensuciar el snapshot.
+_SAFE_NAMES_KEYS = {k for k in math.__dict__ if not k.startswith("_")}
+
 
 class DespieceMaestroService:
     def __init__(self, despiece: "DespieceMaestro"):
@@ -79,6 +83,12 @@ class DespieceMaestroService:
 
         ctx = self._build_contexto()
 
+        # Validar variables OPCION_UNICA antes de calcular
+        variables_usuario = self.despiece.variables_entrada or {}
+        errores_vars = self.validar_variables_entrada(variables_usuario)
+        if errores_vars:
+            raise ValueError("\n".join(errores_vars))
+
         # Filtrar por subconjuntos seleccionados
         sq_ids = list(self.despiece.subconjuntos.values_list("pk", flat=True))
 
@@ -101,7 +111,19 @@ class DespieceMaestroService:
 
         resultados: list[dict] = []
 
+        import re as _re
+        _token_re = _re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b')
+
         for comp in qs:
+            # Snapshot de los valores usados por ESTA fórmula (variables + salidas
+            # intermedias ya resueltas), tomado del contexto ANTES de evaluar.
+            valores_usados = {}
+            if comp.formula_texto:
+                for tok in _token_re.findall(comp.formula_texto):
+                    if tok in ctx and tok not in _SAFE_NAMES_KEYS:
+                        val = ctx[tok]
+                        valores_usados[tok] = float(val) if isinstance(val, (int, float)) else val
+
             try:
                 cantidad_float = comp.evaluar(ctx)
                 if comp.variable_salida:
@@ -125,6 +147,7 @@ class DespieceMaestroService:
                 "componente_codigo":       comp.codigo,
                 "componente_nombre":       comp.nombre,
                 "formula_texto":           comp.formula_texto,
+                "valores_usados":          valores_usados,
                 "cantidad_calculada":      cantidad_f,
                 "cantidad_redondeada":     math.ceil(cantidad_f) if not error else 0,
                 "unidad":                  comp.unidad,
@@ -212,6 +235,7 @@ class DespieceMaestroService:
                 componente_codigo=r["componente_codigo"],
                 componente_nombre=r["componente_nombre"],
                 formula_texto=r["formula_texto"],
+                valores_usados=r.get("valores_usados") or {},
                 cantidad_calculada=cantidad,
                 cantidad_redondeada=cant_redondeada,
                 unidad=r["unidad"],
@@ -243,7 +267,7 @@ class DespieceMaestroService:
         """
         Retorna las variables de entrada del subsistema para renderizar el formulario.
 
-        [{variable, label, unidad, valor_actual, valor_default}]
+        [{variable, label, unidad, valor_actual, valor_default, tipo_entrada, opciones}]
         """
         from apps.ingenieria.models import VariableSubsistema
 
@@ -252,10 +276,101 @@ class DespieceMaestroService:
         for var in VariableSubsistema.objects.filter(subsistema=self.subsistema).order_by("orden"):
             valor_actual = params.get(var.variable, "")
             result.append({
-                "variable":     var.variable,
-                "label":        var.label,
-                "unidad":       var.unidad,
-                "valor_actual": valor_actual if valor_actual != "" else float(var.valor_default),
+                "variable":      var.variable,
+                "label":         var.label,
+                "unidad":        var.unidad,
+                "valor_actual":  valor_actual if valor_actual != "" else float(var.valor_default),
                 "valor_default": float(var.valor_default),
+                "tipo_entrada":  var.tipo_entrada,
+                "opciones":      var.opciones or [],
             })
         return result
+
+    def _tokens_subconjuntos_seleccionados(self) -> set[str] | None:
+        """
+        Devuelve el conjunto de tokens (identificadores) que aparecen en las
+        fórmulas de los componentes de los subconjuntos seleccionados.
+
+        Retorna None si NO hay subconjuntos seleccionados (subsistema sin
+        subconjuntos): en ese caso todas las variables se consideran en uso.
+
+        Best-effort: usa regex sobre formula_texto + variable_salida.
+        """
+        import re
+        from apps.ingenieria.models import ComponenteSubsistema
+
+        sq_ids = list(self.despiece.subconjuntos.values_list("pk", flat=True))
+        if not sq_ids:
+            return None
+
+        formulas = ComponenteSubsistema.objects.filter(
+            subsistema=self.subsistema,
+            subconjunto__in=sq_ids,
+        ).values_list("formula_texto", "variable_salida")
+
+        token_re = re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b')
+        tokens_usados: set[str] = set()
+        for formula, var_salida in formulas:
+            if formula:
+                tokens_usados.update(token_re.findall(formula))
+            if var_salida:
+                tokens_usados.add(var_salida)
+        return tokens_usados
+
+    def get_variables_para_subconjuntos(self) -> list[dict]:
+        """
+        Como get_variables_requeridas(), pero filtra solo las variables que
+        realmente aparecen en las fórmulas de los subconjuntos seleccionados.
+
+        Si no hay subconjuntos seleccionados (subsistema sin subconjuntos),
+        devuelve todas las variables del subsistema.
+
+        El filtrado es best-effort: si ninguna variable coincide, devuelve todas.
+        """
+        todas = self.get_variables_requeridas()
+        tokens_usados = self._tokens_subconjuntos_seleccionados()
+        if tokens_usados is None:
+            return todas
+
+        filtradas = [v for v in todas if v["variable"] in tokens_usados]
+        return filtradas if filtradas else todas
+
+    def validar_variables_entrada(self, variables: dict) -> list[str]:
+        """
+        Valida que los valores ingresados sean válidos para su tipo.
+        Retorna lista de errores (vacía = todo OK).
+
+        Solo valida OPCION_UNICA, y SOLO para las variables realmente usadas por
+        los componentes de los subconjuntos seleccionados. Una opción única que
+        no es usada por la selección actual NO bloquea cálculo ni guardado.
+        """
+        from apps.ingenieria.models import VariableSubsistema
+
+        tokens_usados = self._tokens_subconjuntos_seleccionados()
+
+        errores = []
+        for var in VariableSubsistema.objects.filter(
+            subsistema=self.subsistema,
+            tipo_entrada=VariableSubsistema.OPCION_UNICA,
+        ).order_by("orden"):
+            if not var.opciones:
+                continue
+            # Saltar variables que no usan los subconjuntos seleccionados.
+            if tokens_usados is not None and var.variable not in tokens_usados:
+                continue
+            valor = str(variables.get(var.variable, "")).strip()
+            # Comparar como string y como float (para tolerar "4" vs "4.0")
+            opciones_norm = []
+            for op in var.opciones:
+                opciones_norm.append(str(op).strip())
+                try:
+                    opciones_norm.append(str(float(op)))
+                except (ValueError, TypeError):
+                    pass
+            if valor not in opciones_norm:
+                opciones_str = "; ".join(str(o) for o in var.opciones)
+                errores.append(
+                    f"El valor seleccionado para '{var.label}' no es válido. "
+                    f"Opciones permitidas: {opciones_str}."
+                )
+        return errores

@@ -110,6 +110,14 @@ class DespieceMaestroLinea(models.Model):
     componente_codigo  = models.CharField(max_length=80)
     componente_nombre  = models.CharField(max_length=200, blank=True)
     formula_texto      = models.TextField(blank=True)
+    valores_usados     = models.JSONField(
+        default=dict, blank=True,
+        help_text=(
+            "Snapshot de los valores usados al evaluar la fórmula de esta línea "
+            "(variables de entrada + salidas intermedias). Permite reconstruir "
+            "fórmula + valores + resultado sin depender de la receta actual."
+        ),
+    )
     cantidad_calculada  = models.DecimalField(max_digits=18, decimal_places=6, default=0)
     cantidad_redondeada = models.IntegerField(
         null=True, blank=True,

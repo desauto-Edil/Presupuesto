@@ -43,11 +43,59 @@
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 .wb-layout {
   display: grid;
-  grid-template-columns: 264px 1fr;
+  grid-template-columns: 232px 1fr;
   gap: 20px;
   align-items: start;
 }
-@media (max-width: 900px) { .wb-layout { grid-template-columns: 1fr; } }
+/* Con notas técnicas: tercera zona a la derecha */
+.wb-layout--notas { grid-template-columns: 232px 1fr 248px; }
+@media (max-width: 1400px) { .wb-layout--notas { grid-template-columns: 232px 1fr; } }
+@media (max-width: 900px)  { .wb-layout, .wb-layout--notas { grid-template-columns: 1fr; } }
+
+/* ── Panel de Notas técnicas (zona 3) ────────────────────────────────────── */
+.wb-notas {
+  background: #fff; border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08); box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden; position: sticky; top: 72px;
+}
+.wb-notas__head {
+  padding: 13px 16px; border-bottom: 1px solid rgba(0,0,0,.08);
+  border-top: 3px solid #1a4fa0;
+  background: linear-gradient(135deg, rgba(26,79,160,.10) 0%, rgba(255,255,255,0) 80%);
+}
+.wb-notas__title {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: #1a4fa0;
+  display: flex; align-items: center; gap: 6px;
+}
+.wb-notas__body {
+  padding: 12px 15px; font-size: 13px; line-height: 1.6; color: #444;
+  white-space: pre-wrap; max-height: calc(100vh - 200px); overflow-y: auto;
+}
+
+/* ── Ojo de detalle: fórmula + valores + resultado ───────────────────────── */
+.dp-eye-btn {
+  background: none; border: none; padding: 0 0 0 6px; cursor: pointer;
+  color: #aaa; font-size: 13px; vertical-align: middle;
+}
+.dp-eye-btn:hover { color: var(--theme-accent); }
+.det-formula {
+  font-family: ui-monospace, monospace; font-size: 12.5px;
+  background: #f6f8fa; border-radius: 8px; padding: 9px 12px; color: #24292f;
+  word-break: break-word;
+}
+.det-sub { font-family: ui-monospace, monospace; font-size: 12.5px;
+  background: #f6f8fa; border-radius: 8px; padding: 9px 12px; color: #24292f; word-break: break-word; }
+.det-val-tag {
+  display: inline-block; background: var(--theme-accent-pale,#e8f0fe);
+  color: var(--theme-accent); border-radius: 6px; padding: 1px 7px;
+  font-size: 11.5px; font-weight: 600; margin: 2px 4px 2px 0;
+  font-family: ui-monospace, monospace;
+}
+.det-result {
+  font-size: 16px; font-weight: 800; color: #198754;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Panel de variables ─────────────────────────────────────────────────── */
 .wb-panel {
@@ -281,7 +329,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="wb-layout">
+<div class="wb-layout{% if notas_tecnicas %} wb-layout--notas{% endif %}">
 
   <!-- ── Panel izquierdo: variables ── -->
   <div class="wb-panel">
@@ -291,6 +339,18 @@
     </div>
 
     <div class="wb-panel__body">
+      {% if variables_filtradas %}
+      <div style="font-size:10.5px;color:var(--theme-accent);background:var(--theme-accent-pale);
+                  border-radius:6px;padding:5px 9px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+        <i class="bi bi-funnel-fill" style="flex-shrink:0;"></i>
+        <span>Mostrando variables para los subconjuntos seleccionados.</span>
+        <button type="button" onclick="mostrarTodasVariables()"
+                style="margin-left:auto;background:none;border:none;padding:0;font-size:10.5px;
+                       color:var(--theme-accent);text-decoration:underline;cursor:pointer;">
+          Ver todas
+        </button>
+      </div>
+      {% endif %}
       {% if variables_requeridas %}
         {% for v in variables_requeridas %}
         <div class="var-row">
@@ -298,13 +358,71 @@
             {{ v.label|default:v.variable }}
             {% if v.unidad %}<span class="var-unit">{{ v.unidad }}</span>{% endif %}
           </label>
-          <input type="number" id="var_{{ v.variable }}"
-                 class="form-control var-input"
-                 data-var="{{ v.variable }}"
-                 value="{{ v.valor_actual }}"
-                 step="any" autocomplete="off">
+          {% if v.tipo_entrada == 'OPCION_UNICA' and v.opciones %}
+            {# Renderizar como chips seleccionables para OPCION_UNICA #}
+            <div class="var-chips" data-var="{{ v.variable }}"
+                 style="display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;">
+              {% for op in v.opciones %}
+              <button type="button"
+                      class="var-chip{% if op|stringformat:'s' == v.valor_actual|stringformat:'s' %} var-chip--active{% endif %}"
+                      data-val="{{ op }}"
+                      onclick="seleccionarChip(this)"
+                      style="padding:3px 11px;border-radius:20px;border:1.5px solid var(--theme-accent);
+                             font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;
+                             background:{% if op|stringformat:'s' == v.valor_actual|stringformat:'s' %}var(--theme-accent){% else %}transparent{% endif %};
+                             color:{% if op|stringformat:'s' == v.valor_actual|stringformat:'s' %}#fff{% else %}var(--theme-accent){% endif %};">
+                {{ op }}
+              </button>
+              {% endfor %}
+            </div>
+            {# Input oculto que porta el valor al JS getVariables() #}
+            <input type="hidden" id="var_{{ v.variable }}"
+                   class="var-input"
+                   data-var="{{ v.variable }}"
+                   value="{{ v.valor_actual }}">
+          {% else %}
+            {# Input numérico/texto normal #}
+            <input type="{% if v.tipo_entrada == 'TEXTO' %}text{% else %}number{% endif %}"
+                   id="var_{{ v.variable }}"
+                   class="form-control var-input"
+                   data-var="{{ v.variable }}"
+                   value="{{ v.valor_actual }}"
+                   {% if v.tipo_entrada != 'TEXTO' %}step="any"{% endif %}
+                   autocomplete="off">
+          {% endif %}
         </div>
         {% endfor %}
+        {% if variables_extra %}
+        <div id="varExtraSection" style="display:none;">
+          {% for v in variables_extra %}
+          <div class="var-row">
+            <label for="var_{{ v.variable }}">
+              {{ v.label|default:v.variable }}
+              {% if v.unidad %}<span class="var-unit">{{ v.unidad }}</span>{% endif %}
+            </label>
+            {% if v.tipo_entrada == 'OPCION_UNICA' and v.opciones %}
+              <div class="var-chips" data-var="{{ v.variable }}"
+                   style="display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;">
+                {% for op in v.opciones %}
+                <button type="button"
+                        class="var-chip{% if op|stringformat:'s' == v.valor_actual|stringformat:'s' %} var-chip--active{% endif %}"
+                        data-val="{{ op }}" onclick="seleccionarChip(this)">{{ op }}</button>
+                {% endfor %}
+                <input type="hidden" id="var_{{ v.variable }}" class="var-input"
+                       data-var="{{ v.variable }}" value="{{ v.valor_actual }}">
+              </div>
+            {% elif v.tipo_entrada == 'TEXTO' %}
+              <input type="text" id="var_{{ v.variable }}" class="form-control var-input"
+                     data-var="{{ v.variable }}" value="{{ v.valor_actual }}" autocomplete="off">
+            {% else %}
+              <input type="number" id="var_{{ v.variable }}" class="form-control var-input"
+                     data-var="{{ v.variable }}" value="{{ v.valor_actual }}"
+                     step="any" autocomplete="off">
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
       {% else %}
         <div class="text-muted small text-center py-3">Sin variables configuradas.</div>
       {% endif %}
@@ -356,13 +474,15 @@
         {{ despiece.nombre|default:"Despiece" }}
         <span class="text-muted fw-normal" style="font-size:13px">#{{ despiece.pk }}</span>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <div class="wb-result__count" id="resultCount">Cargando…</div>
         <button type="button" id="btnModoConsolidar"
                 class="btn btn-sm btn-outline-secondary"
                 onclick="toggleModoConsolidacion()" style="display:none">
           <i class="bi bi-layers"></i> Consolidar materiales
         </button>
+        <!-- Progreso integrado: el partial _checkpoint_panel monta aquí #cpPill -->
+        <div id="cpProgressSlot" class="cp-progress-slot"></div>
       </div>
     </div>
 
@@ -375,6 +495,32 @@
     {% endif %}
 
     <div id="resultBody"></div>
+  </div>
+
+  {% if notas_tecnicas %}
+  <!-- ── Zona 3: Notas técnicas (consulta) ── -->
+  <aside class="wb-notas">
+    <div class="wb-notas__head">
+      <div class="wb-notas__title"><i class="bi bi-info-circle"></i> Notas técnicas</div>
+    </div>
+    <div class="wb-notas__body">{{ notas_tecnicas }}</div>
+  </aside>
+  {% endif %}
+</div>
+
+<!-- Modal: Detalle de cálculo (ojo) -->
+<div class="modal fade" id="modalDetalle" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-eye me-2"></i>Detalle del cálculo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalDetalleBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -432,12 +578,42 @@ let variablesUsadas = null;
 let modoConsolidacion = false;
 let _nextCid = 0;
 
+/* ── Variables extra (filtradas) ─────────────────────────────────────────── */
+function mostrarTodasVariables() {
+  const sec = document.getElementById('varExtraSection');
+  if (sec) sec.style.display = '';
+  const btn = document.querySelector('[onclick="mostrarTodasVariables()"]');
+  if (btn) btn.closest('[style*="background"]').remove();
+}
+
+/* ── Chips de opción única ───────────────────────────────────────────────── */
+function seleccionarChip(btn) {
+  const wrap = btn.closest('.var-chips');
+  if (!wrap) return;
+  /* Desactivar todos los chips del mismo grupo */
+  wrap.querySelectorAll('.var-chip').forEach(b => {
+    b.classList.remove('var-chip--active');
+    b.style.background = 'transparent';
+    b.style.color = 'var(--theme-accent)';
+  });
+  /* Activar el pulsado */
+  btn.classList.add('var-chip--active');
+  btn.style.background = 'var(--theme-accent)';
+  btn.style.color = '#fff';
+  /* Sincronizar el input oculto */
+  const inp = document.querySelector('.var-input[data-var="' + wrap.dataset.var + '"]');
+  if (inp) inp.value = btn.dataset.val;
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 function getVariables() {
   const v = {};
   document.querySelectorAll('.var-input[data-var]').forEach(inp => {
-    const n = parseFloat(inp.value);
-    if (!isNaN(n)) v[inp.dataset.var] = n;
+    const raw = inp.value;
+    const n = parseFloat(raw);
+    /* Para OPCION_UNICA el input oculto guarda strings como "4" o "6";
+       se envía como número si es parseable, como string si no. */
+    v[inp.dataset.var] = isNaN(n) ? raw : n;
   });
   return v;
 }
@@ -649,7 +825,7 @@ function _rowNormal(f, i, cols) {
   return `<tr data-idx="${i}">
     ${chk}
     <td class="td-comp">${esc(f.componente_nombre)}<small>${esc(f.componente_codigo)}</small></td>
-    <td class="td-cant">${fmt(f.cantidad_calculada, 4)}</td>
+    <td class="td-cant">${fmt(f.cantidad_calculada, 4)}<button type="button" class="dp-eye-btn" title="Ver fórmula y valores usados" onclick="verDetalle(${i})"><i class="bi bi-eye"></i></button></td>
     <td class="td-red"><span class="td-red-pill">${cantRed}</span></td>
     <td class="td-und">${esc(f.unidad)}</td>
     <td><div class="prod-selector">
@@ -969,6 +1145,56 @@ function verOrigen(cid) {
   new bootstrap.Modal(document.getElementById('modalOrigen')).show();
 }
 
+/* ── Ojo de detalle: fórmula + valores usados + resultado ─────────────────── */
+function verDetalle(i) {
+  const f = filasCalc[i];
+  if (!f) return;
+  const formula = f.formula_texto || '';
+  const valores = f.valores_usados || {};
+
+  // Construir fórmula con sustitución textual de los valores conocidos
+  let sustituida = formula;
+  Object.keys(valores).sort((a, b) => b.length - a.length).forEach(k => {
+    const v = valores[k];
+    const vstr = (typeof v === 'number') ? fmt(v, 4) : esc(String(v));
+    sustituida = sustituida.replace(new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g'), vstr);
+  });
+
+  const tags = Object.keys(valores).length
+    ? Object.keys(valores).map(k => {
+        const v = valores[k];
+        return `<span class="det-val-tag">${esc(k)} = ${typeof v === 'number' ? fmt(v, 4) : esc(String(v))}</span>`;
+      }).join('')
+    : '<span class="text-muted small">Sin variables en la fórmula.</span>';
+
+  const cantRed = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada);
+
+  document.getElementById('modalDetalleBody').innerHTML = `
+    <p class="fw-semibold mb-1">${esc(f.componente_nombre)} <small class="text-muted">${esc(f.componente_codigo)}</small></p>
+    <div class="mb-3 small text-muted">${esc(f.subconjunto_nombre || 'General')}</div>
+
+    <div class="text-muted small mb-1">Fórmula usada</div>
+    <div class="det-formula mb-3">${esc(formula) || '<span class="text-muted">— sin fórmula —</span>'}</div>
+
+    <div class="text-muted small mb-1">Valores usados</div>
+    <div class="mb-3">${tags}</div>
+
+    <div class="text-muted small mb-1">Sustitución</div>
+    <div class="det-sub mb-3">${esc(sustituida) || '—'}</div>
+
+    <div class="d-flex align-items-center gap-3">
+      <div><div class="text-muted small">Resultado</div>
+        <span class="det-result">${fmt(f.cantidad_calculada, 4)}</span> <span class="text-muted">${esc(f.unidad || '')}</span></div>
+      <div><div class="text-muted small">Redondeada</div>
+        <span class="fw-bold" style="font-size:16px">${cantRed}</span></div>
+    </div>
+    <p class="text-muted mt-3 mb-0" style="font-size:11px">
+      <i class="bi bi-shield-check"></i> Fórmula y valores son un snapshot guardado; no dependen de la receta actual del componente.
+    </p>`;
+
+  new bootstrap.Modal(document.getElementById('modalDetalle')).show();
+}
+
 /* ── Calcular ─────────────────────────────────────────────────────────────── */
 async function calcular() {
   setLoading('btnCalcular', 'calcSpinner', 'calcIcon', true);
@@ -1057,6 +1283,114 @@ async function guardar() {
   }
 }
 
+/* ── Checkpoint despiece ─────────────────────────────────────────────────── */
+window.CP_TITULO  = "Progreso del despiece";
+/* Integrar el progreso (no flotante) en el encabezado de la tarjeta de resultados */
+window.CP_MOUNT_ID = "cpProgressSlot";
+window.CP_SECCIONES = [
+  {
+    label: 'Variables completas', anchor: '', fn: function() {
+      /* Solo evaluar las variables VISIBLES = requeridas por los
+         subconjuntos/componentes seleccionados. Las variables extra/no usadas
+         viven dentro de #varExtraSection (oculto) y NO cuentan para el
+         progreso, aunque el usuario las despliegue con "Ver todas". */
+      const todos = document.querySelectorAll('.var-input[data-var]');
+      const totalConfiguradas = todos.length;
+      const extra = document.getElementById('varExtraSection');
+      const inputs = Array.prototype.filter.call(
+        todos, inp => !(extra && extra.contains(inp))
+      );
+
+      /* Fallback seguro: no hay variables configuradas en el subsistema. */
+      if (totalConfiguradas === 0)
+        return { puntaje: 30, maximo: 30, estado: 'ok', errores: [], advertencias: [],
+                 info: 'Este subsistema no tiene variables de entrada configuradas.' };
+
+      /* Fallback seguro: no se pudo determinar el subconjunto de variables
+         visibles (no debería pasar) → evaluar todas y avisar discretamente. */
+      let evaluables = inputs;
+      let fallback = false;
+      if (evaluables.length === 0) {
+        evaluables = Array.prototype.slice.call(todos);
+        fallback = true;
+      }
+
+      const errores = [];
+      const advertencias = [];
+      evaluables.forEach(inp => {
+        const nombre = inp.dataset.var;
+        const v = inp.value.toString().trim();
+
+        /* OPCION_UNICA visible: hay un grupo de chips con data-var = nombre.
+           Validar que tenga valor Y que esté dentro de las opciones. */
+        const chips = document.querySelector('.var-chips[data-var="' + nombre + '"]');
+        if (chips) {
+          if (v === '') {
+            advertencias.push(`Selecciona una opción: ${nombre}`);
+            return;
+          }
+          const permitidas = Array.prototype.map.call(
+            chips.querySelectorAll('.var-chip'), c => String(c.dataset.val).trim()
+          );
+          if (permitidas.length && permitidas.indexOf(v) === -1) {
+            errores.push(`Opción no válida en ${nombre}`);
+          }
+          return;
+        }
+
+        /* Numérica / texto: vacía o cero = pendiente. */
+        if (v === '' || v === '0') advertencias.push(`Variable sin valor: ${nombre}`);
+      });
+
+      const incompletas = errores.length + advertencias.length;
+      const puntaje = incompletas === 0 ? 30 : Math.max(5, 30 - incompletas * 5);
+      const estado  = errores.length ? 'error' : (advertencias.length ? 'advertencia' : 'ok');
+      const info = fallback
+        ? `No se pudieron filtrar las variables del cálculo; evaluando las ${evaluables.length} configuradas como respaldo.`
+        : `Variables evaluadas: ${evaluables.length} visible(s) de ${totalConfiguradas} configurada(s) en el subsistema.`;
+
+      return { puntaje, maximo: 30, estado, errores, advertencias, info };
+    }
+  },
+  {
+    label: 'Cálculo ejecutado', anchor: '', fn: function() {
+      const count = document.getElementById('resultCount');
+      const text  = count ? count.textContent : '';
+      const calculado = text && !text.includes('Cargando') && !text.includes('Pendiente');
+      if (calculado)
+        return { puntaje: 30, maximo: 30, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: 0, maximo: 30, estado: 'error',
+               errores: ['Presiona Calcular para ver los materiales'], advertencias: [] };
+    }
+  },
+  {
+    label: 'Productos seleccionados', anchor: '', fn: function() {
+      const filas = document.querySelectorAll('#dpTbody tr[data-idx]');
+      if (filas.length === 0)
+        return { puntaje: 10, maximo: 20, estado: 'advertencia', errores: [],
+                 advertencias: ['Calcula primero para seleccionar productos'] };
+      let sinProducto = 0;
+      filas.forEach(tr => {
+        const inp = tr.querySelector('.prod-input');
+        if (!inp || !inp.classList.contains('has-product')) sinProducto++;
+      });
+      if (sinProducto === 0)
+        return { puntaje: 20, maximo: 20, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: Math.max(5, 20 - sinProducto * 2), maximo: 20, estado: 'advertencia',
+               errores: [], advertencias: [`${sinProducto} componente(s) sin producto asignado`] };
+    }
+  },
+  {
+    label: 'Despiece guardado', anchor: '', fn: function() {
+      const badge = document.querySelector('.badge.bg-success');
+      if (badge)
+        return { puntaje: 20, maximo: 20, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: 0, maximo: 20, estado: 'advertencia', errores: [],
+               advertencias: ['Guarda el despiece para registrar el resultado'] };
+    }
+  },
+];
+
 /* ── Inicialización ───────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   if (LINEAS_INIT.length > 0) {
@@ -1096,5 +1430,93 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('resultCount').textContent = 'Pendiente de calcular';
   }
 });
+
+/* ── Resumen del despiece (solo esta vista) ───────────────────────────────── */
+const RESUMEN_META = {
+  sistema:     "{{ despiece.subsistema.sistema.codigo|escapejs }} · {{ despiece.subsistema.sistema.nombre|escapejs }}",
+  subsistema:  "{{ despiece.subsistema.codigo|escapejs }} · {{ despiece.subsistema.nombre|escapejs }}",
+  subconjuntos: [{% for sq in subconjuntos_seleccionados %}"{{ sq.nombre|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}],
+};
+
+function _resumenRow(label, value, extra) {
+  return `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 16px;border-bottom:1px solid var(--border,#eee);">
+    <span style="font-size:12px;color:#888;">${esc(label)}</span>
+    <span style="font-size:13px;font-weight:600;text-align:right;${extra||''}">${value}</span>
+  </div>`;
+}
+
+window.abrirResumen = function () {
+  /* Toggle excluyente: si ya está abierto se cierra; si no, cierra los otros. */
+  if (window.toggleFloatingPanel && window.toggleFloatingPanel('resumenOffcanvas')) return;
+  const body = document.getElementById('resumenOffcanvasBody');
+  if (!body) return;
+
+  // Variables ingresadas (con valor)
+  const vars = getVariables();
+  const varsConValor = Object.keys(vars).filter(k => {
+    const v = vars[k];
+    return v !== '' && v !== null && v !== undefined && !(typeof v === 'number' && v === 0);
+  });
+
+  // Productos: contar filas técnicas no consolidadas + consolidadas
+  const { consolidatedSet } = _buildConsolidationMaps();
+  let conProd = 0, sinProd = 0;
+  filasCalc.forEach((f, i) => {
+    if (consolidatedSet.has(i)) return;          // se cuenta en su consolidación
+    if (f._prod && f._prod.producto_nombre) conProd++; else sinProd++;
+  });
+  consolidaciones.forEach(c => { if (c._prod && c._prod.producto_nombre) conProd++; else sinProd++; });
+
+  // Estado de guardado
+  const guardado = !!document.querySelector('.badge.bg-success');
+
+  const subList = RESUMEN_META.subconjuntos.length
+    ? RESUMEN_META.subconjuntos.map(s => `<span class="sq-tag" style="margin:2px">${esc(s)}</span>`).join('')
+    : '<span class="text-muted small">Todos / sin subconjuntos</span>';
+
+  const varList = varsConValor.length
+    ? varsConValor.map(k => `<span class="det-val-tag">${esc(k)} = ${esc(String(vars[k]))}</span>`).join('')
+    : '<span class="text-muted small">Ninguna ingresada aún</span>';
+
+  body.innerHTML = `
+    ${_resumenRow('Sistema', esc(RESUMEN_META.sistema))}
+    ${_resumenRow('Subsistema', esc(RESUMEN_META.subsistema))}
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border,#eee);">
+      <div style="font-size:12px;color:#888;margin-bottom:5px;">Subconjuntos seleccionados</div>${subList}
+    </div>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border,#eee);">
+      <div style="font-size:12px;color:#888;margin-bottom:5px;">Variables ingresadas (${varsConValor.length})</div>${varList}
+    </div>
+    ${_resumenRow('Componentes calculados', filasCalc.length)}
+    ${_resumenRow('Líneas consolidadas', consolidaciones.length)}
+    ${_resumenRow('Productos seleccionados', conProd, 'color:#198754')}
+    ${_resumenRow('Productos pendientes', sinProd, sinProd ? 'color:#c0392b' : 'color:#888')}
+    ${_resumenRow('Estado', guardado ? '<span style="color:#198754">Guardado</span>' : '<span style="color:#c49010">Borrador</span>')}
+  `;
+
+  if (window.bootstrap) {
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('resumenOffcanvas')).show();
+  }
+};
 </script>
+
+<!-- ── Botón "Resumen" → se reubica en el dock de asistencia (inferior derecha) ── -->
+<button class="assist-fab assist-fab--resumen" id="resumenFab" type="button"
+        onclick="abrirResumen()" title="Resumen de lo realizado">
+  <span class="assist-fab__icon"><i class="bi bi-clipboard-data-fill"></i></span>
+  <span class="assist-fab__label">Resumen</span>
+</button>
+
+<div class="offcanvas offcanvas-end" id="resumenOffcanvas" tabindex="-1" aria-labelledby="resumenOffcanvasTitle">
+  <div class="offcanvas-header" style="border-bottom:1px solid var(--border,#eee);">
+    <div>
+      <h6 class="offcanvas-title mb-0" id="resumenOffcanvasTitle">Resumen del despiece</h6>
+      <p style="font-size:11px;color:#888;margin:2px 0 0;">Lo que has hecho en esta pantalla</p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body p-0" id="resumenOffcanvasBody"></div>
+</div>
+
+{% include "ingenieria/_checkpoint_panel.html" %}
 {% endblock %}
