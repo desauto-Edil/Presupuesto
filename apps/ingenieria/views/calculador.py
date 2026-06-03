@@ -203,6 +203,14 @@ class DespieceMaestroView(DetailView):
         ctx["variables_extra"]      = variables_extra
         ctx["variables_filtradas"]  = bool(variables_extra)
 
+        # Mapa {variable_tecnica: label_visible} para mostrar etiqueta
+        # legible en el modal de Detalle del cálculo. Incluye todas las
+        # variables del subsistema (las filtradas y las extra).
+        ctx["var_labels_json"] = json.dumps(
+            {v["variable"]: v["label"] for v in todas_variables},
+            ensure_ascii=False,
+        )
+
         # Líneas agrupadas por subconjunto (si ya fue guardado)
         ctx["lineas_por_subconjunto"] = _agrupar_lineas(dm.lineas.all())
 

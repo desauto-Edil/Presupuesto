@@ -265,6 +265,10 @@ def _guardar_subconjuntos_componentes(subsistema, post):
     SubconjuntoRecetaTecnica.objects.filter(subsistema=subsistema).delete()
     ComponenteSubsistema.objects.filter(subsistema=subsistema, subconjunto__isnull=True).delete()
 
+    # Set acumulativo de códigos ya asignados en este subsistema (defensa backend
+    # ante un código vacío o duplicado proveniente del frontend).
+    codigos_en_uso: set[str] = set()
+
     for sq_idx, sq_data in enumerate(subconjuntos_data):
         nombre_sq = str(sq_data.get("nombre", "")).strip()
         if not nombre_sq:
@@ -286,8 +290,14 @@ def _guardar_subconjuntos_componentes(subsistema, post):
             codigo  = str(comp_data.get("codigo", "")).strip()
             nombre  = str(comp_data.get("nombre", "")).strip()
             formula = str(comp_data.get("formula_texto", "")).strip()
-            if not (codigo and nombre and formula):
+            if not (nombre and formula):
                 continue
+            # Red de seguridad: si no llegó código, o si colisiona con otro
+            # componente del mismo subsistema (unique_together), asignar el
+            # próximo entero libre.
+            if not codigo or codigo in codigos_en_uso:
+                codigo = _proximo_codigo_numerico(codigos_en_uso)
+            codigos_en_uso.add(codigo)
 
             cat_id = comp_data.get("categoria_id")
             categoria = None
@@ -406,6 +416,28 @@ def _tipo_apu_choices_sin_materiales():
     return [(v, l) for v, l in TipoAPU.choices if v != TipoAPU.MATERIALES]
 
 
+def _proximo_codigo_numerico(en_uso: set) -> str:
+    """Devuelve el menor entero positivo (como string) que NO esté en `en_uso`.
+    Replica el comportamiento del helper JS `generarCodigoComponente` del template.
+    Códigos alfanuméricos legacy (ej. "fijaciones_plus") se consideran ocupados
+    como string pero no afectan la numeración: se busca el primer hueco numérico
+    libre desde 1.
+    """
+    n = 1
+    while str(n) in en_uso:
+        n += 1
+    return str(n)
+
+
+def _build_unidades_medida_json():
+    """Catálogo de unidades de medida para selects del subsistema_form."""
+    from apps.catalogos.models import UnidadMedida
+    return json.dumps([
+        {"abrev": u.abreviatura, "nombre": u.nombre}
+        for u in UnidadMedida.objects.order_by("nombre")
+    ])
+
+
 def _sistemas_tipos_json():
     """Devuelve un dict {pk: tipo_sistema} de todos los sistemas."""
     return json.dumps({
@@ -512,6 +544,7 @@ class SubsistemaCreateView(CreateView):
         ctx = super().get_context_data(**kwargs)
         from apps.catalogos.models import CategoriaProducto
         ctx["categorias_producto"] = CategoriaProducto.objects.filter(activa=True).order_by("nombre")
+        ctx["unidades_medida_json"] = _build_unidades_medida_json()
         ctx["tipo_apu_choices"] = _tipo_apu_choices_sin_materiales()
         ctx["reglas_apu_existentes"] = []
         ctx["productos_tecnicos_existentes"] = []
@@ -577,6 +610,7 @@ class SubsistemaUpdateView(UpdateView):
         from apps.presupuestos.models import ReglaAPUSubsistema
 
         ctx["categorias_producto"] = CategoriaProducto.objects.filter(activa=True).order_by("nombre")
+        ctx["unidades_medida_json"] = _build_unidades_medida_json()
 
         # Variables de entrada (incluye tipo_entrada y opciones para el template)
         ctx["variables_existentes"] = list(

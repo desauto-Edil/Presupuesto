@@ -583,7 +583,7 @@ html, body { overflow-y: auto !important; height: auto !important; }
                       </td>
                       <td><input type="number" step="0.01" min="0" name="pt_consumo_min[]" class="form-control form-control-sm" value="{{ pt.consumo_min_g_m2|default:'' }}" placeholder="200"></td>
                       <td><input type="number" step="0.01" min="0" name="pt_consumo_max[]" class="form-control form-control-sm" value="{{ pt.consumo_max_g_m2|default:'' }}" placeholder="400"></td>
-                      <td><input type="text" name="pt_unidad[]" class="form-control form-control-sm" value="{{ pt.unidad }}" placeholder="kg"></td>
+                      <td><select name="pt_unidad[]" class="form-select form-select-sm pt-unidad-sel" data-current="{{ pt.unidad }}"></select></td>
                       <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
                     </tr>
                     {% endfor %}
@@ -691,8 +691,7 @@ html, body { overflow-y: auto !important; height: auto !important; }
                       <tr>
                         <th style="width:150px;">Variable *</th>
                         <th>Etiqueta *</th>
-                        <th style="width:80px;">Unidad</th>
-                        <th style="width:110px;">Valor por defecto</th>
+                        <th style="width:110px;">Unidad</th>
                         <th style="width:110px;">Tipo</th>
                         <th style="width:140px;">Opciones <span style="font-weight:400;font-size:9px;letter-spacing:0;">(si Opción única)</span></th>
                         <th style="width:36px;"></th>
@@ -701,10 +700,9 @@ html, body { overflow-y: auto !important; height: auto !important; }
                     <tbody id="varRows">
                       {% for v in variables_existentes %}
                       <tr class="var-row">
-                        <td><input type="text" name="var_variable[]" class="form-control form-control-sm" value="{{ v.variable }}" placeholder="mi_variable" style="font-family:monospace;" required></td>
+                        <td><input type="text" name="var_variable[]" class="form-control form-control-sm" value="{{ v.variable }}" placeholder="mi_variable" style="font-family:monospace;" required><input type="hidden" name="var_default[]" value="{{ v.valor_default }}"></td>
                         <td><input type="text" name="var_label[]" class="form-control form-control-sm" value="{{ v.label }}" placeholder="Etiqueta legible" required></td>
-                        <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" value="{{ v.unidad }}" placeholder="und"></td>
-                        <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="{{ v.valor_default }}"></td>
+                        <td><select name="var_unidad[]" class="form-select form-select-sm var-unidad-sel" data-current="{{ v.unidad }}"></select></td>
                         <td>
                           <select name="var_tipo[]" class="form-select form-select-sm var-tipo-sel"
                                   onchange="toggleVarOpciones(this)">
@@ -862,8 +860,8 @@ function evalImagen() {
   const tieneNuevo  = imgInp && imgInp.files && imgInp.files.length > 0;
   const tieneActual = wrap && wrap.style.display !== 'none';
   if (tieneNuevo || tieneActual)
-    return { puntaje: 10, maximo: 10, estado: 'ok', errores: [], advertencias: [] };
-  return { puntaje: 5, maximo: 10, estado: 'advertencia', errores: [],
+    return { puntaje: 5, maximo: 5, estado: 'ok', errores: [], advertencias: [] };
+  return { puntaje: 2, maximo: 5, estado: 'advertencia', errores: [],
            advertencias: ['Se recomienda cargar una imagen técnica del sistema'] };
 }
 function evalVariables() {
@@ -1011,6 +1009,59 @@ window.CP_SECCIONES = [
     {% for val, label in tipo_apu_choices %}`<option value="{{ val }}">{{ label }}</option>`,{% endfor %}
   ].join('');
 
+  /* Catálogo de unidades de medida (abreviatura como valor; nombre visible) */
+  const UNIDADES = {{ unidades_medida_json|safe }};
+  function escAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function unidadesOpts(current) {
+    const cur = current == null ? '' : String(current);
+    let out = `<option value="">— Sin unidad —</option>`;
+    let matched = false;
+    UNIDADES.forEach(u => {
+      const sel = (u.abrev === cur) ? ' selected' : '';
+      if (u.abrev === cur) matched = true;
+      out += `<option value="${escAttr(u.abrev)}"${sel}>${escAttr(u.abrev)} — ${escAttr(u.nombre)}</option>`;
+    });
+    // Si la unidad guardada NO está en el catálogo, agregar opción legacy
+    // para no perderla al guardar (la unidad sigue siendo opcional/libre en DB).
+    if (cur && !matched) {
+      out += `<option value="${escAttr(cur)}" selected>${escAttr(cur)} (no catalogada)</option>`;
+    }
+    return out;
+  }
+  /* Hidrata los <select> de unidad renderizados por Django (filas existentes)
+     leyendo data-current para preseleccionar el valor guardado. */
+  function _hidratarSelectsUnidad() {
+    document.querySelectorAll('select.var-unidad-sel[data-current], select.pt-unidad-sel[data-current]')
+      .forEach(sel => {
+        if (sel.dataset._hidrated === '1') return;
+        sel.innerHTML = unidadesOpts(sel.dataset.current || '');
+        sel.dataset._hidrated = '1';
+      });
+  }
+
+  /* Auto-generación de código numérico secuencial.
+     El código de un componente nuevo es el menor entero positivo que NO
+     esté ya en uso por otros componentes del mismo subsistema (toda la
+     receta — unique_together = (subsistema, codigo)). Si existen códigos
+     legacy alfanuméricos (ej. "fijaciones_plus") se ignoran al contar:
+     el nuevo simplemente toma el primer hueco numérico libre desde 1. */
+  function generarCodigoComponente(trActual) {
+    const enUso = new Set();
+    document.querySelectorAll('.sq-comp-row').forEach(tr => {
+      if (tr === trActual) return;
+      const inp = tr.querySelector('.comp-f-codigo');
+      const val = inp && inp.value ? inp.value.trim() : '';
+      if (val) enUso.add(val);
+    });
+    let n = 1;
+    while (enUso.has(String(n))) n++;
+    return String(n);
+  }
+
   /* ─────────────────────────────────────────────────────────────────────────
      SECCIONES: mostrar / ocultar según tipo de sistema
   ───────────────────────────────────────────────────────────────────────── */
@@ -1072,13 +1123,14 @@ window.CP_SECCIONES = [
     comp = comp || {};
     const tr = document.createElement('tr');
     tr.className = 'sq-comp-row';
-    const n = tr.parentElement ? tr.parentElement.querySelectorAll('tr').length + 1 : 1;
+    const esNuevo = !comp.codigo;
+    tr.dataset.nuevo = esNuevo ? '1' : '0';
     tr.innerHTML = `
-      <td style="color:var(--ink-soft);font-size:11px;text-align:center;width:28px;" class="sq-comp-num">${n}</td>
       <td style="width:120px;">
         <input type="text" class="form-control form-control-sm comp-f-codigo"
-               placeholder="id" style="font-family:monospace;"
-               value="${esc(comp.codigo)}" required>
+               placeholder="auto" style="font-family:monospace;background:#f3f4f6;color:#6b7280;"
+               value="${esc(comp.codigo)}" readonly required
+               title="Código generado automáticamente a partir del nombre">
       </td>
       <td style="min-width:130px;">
         <input type="text" class="form-control form-control-sm comp-f-nombre"
@@ -1098,18 +1150,16 @@ window.CP_SECCIONES = [
                placeholder="salida" style="font-family:monospace;"
                value="${esc(comp.variable_salida)}">
       </td>
-      <td style="width:65px;">
-        <input type="text" class="form-control form-control-sm comp-f-unidad"
-               placeholder="und" value="${esc(comp.unidad)}">
+      <td style="width:90px;">
+        <select class="form-select form-select-sm comp-f-unidad">${unidadesOpts(comp.unidad || '')}</select>
       </td>
       <td style="width:110px;">
         <input type="text" class="form-control form-control-sm comp-f-var_ref_apu"
                style="font-family:monospace;font-size:10.5px;"
                value="${esc(comp.variable_referencia_apu)}">
       </td>
-      <td style="width:65px;">
-        <input type="text" class="form-control form-control-sm comp-f-unidad_apu"
-               placeholder="und" value="${esc(comp.unidad_apu)}">
+      <td style="width:90px;">
+        <select class="form-select form-select-sm comp-f-unidad_apu">${unidadesOpts(comp.unidad_apu || '')}</select>
       </td>
       <td style="width:36px;">
         <button type="button" class="btn btn-ghost btn-xs sq-del-comp"
@@ -1122,14 +1172,12 @@ window.CP_SECCIONES = [
       const opt = sel.querySelector(`option[value="${comp.categoria_id}"]`);
       if (opt) opt.selected = true;
     }
+    // Autogenerar código numérico secuencial — SOLO para componentes nuevos.
+    // Los existentes mantienen su código original (no se regenera).
+    if (esNuevo) {
+      tr.querySelector('.comp-f-codigo').value = generarCodigoComponente(tr);
+    }
     return tr;
-  }
-
-  function renumerarFilasComponen(tbody) {
-    tbody.querySelectorAll('.sq-comp-row').forEach((tr, i) => {
-      const cell = tr.querySelector('.sq-comp-num');
-      if (cell) cell.textContent = i + 1;
-    });
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
@@ -1161,15 +1209,14 @@ window.CP_SECCIONES = [
           <table class="rows-table sq-comp-table" style="min-width:900px;">
             <thead>
               <tr>
-                <th style="width:28px;">#</th>
                 <th style="width:120px;">Código *</th>
                 <th style="min-width:130px;">Nombre *</th>
                 <th style="width:140px;">Categoría</th>
                 <th style="min-width:180px;">Fórmula *</th>
                 <th style="width:100px;">Var. salida</th>
-                <th style="width:65px;">Unidad</th>
+                <th style="width:90px;">Unidad</th>
                 <th style="width:110px;">Ref. APU</th>
-                <th style="width:65px;">Und. APU</th>
+                <th style="width:90px;">Und. APU</th>
                 <th style="width:36px;"></th>
               </tr>
             </thead>
@@ -1199,9 +1246,10 @@ window.CP_SECCIONES = [
     card.querySelector('.sq-add-comp-btn').addEventListener('click', () => {
       const tr = crearFilaComponente({});
       tbody.appendChild(tr);
-      renumerarFilasComponen(tbody);
       emptyMsg.style.display = 'none';
-      tr.querySelector('input').focus();
+      // Foco en Nombre (primer input editable; Código es readonly autogenerado).
+      const nombreInp = tr.querySelector('.comp-f-nombre');
+      if (nombreInp) nombreInp.focus();
     });
 
     // Botón eliminar subconjunto
@@ -1216,7 +1264,6 @@ window.CP_SECCIONES = [
       const btn = e.target.closest('.sq-del-comp');
       if (!btn) return;
       btn.closest('tr').remove();
-      renumerarFilasComponen(tbody);
       if (tbody.querySelectorAll('.sq-comp-row').length === 0) {
         emptyMsg.style.display = '';
       }
@@ -1245,6 +1292,8 @@ window.CP_SECCIONES = [
   ───────────────────────────────────────────────────────────────────────── */
   SUBCONJUNTOS_INIT.forEach(sq => contenedor.appendChild(crearTarjetaSubconjunto(sq)));
   renumerarSubconjuntos();
+  // Hidratar los <select> de unidad de variables y productos técnicos (filas server-rendered)
+  _hidratarSelectsUnidad();
 
   /* ─────────────────────────────────────────────────────────────────────────
      BOTÓN AGREGAR SUBCONJUNTO
@@ -1304,10 +1353,9 @@ window.CP_SECCIONES = [
     const tr = document.createElement('tr');
     tr.className = 'var-row';
     tr.innerHTML = `
-      <td><input type="text" name="var_variable[]" class="form-control form-control-sm" placeholder="mi_variable" style="font-family:monospace;" required></td>
+      <td><input type="text" name="var_variable[]" class="form-control form-control-sm" placeholder="mi_variable" style="font-family:monospace;" required><input type="hidden" name="var_default[]" value=""></td>
       <td><input type="text" name="var_label[]" class="form-control form-control-sm" placeholder="Etiqueta legible" required></td>
-      <td><input type="text" name="var_unidad[]" class="form-control form-control-sm" placeholder="und"></td>
-      <td><input type="number" step="any" name="var_default[]" class="form-control form-control-sm" value="0"></td>
+      <td><select name="var_unidad[]" class="form-select form-select-sm var-unidad-sel">${unidadesOpts('')}</select></td>
       <td>
         <select name="var_tipo[]" class="form-select form-select-sm var-tipo-sel" onchange="toggleVarOpciones(this)">
           <option value="NUMERO">Número</option>
@@ -1340,7 +1388,7 @@ window.CP_SECCIONES = [
       <td><select name="pt_estado_fisico[]" class="form-select form-select-sm">${estadoFisicoOpts}</select></td>
       <td><input type="number" step="0.01" min="0" name="pt_consumo_min[]" class="form-control form-control-sm" placeholder="200"></td>
       <td><input type="number" step="0.01" min="0" name="pt_consumo_max[]" class="form-control form-control-sm" placeholder="400"></td>
-      <td><input type="text" name="pt_unidad[]" class="form-control form-control-sm" value="kg" placeholder="kg"></td>
+      <td><select name="pt_unidad[]" class="form-select form-select-sm pt-unidad-sel">${unidadesOpts('kg')}</select></td>
       <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
     `;
     tbody.appendChild(tr);

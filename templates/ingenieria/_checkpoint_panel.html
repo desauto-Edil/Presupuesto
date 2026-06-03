@@ -54,12 +54,14 @@
   position: relative;
   right: auto; top: auto;
   transform: none;
+  z-index: auto;
   border: 1px solid var(--border);
   border-radius: 999px;
   box-shadow: none;
   padding: 5px 12px;
   gap: 8px;
 }
+.cp-pill--inline.cp-pill--hidden { visibility: hidden; }
 .cp-pill--inline:hover { box-shadow: 0 1px 6px rgba(14,17,23,.12); padding-left: 12px; }
 .cp-pill--inline .cp-pill-label { font-size: 10px; }
 .cp-pill--inline #cpPillScore { font-size: 13px; }
@@ -356,6 +358,22 @@
     }
     _pill.style.cursor = 'pointer';
     _pill.title = 'Ver progreso';
+  }
+
+  /* Ocultar el pill inline cuando Ayuda o Resumen estén abiertos.
+     Solo aplica si está en modo inline (montado en CP_MOUNT_ID); en otras
+     páginas el pill conserva su comportamiento flotante sin alteración. */
+  if (_pill && _mount) {
+    function _bindOcVisibility(ocId) {
+      var oc = document.getElementById(ocId);
+      if (!oc) return;
+      oc.addEventListener('show.bs.offcanvas',   function () { _pill.classList.add('cp-pill--hidden'); });
+      oc.addEventListener('hidden.bs.offcanvas', function () { _pill.classList.remove('cp-pill--hidden'); });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      _bindOcVisibility('helpOffcanvas');
+      _bindOcVisibility('resumenOffcanvas');
+    });
   }
   const _oc = document.getElementById('cpOffcanvas');
   if (_oc && _oc.parentElement !== document.body) {

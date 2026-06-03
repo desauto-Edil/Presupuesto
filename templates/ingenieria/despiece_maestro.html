@@ -570,6 +570,9 @@ const CSRF                 = "{{ csrf_token }}";
 const LINEAS_INIT          = {{ lineas_json|safe }};
 const CONSOLIDACIONES_INIT = {{ consolidaciones_json|safe }};
 const PUEDE_APU            = {{ puede_generar_apu|yesno:"true,false" }};
+/* Mapa {variable_tecnica: label_visible} para mostrar etiqueta legible
+   junto al nombre técnico en el modal de Detalle del cálculo. */
+const VAR_LABELS           = {{ var_labels_json|safe }};
 
 /* ── Estado global ───────────────────────────────────────────────────────── */
 let filasCalc       = [];   // líneas técnicas calculadas (flat)
@@ -848,10 +851,11 @@ function _rowConsolidada(c, cols) {
       <span class="dp-cons-origen">
         ${c.indices.length} línea${c.indices.length !== 1 ? 's' : ''} técnica${c.indices.length !== 1 ? 's' : ''}
         · <button type="button" class="dp-link-btn" onclick="verOrigen(${c.cid})"><i class="bi bi-diagram-3"></i> Ver origen</button>
+        · <button type="button" class="dp-link-btn" onclick="verDetalleConsolidada(${c.cid})"><i class="bi bi-calculator"></i> Fórmulas</button>
         · <button type="button" class="dp-link-btn dp-link-undo" onclick="deshacerConsolidacion(${c.cid})"><i class="bi bi-arrow-counterclockwise"></i> Deshacer</button>
       </span>
     </td>
-    <td class="td-cant">${fmt(c.cantidad_total, 4)}</td>
+    <td class="td-cant">${fmt(c.cantidad_total, 4)}<button type="button" class="dp-eye-btn" title="Ver detalle del cálculo de las líneas que componen este consolidado" onclick="verDetalleConsolidada(${c.cid})"><i class="bi bi-eye"></i></button></td>
     <td class="td-red"><span class="td-red-pill">${c.cantidad_redondeada}</span></td>
     <td class="td-und">${esc(c.unidad)}</td>
     <td><div class="prod-selector">
@@ -1163,7 +1167,11 @@ function verDetalle(i) {
   const tags = Object.keys(valores).length
     ? Object.keys(valores).map(k => {
         const v = valores[k];
-        return `<span class="det-val-tag">${esc(k)} = ${typeof v === 'number' ? fmt(v, 4) : esc(String(v))}</span>`;
+        const lbl = VAR_LABELS[k];
+        const head = lbl
+          ? `${esc(lbl)} <small class="text-muted">(${esc(k)})</small>`
+          : esc(k);
+        return `<span class="det-val-tag">${head} = ${typeof v === 'number' ? fmt(v, 4) : esc(String(v))}</span>`;
       }).join('')
     : '<span class="text-muted small">Sin variables en la fórmula.</span>';
 
@@ -1190,6 +1198,83 @@ function verDetalle(i) {
     </div>
     <p class="text-muted mt-3 mb-0" style="font-size:11px">
       <i class="bi bi-shield-check"></i> Fórmula y valores son un snapshot guardado; no dependen de la receta actual del componente.
+    </p>`;
+
+  new bootstrap.Modal(document.getElementById('modalDetalle')).show();
+}
+
+/* ── Ojo de detalle de un CONSOLIDADO: detalla cada línea técnica origen ── */
+function verDetalleConsolidada(cid) {
+  const c = consolidaciones.find(x => x.cid === cid);
+  if (!c) return;
+
+  const bloques = c.indices.map(i => {
+    const f = filasCalc[i];
+    if (!f) return '';
+    const formula = f.formula_texto || '';
+    const valores = f.valores_usados || {};
+
+    let sustituida = formula;
+    Object.keys(valores).sort((a, b) => b.length - a.length).forEach(k => {
+      const v = valores[k];
+      const vstr = (typeof v === 'number') ? fmt(v, 4) : esc(String(v));
+      sustituida = sustituida.replace(new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g'), vstr);
+    });
+
+    const tags = Object.keys(valores).length
+      ? Object.keys(valores).map(k => {
+          const v = valores[k];
+          const lbl = VAR_LABELS[k];
+          const head = lbl
+            ? `${esc(lbl)} <small class="text-muted">(${esc(k)})</small>`
+            : esc(k);
+          return `<span class="det-val-tag">${head} = ${typeof v === 'number' ? fmt(v, 4) : esc(String(v))}</span>`;
+        }).join('')
+      : '<span class="text-muted small">Sin variables en la fórmula.</span>';
+
+    const cantRed = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada);
+
+    return `
+      <div class="border rounded p-2 mb-3" style="background:#fafbfd">
+        <p class="fw-semibold mb-1">${esc(f.componente_nombre)} <small class="text-muted">${esc(f.componente_codigo)}</small></p>
+        <div class="mb-2 small text-muted">${esc(f.subconjunto_nombre || 'General')}</div>
+
+        <div class="text-muted small mb-1">Fórmula usada</div>
+        <div class="det-formula mb-2">${esc(formula) || '<span class="text-muted">— sin fórmula —</span>'}</div>
+
+        <div class="text-muted small mb-1">Valores usados</div>
+        <div class="mb-2">${tags}</div>
+
+        <div class="text-muted small mb-1">Sustitución</div>
+        <div class="det-sub mb-2">${esc(sustituida) || '—'}</div>
+
+        <div class="d-flex align-items-center gap-3">
+          <div><div class="text-muted small">Resultado</div>
+            <span class="det-result">${fmt(f.cantidad_calculada, 4)}</span> <span class="text-muted">${esc(f.unidad || '')}</span></div>
+          <div><div class="text-muted small">Redondeada</div>
+            <span class="fw-bold" style="font-size:16px">${cantRed}</span></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const totalRed = c.cantidad_redondeada ?? Math.ceil(c.cantidad_total);
+
+  document.getElementById('modalDetalleBody').innerHTML = `
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span class="dp-cons-badge">Consolidado</span>
+      <p class="fw-semibold mb-0">${esc(c.label)}</p>
+    </div>
+    <div class="mb-3 small text-muted">
+      ${c.indices.length} línea${c.indices.length !== 1 ? 's' : ''} técnica${c.indices.length !== 1 ? 's' : ''} origen ·
+      Total <strong>${fmt(c.cantidad_total, 4)}</strong> ${esc(c.unidad || '')} ·
+      Redondeada <strong>${totalRed}</strong>
+    </div>
+
+    <div class="text-muted small mb-2">Detalle por línea técnica origen</div>
+    ${bloques || '<div class="text-muted small">Sin líneas origen disponibles.</div>'}
+
+    <p class="text-muted mt-2 mb-0" style="font-size:11px">
+      <i class="bi bi-shield-check"></i> Fórmula y valores son un snapshot guardado por cada línea técnica; el consolidado solo suma sus cantidades.
     </p>`;
 
   new bootstrap.Modal(document.getElementById('modalDetalle')).show();
@@ -1248,8 +1333,15 @@ async function guardar() {
     if (!consolidatedSet.has(i) && f._prod) seleccion[f.componente_codigo] = f._prod;
   });
 
+  // Siempre tomar el estado actual de los inputs al guardar.
+  // Antes se reusaba `variablesUsadas` (snapshot del último Calcular o de la
+  // carga inicial), lo que perdía ediciones hechas después de Calcular y
+  // dejaba esos campos vacíos al recargar (progreso bajaba de 100 → 90).
+  // El backend recalcula con estos valores, así que el resultado siempre
+  // queda alineado con lo que el usuario ve en pantalla.
+  const variablesActuales = getVariables();
   const payload = {
-    variables_entrada:   variablesUsadas || getVariables(),
+    variables_entrada:   variablesActuales,
     seleccion_productos: seleccion,
     consolidaciones:     consolidaciones.map(c => ({
       label:               c.label,
