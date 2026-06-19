@@ -23,7 +23,14 @@ from apps.presupuestos.models import (
     CategoriaItemAPU, CuadrillaPreset, CuadrillaPresetItem, ItemCatalogoAPU,
 )
 from apps.comercial.models import Proyecto
-from apps.comercial.views import registrar_log
+from apps.comercial.views import registrar_log, _usuario_sistema
+from apps.common.auth import (
+    get_usuario_actual,
+    es_admin,
+    puede_aprobar_apu,
+    puede_enviar_a_revision,
+    puede_gestionar_unidad,
+)
 from apps.ingenieria.models import Sistema, Subsistema
 from apps.common.choices import TipoAPU
 from apps.presupuestos.forms import (
@@ -475,12 +482,129 @@ class APUListView(ListView):
         )
         if self.request.GET.get("revision") == "pendiente":
             qs = qs.filter(fecha_envio_revision__isnull=False, modalidad_aiu_seleccionada__isnull=True)
+        # Fase 11.5.3: ocultar archivados por defecto; ?archivados=1 los muestra
+        if self.request.GET.get("archivados") != "1":
+            qs = qs.filter(archivado=False)
         return qs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["filtro_revision"] = self.request.GET.get("revision", "")
+        ctx["mostrar_archivados"] = self.request.GET.get("archivados") == "1"
         return ctx
+
+
+def _build_info_card_data(apu) -> dict:
+    """Fase 6L-E/6L-F — Datos consolidados para las tarjetas informativas
+    por sección del APU.
+
+    Devuelve un dict cuyas claves son los TipoAPU. Cada valor es un dict
+    auto-contenido que el partial `_apu_info_card.html` consume sin lógica
+    adicional. Si un dato no existe, se rellena con None y el template
+    muestra "No definido" o lo omite (regla: no inventar datos).
+
+    Para MATERIALES:
+        producto_principal (nombre + id), cantidad_base, unidad_base,
+        modo_rendimiento, formula.
+
+    Para HERRAMIENTAS_EQUIPOS / TRANSPORTE / MANO_DE_OBRA / ADMINISTRACION:
+        num_personas, dias_duracion, items_configurados_count,
+        base_calculo (texto), mensaje (texto corto).
+    """
+    from apps.common.choices import TipoAPU
+    from apps.presupuestos.models import SubsistemaItemAPU
+
+    # Producto principal (si el flujo "Armar mi APU" lo persistió)
+    pp_nombre = None
+    pp_cantidad = None
+    pp_unidad = None
+    modo_rendimiento = None
+    ps = apu.proyecto_sistema
+    if ps:
+        params = ps.parametros_entrada or {}
+        modo_rendimiento = params.get("modo_rendimiento")
+        pp_cantidad = params.get("cantidad_base")
+        pp_unidad = params.get("unidad_base")
+        pp_id = params.get("producto_principal_id")
+        if pp_id:
+            try:
+                from apps.catalogos.models import Producto
+                p = Producto.objects.only("nombre").get(pk=int(pp_id))
+                pp_nombre = p.nombre
+            except Exception:
+                pp_nombre = None
+
+    # Conteos de ítems configurados por categoría (Fase 6L-D)
+    items_por_tipo: dict = {}
+    if ps and ps.subsistema_id:
+        for row in (
+            SubsistemaItemAPU.objects
+            .filter(subsistema_id=ps.subsistema_id, activo=True, item_catalogo__activo=True)
+            .values("tipo")
+            .annotate(n=Count("id"))
+        ):
+            items_por_tipo[row["tipo"]] = row["n"]
+
+    proyecto = getattr(ps, "proyecto", None) if ps else None
+    num_personas = getattr(proyecto, "num_personas", None) if proyecto else None
+    dias_duracion = apu.dias_duracion or (getattr(proyecto, "dias_duracion", None) if proyecto else None)
+
+    return {
+        TipoAPU.MATERIALES: {
+            "producto_principal": pp_nombre,
+            "cantidad_base": pp_cantidad,
+            "unidad_base": pp_unidad,
+            "modo_rendimiento": modo_rendimiento,
+            "formula": "rendimiento = cantidad del material / cantidad base del producto principal",
+            "mensaje": (
+                "Los materiales vienen del despiece seleccionado. "
+                "El rendimiento se calcula dividiendo la cantidad de cada material "
+                "entre la cantidad total del producto principal."
+            ),
+        },
+        TipoAPU.HERRAMIENTAS_EQUIPOS: {
+            "num_personas": num_personas,
+            "dias_duracion": dias_duracion,
+            "items_configurados": items_por_tipo.get(TipoAPU.HERRAMIENTAS_EQUIPOS, 0),
+            "base_calculo": "Suma de costo por día de los ítems × días configurados",
+            "mensaje": (
+                "Herramientas se calcula a partir de los ítems APU predeterminados del "
+                "subsistema. Si aplica, el costo considera el número de personas y días "
+                "del proyecto."
+            ),
+        },
+        TipoAPU.TRANSPORTE: {
+            "num_personas": num_personas,
+            "dias_duracion": dias_duracion,
+            "items_configurados": items_por_tipo.get(TipoAPU.TRANSPORTE, 0),
+            "base_calculo": "Costo total de los ítems APU configurados",
+            "mensaje": (
+                "Transporte se calcula según los ítems APU predeterminados del subsistema "
+                "y los parámetros generales del proyecto."
+            ),
+        },
+        TipoAPU.MANO_DE_OBRA: {
+            "num_personas": num_personas,
+            "dias_duracion": dias_duracion,
+            "items_configurados": items_por_tipo.get(TipoAPU.MANO_DE_OBRA, 0),
+            "base_calculo": "Personas × días × rendimiento configurado",
+            "mensaje": (
+                "La mano de obra se calcula con base en las personas requeridas, los "
+                "días de duración y los ítems configurados para el subsistema."
+            ),
+        },
+        TipoAPU.ADMINISTRACION: {
+            "num_personas": num_personas,
+            "dias_duracion": dias_duracion,
+            "items_configurados": items_por_tipo.get(TipoAPU.ADMINISTRACION, 0),
+            "base_calculo": "Suma de los ítems administrativos configurados",
+            "mensaje": (
+                "Administración agrupa costos indirectos configurados para el subsistema. "
+                "Estos valores se calculan según los ítems seleccionados y los parámetros "
+                "generales del APU."
+            ),
+        },
+    }
 
 
 def _build_categorias_context(apu) -> list:
@@ -513,12 +637,52 @@ def _build_categorias_context(apu) -> list:
         {"tipo": TipoAPU.ADMINISTRACION,       "label": "Administración", "icon": "bi-briefcase", "color": "#64748b", "tab_id": "tab-admin"},
     ]
 
+    # Fase 6L-E: tarjetas informativas por sección (calculadas una sola vez)
+    info_cards = _build_info_card_data(apu)
+
     # Cargar todas las líneas del APU de una sola vez
     all_lineas = list(
         apu.lineas.select_related(
             "item_catalogo__categoria", "despiece_linea__producto"
         ).order_by("descripcion")
     )
+
+    # ── Fase 6G: enriquecer líneas MATERIALES con componente + producto ──────
+    # Resuelve el nombre humano del componente a partir de
+    # ComponenteSubsistema(subsistema, codigo). Lookup batch para evitar N
+    # queries. Si no se encuentra, fallback al código (o "—" si no hay
+    # despiece_linea). Esto NO toca el modelo: solo asigna atributos en
+    # runtime a las instancias APULinea para que el template los lea.
+    materiales = [l for l in all_lineas if l.tipo == TipoAPU.MATERIALES]
+    if materiales:
+        _comp_nombre_por_codigo: dict = {}
+        try:
+            ps = apu.proyecto_sistema
+            if ps and ps.subsistema_id:
+                from apps.ingenieria.models import ComponenteSubsistema
+                for c in ComponenteSubsistema.objects.filter(
+                    subsistema_id=ps.subsistema_id
+                ).only("codigo", "nombre"):
+                    _comp_nombre_por_codigo[c.codigo] = c.nombre
+        except Exception:
+            _comp_nombre_por_codigo = {}
+
+        for l in materiales:
+            dl = l.despiece_linea
+            codigo = (dl.componente_codigo if dl else "") or ""
+            l.componente_nombre = (
+                _comp_nombre_por_codigo.get(codigo) or codigo or "—"
+            )
+            # Producto: prefiere el FK resuelto vía despiece_linea; fallback
+            # a la descripción de la línea (que ya es el nombre del producto
+            # según el snapshot de APUService.generar_materiales).
+            if dl and dl.producto_id and dl.producto:
+                l.producto_nombre = dl.producto.nombre
+            else:
+                l.producto_nombre = l.descripcion or "—"
+            # Cantidad total real (no rendimiento): viene del despiece.
+            # Si no hay despiece_linea, queda None y el template muestra "—".
+            l.cantidad_total = dl.cantidad_final if dl else None
 
     categorias = []
     for info in TIPO_INFO:
@@ -586,15 +750,168 @@ def _build_categorias_context(apu) -> list:
             "subtotal_costo": subtotal_costo,
             "subtotal_valor": subtotal_valor,
             "count": len(lineas_tipo),
+            "info_card": info_cards.get(tipo, {}),
         })
 
     return categorias
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fase 11.5.2 — Helper compartido para contexto de APU consolidado
+# ──────────────────────────────────────────────────────────────────────────────
+def _build_apu_consolidado_context(apu) -> dict:
+    """
+    Construye el contexto consolidado reutilizable por la vista detalle y por
+    los PDFs (Interno/Cliente) cuando ``apu.es_consolidado``.
+
+    Devuelve un dict con:
+      - apus_origen
+      - resumen_consolidacion
+      - materiales_por_origen_consolidado
+      - lineas_no_materiales
+
+    Si el APU no es consolidado devuelve dict vacío (no agrega claves al ctx).
+    """
+    if not apu.es_consolidado:
+        return {}
+
+    from apps.common.choices import TipoAPU as _TipoAPU
+
+    materiales = list(
+        apu.lineas.filter(tipo=_TipoAPU.MATERIALES)
+        .order_by(
+            "subsistema_nombre_snapshot", "sistema_nombre_snapshot",
+            "despiece_maestro_id", "descripcion",
+        )
+        .select_related("despiece_linea__producto", "item_catalogo")
+    )
+
+    apus_origen = list(
+        apu.get_apus_origen().select_related(
+            "proyecto_sistema__sistema",
+            "proyecto_sistema__subsistema",
+        )
+    )
+
+    def _nuevo_grupo(ln):
+        return {
+            "sistema": ln.sistema_nombre_snapshot or "",
+            "subsistema": ln.subsistema_nombre_snapshot or "",
+            "despiece_id": ln.despiece_maestro_id,
+            "lineas": [],
+            "subtotal_costo": Decimal("0"),
+            "subtotal_valor": Decimal("0"),
+        }
+
+    materiales_por_origen: list = []
+    for apu_o in apus_origen:
+        lineas_apu = [ln for ln in materiales if ln.apu_origen_id == apu_o.pk]
+        if not lineas_apu:
+            continue
+        grupos: dict = {}
+        for ln in lineas_apu:
+            key = (
+                ln.sistema_nombre_snapshot or "",
+                ln.subsistema_nombre_snapshot or "",
+                ln.despiece_maestro_id or 0,
+            )
+            g = grupos.setdefault(key, _nuevo_grupo(ln))
+            g["lineas"].append(ln)
+            g["subtotal_costo"] += Decimal(str(ln.costo_total or 0))
+            g["subtotal_valor"] += Decimal(str(ln.valor_total or 0))
+        materiales_por_origen.append({
+            "apu": apu_o,
+            "grupos": list(grupos.values()),
+            "total_lineas": len(lineas_apu),
+            "subtotal_valor": sum((g["subtotal_valor"] for g in grupos.values()),
+                                  Decimal("0")),
+        })
+
+    # Líneas sin apu_origen (defensivo — consolidado migrado o legacy).
+    lineas_sin_origen = [ln for ln in materiales if not ln.apu_origen_id]
+    if lineas_sin_origen:
+        grupos_so: dict = {}
+        for ln in lineas_sin_origen:
+            key = (
+                ln.sistema_nombre_snapshot or "",
+                ln.subsistema_nombre_snapshot or "",
+                ln.despiece_maestro_id or 0,
+            )
+            g = grupos_so.setdefault(key, _nuevo_grupo(ln))
+            g["lineas"].append(ln)
+            g["subtotal_costo"] += Decimal(str(ln.costo_total or 0))
+            g["subtotal_valor"] += Decimal(str(ln.valor_total or 0))
+        materiales_por_origen.append({
+            "apu": None,  # bloque "sin origen"
+            "grupos": list(grupos_so.values()),
+            "total_lineas": len(lineas_sin_origen),
+            "subtotal_valor": sum((g["subtotal_valor"] for g in grupos_so.values()),
+                                  Decimal("0")),
+        })
+
+    no_materiales_total = apu.lineas.exclude(tipo=_TipoAPU.MATERIALES).count()
+    no_mat_antes = 0
+    for apu_o in apus_origen:
+        no_mat_antes += apu_o.lineas.exclude(tipo=_TipoAPU.MATERIALES).count()
+    sistemas_set = sorted({ln.sistema_nombre_snapshot for ln in materiales
+                           if ln.sistema_nombre_snapshot})
+    subsistemas_set = sorted({ln.subsistema_nombre_snapshot for ln in materiales
+                              if ln.subsistema_nombre_snapshot})
+
+    resumen_consolidacion = {
+        "apus_origen_count": len(apus_origen),
+        "sistemas": sistemas_set,
+        "subsistemas": subsistemas_set,
+        "materiales_total": len(materiales),
+        "no_materiales_antes": no_mat_antes,
+        "no_materiales_despues": no_materiales_total,
+    }
+
+    lineas_no_materiales = list(
+        apu.lineas.exclude(tipo=_TipoAPU.MATERIALES)
+        .order_by("tipo", "descripcion")
+        .select_related("despiece_linea__producto", "item_catalogo")
+    )
+
+    return {
+        "apus_origen": apus_origen,
+        "resumen_consolidacion": resumen_consolidacion,
+        "materiales_por_origen_consolidado": materiales_por_origen,
+        "lineas_no_materiales": lineas_no_materiales,
+    }
+
+
+def _apu_unidad(apu):
+    """Unidad de negocio asociada a un APUProyecto (vía creador del proyecto)."""
+    try:
+        proyecto = apu.get_proyecto()
+    except Exception:
+        proyecto = None
+    if proyecto is None:
+        return ""
+    creado_por = getattr(proyecto, "creado_por", None)
+    if creado_por is None:
+        return ""
+    return getattr(creado_por, "unidad_negocio", "") or ""
 
 
 class APUProyectoDetailView(DetailView):
     model = APUProyecto
     template_name = "presupuestos/apu_detail.html"
     context_object_name = "apu"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        # Bypass del creador del proyecto del APU
+        usuario = get_usuario_actual(request)
+        proyecto = self.object.get_proyecto() if hasattr(self.object, "get_proyecto") else None
+        creado_por_id = getattr(proyecto, "creado_por_id", None)
+        if usuario is not None and creado_por_id is not None and usuario.pk == creado_por_id:
+            return super().dispatch(request, *args, **kwargs)
+        if not puede_gestionar_unidad(request, _apu_unidad(self.object)):
+            messages.error(request, "No tiene permiso para acceder a información de otra unidad.")
+            return redirect("comercial:dashboard")
+        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         from django.db.models import Sum as _Sum
@@ -638,39 +955,134 @@ class APUProyectoDetailView(DetailView):
             .filter(activo=True)
             .prefetch_related("items__item")
         )
-        ctx["items_mo"] = (
-            ItemCatalogoAPU.objects
-            .filter(activo=True, categoria__tipo_apu="MANO_DE_OBRA")
-            .select_related("categoria").order_by("categoria__nombre", "nombre")
-        )
-        ctx["items_herr"] = (
-            ItemCatalogoAPU.objects
-            .filter(activo=True, categoria__tipo_apu="HERRAMIENTAS_EQUIPOS")
-            .select_related("categoria").order_by("categoria__nombre", "nombre")
-        )
-        ctx["items_transp"] = (
-            ItemCatalogoAPU.objects
-            .filter(activo=True, categoria__tipo_apu="TRANSPORTE")
-            .select_related("categoria").order_by("categoria__nombre", "nombre")
-        )
-        ctx["items_admin"] = (
-            ItemCatalogoAPU.objects
-            .filter(activo=True, categoria__tipo_apu="ADMINISTRACION")
-            .select_related("categoria").order_by("categoria__nombre", "nombre")
-        )
-        # PKs de ítems ya usados en este APU (para pre-marcar checkboxes)
+        # Fase 6L-11/12: los modales "Configurar [categoría]" son ahora la
+        # BIBLIOTECA COMPLETA: muestran todo ItemCatalogoAPU activo del tipo
+        # correspondiente. Los predeterminados del subsistema y los ítems
+        # ya activos en el APU se *marcan* con badges en el template, no se
+        # filtran. La vista principal sigue mostrando solo las APULinea
+        # realmente generadas (gestionadas por APUService).
+        from apps.presupuestos.models import SubsistemaItemAPU as _SIA
+        _ps = self.object.proyecto_sistema
+        _sub_id = getattr(_ps, "subsistema_id", None) if _ps else None
+
+        def _items_para_tipo(tipo):
+            return (
+                ItemCatalogoAPU.objects
+                .filter(categoria__tipo_apu=tipo,
+                        categoria__activa=True,
+                        activo=True)
+                .select_related("categoria")
+                .order_by("categoria__nombre", "nombre")
+            )
+
+        ctx["items_mo"]     = _items_para_tipo("MANO_DE_OBRA")
+        ctx["items_herr"]   = _items_para_tipo("HERRAMIENTAS_EQUIPOS")
+        ctx["items_transp"] = _items_para_tipo("TRANSPORTE")
+        ctx["items_admin"]  = _items_para_tipo("ADMINISTRACION")
+        # PKs de ítems ya usados en este APU (para pre-marcar checkboxes y
+        # mostrar badge "Ya en APU").
         ctx["lineas_item_ids"] = set(
             self.object.lineas
             .exclude(item_catalogo=None)
             .values_list("item_catalogo_id", flat=True)
         )
+        # Fase 6L-12: PKs de ítems predeterminados del subsistema, para
+        # mostrar badge "Predeterminado" en los modales.
+        if _sub_id:
+            ctx["sia_item_ids"] = set(
+                _SIA.objects
+                .filter(subsistema_id=_sub_id, activo=True,
+                        item_catalogo__activo=True)
+                .values_list("item_catalogo_id", flat=True)
+            )
+        else:
+            ctx["sia_item_ids"] = set()
         # Modalidades AIU del proyecto
         ctx["modalidades_aiu"] = self.object.calcular_modalidades_aiu()
+
+        # Fase 9E / 9R — Tipos de garantía activos para el modal de edición.
+        from apps.comercial.models import TipoGarantia as _TipoGarantia
+        ctx["tipos_garantia_activos"] = list(
+            _TipoGarantia.objects.filter(activo=True).order_by("orden", "nombre")
+        )
+        # Fase 9R — líneas Materiales del APU para el selector "material específico".
+        ctx["lineas_materiales_apu"] = list(
+            self.object.lineas
+            .filter(tipo=TipoAPU.MATERIALES)
+            .order_by("descripcion")
+        )
 
         # Revisores disponibles (usuarios del sistema excepto el actual)
         from apps.configuracion.models import ConfiguracionSistema
         ctx["revisores"] = ConfiguracionSistema.objects.filter(activo=True).order_by("nombre_completo")
         ctx["ya_en_revision"] = bool(self.object.fecha_envio_revision)
+
+        # Fase 12.2 — Permisos para condicionar UI
+        _usuario = get_usuario_actual(self.request)
+        ctx["usuario_actual"] = _usuario
+        ctx["puede_aprobar"] = puede_aprobar_apu(self.request, self.object)
+        ctx["puede_enviar_revision"] = puede_enviar_a_revision(self.request, self.object)
+        ctx["es_administrador"] = es_admin(self.request)
+        ctx["es_aprobador_asignado"] = (
+            _usuario is not None
+            and self.object.revisor_id is not None
+            and self.object.revisor_id == _usuario.pk
+        )
+
+        # ── Fase 11.4: materiales agrupados por subsistema (snapshot) ──────
+        ctx["es_legacy_sin_seleccion"] = self.object.es_legacy_sin_seleccion()
+        ctx["despieces_incluidos_lista"] = list(
+            self.object.despieces_incluidos.filter(activo=True)
+            .select_related("despiece_maestro", "despiece_maestro__subsistema",
+                            "despiece_maestro__subsistema__sistema")
+            .order_by("orden", "id")
+        )
+        materiales = list(
+            self.object.lineas.filter(tipo=TipoAPU.MATERIALES)
+            .order_by(
+                "subsistema_nombre_snapshot", "sistema_nombre_snapshot",
+                "despiece_maestro_id", "descripcion",
+            )
+        )
+        # Agrupación por (sistema, subsistema, despiece_maestro_id)
+        grupos_mat: dict = {}
+        for ln in materiales:
+            key = (
+                ln.sistema_nombre_snapshot or "",
+                ln.subsistema_nombre_snapshot or "",
+                ln.despiece_maestro_id or 0,
+            )
+            grupos_mat.setdefault(key, {
+                "sistema": ln.sistema_nombre_snapshot or "",
+                "subsistema": ln.subsistema_nombre_snapshot or "",
+                "despiece_id": ln.despiece_maestro_id,
+                "lineas": [],
+                "subtotal_costo": Decimal("0"),
+                "subtotal_valor": Decimal("0"),
+            })
+            grupos_mat[key]["lineas"].append(ln)
+            grupos_mat[key]["subtotal_costo"] += Decimal(str(ln.costo_total or 0))
+            grupos_mat[key]["subtotal_valor"] += Decimal(str(ln.valor_total or 0))
+        ctx["materiales_por_subsistema"] = list(grupos_mat.values())
+        ctx["materiales_multi_despiece"] = (
+            len([g for g in grupos_mat.values() if g["sistema"]]) > 1
+            or len(ctx["despieces_incluidos_lista"]) > 1
+        )
+
+        # ── Fase 11.5.2 — Contexto consolidado vía helper compartido ──────
+        # El mismo helper lo usan APUPDFInternoView y APUPDFClienteView.
+        if self.object.es_consolidado:
+            ctx.update(_build_apu_consolidado_context(self.object))
+
+        # ── Fase 12 — Cotización aprobada (snapshot vigente + historial) ──
+        from apps.presupuestos.services import CotizacionSnapshotService
+        from apps.presupuestos.models import CotizacionAPU
+        ctx["cotizacion_vigente"] = CotizacionSnapshotService.obtener_snapshot_vigente(self.object)
+        ctx["cotizaciones_historico"] = list(
+            CotizacionAPU.objects
+            .filter(apu=self.object, estado=CotizacionAPU.Estado.REEMPLAZADA)
+            .order_by("-version")[:10]
+        )
         return ctx
 
 
@@ -703,7 +1115,6 @@ class APUProyectoUpdateView(UpdateView):
         if parametros_cambiaron:
             try:
                 from apps.presupuestos.services.apu_service import APUService
-                from apps.presupuestos.models import ItemCatalogoAPU
 
                 svc = APUService.for_apu(new)
                 tipos = [
@@ -713,21 +1124,37 @@ class APUProyectoUpdateView(UpdateView):
                     TipoAPU.ADMINISTRACION,
                 ]
                 regenerado = False
+                vacias = []
+                # Fase 6L-D: regenerar usando SOLO los ítems APU asociados al
+                # subsistema (SubsistemaItemAPU). Si una categoría no tiene
+                # ítems configurados, NO se llena con todo el catálogo.
                 for tipo in tipos:
-                    items = list(ItemCatalogoAPU.objects.filter(
-                        activo=True, categoria__tipo_apu=tipo
-                    ))
-                    if items:
-                        svc._generar_categoria_desde_catalogo(
-                            tipo,
-                            [{"item_id": i.pk, "cantidad": 1} for i in items],
-                        )
+                    items_data = svc._items_apu_subsistema(tipo)
+                    if items_data:
+                        svc._generar_categoria_desde_catalogo(tipo, items_data)
                         regenerado = True
+                    else:
+                        # Limpiar líneas previas de la categoría para que no
+                        # queden ítems huérfanos al cambiar parámetros con
+                        # subsistema sin configuración para ese tipo.
+                        new.lineas.filter(tipo=tipo).delete()
+                        vacias.append(tipo)
                 if regenerado:
                     new.recalcular()
-                    messages.success(
+                    msg = "Parámetros guardados y líneas recalculadas con los nuevos valores."
+                    if vacias:
+                        msg += (
+                            f" Categorías sin ítems APU configurados en el subsistema: "
+                            f"{', '.join(vacias)}."
+                        )
+                    messages.success(self.request, msg)
+                elif vacias:
+                    new.recalcular()
+                    messages.info(
                         self.request,
-                        "Parámetros guardados y líneas recalculadas con los nuevos valores.",
+                        "Parámetros guardados. El subsistema no tiene ítems APU "
+                        "configurados para Herramientas, Transporte, Mano de obra ni "
+                        "Administración: esas categorías quedan vacías.",
                     )
             except Exception as exc:
                 messages.warning(
@@ -785,18 +1212,127 @@ class APUGenerarView(View):
             return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={ps.proyecto_id}")
 
 
+class APUSeleccionarDespiecesView(View):
+    """
+    Fase 11.4 — Vista intermedia de selección manual de despieces.
+
+    GET: lista los DespieceMaestro candidatos del proyecto (origen marcado
+         y bloqueado, los demás opcionales). Si solo hay un candidato
+         válido, genera el APU directo sin paso intermedio.
+
+    POST: recibe la selección, valida con DespieceSelectionStrategy y
+          ejecuta APUGenerationFacade.generar_desde_seleccion.
+    """
+
+    def get(self, request, pk):
+        from apps.ingenieria.models import DespieceMaestro
+        from apps.presupuestos.services.despiece_selection import (
+            DespieceSelectionStrategy,
+        )
+        dm = get_object_or_404(DespieceMaestro, pk=pk)
+
+        if not dm.esta_guardado:
+            messages.error(request, "El despiece debe estar guardado antes de generar el APU.")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+        if not dm.proyecto_id:
+            messages.error(request, "Solo los despieces asociados a un proyecto pueden generar APU.")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        candidatos = DespieceSelectionStrategy.listar_candidatos(dm)
+        secundarios = [c for c in candidatos if not c.es_origen]
+
+        if not secundarios:
+            return self._generar(request, dm, [dm.pk])
+
+        return render(
+            request,
+            "presupuestos/apu_seleccionar_despieces.html",
+            {
+                "despiece_origen": dm,
+                "proyecto": dm.proyecto,
+                "candidatos": candidatos,
+                "secundarios": secundarios,
+            },
+        )
+
+    def post(self, request, pk):
+        from apps.ingenieria.models import DespieceMaestro
+        dm = get_object_or_404(DespieceMaestro, pk=pk)
+
+        if not dm.esta_guardado or not dm.proyecto_id:
+            messages.error(request, "El despiece origen no es válido para generar APU.")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        accion = request.POST.get("accion", "").strip()
+        if accion == "solo_origen":
+            ids_seleccionados = [dm.pk]
+        else:
+            ids_seleccionados = request.POST.getlist("despieces")
+            try:
+                ids_seleccionados = [int(x) for x in ids_seleccionados if str(x).isdigit()]
+            except (TypeError, ValueError):
+                ids_seleccionados = []
+            if dm.pk not in ids_seleccionados:
+                ids_seleccionados.append(dm.pk)
+
+        return self._generar(request, dm, ids_seleccionados)
+
+    def _generar(self, request, dm, ids_seleccionados):
+        from apps.presupuestos.services.apu_facade import APUFacade
+        try:
+            apu, resumen, errores = APUFacade.generar_desde_seleccion(
+                despiece_origen=dm,
+                dm_ids_seleccionados=ids_seleccionados,
+            )
+        except Exception as exc:
+            messages.error(request, f"Error al generar APU: {exc}")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        if errores:
+            for err in errores:
+                messages.error(request, err)
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        if resumen.get("apu_existia"):
+            messages.success(
+                request,
+                f"APU actualizado correctamente con {resumen['despieces_incluidos']} despiece(s).",
+            )
+        else:
+            messages.success(
+                request,
+                f"APU generado correctamente con {resumen['despieces_incluidos']} despiece(s).",
+            )
+
+        registrar_log(
+            request,
+            accion="GENERAR_APU",
+            descripcion=(
+                f"APU {'actualizado' if resumen.get('apu_existia') else 'generado'} desde "
+                f"despiece maestro #{dm.pk} con {resumen['despieces_incluidos']} despieces "
+                f"seleccionados — {dm.proyecto.consecutivo}"
+            ),
+            modelo_afectado="Proyecto",
+            objeto_id=dm.proyecto_id,
+        )
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
 class APUGenerarDesdeDespiece(View):
     """
-    POST: genera o actualiza el APU a partir de un DespieceMaestro asociado a proyecto.
-
-    Flujo:
-      1. Valida que el despiece esté guardado, tenga proyecto y tenga líneas.
-      2. Obtiene o crea el ProyectoSistema (proyecto × sistema × subsistema).
-      3. Sincroniza variables_entrada del DespieceMaestro → parametros_entrada del PS.
-      4. Sincroniza DespieceMaestroLinea → DespieceLinea del PS (upsert por componente).
-      5. Llama a APUService.generar(ps) — internamente hace get_or_create del APU.
-      6. Redirige a apu_detail con mensaje de éxito (creado vs. actualizado).
+    Compatibilidad Fase 11.3 → 11.4. El botón antiguo POSTea aquí; ahora
+    redirigimos siempre a la vista de selección manual, que internamente
+    maneja el caso degenerado de "un solo despiece" sin paso intermedio.
     """
+    def post(self, request, pk):
+        return redirect("presupuestos:apu_seleccionar_despieces", pk=pk)
+
+    def get(self, request, pk):
+        return redirect("presupuestos:apu_seleccionar_despieces", pk=pk)
+
+
+class _APUGenerarDesdeDespiece_LEGACY(View):
+    """LEGADO (Fase 11.3 e inferior). Conservado como referencia; no enrutado."""
     def post(self, request, pk):
         from apps.ingenieria.models import DespieceMaestro
         from django.db import transaction as db_transaction
@@ -943,6 +1479,266 @@ class APUGenerarDesdeDespiece(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
 
+# ── Fase 6E: armar APU con producto principal ────────────────────────────────
+
+
+class APUArmarDesdeDespieceView(View):
+    """
+    POST: arma el APU desde DespieceMaestro con un producto principal seleccionado.
+
+    Diferencia con APUGenerarDesdeDespiece:
+      - Recibe `producto_principal_id` (FK a catalogos.Producto).
+      - Revalida con validar_despiece_listo_para_apu en backend (no confía en el modal).
+      - Verifica que el producto principal está en las líneas finales.
+      - Recalcula cantidad_base como sumatoria de líneas finales con ese producto.
+      - Persiste en `ProyectoSistema.parametros_entrada`:
+            producto_principal_id, cantidad_base, unidad_base,
+            modo_rendimiento="PRODUCTO_PRINCIPAL"
+        Sin tocar modelos ni crear migraciones.
+      - Luego ejecuta la misma sincronización consolidado→DespieceLinea y
+        llama APUService.generar(ps). La fórmula nueva de rendimiento se
+        adopta en Fase 6F leyendo `parametros_entrada`.
+    """
+
+    def post(self, request, pk):
+        from apps.ingenieria.models import DespieceMaestro
+        from apps.ingenieria.services.lineas_finales_apu import (
+            validar_despiece_listo_para_apu,
+            productos_principal_opciones,
+        )
+        from django.db import transaction as db_transaction
+        from decimal import Decimal
+
+        dm = get_object_or_404(DespieceMaestro, pk=pk)
+
+        # ── 1. Revalidación backend obligatoria ──────────────────────────────
+        validacion = validar_despiece_listo_para_apu(dm)
+        if not validacion["ok"]:
+            for err in validacion["errores"]:
+                messages.error(request, err)
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        # ── 2. Producto principal: validar entrada ───────────────────────────
+        try:
+            producto_principal_id = int(request.POST.get("producto_principal_id", "") or 0)
+        except (TypeError, ValueError):
+            producto_principal_id = 0
+        if not producto_principal_id:
+            messages.error(
+                request,
+                "Debe seleccionar un producto principal para armar el APU.",
+            )
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        # 3. Validar que el producto pertenece a las líneas finales ──────────
+        opciones = productos_principal_opciones(validacion["lineas_finales"])
+        elegido = next(
+            (o for o in opciones if o["producto_id"] == producto_principal_id),
+            None,
+        )
+        if elegido is None:
+            messages.error(
+                request,
+                "El producto principal debe pertenecer a las líneas finales del despiece.",
+            )
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        cantidad_base = elegido["cantidad_base"]
+        unidad_base = elegido["unidad"] or ""
+
+        # 4. Cantidad base > 0 (regla obligatoria, recalculada en backend) ───
+        if not cantidad_base or Decimal(str(cantidad_base)) <= Decimal("0"):
+            messages.error(
+                request,
+                "La cantidad base del producto principal debe ser mayor que cero.",
+            )
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        # ── 5. Sincronización + generación (mismo flujo que APUGenerar…) ─────
+        try:
+            with db_transaction.atomic():
+                ps, _ = ProyectoSistema.objects.get_or_create(
+                    proyecto=dm.proyecto,
+                    sistema=dm.subsistema.sistema,
+                    subsistema=dm.subsistema,
+                )
+
+                # Variables_entrada del despiece → parametros_entrada del PS
+                if dm.variables_entrada:
+                    ps.parametros_entrada = {
+                        **(ps.parametros_entrada or {}),
+                        **dm.variables_entrada,
+                    }
+
+                # 6. Persistir producto principal en parametros_entrada ───────
+                # Sin migración: vive en el JSONField existente. La Fase 6F lo
+                # leerá para el cálculo de rendimiento.
+                ps.parametros_entrada = {
+                    **(ps.parametros_entrada or {}),
+                    "producto_principal_id": producto_principal_id,
+                    "cantidad_base": str(cantidad_base),
+                    "unidad_base": unidad_base,
+                    "modo_rendimiento": "PRODUCTO_PRINCIPAL",
+                }
+                ps.save(update_fields=["parametros_entrada"])
+
+                # 7. Sincronización del PS desde el despiece actual ───────────
+                # Fix 6E-B (regla del usuario):
+                #   El APU debe generarse ÚNICAMENTE con las líneas finales
+                #   mostradas en el modal "Armar mi APU". Eso es exactamente
+                #   obtener_lineas_finales_para_apu(dm) del despiece que
+                #   disparó el POST. No se consolidan otros despieces del
+                #   mismo subsistema, no se reutilizan DespieceLinea
+                #   antiguas — el conjunto del PS se reconstruye 1:1 con lo
+                #   que el usuario vio en el modal.
+                #
+                #   Consecuencias:
+                #   - Si había DespieceLinea antiguas en el PS que ya no
+                #     corresponden al despiece actual → se eliminan.
+                #   - Si en el subsistema hay varios DM guardados con
+                #     materiales distintos, cada armado de APU reemplaza
+                #     completamente al anterior (el último botón gana).
+                lineas_finales = validacion["lineas_finales"]
+
+                # Pre-cargar componente_codigo de líneas "normales" en 1 query
+                # (lo necesitamos como clave estable de DespieceLinea).
+                normal_ids = [f["id"] for f in lineas_finales if f["tipo"] == "normal"]
+                codigos_por_pk: dict = {}
+                if normal_ids:
+                    from apps.ingenieria.models import DespieceMaestroLinea
+                    codigos_por_pk = dict(
+                        DespieceMaestroLinea.objects.filter(pk__in=normal_ids)
+                        .values_list("pk", "componente_codigo")
+                    )
+
+                consolidado: dict = {}
+                for f in lineas_finales:
+                    # Defensa: si pasara una línea sin producto (no debería tras
+                    # la validación), se omite. NO crashea el armado.
+                    if not f.get("producto_id"):
+                        continue
+
+                    # Clave estable en DespieceLinea:
+                    #   - Consolidadas: CONS_{producto_id} (igual que el legacy
+                    #     para mantener compatibilidad de datos históricos).
+                    #   - Normales: componente_codigo del DML.
+                    if f["tipo"] == "consolidada":
+                        clave = f"CONS_{f['producto_id']}"
+                    else:
+                        clave = codigos_por_pk.get(f["id"]) or f"LIN_{f['id']}"
+
+                    # Precio: snapshot de la línea final si existe; si no, el
+                    # precio activo del producto.
+                    precio_snapshot = f.get("precio_unitario")
+                    if precio_snapshot in (None, ""):
+                        prod_obj = f.get("producto")
+                        precio_snapshot = (
+                            getattr(prod_obj, "precio_unitario_real", None)
+                            if prod_obj is not None else None
+                        )
+
+                    # Si el mismo producto principal aparece en varias líneas
+                    # (mismo componente_codigo no debería repetirse en un mismo
+                    # DM, pero por defensa sumamos cantidades).
+                    if clave in consolidado:
+                        consolidado[clave]["cantidad"] += Decimal(str(f["cantidad_total"] or 0))
+                    else:
+                        consolidado[clave] = {
+                            "cantidad": Decimal(str(f["cantidad_total"] or 0)),
+                            "precio_snapshot": precio_snapshot,
+                            "producto": f.get("producto"),
+                        }
+
+                # Upsert de las líneas finales como DespieceLinea del PS.
+                for codigo, datos in consolidado.items():
+                    DespieceLinea.objects.update_or_create(
+                        proyecto_sistema=ps,
+                        componente_codigo=codigo,
+                        defaults={
+                            "proyecto": dm.proyecto,
+                            "cantidad_calculada": datos["cantidad"],
+                            "precio_snapshot": datos["precio_snapshot"],
+                            "producto": datos["producto"],
+                        },
+                    )
+
+                # Eliminar DespieceLinea OBSOLETAS del PS (cualquiera que no
+                # esté en el set de líneas finales del modal actual). Esto
+                # cubre la regla "no debe usar líneas antiguas".
+                DespieceLinea.objects.filter(
+                    proyecto_sistema=ps
+                ).exclude(componente_codigo__in=consolidado.keys()).delete()
+
+                apu_existia = APUProyecto.objects.filter(proyecto_sistema=ps).exists()
+
+                from apps.presupuestos.services.apu_service import APUService
+                apu = APUService.generar(ps)
+
+                # ── Fase 11.4 · Trazabilidad explícita despiece → APU ───────
+                # El botón "Armar mi APU" usa un único DespieceMaestro origen.
+                # Sin este registro, el APU se marca como "legacy sin selección"
+                # aunque haya sido creado por el flujo moderno. Replica el
+                # patrón de APUMultiDespieceBuilder._sincronizar_inclusiones.
+                from apps.common.choices import TipoAPU as _TipoAPU
+                from apps.presupuestos.models import APUDespieceIncluido
+                sistema_nombre = dm.subsistema.sistema.nombre if dm.subsistema_id else ""
+                subsistema_nombre = dm.subsistema.nombre if dm.subsistema_id else ""
+                APUDespieceIncluido.objects.update_or_create(
+                    apu=apu,
+                    despiece_maestro=dm,
+                    defaults={
+                        "sistema_nombre_snapshot": sistema_nombre,
+                        "subsistema_nombre_snapshot": subsistema_nombre,
+                        "orden": 0,
+                        "activo": True,
+                    },
+                )
+                # Anotar despiece_maestro + snapshots en las líneas MATERIALES
+                # recién creadas para agrupar correctamente en apu_detail/PDFs.
+                apu.lineas.filter(
+                    tipo=_TipoAPU.MATERIALES,
+                    despiece_maestro__isnull=True,
+                ).update(
+                    despiece_maestro=dm,
+                    sistema_nombre_snapshot=sistema_nombre,
+                    subsistema_nombre_snapshot=subsistema_nombre,
+                )
+
+                # ── Fase 9R · Garantía como recargo comercial ──────────────
+                # La garantía afecta el total comercial (suma a total_valor_venta)
+                # pero NO modifica cantidades, rendimientos, costos técnicos ni
+                # valor_total de APULinea.
+                if "aplica_garantia" in request.POST:
+                    _aplicar_garantia_desde_post(
+                        apu, request.POST, ps=ps, durante_armado=True,
+                    )
+
+        except Exception as exc:
+            messages.error(request, f"Error al armar APU: {exc}")
+            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+        verbo = "actualizado" if apu_existia else "armado"
+        messages.success(
+            request,
+            f"APU {verbo} con producto principal: {elegido['producto_nombre']} "
+            f"({cantidad_base} {unidad_base}).",
+        )
+
+        registrar_log(
+            request,
+            accion="ARMAR_APU",
+            descripcion=(
+                f"APU {verbo} con producto principal #{producto_principal_id} "
+                f"(cant_base={cantidad_base} {unidad_base}) desde despiece maestro "
+                f"#{dm.pk} — {ps.proyecto.consecutivo} / {ps.sistema.nombre}"
+                + (f" / {ps.subsistema.nombre}" if ps.subsistema_id else "")
+            ),
+            modelo_afectado="Proyecto",
+            objeto_id=ps.proyecto_id,
+        )
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
 # Stubs de compatibilidad para imports históricos
 class PowerGripWizardView(View):
     """Redirige al calculador de sistemas."""
@@ -1056,6 +1852,33 @@ class SubsistemaDefAPIView(View):
 
 # ── APU Mano de Obra ────────────────────────────────────────────────────────
 
+def _filtrar_items_por_sia(apu, tipo_apu, items_data):
+    """Fase 6L-H — Filtra items_data dejando solo los que están asociados al
+    subsistema (SubsistemaItemAPU) bajo el tipo_apu indicado.
+
+    Defensa de servidor para evitar que entren al APU ítems no configurados
+    en el subsistema, incluso si el cliente manipula el POST. Si el
+    subsistema no tiene ítems configurados para el tipo, devuelve lista
+    vacía y la vista de origen muestra mensaje al usuario.
+    """
+    from apps.presupuestos.models import SubsistemaItemAPU
+
+    ps = apu.proyecto_sistema
+    if not ps or not ps.subsistema_id:
+        return [], 0
+    permitidos = set(
+        SubsistemaItemAPU.objects
+        .filter(subsistema_id=ps.subsistema_id, tipo=tipo_apu, activo=True,
+                item_catalogo__activo=True)
+        .values_list("item_catalogo_id", flat=True)
+    )
+    if not permitidos:
+        return [], 0
+    filtrados = [d for d in items_data if int(d.get("item_id", 0)) in permitidos]
+    descartados = len(items_data) - len(filtrados)
+    return filtrados, descartados
+
+
 class APUManoObraView(View):
     """
     POST /presupuestos/apu/<pk>/mano-obra/
@@ -1093,6 +1916,11 @@ class APUManoObraView(View):
                 messages.warning(request, "Seleccione al menos un ítem de mano de obra.")
                 return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
+            # Fase 6L-13: el modal "Configurar mano de obra" es ahora la
+            # biblioteca completa del catálogo. Se permite cualquier
+            # ItemCatalogoAPU activo de tipo MANO_DE_OBRA — la restricción a
+            # SubsistemaItemAPU se eliminó porque los predeterminados solo
+            # actúan como marcado visual en el modal, no como tope.
             apu.lineas.filter(tipo="MANO_DE_OBRA").delete()
             svc = APUService.for_apu(apu)
             svc.generar_mano_obra_desde_catalogo(items_data)
@@ -1129,6 +1957,7 @@ class APUHerramientasView(View):
                 messages.warning(request, "No se seleccionaron herramientas del catálogo.")
                 return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
+            # Fase 6L-13: biblioteca completa — sin filtro por subsistema.
             apu.lineas.filter(tipo="HERRAMIENTAS_EQUIPOS").delete()
             svc = APUService.for_apu(apu)
             svc.generar_herramientas_desde_catalogo(items_data)
@@ -1216,6 +2045,36 @@ class APULineaUpdateView(View):
             logger.exception("[APULineaUpdateView] Error línea %s", pk)
 
         return redirect(reverse("presupuestos:apu_detail", args=[linea.apu.pk]))
+
+
+class APUArchivarView(View):
+    """
+    POST /presupuestos/apu/<pk>/archivar/
+
+    Marca el APU como archivado. No borra líneas ni relaciones consolidadas.
+    Funciona tanto para APUs individuales (incluyendo los que son origen de un
+    consolidado) como para APUs consolidados (no toca los APUs origen).
+    """
+
+    def post(self, request, pk, *args, **kwargs):
+        from django.utils import timezone
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        if apu.archivado:
+            messages.info(request, f"El APU «{apu.nombre}» ya estaba archivado.")
+            return redirect("presupuestos:apu_detail", pk=pk)
+        motivo = (request.POST.get("motivo") or "").strip()
+        apu.archivado = True
+        apu.fecha_archivado = timezone.now()
+        apu.motivo_archivado = motivo
+        usuario = _usuario_sistema(request)
+        if usuario is not None:
+            apu.archivado_por = usuario
+        apu.save(update_fields=[
+            "archivado", "fecha_archivado", "motivo_archivado",
+            "archivado_por", "updated_at",
+        ])
+        messages.success(request, f"APU «{apu.nombre}» archivado. Trazabilidad preservada.")
+        return redirect("presupuestos:apu_detail", pk=pk)
 
 
 class APULineaDeleteView(View):
@@ -1485,33 +2344,57 @@ def _render_apu_pdf(apu, template_name: str) -> bytes:
 class APUPDFInternoView(View):
     """
     GET /presupuestos/apu/<pk>/pdf-interno/
-    Renderiza una página HTML imprimible con todos los datos internos (costos, márgenes, etc.).
-    Solo para uso interno de la empresa.
+
+    Documento técnico interno: puede mostrar costos internos, rendimientos y
+    detalles que no verá el cliente. Se genera con WeasyPrint en memoria y se
+    entrega como attachment. No se persiste archivo en disco.
     """
     def get(self, request, pk):
+        from weasyprint import HTML  # import perezoso: errores de sistema afloran al usar el botón
+
         apu = get_object_or_404(APUProyecto, pk=pk)
         lineas = apu.lineas.order_by("tipo", "descripcion").select_related(
             "despiece_linea__producto", "item_catalogo",
         )
-        html = render_to_string("presupuestos/apu_pdf_interno.html", {
+        resumen = apu.get_resumen_cotizacion()
+        # Fase 11.5.2 — proyecto contenedor (sirve tanto a individual como a
+        # consolidado, donde proyecto_sistema puede ser None).
+        proyecto = apu.get_proyecto()
+        ctx = {
             "apu": apu,
             "lineas": lineas,
+            "resumen": resumen,
+            "proyecto": proyecto,
             "fecha_generacion": date.today().strftime("%d/%m/%Y"),
             "request": request,
-        })
-        return HttpResponse(html)
+        }
+        if apu.es_consolidado:
+            ctx.update(_build_apu_consolidado_context(apu))
+        html_str = render_to_string("presupuestos/pdf/apu_pdf_interno.html", ctx)
+        pdf_bytes = HTML(string=html_str, base_url=request.build_absolute_uri("/")).write_pdf()
+        consecutivo = getattr(apu, "consecutivo", None) or apu.pk
+        filename = f"APU_Interno_{consecutivo}.pdf"
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 class APUPDFClienteView(View):
     """
     GET /presupuestos/apu/<pk>/pdf-cliente/
-    Renderiza cotización comercial simplificada para el cliente.
-    Muestra filas consolidadas por sección (Suministro / Instalación / etc.)
-    con cantidad, precio unitario de venta y total. Sin desglose interno de costos.
+
+    Cotización comercial para enviar al cliente. Usa get_resumen_cotizacion()
+    como única fuente de verdad para totales (garantía Red Shield, AIU aprobado,
+    IVA sobre Utilidad, total final). No muestra costos internos, rendimientos
+    ni fórmulas. Se genera con WeasyPrint en memoria y se entrega como
+    attachment. No se persiste archivo en disco.
     """
     def get(self, request, pk):
         from decimal import Decimal
+        from weasyprint import HTML  # import perezoso
+
         apu = get_object_or_404(APUProyecto, pk=pk)
+        resumen = apu.get_resumen_cotizacion()
         ps = apu.proyecto_sistema
         lineas_qs = list(apu.lineas.order_by("tipo", "descripcion").select_related(
             "despiece_linea__producto__unidad", "item_catalogo",
@@ -1529,13 +2412,11 @@ class APUPDFClienteView(View):
                 if key in params:
                     try:
                         qty_principal = Decimal(str(params[key]))
+                        if key == "area_m2":
+                            unidad_principal = "m²"
                     except Exception:
                         pass
                     break
-            if qty_principal == Decimal("1") and ps.proyecto:
-                if ps.proyecto.area_total_m2:
-                    qty_principal = Decimal(str(ps.proyecto.area_total_m2))
-                    unidad_principal = "m²"
             # Detectar moneda y unidad principal desde primera línea de materiales
             for linea in lineas_qs:
                 if linea.tipo == "MATERIALES" and linea.despiece_linea and linea.despiece_linea.producto:
@@ -1596,15 +2477,177 @@ class APUPDFClienteView(View):
                     productos_con_ficha.append(prod)
                     vistos.add(prod.pk)
 
-        html = render_to_string("presupuestos/apu_pdf_cliente.html", {
+        # Fase 11.5.2 — proyecto contenedor para cabecera comercial
+        # (en consolidado ps puede ser None pero apu.proyecto sí existe).
+        proyecto = apu.get_proyecto()
+        ctx = {
             "apu": apu,
             "ps": ps,
+            "proyecto": proyecto,
+            "resumen": resumen,
+            "secciones": secciones,
+            "productos_con_ficha": productos_con_ficha,
+            "fecha_generacion": date.today().strftime("%d/%m/%Y"),
+            "request": request,
+        }
+        if apu.es_consolidado:
+            ctx.update(_build_apu_consolidado_context(apu))
+        html_str = render_to_string("presupuestos/pdf/apu_pdf_cliente.html", ctx)
+        pdf_bytes = HTML(string=html_str, base_url=request.build_absolute_uri("/")).write_pdf()
+        consecutivo = getattr(apu, "consecutivo", None) or apu.pk
+        filename = f"Cotizacion_Cliente_{consecutivo}.pdf"
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Fase 12 — PDFs desde snapshot inmutable (CotizacionAPU)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CotizacionPDFInternoView(View):
+    """
+    GET /presupuestos/cotizacion/<pk>/pdf-interno/
+
+    Genera PDF Interno desde un snapshot APROBADO. NO toca datos vivos.
+    Se entrega como attachment, sin persistir archivo en disco.
+    """
+    def get(self, request, pk):
+        from weasyprint import HTML
+        from apps.presupuestos.models import CotizacionAPU
+        from apps.presupuestos.services import CotizacionSnapshotService
+
+        snapshot = get_object_or_404(CotizacionAPU, pk=pk)
+        ctx = CotizacionSnapshotService.construir_contexto_pdf(snapshot)
+        apu = snapshot.apu  # solo para que la plantilla pueda referenciar nombre/tipo
+        ctx.update({
+            "apu": apu,
+            "lineas": apu.lineas.order_by("tipo", "descripcion").select_related(
+                "despiece_linea__producto", "item_catalogo",
+            ),
+            "proyecto": snapshot.proyecto,
+            "fecha_generacion": date.today().strftime("%d/%m/%Y"),
+            "request": request,
+        })
+        if apu.es_consolidado:
+            ctx.update(_build_apu_consolidado_context(apu))
+        html_str = render_to_string("presupuestos/pdf/apu_pdf_interno.html", ctx)
+        pdf_bytes = HTML(string=html_str, base_url=request.build_absolute_uri("/")).write_pdf()
+        filename = f"APU_Interno_Aprobado_{snapshot.consecutivo_cotizacion}.pdf"
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+class CotizacionPDFClienteView(View):
+    """
+    GET /presupuestos/cotizacion/<pk>/pdf-cliente/
+
+    Genera PDF Cliente desde un snapshot APROBADO. NO toca datos vivos.
+    Reutiliza la plantilla del PDF Cliente vivo pasando el contexto rehidratado.
+    """
+    def get(self, request, pk):
+        from decimal import Decimal as _Dec
+        from weasyprint import HTML
+        from apps.presupuestos.models import CotizacionAPU
+        from apps.presupuestos.services import CotizacionSnapshotService
+
+        snapshot = get_object_or_404(CotizacionAPU, pk=pk)
+        ctx = CotizacionSnapshotService.construir_contexto_pdf(snapshot)
+        apu = snapshot.apu
+        ps = apu.proyecto_sistema
+        lineas_qs = list(apu.lineas.order_by("tipo", "descripcion").select_related(
+            "despiece_linea__producto__unidad", "item_catalogo",
+        ))
+
+        # Reconstruir secciones comerciales con los subtotales del snapshot.
+        moneda_principal = snapshot.moneda_snapshot or "COP"
+        unidad_principal = "und"
+        qty_principal = _Dec("1")
+        desc_sistema = apu.nombre or "Sistema"
+
+        if ps:
+            params = ps.parametros_entrada or {}
+            for key in ("total_powergrip", "cantidad", "area_m2"):
+                if key in params:
+                    try:
+                        qty_principal = _Dec(str(params[key]))
+                        if key == "area_m2":
+                            unidad_principal = "m²"
+                    except Exception:
+                        pass
+                    break
+            for linea in lineas_qs:
+                if linea.tipo == "MATERIALES" and linea.despiece_linea and linea.despiece_linea.producto:
+                    prod = linea.despiece_linea.producto
+                    if prod.unidad:
+                        unidad_principal = str(prod.unidad)
+                    break
+            desc_sistema = (
+                f"{ps.sistema.nombre}"
+                + (f" / {ps.subsistema.nombre}" if ps.subsistema else "")
+            )
+
+        SECCIONES_CONFIG = [
+            ("MATERIALES",          "Suministro",                 moneda_principal),
+            ("MANO_DE_OBRA",        "Mano de Obra / Instalación", "COP"),
+            ("HERRAMIENTAS_EQUIPOS","Herramientas y Equipos",      "COP"),
+            ("TRANSPORTE",          "Transporte y Logística",      "COP"),
+            ("ADMINISTRACION",      "Administración",              "COP"),
+        ]
+        secciones = []
+        for tipo_key, tipo_label, moneda_sec in SECCIONES_CONFIG:
+            lineas_tipo = [l for l in lineas_qs if l.tipo == tipo_key]
+            if not lineas_tipo:
+                continue
+            valor_subtotal = sum(_Dec(str(l.valor_total or 0)) for l in lineas_tipo)
+            if valor_subtotal <= 0:
+                continue
+            qty = qty_principal if qty_principal > 0 else _Dec("1")
+            valor_unitario = (valor_subtotal / qty).quantize(_Dec("0.1"))
+            iva_factor = (snapshot.iva_pct or _Dec("0")) / _Dec("100")
+            iva_monto = (valor_subtotal * iva_factor).quantize(_Dec("0.1")) if snapshot.aplica_iva else _Dec("0")
+            secciones.append({
+                "tipo": tipo_key,
+                "label": tipo_label,
+                "descripcion": f"{tipo_label} — {desc_sistema}",
+                "unidad": unidad_principal,
+                "cantidad": qty,
+                "valor_unitario": valor_unitario,
+                "subtotal": valor_subtotal,
+                "iva_monto": iva_monto,
+                "total_con_iva": valor_subtotal + iva_monto,
+                "moneda": moneda_sec,
+                "aplica_iva": snapshot.aplica_iva,
+                "iva_pct": snapshot.iva_pct,
+            })
+
+        productos_con_ficha = []
+        vistos = set()
+        for linea in lineas_qs:
+            if linea.despiece_linea and linea.despiece_linea.producto:
+                prod = linea.despiece_linea.producto
+                if prod.pk not in vistos and prod.ficha_tecnica:
+                    productos_con_ficha.append(prod)
+                    vistos.add(prod.pk)
+
+        ctx.update({
+            "apu": apu,
+            "ps": ps,
+            "proyecto": snapshot.proyecto,
             "secciones": secciones,
             "productos_con_ficha": productos_con_ficha,
             "fecha_generacion": date.today().strftime("%d/%m/%Y"),
             "request": request,
         })
-        return HttpResponse(html, content_type="text/html; charset=utf-8")
+        if apu.es_consolidado:
+            ctx.update(_build_apu_consolidado_context(apu))
+        html_str = render_to_string("presupuestos/pdf/apu_pdf_cliente.html", ctx)
+        pdf_bytes = HTML(string=html_str, base_url=request.build_absolute_uri("/")).write_pdf()
+        filename = f"Cotizacion_Cliente_Aprobada_{snapshot.consecutivo_cotizacion}.pdf"
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 class APUEnviarRevisionView(View):
@@ -1616,6 +2659,39 @@ class APUEnviarRevisionView(View):
         from django.utils import timezone as tz
         from apps.configuracion.models import ConfiguracionSistema
         apu = get_object_or_404(APUProyecto, pk=pk)
+
+        # Fase 12.2 — Gate de permisos
+        if not puede_enviar_a_revision(request, apu):
+            registrar_log(
+                request, accion="APROBACION_DENEGADA",
+                descripcion=f"Intento no autorizado de enviar APU {apu.pk} a revisión.",
+                modelo_afectado="APUProyecto", objeto_id=apu.pk,
+            )
+            messages.error(
+                request,
+                "No tiene permiso para enviar este APU a revisión.",
+            )
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
+        # Fase 12.3 — Bloqueo: no reenviar a revisión un APU ya aprobado.
+        ya_aprobado = bool(
+            (apu.modalidad_aiu_seleccionada or "").strip()
+            or apu.fecha_aprobacion
+            or apu.aprobado_por_id
+        )
+        if ya_aprobado:
+            registrar_log(
+                request, accion="APROBACION_DENEGADA",
+                descripcion=f"Intento de reenviar a revisión APU {apu.pk} ya aprobado.",
+                modelo_afectado="APUProyecto", objeto_id=apu.pk,
+            )
+            messages.error(
+                request,
+                "Este APU ya fue aprobado y no puede reenviarse a revisión. "
+                "Si requiere cambios, primero debe resetear la modalidad según el flujo autorizado.",
+            )
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
         try:
             revisor_pk = request.POST.get("revisor_id", "").strip()
             revisor = None
@@ -1640,6 +2716,11 @@ class APUEnviarRevisionView(View):
                     proyecto.solicitud.save(update_fields=["estado"])
 
             revisor_txt = f" Revisor: {revisor}." if revisor else ""
+            registrar_log(
+                request, accion="ENVIAR_REVISION",
+                descripcion=f"APU {apu.pk} ({apu.nombre}) enviado a revisión.{revisor_txt}",
+                modelo_afectado="APUProyecto", objeto_id=apu.pk,
+            )
             messages.success(
                 request,
                 f"APU «{apu.nombre}» enviado a revisión.{revisor_txt}",
@@ -1660,16 +2741,78 @@ class APURevisarView(View):
     template_name = "presupuestos/apu_revisar.html"
 
     def get(self, request, pk):
+        return self._render(request, pk)
+
+    def post(self, request, pk):
+        """Preview con porcentajes A/I/U ajustados sin persistir."""
+        return self._render(request, pk, preview=True)
+
+    def _render(self, request, pk, preview: bool = False):
+        from decimal import Decimal, InvalidOperation
+        from apps.configuracion.models import ConfiguracionSistema
         apu = get_object_or_404(APUProyecto, pk=pk)
+        # Fase 12.3 ext — Gate por unidad: ADMINISTRADOR siempre, resto sólo su unidad.
+        # Bypass: el creador del proyecto del APU siempre puede revisar.
+        _usuario = get_usuario_actual(request)
+        _proyecto = apu.get_proyecto()
+        _creado_por_id = getattr(_proyecto, "creado_por_id", None)
+        _es_creador = (
+            _usuario is not None
+            and _creado_por_id is not None
+            and _usuario.pk == _creado_por_id
+        )
+        if not _es_creador and not puede_gestionar_unidad(request, _apu_unidad(apu)):
+            messages.error(request, "No tiene permiso para acceder a información de otra unidad.")
+            return redirect("comercial:dashboard")
         if not apu.fecha_envio_revision:
             messages.warning(request, "Este APU aún no ha sido enviado a revisión.")
             return redirect(reverse("presupuestos:apu_detail", args=[pk]))
-        from apps.configuracion.models import ConfiguracionSistema
+
+        efectivos = apu.get_aiu_pct_efectivos()
+        pct_form = {
+            "admin": efectivos["admin"],
+            "imprevistos": efectivos["imprevistos"],
+            "utilidad": efectivos["utilidad"],
+        }
+        pct_override = None
+        if preview:
+            try:
+                def _p(name, fallback):
+                    raw = request.POST.get(name, "")
+                    if str(raw).strip() == "":
+                        return Decimal(str(fallback))
+                    return Decimal(str(raw).replace(",", "."))
+                pct_form["admin"] = _p("aiu_final_admin_pct", efectivos["admin"])
+                pct_form["imprevistos"] = _p("aiu_final_imprevistos_pct", efectivos["imprevistos"])
+                pct_form["utilidad"] = _p("aiu_final_utilidad_pct", efectivos["utilidad"])
+                if any(v < 0 for v in pct_form.values()):
+                    raise ValueError("Los porcentajes no pueden ser negativos.")
+                pct_override = pct_form
+            except (InvalidOperation, ValueError) as exc:
+                messages.error(request, f"Porcentajes inválidos: {exc}")
+
+        # Fase 12.2 — Contexto de permisos
+        usuario_actual = get_usuario_actual(request)
+        puede_aprobar = puede_aprobar_apu(request, apu)
+        es_aprobador_asignado = (
+            usuario_actual is not None
+            and apu.revisor_id is not None
+            and apu.revisor_id == usuario_actual.pk
+        )
+        es_administrador = es_admin(request)
+
         ctx = {
             "apu": apu,
-            "modalidades_aiu": apu.calcular_modalidades_aiu(),
+            "modalidades_aiu": apu.calcular_modalidades_aiu(pct_override=pct_override),
+            "pct_form": pct_form,
+            "pct_efectivos": efectivos,
+            "es_preview": preview and pct_override is not None,
             "revisores": ConfiguracionSistema.objects.filter(activo=True).order_by("nombre_completo"),
             "ya_aprobado": bool(apu.modalidad_aiu_seleccionada),
+            "puede_aprobar": puede_aprobar,
+            "es_aprobador_asignado": es_aprobador_asignado,
+            "es_administrador": es_administrador,
+            "usuario_actual": usuario_actual,
         }
         return render(request, self.template_name, ctx)
 
@@ -1677,28 +2820,67 @@ class APURevisarView(View):
 class APUAprobarModalidadView(View):
     """
     POST /presupuestos/apu/<pk>/aprobar-modalidad/
-    Guarda la modalidad AIU seleccionada por el revisor y avanza el estado del proyecto a COTIZADO.
+    Guarda la modalidad AIU seleccionada por el revisor, junto con los
+    porcentajes finales A/I/U (Fase 10A), y avanza el estado del proyecto a COTIZADO.
     """
     def post(self, request, pk):
         from django.utils import timezone as tz
-        from apps.configuracion.models import ConfiguracionSistema
+        from decimal import Decimal, InvalidOperation
         from apps.common.choices import EstadoProyecto, EstadoSolicitud
         apu = get_object_or_404(APUProyecto, pk=pk)
+
+        # Fase 12.2 — Gate de permisos
+        if not puede_aprobar_apu(request, apu):
+            registrar_log(
+                request, accion="APROBACION_DENEGADA",
+                descripcion=f"Intento no autorizado de aprobar APU {apu.pk}.",
+                modelo_afectado="APUProyecto", objeto_id=apu.pk,
+            )
+            messages.error(
+                request,
+                "No tiene permiso para aprobar este APU. Solo el aprobador "
+                "asignado puede realizar esta acción.",
+            )
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
         try:
             modalidad = request.POST.get("modalidad_aiu", "").strip()
             if modalidad not in ("1", "2"):
-                messages.error(request, "Seleccione una modalidad AIU válida (1 o 2).")
+                messages.error(request, "Modalidad AIU inválida. Solo se admiten Modalidad 1 o Modalidad 2 en esta fase.")
                 return redirect(reverse("presupuestos:apu_revisar", args=[pk]))
 
-            aprobador_pk = request.POST.get("aprobado_por_id", "").strip()
-            aprobador = None
-            if aprobador_pk:
-                aprobador = ConfiguracionSistema.objects.filter(pk=aprobador_pk).first()
+            # Validar porcentajes A/I/U finales (opcionales — si vienen se persisten).
+            def _parse_pct(raw, label):
+                if raw is None or str(raw).strip() == "":
+                    return None
+                try:
+                    val = Decimal(str(raw).replace(",", "."))
+                except (InvalidOperation, ValueError):
+                    raise ValueError(f"Porcentaje de {label} no es numérico.")
+                if val < 0:
+                    raise ValueError(f"Porcentaje de {label} no puede ser negativo.")
+                return val
+
+            pct_admin = _parse_pct(request.POST.get("aiu_final_admin_pct"), "Administración")
+            pct_imprev = _parse_pct(request.POST.get("aiu_final_imprevistos_pct"), "Imprevistos")
+            pct_util = _parse_pct(request.POST.get("aiu_final_utilidad_pct"), "Utilidad")
+
+            # Fase 12.2 — aprobado_por = usuario en sesión, ignorar campos del form.
+            aprobador = get_usuario_actual(request)
 
             apu.modalidad_aiu_seleccionada = modalidad
             apu.fecha_aprobacion = tz.now()
             update_fields = ["modalidad_aiu_seleccionada", "fecha_aprobacion", "updated_at"]
-            if aprobador:
+            if pct_admin is not None:
+                apu.aiu_final_admin_pct = pct_admin
+                update_fields.append("aiu_final_admin_pct")
+            if pct_imprev is not None:
+                apu.aiu_final_imprevistos_pct = pct_imprev
+                update_fields.append("aiu_final_imprevistos_pct")
+            if pct_util is not None:
+                apu.aiu_final_utilidad_pct = pct_util
+                update_fields.append("aiu_final_utilidad_pct")
+            if aprobador is not None:
                 apu.aprobado_por = aprobador
                 update_fields.append("aprobado_por")
             apu.save(update_fields=update_fields)
@@ -1712,14 +2894,90 @@ class APUAprobarModalidadView(View):
                     proyecto.solicitud.estado = EstadoSolicitud.APROBADA
                     proyecto.solicitud.save(update_fields=["estado"])
 
+            # Fase 12 — Snapshot inmutable de cotización aprobada.
+            # Se crea DESPUÉS de los estados para reflejar el momento final
+            # de la aprobación. Versiona automáticamente y marca las anteriores
+            # como REEMPLAZADA. NUNCA borra histórico.
+            from apps.presupuestos.services import CotizacionSnapshotService
+            snapshot = CotizacionSnapshotService.crear_snapshot(apu)
+
+            registrar_log(
+                request, accion="APROBAR_MODALIDAD",
+                descripcion=(
+                    f"APU {apu.pk} ({apu.nombre}) aprobado: modalidad {modalidad}, "
+                    f"cotización v{snapshot.version}."
+                ),
+                modelo_afectado="APUProyecto", objeto_id=apu.pk,
+            )
             messages.success(
                 request,
-                f"Modalidad AIU {modalidad} aprobada para el APU «{apu.nombre}».",
+                f"Modalidad AIU {modalidad} aprobada para el APU «{apu.nombre}». "
+                f"Cotización aprobada v{snapshot.version} generada.",
             )
+        except ValueError as exc:
+            messages.error(request, str(exc))
         except Exception as exc:
             messages.error(request, f"Error al aprobar modalidad: {exc}")
             logger.exception("[APUAprobarModalidadView] Error APU %s", pk)
 
+        return redirect(reverse("presupuestos:apu_revisar", args=[pk]))
+
+
+class APUResetModalidadView(View):
+    """
+    POST /presupuestos/apu/<pk>/reset-modalidad/
+    Limpia la aprobación de modalidad (Fase 10A-8) conservando los porcentajes
+    A/I/U finales para que el revisor pueda re-aprobar otra modalidad sin perder
+    el ajuste ya hecho.
+    """
+    def post(self, request, pk):
+        from apps.common.choices import EstadoProyecto, EstadoSolicitud
+        apu = get_object_or_404(APUProyecto, pk=pk)
+
+        # Fase 12.2 — Gate de permisos (mismo que aprobar)
+        if not puede_aprobar_apu(request, apu):
+            registrar_log(
+                request, accion="APROBACION_DENEGADA",
+                descripcion=f"Intento no autorizado de reset modalidad APU {apu.pk}.",
+                modelo_afectado="APUProyecto", objeto_id=apu.pk,
+            )
+            messages.error(
+                request,
+                "No tiene permiso para resetear la modalidad de este APU.",
+            )
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
+        try:
+            apu.modalidad_aiu_seleccionada = None
+            apu.aprobado_por = None
+            apu.fecha_aprobacion = None
+            apu.save(update_fields=[
+                "modalidad_aiu_seleccionada", "aprobado_por", "fecha_aprobacion", "updated_at",
+            ])
+            registrar_log(
+                request, accion="RESET_MODALIDAD",
+                descripcion=f"APU {apu.pk} ({apu.nombre}): modalidad reseteada.",
+                modelo_afectado="APUProyecto", objeto_id=apu.pk,
+            )
+
+            # Revertir estados de Proyecto y Solicitud — si el APU ya no tiene
+            # modalidad aprobada, el flujo comercial vuelve a revisión.
+            if apu.proyecto_sistema:
+                proyecto = apu.proyecto_sistema.proyecto
+                proyecto.estado = EstadoProyecto.APU_GENERADO
+                proyecto.save(update_fields=["estado"])
+                if proyecto.solicitud_id:
+                    proyecto.solicitud.estado = EstadoSolicitud.EN_REVISION
+                    proyecto.solicitud.save(update_fields=["estado"])
+
+            messages.success(
+                request,
+                "La modalidad AIU fue reiniciada. El proyecto y la solicitud vuelven a revisión. "
+                "Los porcentajes A/I/U finales se conservan.",
+            )
+        except Exception as exc:
+            messages.error(request, f"Error al resetear modalidad: {exc}")
+            logger.exception("[APUResetModalidadView] Error APU %s", pk)
         return redirect(reverse("presupuestos:apu_revisar", args=[pk]))
 
 
@@ -1791,7 +3049,7 @@ class CalculoConsumoView(View):
             "componentes_quimicos": componentes_quimicos,
             "lineas": lineas,
             "categorias_disponibles": categorias_disponibles,
-            "area_m2": ps.proyecto.area_total_m2,
+            "area_m2": (ps.parametros_entrada or {}).get("area_m2"),
             "tiene_resultados": bool(lineas),
             "sin_capas_definidas": not capas,
         }
@@ -1884,3 +3142,268 @@ class ProductosPorCategoriaConsumoAPIView(View):
             .values("pk", "nombre", "precio_actual", "moneda", "unidad__abreviatura")
         )
         return JsonResponse({"productos": list(productos)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fase 9R — Helper compartido + edición de garantía del APU desde el detalle
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _aplicar_garantia_desde_post(apu, POST, *, ps=None, durante_armado=False):
+    """
+    Aplica la sección Garantía del POST sobre el APUProyecto y guarda snapshot.
+
+    - durante_armado=True: las líneas APULinea acaban de crearse vía
+      APUService.generar(); el material objetivo viene como
+      `garantia_material_despiece_id` (DespieceLinea) y se resuelve a APULinea
+      por despiece_linea_id.
+    - durante_armado=False: edición desde apu_detail; el material objetivo
+      viene como `garantia_material_linea_id` (APULinea del APU).
+
+    Hace recalcular() al final para refrescar base/recargo y total_valor_venta.
+    """
+    from apps.comercial.models import TipoGarantia
+    from decimal import Decimal
+
+    aplica_g = POST.get("aplica_garantia") == "1"
+    apu.aplica_garantia = aplica_g
+
+    if not aplica_g:
+        apu.tipo_garantia = None
+        apu.garantia_porcentaje_aplicado = None
+        apu.garantia_modo_aplicacion = ""
+        apu.garantia_material_linea = None
+        apu.garantia_material_nombre_snapshot = ""
+        apu.garantia_base_valor = Decimal("0")
+        apu.garantia_valor_recargo = Decimal("0")
+        apu.save(update_fields=[
+            "aplica_garantia", "tipo_garantia",
+            "garantia_porcentaje_aplicado", "garantia_modo_aplicacion",
+            "garantia_material_linea", "garantia_material_nombre_snapshot",
+            "garantia_base_valor", "garantia_valor_recargo",
+            "updated_at",
+        ])
+        apu.recalcular()
+        return
+
+    # aplica_g == True → tipo obligatorio y activo
+    try:
+        tg_id = int(POST.get("tipo_garantia_id") or 0)
+    except (TypeError, ValueError):
+        tg_id = 0
+    tg = (
+        TipoGarantia.objects.filter(pk=tg_id, activo=True).first()
+        if tg_id else None
+    )
+    if tg is None:
+        raise ValueError(
+            "Debe seleccionar un tipo de garantía activo cuando 'Sí aplica' está marcado."
+        )
+
+    pct = tg.porcentaje_recargo or Decimal("0")
+    if pct < 0:
+        raise ValueError("El porcentaje de la garantía no puede ser negativo.")
+
+    modo = POST.get("garantia_modo_aplicacion") or APUProyecto.GARANTIA_MODO_TOTAL
+    if modo not in (APUProyecto.GARANTIA_MODO_TOTAL, APUProyecto.GARANTIA_MODO_ESPECIFICO):
+        raise ValueError("Modo de aplicación de garantía inválido.")
+
+    material_linea = None
+    material_nombre = ""
+
+    if modo == APUProyecto.GARANTIA_MODO_ESPECIFICO:
+        if durante_armado:
+            # Selector en modal "Armar mi APU" emite el ID de DespieceLinea
+            try:
+                dl_id = int(POST.get("garantia_material_despiece_id") or 0)
+            except (TypeError, ValueError):
+                dl_id = 0
+            if not dl_id:
+                raise ValueError(
+                    "Debe seleccionar el material sobre el que aplica la garantía."
+                )
+            material_linea = apu.lineas.filter(
+                tipo=TipoAPU.MATERIALES, despiece_linea_id=dl_id,
+            ).first()
+            if material_linea is None:
+                # Fallback: snapshot textual desde el POST (puede no haberse generado APULinea)
+                material_nombre = POST.get("garantia_material_nombre_snapshot") or ""
+                if not material_nombre:
+                    raise ValueError(
+                        "El material seleccionado no se encuentra en las líneas del APU."
+                    )
+        else:
+            # Edición desde apu_detail — selector emite APULinea.pk del propio APU
+            try:
+                al_id = int(POST.get("garantia_material_linea_id") or 0)
+            except (TypeError, ValueError):
+                al_id = 0
+            if not al_id:
+                raise ValueError(
+                    "Debe seleccionar el material sobre el que aplica la garantía."
+                )
+            material_linea = apu.lineas.filter(
+                pk=al_id, tipo=TipoAPU.MATERIALES,
+            ).first()
+            if material_linea is None:
+                raise ValueError(
+                    "El material seleccionado no pertenece a este APU o no es de tipo Materiales."
+                )
+        if material_linea is not None:
+            material_nombre = material_linea.descripcion or ""
+
+    apu.tipo_garantia = tg
+    apu.garantia_porcentaje_aplicado = pct
+    apu.garantia_modo_aplicacion = modo
+    apu.garantia_material_linea = material_linea
+    apu.garantia_material_nombre_snapshot = material_nombre
+    apu.save(update_fields=[
+        "aplica_garantia", "tipo_garantia",
+        "garantia_porcentaje_aplicado", "garantia_modo_aplicacion",
+        "garantia_material_linea", "garantia_material_nombre_snapshot",
+        "updated_at",
+    ])
+    apu.recalcular()
+
+
+class APUEditarGarantiaView(View):
+    """POST: actualiza garantía del APU. Recalcula recargo y total comercial."""
+
+    def post(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        try:
+            _aplicar_garantia_desde_post(apu, request.POST, durante_armado=False)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+        messages.success(request, "Garantía del APU actualizada correctamente.")
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
+class APUCotizacionFinalView(View):
+    """
+    Fase 11 — Cotización final en pantalla a partir del APU.
+
+    GET /presupuestos/apu/<pk>/cotizacion/
+
+    - Si el APU no tiene modalidad AIU aprobada, muestra Vista preliminar con
+      ambas modalidades como referencia y banner de advertencia.
+    - Si el APU tiene modalidad aprobada, muestra la cotización oficial.
+    - No genera PDF en esta fase; es una vista comercial calculada en pantalla.
+    """
+    template_name = "presupuestos/apu_cotizacion_final.html"
+
+    def get(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        resumen = apu.get_resumen_cotizacion()
+        return render(request, self.template_name, {
+            "apu": apu,
+            "resumen": resumen,
+        })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fase 11.5 — Consolidación opcional de APUs
+# ─────────────────────────────────────────────────────────────────────────────
+
+class APUConsolidarSeleccionarView(View):
+    """
+    GET — Pinta la página de selección de APUs del proyecto.
+    POST → preview.
+    La consolidación es opcional. El usuario decide si la usa.
+    """
+    template_name = "presupuestos/apu_consolidar_seleccionar.html"
+
+    def get(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        apus = self._apus_del_proyecto(proyecto)
+        return render(request, self.template_name, {
+            "proyecto": proyecto,
+            "apus_individuales": [a for a in apus if not a.es_consolidado],
+            "apus_consolidados": [a for a in apus if a.es_consolidado],
+        })
+
+    @staticmethod
+    def _apus_del_proyecto(proyecto):
+        # APUs individuales del proyecto via ProyectoSistema
+        del_proyecto = APUProyecto.objects.filter(
+            proyecto_sistema__proyecto=proyecto
+        )
+        # APUs consolidados via FK directa
+        consolidados = APUProyecto.objects.filter(proyecto=proyecto)
+        ids = list(del_proyecto.values_list("pk", flat=True)) + \
+              list(consolidados.values_list("pk", flat=True))
+        return (
+            APUProyecto.objects
+            .filter(pk__in=ids)
+            .select_related("proyecto_sistema__subsistema__sistema",
+                            "tipo_garantia")
+            .order_by("tipo_apu", "pk")
+        )
+
+
+class APUConsolidarPreviewView(View):
+    """
+    POST — recibe ids de APUs y muestra el resumen previo. No persiste.
+    Botón "Confirmar" envía a APUConsolidarConfirmarView.
+    """
+    template_name = "presupuestos/apu_consolidar_preview.html"
+
+    def post(self, request, pk):
+        from apps.presupuestos.services.apu_consolidacion_facade import (
+            APUConsolidacionFacade,
+        )
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        ids = request.POST.getlist("apus")
+        validacion, resumen = APUConsolidacionFacade.preview(proyecto, ids)
+
+        if not validacion.ok:
+            for err in validacion.errores:
+                messages.error(request, err)
+            return redirect("presupuestos:apu_consolidar_seleccionar", pk=proyecto.pk)
+
+        return render(request, self.template_name, {
+            "proyecto": proyecto,
+            "apus_origen": validacion.apus,
+            "resumen": resumen,
+            "ids_csv": ",".join(str(a.pk) for a in validacion.apus),
+        })
+
+
+class APUConsolidarConfirmarView(View):
+    """
+    POST — confirma y persiste el APU consolidado. Redirige a apu_detail.
+    """
+    def post(self, request, pk):
+        from apps.presupuestos.services.apu_consolidacion_facade import (
+            APUConsolidacionFacade,
+        )
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        ids_csv = request.POST.get("ids_csv", "")
+        ids = [int(x) for x in ids_csv.split(",") if x.strip().isdigit()]
+        nombre = (request.POST.get("nombre") or "").strip()
+
+        validacion, apu_consolidado = APUConsolidacionFacade.consolidar(
+            proyecto=proyecto, apu_ids=ids, nombre=nombre,
+        )
+        if not validacion.ok or apu_consolidado is None:
+            for err in validacion.errores:
+                messages.error(request, err)
+            return redirect("presupuestos:apu_consolidar_seleccionar", pk=proyecto.pk)
+
+        messages.success(
+            request,
+            f"APU consolidado #{apu_consolidado.pk} creado a partir de "
+            f"{len(validacion.apus)} APUs individuales.",
+        )
+        registrar_log(
+            request,
+            accion="CONSOLIDAR_APU",
+            descripcion=(
+                f"APU consolidado #{apu_consolidado.pk} creado a partir de "
+                f"APUs {[a.pk for a in validacion.apus]} "
+                f"en proyecto {proyecto.consecutivo}"
+            ),
+            modelo_afectado="Proyecto",
+            objeto_id=proyecto.pk,
+        )
+        return redirect("presupuestos:apu_detail", pk=apu_consolidado.pk)

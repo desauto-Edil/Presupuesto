@@ -45,18 +45,74 @@ class UnidadFilterMixin:
     unidad_field = None  # Ej: "unidad_negocio" o "creado_por__unidad_negocio"
 
     def _unidad_sesion(self):
-        """Retorna la unidad de negocio de la sesión actual."""
+        """Retorna la unidad de negocio efectiva (Fase 12.3 ext).
+        ADMINISTRADOR → "" (global). Resto → session["unidad_negocio"].
+        """
+        # Import diferido para evitar ciclos.
+        from apps.common.auth import unidad_efectiva
         try:
-            return self.request.session.get("unidad_negocio", "") or ""
+            return unidad_efectiva(self.request)
         except Exception:
             return ""
 
     def get_queryset(self):
         qs = super().get_queryset()
+        # ADMINISTRADOR ve todo, sin filtro por unidad.
+        from apps.common.auth import puede_ver_todas_las_unidades
+        try:
+            if puede_ver_todas_las_unidades(self.request):
+                return qs
+        except Exception:
+            pass
         unidad = self._unidad_sesion()
         if not unidad or not self.unidad_field:
             return qs
         return qs.filter(**{self.unidad_field: unidad})
+
+
+class UnidadObjectAccessMixin:
+    """
+    Para vistas de DETALLE: rechaza accesos a objetos de otra unidad cuando
+    el usuario no es ADMINISTRADOR. Aplica tras `get_object`.
+
+    Subclases definen `get_unidad_del_objeto(obj) -> str`. Devolver "" indica
+    que el objeto no está atado a una unidad específica.
+    """
+
+    redirect_url_name = "comercial:dashboard"
+    mensaje_denegacion = "No tiene permiso para acceder a información de otra unidad."
+
+    def get_unidad_del_objeto(self, obj):
+        # Implementación por defecto: intenta atributos comunes.
+        unidad = getattr(obj, "unidad_negocio", None)
+        if unidad:
+            return unidad
+        creado_por = getattr(obj, "creado_por", None)
+        if creado_por is not None:
+            return getattr(creado_por, "unidad_negocio", "") or ""
+        return ""
+
+    def dispatch(self, request, *args, **kwargs):
+        # Resolver objeto antes de chequear permisos
+        try:
+            self.object = self.get_object()
+        except Exception:
+            # Si no se puede resolver, deja que la vista falle naturalmente
+            return super().dispatch(request, *args, **kwargs)
+
+        from apps.common.auth import puede_gestionar_unidad, get_usuario_actual
+
+        # Bypass — el creador del objeto siempre puede acceder a lo suyo.
+        usuario = get_usuario_actual(request)
+        creado_por_id = getattr(self.object, "creado_por_id", None)
+        if usuario is not None and creado_por_id is not None and usuario.pk == creado_por_id:
+            return super().dispatch(request, *args, **kwargs)
+
+        unidad_obj = self.get_unidad_del_objeto(self.object)
+        if not puede_gestionar_unidad(request, unidad_obj):
+            messages.error(request, self.mensaje_denegacion)
+            return redirect(self.redirect_url_name)
+        return super().dispatch(request, *args, **kwargs)
 
 
 class WithCreateFormMixin:

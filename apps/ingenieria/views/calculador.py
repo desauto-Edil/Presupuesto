@@ -32,6 +32,7 @@ from apps.ingenieria.models import (
     ConsolidacionDespieceMaestro,
 )
 from apps.ingenieria.services.despiece_maestro_service import DespieceMaestroService
+from apps.ingenieria.services.despiece_facade import DespieceFacade
 from apps.common.choices import TipoSistema, LineaNegocio
 
 
@@ -246,10 +247,32 @@ class DespieceMaestroView(DetailView):
             except Exception:
                 pass
 
+        # ── Contexto del modal "Armar mi APU" (Fase 6D) ──────────────────────
+        # Solo se inyecta cuando el despiece pasaría la primera barrera de
+        # visibilidad (guardado + con proyecto). Si no, el botón principal no
+        # aparece y no hace falta validar más.
+        ctx["armar_apu_validacion"] = None
+        ctx["armar_apu_productos_opciones"] = []
+        # Fase 9D — Tipos de garantía activos para el selector del modal.
+        from apps.comercial.models import TipoGarantia as _TipoGarantia
+        ctx["tipos_garantia_activos"] = list(
+            _TipoGarantia.objects.filter(activo=True).order_by("orden", "nombre")
+        )
+        if ctx["puede_generar_apu"]:
+            from apps.ingenieria.services.lineas_finales_apu import (
+                validar_despiece_listo_para_apu,
+                productos_principal_opciones,
+            )
+            validacion = validar_despiece_listo_para_apu(dm)
+            ctx["armar_apu_validacion"] = validacion
+            ctx["armar_apu_productos_opciones"] = productos_principal_opciones(
+                validacion["lineas_finales"]
+            )
+
         # Serialización JSON de líneas guardadas para inicializar la tabla en JS
         import math as _math
         lineas_data = []
-        for linea in dm.lineas.order_by("orden"):
+        for linea in dm.lineas.select_related("producto").order_by("orden"):
             cant_calc = float(linea.cantidad_calculada)
             cant_red  = (
                 linea.cantidad_redondeada
@@ -274,6 +297,20 @@ class DespieceMaestroView(DetailView):
                 "producto_id":           linea.producto_id,
                 "producto_codigo":       linea.producto_codigo,
                 "producto_nombre":       linea.producto_nombre,
+                "presentacion_nombre": (
+                    linea.producto.presentacion_nombre if linea.producto_id and linea.producto else ""
+                ),
+                # Unidades del producto (para advertencia no bloqueante en frontend)
+                "unidad_producto": (
+                    linea.producto.unidad.abreviatura
+                    if linea.producto_id and linea.producto and linea.producto.unidad_id
+                    else ""
+                ),
+                "unidad_presentacion": (
+                    linea.producto.unidad_presentacion.abreviatura
+                    if linea.producto_id and linea.producto and linea.producto.unidad_presentacion_id
+                    else ""
+                ),
                 "precio_unitario": (
                     float(linea.precio_unitario) if linea.precio_unitario is not None else None
                 ),
@@ -286,7 +323,7 @@ class DespieceMaestroView(DetailView):
 
         # Consolidaciones guardadas para inicializar el estado JS
         consolidaciones_data = []
-        for c in dm.consolidaciones.order_by("orden"):
+        for c in dm.consolidaciones.select_related("producto").order_by("orden"):
             consolidaciones_data.append({
                 "id":                 c.pk,
                 "label":              c.label,
@@ -298,6 +335,20 @@ class DespieceMaestroView(DetailView):
                 "producto_id":        c.producto_id,
                 "producto_codigo":    c.producto_codigo,
                 "producto_nombre":    c.producto_nombre,
+                "presentacion_nombre": (
+                    c.producto.presentacion_nombre if c.producto_id and c.producto else ""
+                ),
+                # Unidades del producto (para advertencia no bloqueante en frontend)
+                "unidad_producto": (
+                    c.producto.unidad.abreviatura
+                    if c.producto_id and c.producto and c.producto.unidad_id
+                    else ""
+                ),
+                "unidad_presentacion": (
+                    c.producto.unidad_presentacion.abreviatura
+                    if c.producto_id and c.producto and c.producto.unidad_presentacion_id
+                    else ""
+                ),
                 "precio_unitario": (
                     float(c.precio_unitario) if c.precio_unitario is not None else None
                 ),
@@ -367,9 +418,12 @@ class CalcularDespieceMaestroView(View):
         # Actualizar variables_entrada en el objeto en memoria (sin guardar)
         dm.variables_entrada = variables_entrada
 
-        svc = DespieceMaestroService(dm)
+        # Fase 3D — primera adopción de DespieceFacade.
+        # Equivalente a: DespieceMaestroService(dm).calcular()
+        # (la facade es un wrapper estático sobre el mismo service; no
+        # captura excepciones, las propaga igual que el código previo).
         try:
-            resultados = svc.calcular()
+            resultados = DespieceFacade.calcular_maestro(dm)
         except Exception as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
@@ -562,8 +616,17 @@ class EliminarDespieceMaestroView(View):
     """POST: elimina un DespieceMaestro."""
 
     def post(self, request, pk):
+        from django.db.models import ProtectedError
         dm = get_object_or_404(DespieceMaestro, pk=pk)
-        dm.delete()
+        try:
+            dm.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                "No se puede eliminar este despiece porque está incluido en "
+                "uno o más APUs.",
+            )
+            return redirect("ingenieria:despiece_maestro", pk=pk)
         messages.success(request, "Despiece eliminado correctamente.")
         return redirect("ingenieria:despiece_list")
 
@@ -625,7 +688,9 @@ class BuscarProductosView(View):
         q         = request.GET.get("q", "").strip()
         categoria = request.GET.get("categoria", "").strip()
 
-        qs = Producto.objects.filter(activo=True).select_related("unidad", "categoria")
+        qs = Producto.objects.filter(activo=True).select_related(
+            "unidad", "categoria", "unidad_presentacion",
+        )
 
         if q:
             qs = qs.filter(nombre__icontains=q) | Producto.objects.filter(
@@ -654,6 +719,13 @@ class BuscarProductosView(View):
                     p.fecha_actualizacion_precio.strftime("%Y-%m-%dT%H:%M:%S")
                     if p.fecha_actualizacion_precio else None
                 ),
+                # ── Presentación técnica (opcional, para advertencias futuras) ──
+                "presentacion_nombre":   p.presentacion_nombre or "",
+                "ancho_presentacion":    float(p.ancho_presentacion) if p.ancho_presentacion is not None else None,
+                "largo_presentacion":    float(p.largo_presentacion) if p.largo_presentacion is not None else None,
+                "unidad_dimension":      p.unidad_dimension or "",
+                "cantidad_presentacion": float(p.cantidad_presentacion) if p.cantidad_presentacion is not None else None,
+                "unidad_presentacion":   p.unidad_presentacion.abreviatura if p.unidad_presentacion else "",
             })
 
         return JsonResponse({"ok": True, "productos": productos})

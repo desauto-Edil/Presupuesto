@@ -8,12 +8,16 @@ from .apu import (
     ConfiguracionAPU,
     APU,
     APULinea,
+    APUDespieceIncluido,
+    APUConsolidadoOrigen,
     CategoriaItemAPU,
     ItemCatalogoAPU,
     CuadrillaPreset,
     CuadrillaPresetItem,
     ReglaAPUSubsistema,
+    SubsistemaItemAPU,
 )
+from .cotizacion import CotizacionAPU
 
 # Alias de compatibilidad — el modelo se llama APU en el código fuente
 APUProyecto = APU
@@ -26,9 +30,13 @@ __all__ = [
     "APU",
     "APUProyecto",   # alias → APU
     "APULinea",
+    "APUDespieceIncluido",
+    "APUConsolidadoOrigen",
     "CategoriaItemAPU",
     "ItemCatalogoAPU",
     "CuadrillaPreset",
     "CuadrillaPresetItem",
     "ReglaAPUSubsistema",
+    "SubsistemaItemAPU",
+    "CotizacionAPU",
 ]

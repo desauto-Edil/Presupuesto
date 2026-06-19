@@ -9,17 +9,26 @@ from django.db import models
 
 
 class UnidadNegocio(models.TextChoices):
+    # Unidades operativas
     IMPERANDINA = "IMPERANDINA", "Imperandina"
     SOLARANDINA = "SOLARANDINA", "Solarandina"
     IMPERTIENDA = "IMPERTIENDA", "Impertienda"
+    # Fase 12.3 ext — Unidad corporativa/técnica reservada al ADMINISTRADOR
+    # global. No representa una unidad operativa; sólo da identidad visual
+    # (tema gris/negro/blanco) al alcance global. No limita el alcance del
+    # administrador, que sigue viendo todas las unidades.
+    EDILANDINA = "EDILANDINA", "Edilandina"
 
 
 
 class RolSistema(models.TextChoices):
+    # Jerarquía funcional (Fase 12.3 ext): ADMINISTRADOR global → GERENTE por
+    # unidad → PRESUPUESTOS / ASESOR_COMERCIAL / COMPRAS / SOLO_LECTURA.
     ADMINISTRADOR = "ADMINISTRADOR", "Administrador"
+    GERENTE = "GERENTE", "Gerente"
     PRESUPUESTOS = "PRESUPUESTOS", "Presupuestos"
-    COMPRAS = "COMPRAS", "Compras"
     ASESOR_COMERCIAL = "ASESOR_COMERCIAL", "Asesor comercial"
+    COMPRAS = "COMPRAS", "Compras"
     SOLO_LECTURA = "SOLO_LECTURA", "Solo lectura"
 
 
@@ -29,6 +38,9 @@ class EstadoSolicitud(models.TextChoices):
     EN_PRESUPUESTO = "EN_PRESUPUESTO", "En presupuesto"
     EN_REVISION = "EN_REVISION", "En revisión"
     APROBADA = "APROBADA", "Aprobada"
+    DEVUELTA = "DEVUELTA", "Devuelta"
+    # RECHAZADA queda solo por compatibilidad de datos legacy.
+    # En la UI del flujo de presupuestos se trata visualmente como "Devuelta".
     RECHAZADA = "RECHAZADA", "Rechazada"
     CERRADA = "CERRADA", "Cerrada"
 

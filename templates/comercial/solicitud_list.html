@@ -1,42 +1,42 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Solicitudes{% endblock %}
 {% block nav_solicitudes %}active{% endblock %}
 {% block page_title %}Solicitudes{% endblock %}
 {% block breadcrumb %}Comercial → Solicitudes{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/solicitudes-panel.css' %}">
 <style>
-    .sol-card {
-        background: var(--card);
-        border-radius: var(--radius);
-        border: 1px solid var(--border);
-        overflow: hidden;
+    /* Estilos del bloque de detalle reutilizado (heredados del detail original) */
+    .det-grid {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 14px;
     }
-    .sol-card .table thead th {
-        background: var(--surface);
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        padding: 14px 16px;
-        color: var(--ink-soft);
-        font-weight: 600;
-        border-bottom: 1px solid var(--border);
-    }
-    .sol-card .table tbody td {
-        padding: 12px 16px;
-        vertical-align: middle;
-        border-bottom: 1px solid rgba(14,17,23,0.04);
+    .det-col { display: flex; flex-direction: column; gap: 14px; }
+    .archivo-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 16px; border-bottom: 1px solid var(--border);
         font-size: 13px;
     }
-    .sol-card .table tbody tr:last-child td { border-bottom: none; }
-    .sol-card .table tbody tr:hover td { background: var(--theme-accent-pale); }
-
-    .sol-consecutivo {
-        font-family: monospace;
-        font-weight: 700;
-        color: var(--theme-accent);
-        font-size: 13px;
+    .archivo-item:last-child { border-bottom: none; }
+    .archivo-ext {
+        width: 32px; height: 32px; border-radius: 6px;
+        background: var(--theme-accent-pale);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; flex-shrink: 0;
     }
+    .archivo-nombre { font-weight: 500; color: var(--ink); text-decoration: none; flex: 1; }
+    .archivo-nombre:hover { color: var(--theme-accent); }
+    .archivo-meta { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+    .archivo-del {
+        background: none; border: none; cursor: pointer;
+        color: rgba(14,17,23,0.28); font-size: 13px; padding: 4px;
+        line-height: 1; border-radius: 4px; transition: color .15s;
+    }
+    .archivo-del:hover { color: var(--brand-red); }
+    @media (max-width: 1280px) { .det-grid { grid-template-columns: 1fr; } }
 
     /* Offcanvas nueva solicitud */
     #offcanvasSol { width: 480px; }
@@ -50,16 +50,13 @@
         font-size: 15px; font-weight: 700; color: var(--ink);
     }
     #offcanvasSol .offcanvas-body { padding: 22px; overflow-y: auto; }
-
     .sol-sys-info {
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 8px;
         padding: 12px 16px;
         margin-bottom: 18px;
-        display: flex;
-        gap: 22px;
-        flex-wrap: wrap;
+        display: flex; gap: 22px; flex-wrap: wrap;
         font-size: 12px;
     }
     .sol-sys-info-label {
@@ -67,12 +64,8 @@
         text-transform: uppercase; letter-spacing: 0.07em;
         color: var(--ink-soft); margin-bottom: 3px;
     }
-    .sol-sys-info-val {
-        font-weight: 600; color: var(--ink);
-    }
-
+    .sol-sys-info-val { font-weight: 600; color: var(--ink); }
     .oc-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
     .sol-oc-footer {
         position: sticky; bottom: 0;
         background: var(--card);
@@ -80,7 +73,6 @@
         border-top: 1px solid var(--border);
         display: flex; gap: 10px; justify-content: flex-end;
     }
-
     @media (max-width: 600px) {
         #offcanvasSol { width: 100vw; }
         .oc-grid2     { grid-template-columns: 1fr; }
@@ -97,131 +89,131 @@
 
 {% block content %}
 
-<!-- ── Barra de búsqueda y filtros ── -->
-<form method="get" class="fade-up" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <input type="text" name="q" value="{{ q }}" placeholder="Buscar por consecutivo, nombre o cliente…"
-           class="form-control form-control-sm" style="max-width:280px;">
-    <select name="estado" class="form-select form-select-sm" style="max-width:170px;">
-        <option value="">Todos los estados</option>
-        {% for val, label in estados %}
-        <option value="{{ val }}" {% if estado_filtro == val %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-    </select>
-    <select name="responsable" class="form-select form-select-sm" style="max-width:180px;">
-        <option value="">Todos los responsables</option>
-        {% for r in responsables %}
-        <option value="{{ r.pk }}" {% if responsable_filtro == r.pk|stringformat:"s" %}selected{% endif %}>
-            {{ r.nombre_completo|default:r.email }}
-        </option>
-        {% endfor %}
-    </select>
-    <button type="submit" class="btn btn-ghost btn-sm">Filtrar</button>
-    {% if q or estado_filtro or responsable_filtro %}
-    <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm" style="color:var(--ink-soft);">✕ Limpiar</a>
-    {% endif %}
-</form>
-
-<div class="sol-card fade-up">
-    {% if solicitudes %}
-    <table class="table mb-0">
-        <thead>
-            <tr>
-                <th>Consecutivo</th>
-                <th>Cliente</th>
-                <th>Nombre</th>
-                <th>F. entrega</th>
-                <th>Estado</th>
-                <th>Responsable</th>
-                <th>Creada</th>
-                <th class="text-end">Acciones</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in solicitudes %}
-            <tr>
-                <td><span class="sol-consecutivo">{{ s.consecutivo }}</span></td>
-                <td style="color:var(--ink-soft);">{{ s.cliente.razon_social }}</td>
-                <td style="font-weight:500;">{{ s.nombre }}</td>
-                <td style="font-size:12px;color:var(--ink-soft);">{{ s.fecha_entrega|date:"d/m/Y"|default:"—" }}</td>
-                <td>
-                    <span class="badge-status
-                        {% if s.estado == 'EN_GESTION' %}bs-pendiente
-                        {% elif s.estado == 'COTIZADA' %}bs-apu
-                        {% elif s.estado == 'APROBADA' %}bs-validado
-                        {% elif s.estado == 'RECHAZADA' or s.estado == 'CANCELADA' %}bs-cerrado
-                        {% else %}bs-inactivo{% endif %}">
-                        {{ s.get_estado_display }}
-                    </span>
-                </td>
-                <td style="font-size:12px;color:var(--ink-soft);">
-                    {{ s.creado_por.nombre_completo|default:s.creado_por.email|default:"—" }}
-                </td>
-                <td style="font-size:12px;color:var(--ink-soft);">{{ s.created_at|date:"d/m/Y" }}</td>
-                <td class="text-end">
-                    <a href="{% url 'comercial:solicitud_detail' s.pk %}"
-                        class="btn btn-ghost btn-xs d-inline-flex align-items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-eye-fill me-1" viewBox="0 0 16 16">
-                            <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0"/>
-                            <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8m8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7"/>
-                        </svg>
-                    </a>
-                    <a href="{% url 'comercial:solicitud_update' s.pk %}"
-                        class="btn btn-ghost btn-xs d-inline-flex align-items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-pencil-fill" viewBox="0 0 16 16">
-                            <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/>
-                        </svg>
-                    </a>
-                    <button type="button" class="btn btn-ghost btn-xs d-inline-flex align-items-center"
-                            style="color:var(--danger);"
-                            data-bs-toggle="modal"
-                            data-bs-target="#modalDeleteSolicitud"
-                            data-sol-pk="{{ s.pk }}"
-                            data-sol-nombre="{{ s.consecutivo }} — {{ s.cliente.razon_social }}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
-                            <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
-                        </svg>
-                    </button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% if is_paginated %}
-    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
-        {% if page_obj.has_previous %}
-        <a href="?{% if q %}q={{ q }}&{% endif %}{% if estado_filtro %}estado={{ estado_filtro }}&{% endif %}{% if responsable_filtro %}responsable={{ responsable_filtro }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-ghost btn-xs">← Anterior</a>
-        {% endif %}
-        <span style="font-size:12px;color:var(--ink-soft);">Pág. {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
-        {% if page_obj.has_next %}
-        <a href="?{% if q %}q={{ q }}&{% endif %}{% if estado_filtro %}estado={{ estado_filtro }}&{% endif %}{% if responsable_filtro %}responsable={{ responsable_filtro }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-ghost btn-xs">Siguiente →</a>
-        {% endif %}
-    </div>
-    {% endif %}
-    {% else %}
-    <div class="empty-state" style="padding:60px 24px;">
-        <div class="empty-state-icon">◷</div>
-        <div style="font-size:15px;font-weight:600;margin-bottom:6px;">
-            {% if q or estado_filtro or responsable_filtro %}Sin resultados para los filtros aplicados{% else %}Sin solicitudes registradas{% endif %}
-        </div>
-        <div class="empty-state-text" style="margin-bottom:20px;">
-            {% if q or estado_filtro or responsable_filtro %}
-            <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-sm">Limpiar filtros</a>
-            {% else %}
-            Las solicitudes provienen del sistema Salesforce. Registra la primera.
-            <div style="margin-top:16px;">
-                <a href="{% url 'comercial:solicitud_create' %}" class="btn btn-primary btn-sm">+ Nueva solicitud</a>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
+<div class="solpanel-toolbar fade-up">
+    <button type="button" id="solpanelToggle" class="btn btn-ghost btn-sm solpanel-toggle"
+            aria-pressed="false" title="Mostrar u ocultar el listado de solicitudes">
+        <span class="solpanel-toggle-icon">⇆</span>
+        <span class="solpanel-toggle-text">Ocultar lista</span>
+    </button>
 </div>
 
+<div class="solpanel-wrap fade-up">
 
-<!-- ═══════════════════════════════════════
-     OFFCANVAS — Nueva solicitud (creación rápida)
-     La edición completa va a solicitud_form.html
-═══════════════════════════════════════ -->
+    {# ─────────────── COLUMNA IZQUIERDA: lista ─────────────── #}
+    <aside class="solpanel-list">
+        <div class="solpanel-list-header">
+            <h2 class="solpanel-list-title">Solicitudes</h2>
+            <div class="solpanel-list-subtitle">Seguimiento y control</div>
+        </div>
+
+        <form method="get" class="solpanel-filters">
+            <input type="text" name="q" value="{{ q }}"
+                   placeholder="Buscar por consecutivo, nombre o cliente…"
+                   class="form-control form-control-sm">
+            <div class="solpanel-filters-row">
+                <select name="estado" class="form-select form-select-sm">
+                    <option value="">Todos los estados</option>
+                    {% for val, label in estados %}
+                    <option value="{{ val }}" {% if estado_filtro == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <select name="responsable" class="form-select form-select-sm">
+                    <option value="">Responsable</option>
+                    {% for r in responsables %}
+                    <option value="{{ r.pk }}" {% if responsable_filtro == r.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ r.nombre_completo|default:r.email|truncatechars:22 }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="solpanel-filters-actions">
+                <button type="submit" class="btn btn-ghost btn-xs">Filtrar</button>
+                {% if q or estado_filtro or responsable_filtro %}
+                <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-xs"
+                   style="color:var(--ink-soft);">✕ Limpiar</a>
+                {% endif %}
+            </div>
+        </form>
+
+        <div class="solpanel-scroll">
+            {% if solicitudes %}
+                {% for s in solicitudes %}
+                    {% include "comercial/partials/_solicitud_panel_list_item.html" with s=s sel_pk=sel_pk %}
+                {% endfor %}
+            {% else %}
+                <div class="empty-state" style="padding:40px 20px;text-align:center;">
+                    <div class="empty-state-icon" style="font-size:28px;">◷</div>
+                    <div style="font-size:13px;font-weight:600;margin-top:8px;color:var(--ink);">
+                        {% if q or estado_filtro or responsable_filtro %}
+                            Sin resultados
+                        {% else %}
+                            Sin solicitudes
+                        {% endif %}
+                    </div>
+                    <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">
+                        {% if q or estado_filtro or responsable_filtro %}
+                            <a href="{% url 'comercial:solicitud_list' %}" class="btn btn-ghost btn-xs">Limpiar filtros</a>
+                        {% else %}
+                            <button type="button" class="btn btn-primary btn-xs"
+                                    data-bs-toggle="offcanvas" data-bs-target="#offcanvasSol">
+                                + Nueva solicitud
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        {% if is_paginated and solicitudes %}
+        <div class="solpanel-list-footer">
+            <span>Pág. {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+            <div style="display:flex;gap:4px;">
+                {% if page_obj.has_previous %}
+                <a href="?{% if q %}q={{ q }}&{% endif %}{% if estado_filtro %}estado={{ estado_filtro }}&{% endif %}{% if responsable_filtro %}responsable={{ responsable_filtro }}&{% endif %}{% if sel_pk %}sel={{ sel_pk }}&{% endif %}page={{ page_obj.previous_page_number }}"
+                   class="btn btn-ghost btn-xs">←</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                <a href="?{% if q %}q={{ q }}&{% endif %}{% if estado_filtro %}estado={{ estado_filtro }}&{% endif %}{% if responsable_filtro %}responsable={{ responsable_filtro }}&{% endif %}{% if sel_pk %}sel={{ sel_pk }}&{% endif %}page={{ page_obj.next_page_number }}"
+                   class="btn btn-ghost btn-xs">→</a>
+                {% endif %}
+            </div>
+        </div>
+        {% elif solicitudes %}
+        <div class="solpanel-list-footer">
+            <span>Mostrando {{ solicitudes|length }} solicitud{{ solicitudes|length|pluralize:"es" }}</span>
+        </div>
+        {% endif %}
+    </aside>
+
+    {# ─────────────── COLUMNA DERECHA: detalle ─────────────── #}
+    <section class="solpanel-detail">
+        {% if solicitud_sel %}
+            {% with solicitud=solicitud_sel %}
+                {% include "comercial/partials/_solicitud_panel_detail.html" %}
+            {% endwith %}
+        {% elif sel_pk %}
+            <div class="solpanel-empty">
+                <div class="solpanel-empty-icon">⚠</div>
+                <div class="solpanel-empty-title">Solicitud no disponible</div>
+                <div class="solpanel-empty-text">
+                    La solicitud seleccionada no existe o pertenece a otra unidad de negocio.
+                </div>
+            </div>
+        {% else %}
+            <div class="solpanel-empty">
+                <div class="solpanel-empty-icon">📋</div>
+                <div class="solpanel-empty-title">Selecciona una solicitud</div>
+                <div class="solpanel-empty-text">
+                    Elige una solicitud del panel izquierdo para ver su información, proyectos,
+                    despieces, APUs y cotizaciones.
+                </div>
+            </div>
+        {% endif %}
+    </section>
+
+</div>
+
+{% comment %}OFFCANVAS — Nueva solicitud{% endcomment %}
 <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasSol">
     <div class="offcanvas-header">
         <h5 class="offcanvas-title">+ Nueva solicitud</h5>
@@ -229,7 +221,6 @@
     </div>
     <div class="offcanvas-body">
 
-        <!-- Campos del sistema — solo informativo -->
         <div class="sol-sys-info">
             <div>
                 <div class="sol-sys-info-label">Consecutivo</div>
@@ -248,9 +239,7 @@
         <form method="post" action="{% url 'comercial:solicitud_create' %}" enctype="multipart/form-data">
             {% csrf_token %}
 
-            <!-- Referencia Salesforce -->
             <div class="section-heading">Referencia Salesforce</div>
-
             <div class="oc-grid2" style="margin-bottom:14px;">
                 <div>
                     <label class="form-label">Consecutivo <span style="color:var(--brand-red)">*</span></label>
@@ -262,9 +251,7 @@
                 </div>
             </div>
 
-            <!-- Cliente y nombre -->
             <div class="section-heading">Cliente y proyecto</div>
-
             <div class="oc-grid2" style="margin-bottom:14px;">
                 <div>
                     <label class="form-label">Cliente <span style="color:var(--brand-red)">*</span></label>
@@ -281,20 +268,16 @@
                 {{ create_form.nombre }}
             </div>
 
-            <!-- Detalle -->
             <div class="section-heading">Detalle</div>
-
             <div style="margin-bottom:14px;">
                 <label class="form-label">Descripción <span style="color:var(--brand-red)">*</span></label>
                 {{ create_form.descripcion }}
             </div>
-
             <div style="margin-bottom:14px;">
                 <label class="form-label">Observaciones <span style="color:var(--brand-red)">*</span></label>
                 {{ create_form.observaciones }}
             </div>
 
-            <!-- Archivos adjuntos — obligatorio para crear -->
             <div style="margin-bottom:14px;">
                 <label class="form-label">Archivos adjuntos <span style="color:var(--brand-red)">*</span></label>
                 <input type="file" name="archivos" class="form-control form-control-sm" multiple required>
@@ -312,41 +295,86 @@
     </div>
 </div>
 
-{# ── Modal: Confirmar eliminación de solicitud ─────────────────── #}
-<div class="modal fade" id="modalDeleteSolicitud" tabindex="-1">
-  <div class="modal-dialog modal-sm">
-    <div class="modal-content">
-      <form id="formDeleteSolicitud" method="post" action="">
-        {% csrf_token %}
-        <div class="modal-header" style="border-bottom:1px solid var(--border);">
-          <h5 class="modal-title" style="font-size:14px;">Eliminar solicitud</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body" style="font-size:13px;">
-          ¿Eliminar <strong id="deleteSolNombre"></strong>? Esta acción no se puede deshacer.
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-sm" style="background:var(--danger);color:#fff;">Eliminar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
 {% endblock %}
 
 {% block extra_js %}
 <script>
+/* Toggle del historial de actividad — definido aquí porque el parcial
+   _solicitud_panel_detail.html se incluye desde esta vista. */
+function toggleHistorial() {
+  const preview = document.getElementById('historial-preview');
+  const completo = document.getElementById('historial-completo');
+  const chevron = document.getElementById('historial-chevron');
+  if (!preview) return;
+  const hidden = preview.style.display === 'none';
+  preview.style.display = hidden ? '' : 'none';
+  if (completo) completo.style.display = 'none';
+  if (chevron) chevron.style.transform = hidden ? '' : 'rotate(-90deg)';
+}
+function toggleHistorialCompleto() {
+  const completo = document.getElementById('historial-completo');
+  const btn = document.getElementById('btn-ver-mas');
+  if (!completo) return;
+  const visible = completo.style.display !== 'none';
+  completo.style.display = visible ? 'none' : '';
+  if (btn) btn.textContent = visible ? btn.dataset.labelMas : 'Mostrar menos ▴';
+}
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('btn-ver-mas');
+  if (btn) btn.dataset.labelMas = btn.textContent;
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Limpieza defensiva de backdrops / body.modal-open / scroll-lock.
+   Razón: si por alguna razón Bootstrap deja huérfano un .modal-backdrop o
+   un .offcanvas-backdrop al cerrar (por ejemplo, al intentar cambiar entre
+   un modal y otro), la pantalla queda gris y bloqueada. Este observer
+   garantiza que al cerrar cualquier modal/offcanvas se restablece el body.
+   ───────────────────────────────────────────────────────────────────────── */
 (function () {
-  const modal = document.getElementById('modalDeleteSolicitud');
-  if (!modal) return;
-  modal.addEventListener('show.bs.modal', function (e) {
-    const btn  = e.relatedTarget;
-    const pk   = btn.dataset.solPk;
-    const url  = "{% url 'comercial:solicitud_delete' 0 %}".replace('/0/', '/' + pk + '/');
-    document.getElementById('formDeleteSolicitud').action = url;
-    document.getElementById('deleteSolNombre').textContent = btn.dataset.solNombre;
+  function limpiarSiNoHayActivos() {
+    var hayModalAbierto = document.querySelector('.modal.show');
+    var hayOffcanvasAbierto = document.querySelector('.offcanvas.show');
+    if (!hayModalAbierto && !hayOffcanvasAbierto) {
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+      document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
+      document.querySelectorAll('.offcanvas-backdrop').forEach(function (b) { b.remove(); });
+    }
+  }
+  document.addEventListener('hidden.bs.modal', function () { setTimeout(limpiarSiNoHayActivos, 20); });
+  document.addEventListener('hidden.bs.offcanvas', function () { setTimeout(limpiarSiNoHayActivos, 20); });
+  /* Salvavidas extra: tecla Escape — si quedó algo huérfano, lo limpia. */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') setTimeout(limpiarSiNoHayActivos, 50);
+  });
+  /* Doble clic en cualquier backdrop huérfano que quede después de 600ms
+     sin un modal visible: se considera basura y se remueve. */
+  document.addEventListener('click', function (e) {
+    if (e.target && e.target.classList && (e.target.classList.contains('modal-backdrop') || e.target.classList.contains('offcanvas-backdrop'))) {
+      setTimeout(limpiarSiNoHayActivos, 50);
+    }
+  });
+})();
+
+/* Toggle mostrar/ocultar la lista de solicitudes — estado persistido en localStorage */
+(function () {
+  const btn = document.getElementById('solpanelToggle');
+  const wrap = document.querySelector('.solpanel-wrap');
+  if (!btn || !wrap) return;
+  const KEY = 'solpanel:listCollapsed';
+  const label = btn.querySelector('.solpanel-toggle-text');
+  const apply = function (collapsed) {
+    wrap.classList.toggle('is-collapsed', collapsed);
+    btn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+    if (label) label.textContent = collapsed ? 'Mostrar lista' : 'Ocultar lista';
+  };
+  try { apply(localStorage.getItem(KEY) === '1'); } catch (e) { apply(false); }
+  btn.addEventListener('click', function () {
+    const next = !wrap.classList.contains('is-collapsed');
+    try { localStorage.setItem(KEY, next ? '1' : '0'); } catch (e) {}
+    apply(next);
   });
 })();
 </script>

@@ -1,0 +1,395 @@
+{% comment %}
+   ============================================================
+   Partial: Modal "Armar mi APU" del Despiece Maestro (Fase 6D).
+
+   Uso (al final de despiece_maestro.html, junto a los demás modales):
+       {% if puede_generar_apu %}
+       {% include "ingenieria/partials/_modal_armar_apu.html" %}
+       {% endif %}
+
+   Contrato de contexto (inyectado por DespieceMaestroView):
+     - despiece                       — instancia DespieceMaestro
+     - armar_apu_validacion           — dict de validar_despiece_listo_para_apu()
+         · ok, errores, advertencias
+         · lineas_finales, lineas_pendientes_producto,
+           lineas_cantidad_invalida, lineas_sin_unidad, lineas_sin_precio
+     - armar_apu_productos_opciones   — list[dict] de productos_principal_opciones()
+         · producto_id, producto_nombre, unidad, cantidad_base, origen_lineas
+
+   Comportamiento:
+     - Si validacion.ok es False → muestra bloque de errores con líneas
+       específicas. El botón "Armar APU" queda deshabilitado.
+     - Si ok=True → selector de producto principal listando solo productos
+       presentes en líneas finales. Cantidad base = sumatoria automática.
+     - Form action (Fase 6E): apunta a
+       `presupuestos:apu_armar_desde_despiece`, que revalida en backend,
+       confirma que el producto principal está en líneas finales,
+       persiste producto_principal_id/cantidad_base/unidad_base/
+       modo_rendimiento en ProyectoSistema.parametros_entrada y dispara
+       APUService.generar(). El cálculo de rendimiento por producto
+       principal se cablea en Fase 6F.
+
+   ID preservados:
+     - #modalArmarApu  → trigger desde botón principal del despiece_maestro.
+   ============================================================
+{% endcomment %}
+<div class="modal fade" id="modalArmarApu" tabindex="-1" aria-hidden="true"
+     aria-labelledby="modalArmarApuTitle">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalArmarApuTitle">
+          <i class="bi bi-file-earmark-bar-graph me-2"></i>Armar mi APU
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+
+      <form method="post"
+            action="{% url 'presupuestos:apu_armar_desde_despiece' despiece.pk %}"
+            id="formArmarApu">
+        {% csrf_token %}
+        <input type="hidden" name="producto_principal_id" id="armarApuProductoId" value="">
+        <input type="hidden" name="cantidad_base"          id="armarApuCantidadBase" value="">
+        <input type="hidden" name="unidad_base"            id="armarApuUnidadBase"   value="">
+        {# Fase 9D — Garantía. aplica_garantia=on/off; tipo_garantia_id solo si aplica. #}
+
+        <div class="modal-body">
+
+          <p class="text-muted small mb-3">
+            El rendimiento de cada material se calculará dividiendo su cantidad
+            total entre la cantidad total del producto principal seleccionado.
+          </p>
+
+          {% if not armar_apu_validacion.ok %}
+          {# ── Bloque de errores: el despiece no está listo ─────────────── #}
+          <div class="alert alert-danger" role="alert">
+            <strong><i class="bi bi-exclamation-triangle me-1"></i>No se puede armar el APU todavía.</strong>
+            <ul class="mb-0 mt-2 small">
+              {% for err in armar_apu_validacion.errores %}
+              <li>{{ err }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+
+          {% if armar_apu_validacion.lineas_pendientes_producto %}
+          <div class="mt-3">
+            <div class="fw-semibold small mb-1">Líneas sin producto seleccionado:</div>
+            <ul class="small text-muted mb-0">
+              {% for l in armar_apu_validacion.lineas_pendientes_producto %}
+              <li>[{{ l.tipo }}] {{ l.nombre }} — {{ l.cantidad_total }} {{ l.unidad|default:"(sin unidad)" }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          {% if armar_apu_validacion.lineas_cantidad_invalida %}
+          <div class="mt-3">
+            <div class="fw-semibold small mb-1">Líneas con cantidad cero o vacía:</div>
+            <ul class="small text-muted mb-0">
+              {% for l in armar_apu_validacion.lineas_cantidad_invalida %}
+              <li>[{{ l.tipo }}] {{ l.nombre }} → {{ l.cantidad_total }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          {% if armar_apu_validacion.lineas_sin_unidad %}
+          <div class="mt-3">
+            <div class="fw-semibold small mb-1">Líneas sin unidad de medida:</div>
+            <ul class="small text-muted mb-0">
+              {% for l in armar_apu_validacion.lineas_sin_unidad %}
+              <li>[{{ l.tipo }}] {{ l.nombre }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          {% else %}
+          {# ── Selector de producto principal ───────────────────────────── #}
+          <div class="mb-3">
+            <label for="armarApuSelectProducto" class="form-label small fw-semibold">
+              Producto principal
+            </label>
+            <select id="armarApuSelectProducto" class="form-select form-select-sm"
+                    onchange="armarApuOnSelectProducto(this)">
+              <option value="">— Seleccione un producto —</option>
+              {% for opt in armar_apu_productos_opciones %}
+              <option value="{{ opt.producto_id }}"
+                      data-cantidad="{{ opt.cantidad_base }}"
+                      data-unidad="{{ opt.unidad }}"
+                      data-origenes="{{ opt.origen_lineas|length }}">
+                {{ opt.producto_nombre }}
+                — {{ opt.cantidad_base }} {{ opt.unidad|default:"" }}
+                {% if opt.origen_lineas|length > 1 %}(suma de {{ opt.origen_lineas|length }} líneas){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text small">
+              Solo se listan productos presentes en las líneas finales del despiece.
+              Si el mismo producto aparece en varias líneas, la cantidad base es la sumatoria.
+            </div>
+          </div>
+
+          <div class="row g-2 mb-3" id="armarApuResumenProducto" style="display:none;">
+            <div class="col-6">
+              <div class="border rounded p-2">
+                <div class="text-muted small">Cantidad base</div>
+                <div class="fw-bold" id="armarApuLblCantidad">—</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="border rounded p-2">
+                <div class="text-muted small">Unidad base</div>
+                <div class="fw-bold" id="armarApuLblUnidad">—</div>
+              </div>
+            </div>
+          </div>
+
+          {% if armar_apu_validacion.advertencias %}
+          <div class="alert alert-warning small py-2 mb-3" role="alert">
+            <i class="bi bi-info-circle me-1"></i>
+            <ul class="mb-0">
+              {% for adv in armar_apu_validacion.advertencias %}
+              <li>{{ adv }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          <div class="mt-2">
+            <div class="fw-semibold small mb-1">Líneas que entrarán al APU
+              <span class="text-muted">({{ armar_apu_validacion.lineas_finales|length }})</span>
+            </div>
+            <div class="table-responsive" style="max-height:240px;overflow-y:auto;">
+              <table class="table table-sm table-hover small mb-0">
+                <thead class="table-light" style="position:sticky;top:0;">
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Línea</th>
+                    <th>Producto</th>
+                    <th class="text-end">Cantidad</th>
+                    <th>Unidad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for l in armar_apu_validacion.lineas_finales %}
+                  <tr>
+                    <td>
+                      {% if l.tipo == "consolidada" %}
+                      <span class="badge bg-info-subtle text-info-emphasis">Consolidada</span>
+                      {% else %}
+                      <span class="badge bg-secondary-subtle text-secondary-emphasis">Normal</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {{ l.nombre }}
+                      {% if l.advertencias_unidad %}
+                      {# Fase 6H: chip de advertencia no bloqueante por línea. #}
+                      <i class="bi bi-exclamation-triangle-fill text-warning ms-1"
+                         title="{{ l.advertencias_unidad|join:' · ' }}"
+                         data-bs-toggle="tooltip"></i>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if l.producto_nombre %}{{ l.producto_nombre }}
+                      {% else %}<span class="text-danger">— sin producto —</span>{% endif %}
+                    </td>
+                    <td class="text-end font-monospace">{{ l.cantidad_total }}</td>
+                    <td>{{ l.unidad|default:"—" }}</td>
+                  </tr>
+                  {% if l.advertencias_unidad %}
+                  <tr>
+                    <td colspan="5" class="bg-warning-subtle text-warning-emphasis small py-1 px-3">
+                      {% for adv in l.advertencias_unidad %}
+                      <div><i class="bi bi-info-circle me-1"></i>{{ adv }}</div>
+                      {% endfor %}
+                    </td>
+                  </tr>
+                  {% endif %}
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {% endif %}
+
+          {# ── Fase 9R · Garantía como recargo comercial sobre Materiales ── #}
+          {% if armar_apu_validacion.ok %}
+          <hr class="my-3">
+          <div class="mb-2">
+            <div class="fw-semibold small mb-2">
+              <i class="bi bi-shield-check me-1"></i>Garantía
+              <span class="text-muted small">(recargo comercial sobre Materiales)</span>
+            </div>
+            <div class="d-flex gap-3 mb-2">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="aplica_garantia"
+                       id="armarApuGarSi" value="1"
+                       onchange="armarApuOnAplicaGarantia(true)">
+                <label class="form-check-label small" for="armarApuGarSi">Sí aplica</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="aplica_garantia"
+                       id="armarApuGarNo" value="0" checked
+                       onchange="armarApuOnAplicaGarantia(false)">
+                <label class="form-check-label small" for="armarApuGarNo">No aplica</label>
+              </div>
+            </div>
+            <div id="armarApuGarantiaSelector" style="display:none;">
+              <label for="armarApuTipoGarantia" class="form-label small">Tipo de garantía</label>
+              <select name="tipo_garantia_id" id="armarApuTipoGarantia"
+                      class="form-select form-select-sm"
+                      onchange="armarApuOnTipoGarantia(this)">
+                <option value="" data-pct="0">— Seleccione una garantía —</option>
+                {% for g in tipos_garantia_activos %}
+                <option value="{{ g.pk }}" data-pct="{{ g.porcentaje_recargo }}">
+                  {{ g.nombre }} — {{ g.porcentaje_recargo }}%
+                </option>
+                {% endfor %}
+              </select>
+              {% if not tipos_garantia_activos %}
+              <div class="form-text small text-warning">
+                No hay tipos de garantía activos. Crea uno en
+                <a href="{% url 'comercial:garantia_list' %}">Comercial → Garantías</a>.
+              </div>
+              {% endif %}
+
+              <div id="armarApuGarPctInfo" class="form-text small mt-1" style="display:none;">
+                Porcentaje aplicado: <strong id="armarApuGarPctValue">0</strong>%
+              </div>
+
+              <div class="mt-2">
+                <label class="form-label small mb-1">¿Cómo aplicar la garantía?</label>
+                <div class="d-flex gap-3 flex-wrap">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="garantia_modo_aplicacion"
+                           id="armarApuGarModoTotal" value="TOTAL_MATERIALES" checked
+                           onchange="armarApuOnModoGarantia('TOTAL_MATERIALES')">
+                    <label class="form-check-label small" for="armarApuGarModoTotal">
+                      Sobre el total de materiales
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="garantia_modo_aplicacion"
+                           id="armarApuGarModoEsp" value="MATERIAL_ESPECIFICO"
+                           onchange="armarApuOnModoGarantia('MATERIAL_ESPECIFICO')">
+                    <label class="form-check-label small" for="armarApuGarModoEsp">
+                      Sobre un material específico
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div id="armarApuGarMaterialBlock" class="mt-2" style="display:none;">
+                <label for="armarApuGarMaterial" class="form-label small">Material objetivo</label>
+                <select name="garantia_material_despiece_id" id="armarApuGarMaterial"
+                        class="form-select form-select-sm"
+                        onchange="armarApuOnMaterialGarantia(this)">
+                  <option value="">— Seleccione un material —</option>
+                  {% for l in armar_apu_validacion.lineas_finales %}
+                  <option value="{{ l.id }}"
+                          data-nombre="{{ l.nombre }}{% if l.producto_nombre %} — {{ l.producto_nombre }}{% endif %}">
+                    {{ l.nombre }}{% if l.producto_nombre %} — {{ l.producto_nombre }}{% endif %}
+                    {% if l.cantidad_total %} ({{ l.cantidad_total }} {{ l.unidad|default:"" }}){% endif %}
+                  </option>
+                  {% endfor %}
+                </select>
+                <input type="hidden" name="garantia_material_nombre_snapshot"
+                       id="armarApuGarMaterialSnapshot" value="">
+                <div class="form-text small">
+                  El recargo se aplicará únicamente sobre el valor de venta de este material.
+                </div>
+              </div>
+
+              <div class="form-text small mt-2">
+                La garantía solo afecta el total comercial — no modifica cantidades,
+                rendimientos ni costos técnicos.
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+            Cancelar
+          </button>
+          <button type="submit"
+                  class="btn btn-primary btn-sm"
+                  id="armarApuBtnSubmit"
+                  {% if not armar_apu_validacion.ok %}disabled{% endif %}>
+            <i class="bi bi-file-earmark-bar-graph me-1"></i>Armar APU
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* Fase 6D — Lógica mínima del modal "Armar mi APU".
+   Al elegir un producto del select, propaga cantidad_base/unidad a los
+   inputs hidden del form y muestra un resumen visual. El backend
+   (apu_armar_desde_despiece, Fase 6E) revalida y recalcula cantidad_base
+   en servidor: estos hidden son hints, no fuentes de verdad. */
+function armarApuOnAplicaGarantia(aplica) {
+  const sel = document.getElementById("armarApuGarantiaSelector");
+  const tg  = document.getElementById("armarApuTipoGarantia");
+  if (sel) sel.style.display = aplica ? "" : "none";
+  if (!aplica) {
+    if (tg) tg.value = "";
+    const pctInfo = document.getElementById("armarApuGarPctInfo");
+    if (pctInfo) pctInfo.style.display = "none";
+    const matBlock = document.getElementById("armarApuGarMaterialBlock");
+    if (matBlock) matBlock.style.display = "none";
+    const modoTotal = document.getElementById("armarApuGarModoTotal");
+    if (modoTotal) modoTotal.checked = true;
+  }
+}
+function armarApuOnTipoGarantia(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const pct = opt ? (opt.getAttribute("data-pct") || "0") : "0";
+  const info = document.getElementById("armarApuGarPctInfo");
+  const val  = document.getElementById("armarApuGarPctValue");
+  if (val) val.textContent = pct;
+  if (info) info.style.display = sel.value ? "" : "none";
+}
+function armarApuOnModoGarantia(modo) {
+  const block = document.getElementById("armarApuGarMaterialBlock");
+  if (block) block.style.display = (modo === "MATERIAL_ESPECIFICO") ? "" : "none";
+  if (modo === "TOTAL_MATERIALES") {
+    const mat = document.getElementById("armarApuGarMaterial");
+    if (mat) mat.value = "";
+    const snap = document.getElementById("armarApuGarMaterialSnapshot");
+    if (snap) snap.value = "";
+  }
+}
+function armarApuOnMaterialGarantia(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const nombre = opt ? (opt.getAttribute("data-nombre") || "") : "";
+  const snap = document.getElementById("armarApuGarMaterialSnapshot");
+  if (snap) snap.value = nombre;
+}
+function armarApuOnSelectProducto(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const pid = sel.value || "";
+  const cantidad = opt ? (opt.getAttribute("data-cantidad") || "") : "";
+  const unidad   = opt ? (opt.getAttribute("data-unidad")   || "") : "";
+
+  document.getElementById("armarApuProductoId").value   = pid;
+  document.getElementById("armarApuCantidadBase").value = cantidad;
+  document.getElementById("armarApuUnidadBase").value   = unidad;
+
+  const resumen = document.getElementById("armarApuResumenProducto");
+  if (pid) {
+    document.getElementById("armarApuLblCantidad").textContent = cantidad || "—";
+    document.getElementById("armarApuLblUnidad").textContent   = unidad   || "—";
+    resumen.style.display = "";
+  } else {
+    resumen.style.display = "none";
+  }
+}
+</script>

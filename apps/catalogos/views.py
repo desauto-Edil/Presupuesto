@@ -59,6 +59,7 @@ class CatalogoView(ListView):
         ctx["modal_categoria_form"] = CategoriaForm()
         ctx["modal_producto_form"] = ProductoForm()
         ctx["modal_unidad_form"] = UnidadMedidaForm()
+        ctx["modal_proveedor_form"] = ProveedorForm(initial={"activo": True})
 
         return ctx
 

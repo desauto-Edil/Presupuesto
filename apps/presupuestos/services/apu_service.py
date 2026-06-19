@@ -9,6 +9,62 @@ from django.db import transaction
 logger = logging.getLogger(__name__)
 
 
+def _resolver_config_apu():
+    """Resuelve la ConfiguracionAPU activa con cache-aside (Fase 5C).
+
+    Camino feliz: get_cached_config_apu_id() → ConfiguracionAPU.objects.get(pk=id).
+    Si el cache devuelve None (sin registro activo en DB) o el id no se puede
+    cargar, cae al flujo original ConfiguracionAPU.activa_o_default() — que
+    además garantiza la auto-creación del registro por defecto. Esto preserva
+    el comportamiento visible y el efecto colateral de inicialización.
+    Invalidación: signals post_save/post_delete sobre ConfiguracionAPU
+    (apps/presupuestos/signals.py).
+    """
+    from apps.presupuestos.models import ConfiguracionAPU
+    from apps.common.cache import get_cached_config_apu_id
+    cfg_id = get_cached_config_apu_id()
+    if cfg_id is not None:
+        try:
+            return ConfiguracionAPU.objects.get(pk=cfg_id)
+        except ConfiguracionAPU.DoesNotExist:
+            pass
+    return ConfiguracionAPU.activa_o_default()
+
+
+def calcular_rendimiento_por_producto_principal(cantidad_linea, cantidad_base) -> Decimal:
+    """Fase 6F — Rendimiento de una línea APU contra la cantidad base del
+    producto principal.
+
+    Fórmula:
+        rendimiento = cantidad_linea / cantidad_base
+
+    Reglas (verbatim del usuario):
+      - cantidad_base no puede ser 0.
+      - cantidad_base no puede ser None.
+      - cantidad_linea no puede ser None.
+      - Usar Decimal.
+      - Redondear a 6 decimales (misma precisión que APULinea.rendimiento).
+
+    Para la línea del producto principal aplica el mismo helper:
+        cantidad_linea == cantidad_base  →  rendimiento = 1.
+
+    Raises:
+        ValueError si cantidad_base es None / 0 / negativa, o si
+        cantidad_linea es None.
+    """
+    if cantidad_base is None:
+        raise ValueError("cantidad_base no puede ser None.")
+    if cantidad_linea is None:
+        raise ValueError("cantidad_linea no puede ser None.")
+    base = Decimal(str(cantidad_base))
+    if base <= Decimal("0"):
+        raise ValueError(
+            f"cantidad_base debe ser mayor que cero (recibido: {cantidad_base})."
+        )
+    linea = Decimal(str(cantidad_linea))
+    return (linea / base).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+
+
 _CLAVES_UNIDAD_REFERENCIA = (
     "total_powergrip",
     "total_unidades",
@@ -25,10 +81,10 @@ class APUService:
     # ── Constructor ───────────────────────────────────────────────────────────
 
     def __init__(self, proyecto_sistema):
-        from apps.presupuestos.models import APU, ConfiguracionAPU
+        from apps.presupuestos.models import APU
 
         self.ps  = proyecto_sistema
-        self.cfg = ConfiguracionAPU.activa_o_default()
+        self.cfg = _resolver_config_apu()
 
         # Nombre y descripción predeterminados derivados del proyecto sistema
         nombre_default = (
@@ -64,9 +120,8 @@ class APUService:
     def for_apu(cls, apu) -> "APUService":
         """Crea un APUService adjunto a un APU existente (sin get_or_create)."""
         instance = object.__new__(cls)
-        from apps.presupuestos.models import ConfiguracionAPU
         instance.ps  = apu.proyecto_sistema
-        instance.cfg = ConfiguracionAPU.activa_o_default()
+        instance.cfg = _resolver_config_apu()
         instance.apu = apu
         return instance
 
@@ -82,50 +137,96 @@ class APUService:
         svc.finalizar()
         return svc.apu
 
+    def _items_apu_subsistema(self, tipo_apu: str) -> list:
+        """Fase 6L-D — Devuelve items_data para una categoría leyendo SOLO
+        SubsistemaItemAPU asociados al subsistema del proyecto.
+
+        Reemplaza el patrón anterior `ItemCatalogoAPU.objects.filter(activo=True,
+        categoria__tipo_apu=tipo)` que traía todo el catálogo. Ahora el APU
+        solo trae los ítems que el subsistema explícitamente configuró.
+
+        Devuelve una lista de dicts compatible con
+        `_generar_categoria_desde_catalogo`:
+            [{"item_id": int, "cantidad": int}, ...]
+
+        Si el subsistema no tiene ítems configurados para `tipo_apu` →
+        devuelve lista vacía (la categoría queda sin generar y el detalle
+        APU muestra mensaje claro en la vista).
+        """
+        from apps.presupuestos.models import SubsistemaItemAPU
+
+        ps = self.ps
+        if not ps or not ps.subsistema_id:
+            return []
+
+        qs = (
+            SubsistemaItemAPU.objects
+            .filter(subsistema_id=ps.subsistema_id, tipo=tipo_apu, activo=True,
+                    item_catalogo__activo=True)
+            .order_by("orden", "item_catalogo__nombre")
+            .values("item_catalogo_id", "cantidad")
+        )
+        return [
+            {"item_id": row["item_catalogo_id"], "cantidad": row["cantidad"]}
+            for row in qs
+        ]
+
     def _auto_generar_desde_catalogo(self) -> None:
         """
-        Auto-puebla el APU con todos los ítems activos del catálogo,
-        por cada tipo que aún no tenga líneas generadas.
+        Auto-puebla el APU con los ítems APU predeterminados del subsistema
+        (Fase 6L-D). Por cada categoría no-Materiales que aún no tenga
+        líneas generadas, consulta SubsistemaItemAPU y solo genera si hay
+        ítems asociados. Si no hay ítems configurados para una categoría,
+        NO se llena con todo el catálogo (cambio respecto al comportamiento
+        anterior): la categoría queda vacía y el template muestra mensaje
+        explicativo.
         """
-        from apps.presupuestos.models import ItemCatalogoAPU
         from apps.common.choices import TipoAPU
 
         tipos_existentes = set(self.apu.lineas.values_list("tipo", flat=True))
 
         if TipoAPU.MANO_DE_OBRA not in tipos_existentes:
-            items = list(ItemCatalogoAPU.objects.filter(
-                activo=True, categoria__tipo_apu=TipoAPU.MANO_DE_OBRA
-            ))
-            if items:
-                self.generar_mano_obra_desde_catalogo(
-                    [{"item_id": i.pk, "cantidad": 1} for i in items]
+            items_data = self._items_apu_subsistema(TipoAPU.MANO_DE_OBRA)
+            if items_data:
+                self.generar_mano_obra_desde_catalogo(items_data)
+            else:
+                logger.info(
+                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para MO; "
+                    "la categoría queda vacía.",
+                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
                 )
 
         if TipoAPU.HERRAMIENTAS_EQUIPOS not in tipos_existentes:
-            items = list(ItemCatalogoAPU.objects.filter(
-                activo=True, categoria__tipo_apu=TipoAPU.HERRAMIENTAS_EQUIPOS
-            ))
-            if items:
-                self.generar_herramientas_desde_catalogo(
-                    [{"item_id": i.pk, "cantidad": 1} for i in items]
+            items_data = self._items_apu_subsistema(TipoAPU.HERRAMIENTAS_EQUIPOS)
+            if items_data:
+                self.generar_herramientas_desde_catalogo(items_data)
+            else:
+                logger.info(
+                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para "
+                    "HERRAMIENTAS; la categoría queda vacía.",
+                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
                 )
 
         if TipoAPU.TRANSPORTE not in tipos_existentes:
-            items = list(ItemCatalogoAPU.objects.filter(
-                activo=True, categoria__tipo_apu=TipoAPU.TRANSPORTE
-            ))
-            if items:
-                self.generar_transporte_desde_catalogo(
-                    [{"item_id": i.pk, "cantidad": 1} for i in items]
+            items_data = self._items_apu_subsistema(TipoAPU.TRANSPORTE)
+            if items_data:
+                self.generar_transporte_desde_catalogo(items_data)
+            else:
+                logger.info(
+                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para "
+                    "TRANSPORTE; la categoría queda vacía.",
+                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
                 )
 
         if TipoAPU.ADMINISTRACION not in tipos_existentes:
-            items = list(ItemCatalogoAPU.objects.filter(
-                activo=True, categoria__tipo_apu=TipoAPU.ADMINISTRACION
-            ))
-            if items:
-                self.generar_administracion_desde_catalogo(
-                    [{"item_id": i.pk, "cantidad": 1} for i in items]
+            items_data = self._items_apu_subsistema(TipoAPU.ADMINISTRACION)
+            if items_data:
+                self.generar_administracion_desde_catalogo(items_data)
+            else:
+                logger.info(
+                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para "
+                    "ADMINISTRACION; la categoría queda vacía.",
+                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
                 )
 
     # ── Helpers: referencia del producto base (PowerGrip) ─────────────────────
@@ -498,11 +599,15 @@ class APUService:
 
         from apps.ingenieria.models import ComponenteSubsistema
 
-        # ── Tarea 10: limpiar líneas de materiales auto-generadas anteriores ──
-        self.apu.lineas.filter(
-            tipo=TipoAPU.MATERIALES,
-            despiece_linea__isnull=False,
-        ).delete()
+        # ── Fix 6E-C: regenerar materiales desde cero ─────────────────────────
+        # Antes filtrábamos por despiece_linea__isnull=False para "preservar"
+        # APULineas materiales legacy sin FK. Eso convertía a las líneas
+        # huérfanas (despiece_linea=NULL por SET_NULL al borrar DespieceLineas
+        # obsoletas en APUArmarDesdeDespieceView) en "materiales fantasma" que
+        # sobrevivían entre regeneraciones.
+        # Regla: las APULineas tipo MATERIALES son SIEMPRE derivadas del
+        # despiece. Se borran completas y se reconstruyen desde ps.despiece_lineas.
+        self.apu.lineas.filter(tipo=TipoAPU.MATERIALES).delete()
 
         lineas_despiece = self.ps.despiece_lineas.select_related(
             "producto", "producto__unidad", "categoria_producto",
@@ -513,6 +618,35 @@ class APUService:
         if self.ps.subsistema_id:
             for c in ComponenteSubsistema.objects.filter(subsistema=self.ps.subsistema):
                 _comp_cache[c.codigo] = c
+
+        # ── Fase 6F: modo de rendimiento ─────────────────────────────────────
+        # Si el flujo "Armar mi APU" persistió producto_principal + cantidad_base
+        # en parametros_entrada, usamos esa cantidad_base como denominador
+        # uniforme para TODAS las líneas. La línea cuyo producto coincide con
+        # el producto principal queda con rendimiento = 1.
+        # Si no hay modo configurado (APUs legacy o flujo APUGenerarDesdeDespiece),
+        # se preserva el cálculo legacy por componente (total_powergrip/área).
+        _params = self.ps.parametros_entrada or {}
+        _modo_rendimiento = _params.get("modo_rendimiento")
+        _usar_producto_principal = _modo_rendimiento == "PRODUCTO_PRINCIPAL"
+        _cantidad_base_pp = None
+        _producto_principal_id = None
+        if _usar_producto_principal:
+            try:
+                _cantidad_base_pp = Decimal(str(_params.get("cantidad_base") or 0))
+                _producto_principal_id = int(_params.get("producto_principal_id") or 0)
+            except (TypeError, ValueError):
+                _cantidad_base_pp = None
+                _producto_principal_id = None
+            if not _cantidad_base_pp or _cantidad_base_pp <= 0 or not _producto_principal_id:
+                # Si los datos persistidos están corruptos, fallback al modo legacy
+                # para no romper la generación.
+                logger.warning(
+                    "[APUService] modo_rendimiento=PRODUCTO_PRINCIPAL pero datos inválidos "
+                    "(cantidad_base=%s, producto_principal_id=%s); fallback al modo legacy (PS=%s).",
+                    _params.get("cantidad_base"), _params.get("producto_principal_id"), self.ps.pk,
+                )
+                _usar_producto_principal = False
 
         creadas = []
 
@@ -534,13 +668,30 @@ class APUService:
             precio   = float(dl.precio_snapshot or 0)
             cantidad = float(dl.cantidad_final)
 
-            # ── Obtener el total de referencia para ESTE componente ──────────
-            # Prioridad: ref. del componente → ref. del subsistema → fallback área
-            tp = self._get_total_unidades_componente(dl.componente_codigo, _comp_cache)
-
-            # rendimiento = cuántas unidades de material por 1 unidad del sistema
-            # Ej: 25947 fijaciones / 2883 soportes = 9 fijaciones/soporte
-            rendimiento = (cantidad / tp) if tp > 0 else 1.0
+            # ── Cálculo de rendimiento ───────────────────────────────────────
+            if _usar_producto_principal:
+                # Fase 6F: rendimiento = cantidad_linea / cantidad_base_producto_principal.
+                # Si la línea corresponde al producto principal, el helper devuelve 1
+                # automáticamente (cantidad == cantidad_base).
+                try:
+                    rendimiento = float(
+                        calcular_rendimiento_por_producto_principal(
+                            cantidad, _cantidad_base_pp
+                        )
+                    )
+                except ValueError as exc:
+                    # Esto no debería pasar (cantidad_base se validó arriba) pero
+                    # protegemos al servicio de un crash en runtime.
+                    logger.error(
+                        "[APUService] Línea %s: error de rendimiento PP (%s); usando 1.0",
+                        dl.pk, exc,
+                    )
+                    rendimiento = 1.0
+            else:
+                # Legacy: ref. del componente → ref. del subsistema → fallback área.
+                # Ej: 25947 fijaciones / 2883 soportes = 9 fijaciones/soporte.
+                tp = self._get_total_unidades_componente(dl.componente_codigo, _comp_cache)
+                rendimiento = (cantidad / tp) if tp > 0 else 1.0
 
             linea, _ = APULinea.objects.update_or_create(
                 apu=self.apu,

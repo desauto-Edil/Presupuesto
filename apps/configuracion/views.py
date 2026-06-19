@@ -1,6 +1,7 @@
 """apps/configuracion/views.py — Vistas unificadas de Configuración."""
 
 from django.contrib import messages
+from django.contrib.auth.hashers import check_password, make_password, identify_hasher
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.views import View
@@ -8,6 +9,36 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from .models import ConfiguracionSistema, UnidadNegocioInfo, UnidadPolitica, UnidadClausula, UnidadAlianza
 from .forms import ConfiguracionSistemaForm
 from apps.common.mixins import AdminRequiredMixin
+
+
+def _es_hash_django(valor: str) -> bool:
+    """True si el valor almacenado en password_hash ya es un hash de Django."""
+    if not valor:
+        return False
+    try:
+        identify_hasher(valor)
+        return True
+    except Exception:
+        return False
+
+
+def _verificar_password(cfg, password_plano: str) -> bool:
+    """
+    Verifica la contraseña con auto-upgrade transparente.
+    - Si el valor en BD ya es hash → check_password.
+    - Si es texto plano (legacy) → comparación directa y re-hash inmediato.
+    """
+    if not password_plano:
+        return False
+    almacenado = cfg.password_hash or ""
+    if _es_hash_django(almacenado):
+        return check_password(password_plano, almacenado)
+    # Legacy: contraseña plana en BD. Comparar y migrar.
+    if almacenado == password_plano:
+        cfg.password_hash = make_password(password_plano)
+        cfg.save(update_fields=["password_hash", "updated_at"])
+        return True
+    return False
 
 
 def _form_errors(form):
@@ -47,6 +78,14 @@ class ConfiguracionCreateView(AdminRequiredMixin, CreateView):
     template_name = "configuracion/configuracion_list.html"
     success_url = reverse_lazy("configuracion:configuracion")
 
+    def form_valid(self, form):
+        cfg = form.save(commit=False)
+        password_plano = (form.cleaned_data.get("password_hash") or "").strip()
+        cfg.password_hash = make_password(password_plano)
+        cfg.save()
+        messages.success(self.request, f"Usuario {cfg.nombre_completo} creado.")
+        return redirect(self.success_url)
+
     def form_invalid(self, form):
         messages.error(self.request, _form_errors(form))
         return redirect("configuracion:configuracion")
@@ -60,11 +99,11 @@ class ConfiguracionUpdateView(AdminRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         cfg = form.save(commit=False)
-        nueva_password = form.cleaned_data.get("password_hash", "").strip()
+        nueva_password = (form.cleaned_data.get("password_hash") or "").strip()
         if not nueva_password:
             cfg.password_hash = ConfiguracionSistema.objects.get(pk=cfg.pk).password_hash
         else:
-            cfg.password_hash = nueva_password
+            cfg.password_hash = make_password(nueva_password)
         cfg.save()
         messages.success(self.request, f"Usuario {cfg.nombre_completo} actualizado.")
         return redirect(self.success_url)
@@ -255,7 +294,7 @@ class LoginConfiguracionView(View):
         password = request.POST.get("password")
         try:
             cfg = ConfiguracionSistema.objects.get(email=email, activo=True)
-            if cfg.password_hash == password:
+            if _verificar_password(cfg, password):
                 # Guardar con ambas claves para compatibilidad con sesiones existentes
                 request.session["configuracion_id"]     = cfg.id
                 request.session["usuario_id"]           = cfg.id

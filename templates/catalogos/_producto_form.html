@@ -1,0 +1,210 @@
+{% comment %}
+   ============================================================
+   Partial reutilizable — CAMPOS de Producto.
+
+   IMPORTANTE: este partial solo renderiza los campos del form.
+   El contenedor <form>, csrf y botones de acción los aporta el
+   template que incluye este partial (página completa o modal).
+
+   Uso desde página completa (catalogos/producto_form.html):
+     <form method="post" enctype="multipart/form-data">{% csrf_token %}
+       {% include "catalogos/_producto_form.html" %}
+       <div class="form-page-footer">...botones...</div>
+     </form>
+
+   Uso desde modal (catalogos/producto_list.html, catalogos/catalogos.html):
+     <form method="post" action="..." enctype="multipart/form-data">{% csrf_token %}
+       <div class="modal-body">
+         {% include "catalogos/_producto_form.html" with form=create_form %}
+       </div>
+       <div class="modal-footer">...botones...</div>
+     </form>
+
+   Variables esperadas: `form` (el ProductoForm), `object` (opcional, instancia
+   existente en modo edición — usado solo para mostrar la ficha actual).
+   ============================================================
+{% endcomment %}
+
+{% if form.non_field_errors %}
+<div class="msg-bar msg-error">✕ {{ form.non_field_errors }}</div>
+{% endif %}
+
+<!-- ── Identificación ── -->
+<div class="section-heading">Identificación</div>
+
+<div class="form-group">
+  <label>Nombre del producto <span style="color:var(--brand-red)">*</span></label>
+  {{ form.nombre }}
+  {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
+</div>
+
+<div class="form-grid-2">
+  <div class="form-group">
+    <label>
+      Código
+      <span style="font-size:10px;color:var(--ink-soft);margin-left:4px;">(opcional — auto-generado)</span>
+    </label>
+    {{ form.codigo }}
+    {% if form.codigo.errors %}<div class="invalid-feedback d-block">{{ form.codigo.errors.0 }}</div>{% endif %}
+  </div>
+  <div class="form-group">
+    <label>Unidad de medida <span style="color:var(--brand-red)">*</span></label>
+    {{ form.unidad }}
+    {% if form.unidad.errors %}<div class="invalid-feedback d-block">{{ form.unidad.errors.0 }}</div>{% endif %}
+  </div>
+</div>
+
+<div class="form-grid-2">
+  <div class="form-group">
+    <label>Categoría <span style="color:var(--brand-red)">*</span></label>
+    {{ form.categoria }}
+    {% if form.categoria.errors %}<div class="invalid-feedback d-block">{{ form.categoria.errors.0 }}</div>{% endif %}
+  </div>
+  <div class="form-group">
+    <label>Origen</label>
+    {{ form.origen }}
+  </div>
+</div>
+
+<!-- ── Proveedor y precio ── -->
+<div class="section-heading" style="margin-top:22px;">Proveedor y precio</div>
+
+<div style="background:rgba(182,205,30,0.07);border:1px solid rgba(182,205,30,0.3);
+            border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+
+  <div class="form-grid-2" style="margin-bottom:12px;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Proveedor <span style="color:var(--brand-red)">*</span></label>
+      {{ form.proveedor }}
+      {% if form.proveedor.errors %}<div class="invalid-feedback d-block">{{ form.proveedor.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Precio actual <span style="color:var(--brand-red)">*</span></label>
+      {{ form.precio_actual }}
+      {% if form.precio_actual.errors %}<div class="invalid-feedback d-block">{{ form.precio_actual.errors.0 }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="form-grid-2" style="margin-top:10px;">
+    <div class="form-group" style="max-width:200px;margin-bottom:0;">
+      <label>Moneda <span style="color:var(--brand-red)">*</span></label>
+      {{ form.moneda }}
+      {% if form.moneda.errors %}<div class="invalid-feedback d-block">{{ form.moneda.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group" style="max-width:260px;margin-bottom:0;">
+      <label>Unidades por presentación</label>
+      {{ form.unidades_por_presentacion }}
+      <small style="color:var(--ink-soft);font-size:10.5px;">
+        Ej: 1000 si el precio es por bolsa de 1000 und.
+        El precio se divide automáticamente para calcular el valor unitario real.
+      </small>
+    </div>
+  </div>
+</div>
+
+<!-- ── Datos adicionales ── -->
+<div class="section-heading" style="margin-top:22px;">Datos adicionales</div>
+
+<div class="form-grid-2">
+  <div class="form-group">
+    <label>Marca</label>
+    {{ form.marca }}
+  </div>
+  <div class="form-group">
+    <label>Línea</label>
+    {{ form.linea }}
+  </div>
+</div>
+
+<div class="form-group">
+  <div class="form-check form-switch" style="margin-top:6px;">
+    {{ form.precio_en_dolares }}
+    <label class="form-check-label fw-bold ms-2" for="{{ form.precio_en_dolares.id_for_label }}">
+      Precio en dólares (USD)
+    </label>
+  </div>
+  <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
+    Si está activo, el precio ingresado está en USD y se dividirá por la TRM del proyecto al calcular el despiece.
+  </div>
+</div>
+
+<!-- ── Presentación técnica ── -->
+<div class="section-heading" style="margin-top:22px;">
+  Presentación técnica
+  <span style="font-size:11px;font-weight:400;color:var(--ink-soft);">(opcional)</span>
+</div>
+
+<div style="background:rgba(20,112,230,0.05);border:1px solid rgba(20,112,230,0.18);
+            border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+
+  <div style="font-size:11px;color:var(--ink-soft);margin-bottom:10px;">
+    Describe el formato físico/comercial del producto (rollo, lámina, caja, galón).
+    Sirve para advertir al técnico si la presentación no coincide con la usada en el cálculo.
+    <strong>No reemplaza</strong> "Unidades por presentación", que solo divide el precio.
+  </div>
+
+  <div class="form-group">
+    <label>Nombre de presentación</label>
+    {{ form.presentacion_nombre }}
+    {% if form.presentacion_nombre.errors %}<div class="invalid-feedback d-block">{{ form.presentacion_nombre.errors.0 }}</div>{% endif %}
+  </div>
+
+  <div class="form-grid-2" style="margin-bottom:10px;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Ancho</label>
+      {{ form.ancho_presentacion }}
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Largo</label>
+      {{ form.largo_presentacion }}
+    </div>
+  </div>
+
+  <div class="form-grid-2" style="margin-bottom:10px;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Unidad de dimensión</label>
+      {{ form.unidad_dimension }}
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label>Unidad de presentación</label>
+      {{ form.unidad_presentacion }}
+    </div>
+  </div>
+
+  <div class="form-group" style="margin-bottom:0;max-width:280px;">
+    <label>Cantidad por presentación</label>
+    {{ form.cantidad_presentacion }}
+    <small style="color:var(--ink-soft);font-size:10.5px;">
+      Ej: 92.96 m² para un rollo de 3.05 × 30.48 m.
+    </small>
+  </div>
+</div>
+
+<!-- ── Ficha técnica ── -->
+<div class="section-heading" style="margin-top:22px;">Ficha técnica <span style="font-size:11px;font-weight:400;color:var(--ink-soft);">(opcional)</span></div>
+
+<div class="form-group">
+  <label>{{ form.ficha_tecnica.label }}</label>
+  {{ form.ficha_tecnica }}
+  <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">
+    Sube un PDF, imagen JPG/PNG con las especificaciones del producto.
+  </div>
+  {% if object.ficha_tecnica %}
+  <div style="margin-top:8px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:8px 12px;display:flex;align-items:center;gap:12px;">
+    <i class="bi bi-file-earmark-pdf" style="font-size:20px;color:#1470e6;"></i>
+    <div>
+      <div style="font-size:12px;font-weight:600;">Ficha actual:</div>
+      <a href="{{ object.ficha_tecnica.url }}" target="_blank" style="font-size:11.5px;color:#1470e6;">
+        {{ object.ficha_tecnica.name|cut:"fichas_tecnicas/" }}
+      </a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="form-group">
+  <div class="form-check">
+    {{ form.activo }}
+    <label class="form-check-label" style="font-size:13px;">Producto activo</label>
+  </div>
+</div>

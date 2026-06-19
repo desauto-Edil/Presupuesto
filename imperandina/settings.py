@@ -162,6 +162,32 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # ---------------------------------------------------------------------------
+# Cache (Fase 0 — base arquitectónica)
+# ---------------------------------------------------------------------------
+# Desarrollo: LocMemCache (por defecto).
+# Producción: definir CACHE_BACKEND=redis y REDIS_URL=redis://host:6379/1 en .env.
+#
+# La política de uso (cache-aside, TTLs, namespaces, invalidación) vive en
+# apps/common/cache.py — settings.py solo declara el backend.
+_CACHE_BACKEND = config("CACHE_BACKEND", default="locmem")
+
+if _CACHE_BACKEND == "redis":
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": config("REDIS_URL", default="redis://127.0.0.1:6379/1"),
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "andinacost-dev",
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 _LOG_LEVEL = config("LOG_LEVEL", default="DEBUG")

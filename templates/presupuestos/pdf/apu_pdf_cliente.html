@@ -109,7 +109,7 @@
   <div>
     <div class="header__logo">Impe<span>randina</span></div>
     <div class="header__tagline">Cubiertas · Fachadas · Soluciones Constructivas</div>
-    {% if ps %}
+    {% if proyecto %}
     <div style="margin-top:6px;font-size:7.5pt;color:#64748b;">
       NIT: &nbsp;<strong style="color:#1a1a2e;">Edil Andina SAS · 805.015.703-5</strong>
     </div>
@@ -117,24 +117,44 @@
   </div>
   <div class="header__meta">
     <div>Fecha: <strong>{{ fecha_generacion }}</strong></div>
-    {% if ps %}
-    <div>Proyecto: <strong>{{ ps.proyecto.consecutivo }}</strong></div>
-    <div>Cliente: <strong>{{ ps.proyecto.cliente.razon_social }}</strong></div>
-    {% if ps.proyecto.moneda != "COP" %}
-    <div>Moneda: <strong>{{ ps.proyecto.moneda }} · TRM {{ ps.proyecto.trm }}</strong></div>
+    {% if proyecto %}
+    <div>Proyecto: <strong>{{ proyecto.consecutivo }}</strong></div>
+    <div>Cliente: <strong>{{ proyecto.cliente.razon_social }}</strong></div>
+    {% if proyecto.moneda != "COP" %}
+    <div>Moneda: <strong>{{ proyecto.moneda }} · TRM {{ proyecto.trm }}</strong></div>
     {% endif %}
+    {% endif %}
+    {% if apu.es_consolidado %}
+    <div style="margin-top:4px;color:#3730a3;font-weight:700;">Documento consolidado</div>
     {% endif %}
   </div>
 </div>
 
+{% if resumen.es_preliminar %}
+<!-- Banner preliminar (Fase 11.3D / 11.5.2) -->
+<div style="background:#fef3c7;border:1.5px solid #f59e0b;border-radius:6px;
+            padding:10px 16px;margin-bottom:14px;color:#92400e;
+            font-size:9pt;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:.04em;">
+  {% if apu.es_consolidado %}
+    ⚠ Documento preliminar — APU consolidado sin modalidad AIU aprobada
+  {% else %}
+    ⚠ Documento preliminar — APU sin modalidad AIU aprobada
+  {% endif %}
+</div>
+{% endif %}
+
 <!-- Banner obra -->
 <div class="banner-obra">
   <div class="banner-obra__title">
-    {% if ps %}{{ ps.proyecto.nombre|upper }}{% else %}{{ apu.nombre|upper }}{% endif %}
+    {% if proyecto %}{{ proyecto.nombre|upper }}{% else %}{{ apu.nombre|upper }}{% endif %}
   </div>
   <div class="banner-obra__sub">
     FORMULARIO DE ÍTEMS, CANTIDADES Y PRECIOS
-    {% if ps %}&nbsp;—&nbsp;{{ ps.sistema.nombre }}{% if ps.subsistema %} / {{ ps.subsistema.nombre }}{% endif %}{% endif %}
+    {% if ps %}
+      &nbsp;—&nbsp;{{ ps.sistema.nombre }}{% if ps.subsistema %} / {{ ps.subsistema.nombre }}{% endif %}
+    {% elif apu.es_consolidado %}
+      &nbsp;—&nbsp;Alcance consolidado · {{ apu.nombre }}
+    {% endif %}
   </div>
 </div>
 
@@ -161,7 +181,7 @@
       {% if sec.tipo == "MATERIALES" %}
       <br><span style="font-size:7.5pt;color:#64748b;">Incluye todos los materiales e insumos para su correcta instalación.</span>
       {% elif sec.tipo == "MANO_DE_OBRA" %}
-      <br><span style="font-size:7.5pt;color:#64748b;">Incluye cuadrilla especializada, montaje y puesta en marcha.</span>
+      <br><span style="font-size:7.5pt;color:#64748b;">Incluye personal especializado, montaje y puesta en marcha.</span>
       {% endif %}
     </td>
     <td class="center">{{ sec.unidad }}</td>
@@ -232,6 +252,75 @@
   </tbody>
 </table>
 
+{# ── Fase 11.4 — Resumen por sistema/subsistema (sin costos internos) ─── #}
+{% with despieces=apu.despieces_incluidos.all %}
+{% if despieces|length > 0 %}
+<div style="margin-top:10px;padding:10px 14px;border:1px solid #e2e8f0;border-radius:6px;
+            background:#fff;font-size:8.5pt;color:#1a1a2e;">
+  <div style="font-weight:700;margin-bottom:6px;">Alcance por sistema/subsistema</div>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f1f5f9;">
+        <th style="text-align:left;padding:4px 6px;">Sistema</th>
+        <th style="text-align:left;padding:4px 6px;">Subsistema</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inc in despieces %}
+      {% if inc.activo %}
+      <tr>
+        <td style="padding:4px 6px;border-top:1px solid #eee;">{{ inc.sistema_nombre_snapshot|default:"—" }}</td>
+        <td style="padding:4px 6px;border-top:1px solid #eee;">{{ inc.subsistema_nombre_snapshot|default:"—" }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endwith %}
+
+{# ── Fase 11.5 / 11.5.2 — Alcance consolidado (sin costos internos) ──── #}
+{% if apu.es_consolidado %}
+<div style="margin-top:10px;padding:10px 14px;border:1px solid #c7d2fe;border-radius:6px;
+            background:#eef2ff;font-size:8.5pt;color:#3730a3;page-break-inside:avoid;">
+  <div style="font-weight:700;margin-bottom:6px;">Alcance consolidado</div>
+  <div style="font-size:8pt;color:#3730a3;margin-bottom:8px;">
+    Esta cotización consolida varios alcances en una sola propuesta.
+  </div>
+
+  {% if resumen_consolidacion %}
+    {% if resumen_consolidacion.sistemas %}
+    <div style="margin-bottom:4px;">
+      <strong>Sistemas incluidos:</strong> {{ resumen_consolidacion.sistemas|join:" · " }}
+    </div>
+    {% endif %}
+    {% if resumen_consolidacion.subsistemas %}
+    <div style="margin-bottom:8px;">
+      <strong>Subsistemas incluidos:</strong> {{ resumen_consolidacion.subsistemas|join:" · " }}
+    </div>
+    {% endif %}
+  {% endif %}
+
+  <div style="font-weight:700;margin-top:4px;margin-bottom:4px;">Alcances de origen:</div>
+  <ul style="margin:0 0 0 14px;padding:0;">
+    {% for oc in apu.origenes_consolidado.all %}
+      {% if oc.incluido_en_pdf_cliente %}
+      <li style="margin-bottom:2px;">
+        {{ oc.apu_origen.nombre }}
+        {% if oc.apu_origen.proyecto_sistema %}
+          — {{ oc.apu_origen.proyecto_sistema.sistema.nombre }}
+          {% if oc.apu_origen.proyecto_sistema.subsistema %}
+            / {{ oc.apu_origen.proyecto_sistema.subsistema.nombre }}
+          {% endif %}
+        {% endif %}
+      </li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 <!-- Total final -->
 <div class="total-final">
   <div>
@@ -247,9 +336,9 @@
 </div>
 
 <!-- Nota -->
-{% if ps and ps.proyecto.observaciones %}
+{% if proyecto and proyecto.observaciones %}
 <div class="nota">
-  <strong>Nota:</strong> {{ ps.proyecto.observaciones }}
+  <strong>Nota:</strong> {{ proyecto.observaciones }}
 </div>
 {% else %}
 <div class="nota">
@@ -257,6 +346,32 @@
   Vigencia: 30 días desde la fecha de generación. Sujeto a disponibilidad de materiales y condiciones del contrato.
 </div>
 {% endif %}
+
+<!-- Aprobación y garantía (Fase 11.3D) -->
+<div style="margin-top:14px;padding:10px 14px;border:1px solid #e2e8f0;border-radius:6px;
+            background:#f8fafc;font-size:8.5pt;color:#1a1a2e;">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <div>
+      <strong>Modalidad AIU:</strong>
+      {% if resumen.es_preliminar %}
+        <span style="color:#a86b00;">Pendiente de aprobación</span>
+      {% else %}
+        {{ resumen.modalidad_oficial }} —
+        aprobado por <strong>{{ resumen.aprobado_por|default:"—" }}</strong>
+        {% if resumen.fecha_aprobacion %}el {{ resumen.fecha_aprobacion|date:"d/m/Y" }}{% endif %}
+      {% endif %}
+    </div>
+    <div>
+      <strong>Garantía:</strong>
+      {% if resumen.garantia.aplica %}
+        {{ resumen.garantia.tipo_nombre|default:"Red Shield" }}
+        ({{ resumen.garantia.porcentaje_aplicado|default:"—" }}%)
+      {% else %}
+        <span style="color:#64748b;">No incluida</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
 
 <div class="footer">
   <span>IMPERANDINA S.A.S. — Cubiertas y Fachadas Industriales</span>

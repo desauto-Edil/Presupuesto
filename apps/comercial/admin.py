@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import Cliente, ContactoCliente, Solicitud, SolicitudArchivo, LogSistema
+from .models import Cliente, ContactoCliente, Solicitud, SolicitudArchivo, LogSistema, TipoGarantia
+
+
+@admin.register(TipoGarantia)
+class TipoGarantiaAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "duracion_meses", "activo", "orden")
+    list_filter = ("activo",)
+    search_fields = ("nombre", "descripcion")
+    ordering = ("orden", "nombre")
 
 
 class ContactoClienteInline(admin.TabularInline):

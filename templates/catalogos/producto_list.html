@@ -165,82 +165,10 @@
         <h5 class="modal-title">Nuevo producto</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="post" action="{% url 'catalogos:producto_create' %}">
+      <form method="post" action="{% url 'catalogos:producto_create' %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="modal-body">
-
-          <!-- Nombre + Código -->
-          <div class="form-group">
-            <label>Nombre del producto <span style="color:var(--brand-red)">*</span></label>
-            {{ create_form.nombre }}
-          </div>
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>
-                Código
-                <span style="font-size:10px;color:var(--ink-soft);margin-left:4px;">
-                  (opcional — se auto-genera)
-                </span>
-              </label>
-              {{ create_form.codigo }}
-            </div>
-            <div class="form-group">
-              <label>Unidad de medida <span style="color:var(--brand-red)">*</span></label>
-              {{ create_form.unidad }}
-            </div>
-          </div>
-
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Categoría <span style="color:var(--brand-red)">*</span></label>
-              {{ create_form.categoria }}
-            </div>
-            <div class="form-group">
-              <label>Origen</label>
-              {{ create_form.origen }}
-            </div>
-          </div>
-
-          <!-- PRECIO Y PROVEEDOR — datos críticos -->
-          <div style="background:rgba(182,205,30,0.08);border:1px solid rgba(182,205,30,0.3);
-                      border-radius:8px;padding:12px 16px;margin:8px 0 12px;">
-            <div style="font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;
-                        color:#5a6e00;margin-bottom:10px;">Proveedor y precio</div>
-            <div class="form-grid-2" style="margin-bottom:10px;">
-              <div class="form-group" style="margin-bottom:0;">
-                <label>Proveedor <span style="color:var(--brand-red)">*</span></label>
-                {{ create_form.proveedor }}
-              </div>
-              <div class="form-group" style="margin-bottom:0;">
-                <label>Precio actual <span style="color:var(--brand-red)">*</span></label>
-                {{ create_form.precio_actual }}
-              </div>
-            </div>
-            <div class="form-group" style="margin-bottom:0;max-width:180px;">
-              <label>Moneda <span style="color:var(--brand-red)">*</span></label>
-              {{ create_form.moneda }}
-            </div>
-          </div>
-
-          <!-- Opcionales -->
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Marca</label>
-              {{ create_form.marca }}
-            </div>
-            <div class="form-group">
-              <label>Línea</label>
-              {{ create_form.linea }}
-            </div>
-          </div>
-
-          <div class="form-group">
-            <div class="form-check">
-              {{ create_form.activo }}
-              <label class="form-check-label" style="font-size:13px;">Producto activo</label>
-            </div>
-          </div>
-
+          {% include "catalogos/_producto_form.html" with form=create_form %}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>

@@ -1,0 +1,29 @@
+{% comment %}
+_solicitud_panel_list_item.html — Tarjeta compacta de una Solicitud
+dentro del panel master-detail. Recibe: s (Solicitud) y sel_pk (int|None).
+{% endcomment %}
+{% with is_active=s.pk|stringformat:"s" %}
+<a href="?{% if q %}q={{ q }}&{% endif %}{% if estado_filtro %}estado={{ estado_filtro }}&{% endif %}{% if responsable_filtro %}responsable={{ responsable_filtro }}&{% endif %}sel={{ s.pk }}"
+   class="solpanel-item{% if sel_pk == s.pk %} is-active{% endif %}"
+   data-pk="{{ s.pk }}">
+  <div class="solpanel-item-icon" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5zM9.5 3A1.5 1.5 0 0 0 11 4.5h2L9.5 1z"/>
+    </svg>
+  </div>
+  <div class="solpanel-item-body">
+    <div class="solpanel-item-id">{{ s.consecutivo }}</div>
+    <div class="solpanel-item-client">{{ s.cliente.razon_social|truncatechars:32 }}</div>
+  </div>
+  <span class="solpanel-badge
+        {% if s.estado == 'EN_GESTION' %}is-pendiente
+        {% elif s.estado == 'EN_PRESUPUESTO' %}is-info
+        {% elif s.estado == 'EN_REVISION' %}is-warn
+        {% elif s.estado == 'APROBADA' %}is-ok
+        {% elif s.estado == 'DEVUELTA' or s.estado == 'RECHAZADA' %}is-warn
+        {% elif s.estado == 'CERRADA' %}is-muted
+        {% else %}is-muted{% endif %}">
+    {% if s.estado == 'DEVUELTA' or s.estado == 'RECHAZADA' %}Devuelta{% else %}{{ s.get_estado_display }}{% endif %}
+  </span>
+</a>
+{% endwith %}

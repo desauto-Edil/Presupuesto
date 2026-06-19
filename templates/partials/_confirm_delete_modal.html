@@ -1,0 +1,65 @@
+{% comment %}
+   ============================================================
+   Partial reutilizable: tarjeta de confirmación de eliminación.
+
+   Uso típico (desde un template que ya tiene extends "base.html"):
+
+       {% include "partials/_confirm_delete_modal.html" with
+            titulo="Eliminar producto"
+            nombre_objeto=object.nombre
+            mensaje="Esta acción quitará el producto del catálogo."
+            cancel_url=request.META.HTTP_REFERER %}
+
+   Parámetros (todos opcionales — caen a valores razonables):
+     titulo         Texto del encabezado.       default "Confirmar eliminación"
+     nombre_objeto  Nombre del registro.        default object
+     mensaje        Línea principal.            default "¿Está seguro de que desea eliminar este registro?"
+     submensaje     Línea secundaria.           default "Esta acción no se puede deshacer."
+     cancel_url     URL del botón Cancelar.     default "javascript:history.back()"
+     texto_cancelar Texto del botón Cancelar.   default "Cancelar"
+     texto_boton    Texto del botón principal.  default "Eliminar"
+     clase_boton    Clase CSS del botón principal. default "btn-danger"
+     action_url     URL POST.                   default "" (= URL actual, comportamiento de DeleteView)
+   ============================================================
+{% endcomment %}
+
+<div class="row justify-content-center mt-4">
+  <div class="col-12 col-md-6 col-lg-4">
+    <div style="background:white;border-radius:14px;border:1px solid var(--border);
+                border-left:4px solid var(--red,#e62833);overflow:hidden;" class="fade-up">
+
+      <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:.08em;color:var(--red,#e62833);margin-bottom:4px;">
+          {{ titulo|default:"Confirmar eliminación" }}
+        </div>
+        <div style="font-size:16px;font-weight:700;color:var(--ink);">
+          {{ nombre_objeto|default:object }}
+        </div>
+      </div>
+
+      <div style="padding:20px 24px;">
+        <p style="font-size:14px;color:var(--ink);margin-bottom:6px;">
+          {{ mensaje|default:"¿Está seguro de que desea eliminar este registro?" }}
+        </p>
+        <p style="font-size:12px;color:rgba(14,17,23,0.40);margin-bottom:0;">
+          {{ submensaje|default:"Esta acción no se puede deshacer." }}
+        </p>
+      </div>
+
+      <div style="padding:16px 24px;border-top:1px solid var(--border);
+                  display:flex;justify-content:flex-end;gap:8px;">
+        <a href="{{ cancel_url|default:'javascript:history.back()' }}" class="btn btn-ghost btn-sm">
+          {{ texto_cancelar|default:"Cancelar" }}
+        </a>
+        <form method="post" action="{{ action_url|default:'' }}" style="margin:0;">
+          {% csrf_token %}
+          <button type="submit" class="btn {{ clase_boton|default:'btn-danger' }} btn-sm">
+            {{ texto_boton|default:"Eliminar" }}
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>

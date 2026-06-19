@@ -1,0 +1,63 @@
+{% comment %}
+   ============================================================
+   Partial: Modal "Consolidar materiales" del Despiece Maestro.
+
+   Uso (al final del bloque content, después de los otros modales):
+       {% include "ingenieria/partials/_modal_consolidar.html" %}
+
+   Contrato:
+     Render puro. No recibe variables. El contenido del body se construye
+     dinámicamente desde el JS (innerHTML) al abrir el modal.
+
+   IDs preservados (críticos para el JS — TODOS son enganchados desde
+   despiece_maestro.html dentro del bloque <script>):
+
+     - #modalConsolidar          → contenedor abierto por:
+                                    new bootstrap.Modal(...).show()
+                                    cerrado por:
+                                    bootstrap.Modal.getInstance(...).hide()
+     - #modalConsolidarLabel     → referenciado por aria-labelledby.
+     - #modalConsolidarBody      → slot poblado vía innerHTML; el JS escribe
+                                    aquí la tabla de líneas seleccionadas y el
+                                    input #inputLabelConsolidacion.
+                                    NOTA: #inputLabelConsolidacion NO está en
+                                    este partial — vive dentro del innerHTML
+                                    inyectado por el JS.
+     - #btnConfirmarConsolidacion → IMPORTANTE: el JS reasigna .onclick = ...
+                                    en cada apertura del modal. El ID debe
+                                    estar presente en el DOM antes de que el
+                                    JS lo busque.
+
+   Clases preservadas (Bootstrap 5 + estilo propio):
+     modal fade, modal-dialog modal-lg, modal-content,
+     modal-header, modal-title, modal-body, modal-footer,
+     btn-close, data-bs-dismiss="modal",
+     btn btn-secondary, btn btn-success.
+
+   Atributos preservados:
+     tabindex="-1", aria-labelledby="modalConsolidarLabel", aria-hidden="true".
+
+   JS:
+     Cero JavaScript aquí. La lógica vive en el bloque <script> de
+     despiece_maestro.html (apertura, cierre, render del body, handler del
+     botón confirmar).
+   ============================================================
+{% endcomment %}
+<!-- Modal: Consolidar materiales -->
+<div class="modal fade" id="modalConsolidar" tabindex="-1" aria-labelledby="modalConsolidarLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalConsolidarLabel"><i class="bi bi-layers me-2"></i>Consolidar materiales</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalConsolidarBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="btnConfirmarConsolidacion">
+          <i class="bi bi-check2"></i> Confirmar consolidación
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

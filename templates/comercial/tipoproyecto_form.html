@@ -1,6 +1,3 @@
-# Revisar si es necesaria
-
-
 {% extends "base.html" %}
 {% block title %}{% if object %}Editar{% else %}Nuevo{% endif %} Tipo de proyecto{% endblock %}
 {% block page_title %}{% if object %}Editar tipo{% else %}Nuevo tipo{% endif %}{% endblock %}
@@ -20,30 +17,6 @@
       {% if object %}{{ object.nombre }}{% else %}Nuevo tipo de proyecto{% endif %}
     </span>
   </div>
-  <form method="post">
-    {% csrf_token %}
-    <div class="form-page-body">
-      <div class="form-group">
-        <label>Código <span style="color:var(--brand-red)">*</span></label>
-        {{ form.codigo }}
-        {% if form.codigo.errors %}<div class="invalid-feedback d-block">{{ form.codigo.errors.0 }}</div>{% endif %}
-      </div>
-      <div class="form-group">
-        <label>Nombre <span style="color:var(--brand-red)">*</span></label>
-        {{ form.nombre }}
-        {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
-      </div>
-      <div class="form-check" style="margin-top:8px;">
-        {{ form.activo }}
-        <label class="form-check-label" style="font-size:13px;">Activo</label>
-      </div>
-    </div>
-    <div class="form-page-footer">
-      <a href="{% url 'comercial:tipoproyecto_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
-      <button type="submit" class="btn btn-primary btn-sm">
-        {% if object %}Guardar cambios{% else %}Crear tipo{% endif %}
-      </button>
-    </div>
-  </form>
+  {% include "comercial/_tipoproyecto_form.html" %}
 </div>
 {% endblock %}

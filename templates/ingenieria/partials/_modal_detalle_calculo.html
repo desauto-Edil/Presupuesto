@@ -1,0 +1,42 @@
+{% comment %}
+   ============================================================
+   Partial: Modal "Detalle del cálculo" del Despiece Maestro.
+
+   Uso (al final de despiece_maestro.html, antes del bloque <script>):
+       {% include "ingenieria/partials/_modal_detalle_calculo.html" %}
+
+   Contrato:
+     Render puro. No recibe variables.
+
+   IDs preservados (críticos para el JS de despiece_maestro.html):
+     - #modalDetalle      → contenedor abierto por:
+                              verDetalle(i)            ← línea técnica normal
+                              verDetalleConsolidada(cid) ← consolidado
+                            ambas hacen: new bootstrap.Modal(...).show()
+     - #modalDetalleBody  → slot poblado vía innerHTML por ambas funciones.
+
+   Clases preservadas (Bootstrap 5 + estilo propio):
+     modal fade, modal-dialog, modal-content,
+     modal-header, modal-title, modal-body, modal-footer,
+     btn-close, data-bs-dismiss="modal".
+
+   JS:
+     Cero JavaScript aquí. La lógica vive en el bloque <script> de
+     despiece_maestro.html (funciones verDetalle / verDetalleConsolidada).
+   ============================================================
+{% endcomment %}
+<!-- Modal: Detalle de cálculo (ojo) -->
+<div class="modal fade" id="modalDetalle" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-eye me-2"></i>Detalle del cálculo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalDetalleBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>

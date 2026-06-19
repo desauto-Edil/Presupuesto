@@ -383,6 +383,31 @@ class APUProyecto(models.Model):
         help_text="ProyectoSistema al que pertenece este APU (si aplica).",
     )
 
+    # ── Fase 11.5 — Consolidación opcional de APUs ────────────────────────
+    # `tipo_apu` distingue APUs individuales (flujo histórico) de APUs
+    # consolidados creados por confirmación explícita del usuario.
+    # `proyecto` permite que un APU consolidado pertenezca al proyecto sin
+    # estar atado a un ProyectoSistema raíz (los individuales mantienen su
+    # OneToOneField como llave natural).
+    class TipoAPUConsolidacion(models.TextChoices):
+        INDIVIDUAL = "INDIVIDUAL", "APU individual"
+        CONSOLIDADO = "CONSOLIDADO", "APU consolidado"
+
+    tipo_apu = models.CharField(
+        max_length=20,
+        choices=TipoAPUConsolidacion.choices,
+        default=TipoAPUConsolidacion.INDIVIDUAL,
+        db_index=True,
+        help_text="INDIVIDUAL (flujo histórico) o CONSOLIDADO (unión opcional de varios APUs).",
+    )
+    proyecto = models.ForeignKey(
+        "comercial.Proyecto",
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name="apus_consolidados",
+        help_text="Proyecto contenedor. Sólo se usa en APUs consolidados; los individuales lo derivan de proyecto_sistema.",
+    )
+
     # -- Parámetros de cálculo --
     factor_venta_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("20"),
@@ -448,6 +473,74 @@ class APUProyecto(models.Model):
         help_text="Utilidad del proyecto (%).",
     )
 
+    # --- AIU final aprobado por el revisor (Fase 10A). Snapshot opcional. ---
+    # Si están NULL, calcular_modalidades_aiu() usa los porcentajes base.
+    aiu_final_admin_pct = models.DecimalField(
+        max_digits=8, decimal_places=4,
+        null=True, blank=True,
+        help_text="Snapshot de Administración (%) aprobado por el revisor. Si NULL usa aiu_proyecto_admin_pct.",
+    )
+    aiu_final_imprevistos_pct = models.DecimalField(
+        max_digits=8, decimal_places=4,
+        null=True, blank=True,
+        help_text="Snapshot de Imprevistos (%) aprobado por el revisor. Si NULL usa aiu_proyecto_imprevistos_pct.",
+    )
+    aiu_final_utilidad_pct = models.DecimalField(
+        max_digits=8, decimal_places=4,
+        null=True, blank=True,
+        help_text="Snapshot de Utilidad (%) aprobado por el revisor. Si NULL usa aiu_proyecto_utilidad_pct.",
+    )
+
+    # -- Garantía comercial (Fase 9). No afecta cálculo. --
+    aplica_garantia = models.BooleanField(
+        default=False,
+        help_text="Indica si la propuesta incluye garantía. No afecta el cálculo.",
+    )
+    tipo_garantia = models.ForeignKey(
+        "comercial.TipoGarantia",
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="apus",
+        help_text="Tipo de garantía ofrecida en la propuesta (opcional).",
+    )
+
+    # --- Recargo comercial de garantía (Fase 9R) ---
+    GARANTIA_MODO_TOTAL = "TOTAL_MATERIALES"
+    GARANTIA_MODO_ESPECIFICO = "MATERIAL_ESPECIFICO"
+    GARANTIA_MODO_CHOICES = [
+        (GARANTIA_MODO_TOTAL, "Sobre el total de materiales"),
+        (GARANTIA_MODO_ESPECIFICO, "Sobre un material específico"),
+    ]
+    garantia_porcentaje_aplicado = models.DecimalField(
+        max_digits=6, decimal_places=2,
+        null=True, blank=True,
+        help_text="Snapshot del % de recargo tomado del catálogo al armar/editar la garantía.",
+    )
+    garantia_modo_aplicacion = models.CharField(
+        max_length=24, blank=True, default="",
+        choices=GARANTIA_MODO_CHOICES,
+        help_text="Cómo se aplica la garantía: sobre el total de materiales o sobre un material específico.",
+    )
+    garantia_material_linea = models.ForeignKey(
+        "presupuestos.APULinea",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="+",
+        help_text="APULinea tipo Materiales sobre la que se aplica el recargo (modo MATERIAL_ESPECIFICO).",
+    )
+    garantia_material_nombre_snapshot = models.CharField(
+        max_length=255, blank=True, default="",
+        help_text="Snapshot textual del material objetivo (para trazabilidad si la línea se elimina).",
+    )
+    garantia_base_valor = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0"),
+        help_text="Base sobre la que se calculó el recargo.",
+    )
+    garantia_valor_recargo = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0"),
+        help_text="Recargo comercial sumado a total_valor_venta.",
+    )
+
     # -- Flujo de revisión --
     revisor = models.ForeignKey(
         "configuracion.ConfiguracionSistema",
@@ -481,6 +574,25 @@ class APUProyecto(models.Model):
         verbose_name="Fecha de aprobación",
     )
 
+    # ── Fase 11.5.3 — Archivado lógico ─────────────────────────────────────
+    # APUProyecto no tiene estado propio de anulado/archivado (su "estado"
+    # surge de modalidad + aprobación). Para preservar trazabilidad cuando
+    # un APU individual está incluido en un consolidado (PROTECT en
+    # APUConsolidadoOrigen.apu_origen), introducimos un flag de archivado
+    # ortogonal a la maquinaria de AIU/garantía.
+    archivado = models.BooleanField(
+        default=False, db_index=True,
+        help_text="Si True, el APU está archivado: oculto en listas por defecto, preserva trazabilidad.",
+    )
+    fecha_archivado = models.DateTimeField(null=True, blank=True)
+    archivado_por = models.ForeignKey(
+        "configuracion.ConfiguracionSistema",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="apus_archivados",
+    )
+    motivo_archivado = models.TextField(blank=True, default="")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -492,6 +604,86 @@ class APUProyecto(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    # ------------------------------------------------------------------
+    # Fase 11.5 — Consolidado: helpers
+    # ------------------------------------------------------------------
+
+    @property
+    def es_consolidado(self) -> bool:
+        return self.tipo_apu == self.TipoAPUConsolidacion.CONSOLIDADO
+
+    @property
+    def cotizacion_vigente(self):
+        """Fase 12 — Último snapshot APROBADA de cotización, o None."""
+        return self.cotizaciones.filter(estado="APROBADA").order_by("-version").first()
+
+    def get_proyecto(self):
+        """Devuelve el Proyecto contenedor (sea individual o consolidado)."""
+        if self.proyecto_id:
+            return self.proyecto
+        if self.proyecto_sistema_id and self.proyecto_sistema.proyecto_id:
+            return self.proyecto_sistema.proyecto
+        return None
+
+    def get_apus_origen(self):
+        """En consolidado: lista de APUProyecto individuales que lo originaron."""
+        if not self.es_consolidado:
+            return self.__class__.objects.none()
+        return (
+            self.__class__.objects
+            .filter(consolidaciones_destino__apu_consolidado=self)
+            .order_by("consolidaciones_destino__orden", "id")
+        )
+
+    # ------------------------------------------------------------------
+    # Despieces incluidos (Fase 11.3 — aproximado, sin migración)
+    # ------------------------------------------------------------------
+
+    def get_despieces_incluidos(self):
+        """
+        Fase 11.4: devuelve los DespieceMaestro realmente seleccionados para
+        este APU según la relación explícita `APUDespieceIncluido`.
+
+        Fallback legacy: si no existe ningún registro de inclusión explícita
+        (APUs creados antes de Fase 11.4), regresa al filtro aproximado por
+        proyecto+subsistema usado en Fase 11.3 — solo para lectura.
+        """
+        from apps.ingenieria.models import DespieceMaestro
+        # Camino moderno: relación explícita.
+        incluidos = (
+            self.despieces_incluidos
+            .filter(activo=True)
+            .select_related(
+                "despiece_maestro",
+                "despiece_maestro__subsistema",
+                "despiece_maestro__subsistema__sistema",
+            )
+            .order_by("orden", "id")
+        )
+        dms = [inc.despiece_maestro for inc in incluidos if inc.despiece_maestro_id]
+        if dms:
+            return dms
+
+        # Fallback legacy (APUs pre-11.4): inferir por proyecto+subsistema.
+        ps = self.proyecto_sistema
+        if not ps or not ps.proyecto_id or not ps.subsistema_id:
+            return []
+        return list(
+            DespieceMaestro.objects.filter(
+                proyecto=ps.proyecto,
+                subsistema=ps.subsistema,
+                estado=DespieceMaestro.GUARDADO,
+            ).select_related("subsistema", "subsistema__sistema")
+        )
+
+    def es_legacy_sin_seleccion(self) -> bool:
+        """
+        Fase 11.4: True cuando el APU no tiene registros de APUDespieceIncluido
+        activos (creado antes de la selección manual). Sirve para mostrar
+        banner de advertencia en apu_detail y para fallback de lectura.
+        """
+        return not self.despieces_incluidos.filter(activo=True).exists()
 
     # ------------------------------------------------------------------
     # Recálculo
@@ -542,25 +734,99 @@ class APUProyecto(models.Model):
         self.total_costo = total_costo
         self.total_valor_venta = total_valor
 
+        # Fase 9R — recargo comercial de garantía sobre Materiales.
+        # No afecta subtotal_materiales técnico; solo suma a total_valor_venta.
+        self._recalcular_garantia_inline()
+        self.total_valor_venta = total_valor + (self.garantia_valor_recargo or Decimal("0"))
+
         self.save(update_fields=[
             "subtotal_materiales", "subtotal_herramientas",
             "subtotal_transporte", "subtotal_mano_obra",
             "subtotal_administracion",
-            "total_costo", "total_valor_venta", "updated_at",
+            "total_costo", "total_valor_venta",
+            "garantia_base_valor", "garantia_valor_recargo",
+            "updated_at",
         ])
 
-    def calcular_modalidades_aiu(self) -> dict:
+    def _recalcular_garantia_inline(self):
         """
-        Calcula las dos modalidades de AIU del proyecto.
+        Recalcula garantia_base_valor y garantia_valor_recargo a partir del
+        estado actual del APU. NO toca el snapshot porcentaje_aplicado (eso
+        solo cambia cuando el usuario edita la garantía).
+        """
+        if not self.aplica_garantia or not self.tipo_garantia_id:
+            self.garantia_base_valor = Decimal("0")
+            self.garantia_valor_recargo = Decimal("0")
+            return
 
-        Modalidad 1 — AIU sobre todos los costos directos:
+        pct = self.garantia_porcentaje_aplicado
+        if pct is None:
+            # APU legacy Fase 9 sin snapshot — no aplicar recargo silencioso.
+            self.garantia_base_valor = Decimal("0")
+            self.garantia_valor_recargo = Decimal("0")
+            return
+
+        if (
+            self.garantia_modo_aplicacion == self.GARANTIA_MODO_ESPECIFICO
+            and self.garantia_material_linea_id
+        ):
+            base = Decimal(str(self.garantia_material_linea.valor_total or 0))
+        else:
+            base = Decimal(str(self.subtotal_materiales or 0))
+
+        recargo = (base * Decimal(str(pct)) / Decimal("100")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP,
+        )
+        self.garantia_base_valor = base
+        self.garantia_valor_recargo = recargo
+
+    @property
+    def subtotal_materiales_ajustado(self) -> Decimal:
+        """Subtotal de Materiales + recargo comercial de garantía."""
+        return (self.subtotal_materiales or Decimal("0")) + (self.garantia_valor_recargo or Decimal("0"))
+
+    @property
+    def garantia_legacy_sin_snapshot(self) -> bool:
+        """True si la garantía fue creada antes de Fase 9R y no tiene snapshot %."""
+        return bool(self.aplica_garantia and self.tipo_garantia_id and self.garantia_porcentaje_aplicado is None)
+
+    def get_aiu_pct_efectivos(self) -> dict:
+        """
+        Devuelve los porcentajes A/I/U efectivos para el cálculo del AIU final
+        del proyecto. Si el revisor aprobó porcentajes finales (aiu_final_*_pct),
+        se usan esos; si están NULL, se usan los porcentajes base del proyecto
+        (aiu_proyecto_*_pct).
+        """
+        admin = self.aiu_final_admin_pct if self.aiu_final_admin_pct is not None else self.aiu_proyecto_admin_pct
+        imprev = self.aiu_final_imprevistos_pct if self.aiu_final_imprevistos_pct is not None else self.aiu_proyecto_imprevistos_pct
+        utilidad = self.aiu_final_utilidad_pct if self.aiu_final_utilidad_pct is not None else self.aiu_proyecto_utilidad_pct
+        return {
+            "admin": Decimal(str(admin or 0)),
+            "imprevistos": Decimal(str(imprev or 0)),
+            "utilidad": Decimal(str(utilidad or 0)),
+            "es_final": self.aiu_final_admin_pct is not None
+                        or self.aiu_final_imprevistos_pct is not None
+                        or self.aiu_final_utilidad_pct is not None,
+        }
+
+    def calcular_modalidades_aiu(self, pct_override=None) -> dict:
+        """
+        Calcula las dos modalidades de AIU del proyecto sobre subtotales técnicos.
+
+        Modalidad 1 — AIU sobre todos los costos directos técnicos:
           base = materiales + herramientas + transporte + mano_obra + administracion
 
-        Modalidad 2 — AIU sobre costos directos sin materiales:
+        Modalidad 2 — AIU sobre costos directos técnicos sin materiales:
           base_aiu = herramientas + transporte + mano_obra + administracion
-          gran_total = subtotal_costos_directos + total_aiu_modal2
 
-        Devuelve un dict con ambas modalidades y el desglose de subtotales.
+        Decisión Fase 10A-2: la garantía Red Shield NO entra en la base AIU.
+        Sigue afectando total_valor_venta como recargo comercial posterior.
+
+        Porcentajes:
+          - Si `pct_override` está dado (preview en revisor), se usa.
+          - Si no, get_aiu_pct_efectivos() (finales del revisor o base del proyecto).
+
+        Gran total aprobado = subtotal_directos_tecnico + total_aiu + garantia_valor_recargo
         """
         mat  = self.subtotal_materiales
         herr = self.subtotal_herramientas
@@ -568,27 +834,35 @@ class APUProyecto(models.Model):
         mo   = self.subtotal_mano_obra
         adm  = self.subtotal_administracion
 
-        pct_a = Decimal(str(self.aiu_proyecto_admin_pct))
-        pct_i = Decimal(str(self.aiu_proyecto_imprevistos_pct))
-        pct_u = Decimal(str(self.aiu_proyecto_utilidad_pct))
+        if pct_override is not None:
+            pct_a = Decimal(str(pct_override.get("admin", 0)))
+            pct_i = Decimal(str(pct_override.get("imprevistos", 0)))
+            pct_u = Decimal(str(pct_override.get("utilidad", 0)))
+        else:
+            efectivos = self.get_aiu_pct_efectivos()
+            pct_a = efectivos["admin"]
+            pct_i = efectivos["imprevistos"]
+            pct_u = efectivos["utilidad"]
 
         subtotal = mat + herr + tran + mo + adm
+        # Fase 10A-2: garantía se suma DESPUÉS del AIU, no entra en su base.
+        garantia = Decimal(str(self.garantia_valor_recargo or 0))
 
-        # Modalidad 1: base = todos los costos directos
+        # Modalidad 1: base = todos los costos directos técnicos
         base1 = subtotal
         a1 = (base1 * pct_a / 100).quantize(Decimal("0.01"))
         i1 = (base1 * pct_i / 100).quantize(Decimal("0.01"))
         u1 = (base1 * pct_u / 100).quantize(Decimal("0.01"))
         total_aiu1 = a1 + i1 + u1
-        gran_total1 = subtotal + total_aiu1
+        gran_total1 = subtotal + total_aiu1 + garantia
 
-        # Modalidad 2: base AIU = costos directos sin materiales
+        # Modalidad 2: base AIU = costos directos técnicos sin materiales
         base2 = herr + tran + mo + adm
         a2 = (base2 * pct_a / 100).quantize(Decimal("0.01"))
         i2 = (base2 * pct_i / 100).quantize(Decimal("0.01"))
         u2 = (base2 * pct_u / 100).quantize(Decimal("0.01"))
         total_aiu2 = a2 + i2 + u2
-        gran_total2 = subtotal + total_aiu2
+        gran_total2 = subtotal + total_aiu2 + garantia
 
         return {
             "subtotales": {
@@ -603,7 +877,9 @@ class APUProyecto(models.Model):
                 "admin":       pct_a,
                 "imprevistos": pct_i,
                 "utilidad":    pct_u,
+                "es_final":    (pct_override is None) and self.get_aiu_pct_efectivos()["es_final"],
             },
+            "garantia_recargo": garantia,
             "modalidad1": {
                 "label":       "AIU sobre todos los costos directos",
                 "base":        base1,
@@ -622,6 +898,128 @@ class APUProyecto(models.Model):
                 "total_aiu":   total_aiu2,
                 "gran_total":  gran_total2,
             },
+        }
+
+    def get_resumen_cotizacion(self) -> dict:
+        """
+        Fase 11 — Resumen comercial para la vista de cotización final.
+
+        Centraliza la matemática para que el template no calcule totales.
+        Reglas (Excel técnico + decisiones Fase 9R/10A/11):
+          - Si hay modalidad aprobada: usa esa modalidad como bloque oficial.
+          - Si no hay modalidad aprobada: es_preliminar=True, modalidades como referencia.
+          - Garantía Red Shield: recargo separado, fuera de base AIU y base IVA.
+          - IVA sobre la Utilidad (decisión Fase 11): iva_valor = valor_utilidad * iva_pct / 100.
+          - Si aplica_iva=False: iva_valor=0, label "Exento / No aplica".
+          - Fórmula final:
+                total_final = subtotal_directos_tecnico
+                            + total_aiu
+                            + garantia_valor_recargo
+                            + iva_sobre_utilidad
+        """
+        modalidades = self.calcular_modalidades_aiu()
+        modalidad_aprobada = (self.modalidad_aiu_seleccionada or "").strip()
+        es_preliminar = modalidad_aprobada not in ("1", "2")
+
+        if es_preliminar:
+            # Para preliminar, mostramos M1 como bloque "principal" de referencia
+            modalidad_key = "modalidad1"
+            modalidad_label_oficial = None
+        else:
+            modalidad_key = f"modalidad{modalidad_aprobada}"
+            modalidad_label_oficial = modalidades[modalidad_key]["label"]
+
+        bloque = modalidades[modalidad_key]
+        subtotales = modalidades["subtotales"]
+        porcentajes = modalidades["porcentajes"]
+
+        subtotal_directos = subtotales["total"]
+        total_aiu = bloque["total_aiu"]
+        valor_admin = bloque["admin"]
+        valor_imprevistos = bloque["imprevistos"]
+        valor_utilidad = bloque["utilidad"]
+
+        garantia_recargo = Decimal(str(self.garantia_valor_recargo or 0))
+        subtotal_con_aiu = subtotal_directos + total_aiu
+
+        iva_pct = Decimal(str(self.iva_pct or 0))
+        aplica_iva = bool(self.aplica_iva) and iva_pct > 0
+        if aplica_iva:
+            iva_base = valor_utilidad
+            iva_valor = (iva_base * iva_pct / Decimal("100")).quantize(Decimal("0.01"))
+            iva_label = f"IVA {iva_pct}% sobre Utilidad"
+        else:
+            iva_base = Decimal("0")
+            iva_valor = Decimal("0")
+            iva_label = "Exento / No aplica"
+
+        total_final = subtotal_directos + total_aiu + garantia_recargo + iva_valor
+
+        # Garantía detalle
+        garantia_info = {
+            "aplica": bool(self.aplica_garantia and (self.tipo_garantia_id or self.garantia_valor_recargo)),
+            "tipo": self.tipo_garantia,
+            "tipo_nombre": (self.tipo_garantia.nombre if self.tipo_garantia_id else ""),
+            "porcentaje_aplicado": self.garantia_porcentaje_aplicado,
+            "modo_aplicacion": self.garantia_modo_aplicacion,
+            "material_snapshot": self.garantia_material_nombre_snapshot,
+            "base_valor": self.garantia_base_valor,
+            "valor_recargo": garantia_recargo,
+            "condiciones": (self.tipo_garantia.condiciones if self.tipo_garantia_id else ""),
+        }
+
+        # Contexto relacional
+        ps = self.proyecto_sistema
+        proyecto = ps.proyecto if ps else None
+        solicitud = proyecto.solicitud if (proyecto and proyecto.solicitud_id) else None
+        cliente = proyecto.cliente if (proyecto and proyecto.cliente_id) else None
+        sistema = ps.sistema if ps else None
+        subsistema = ps.subsistema if ps else None
+        contacto = cliente.contacto_principal if cliente else None
+
+        return {
+            "es_preliminar": es_preliminar,
+            "modalidad_oficial": (modalidad_aprobada if not es_preliminar else None),
+            "modalidad_oficial_label": modalidad_label_oficial,
+            "modalidades_disponibles": modalidades if es_preliminar else None,
+            # Subtotales técnicos
+            "subtotal_materiales": subtotales["materiales"],
+            "garantia_valor_recargo": garantia_recargo,
+            "subtotal_materiales_ajustado": self.subtotal_materiales_ajustado,
+            "subtotal_herramientas": subtotales["herramientas"],
+            "subtotal_transporte": subtotales["transporte"],
+            "subtotal_mano_obra": subtotales["mano_obra"],
+            "subtotal_administracion": subtotales["administracion"],
+            "subtotal_directos_tecnico": subtotal_directos,
+            # AIU
+            "porcentaje_admin": porcentajes["admin"],
+            "porcentaje_imprevistos": porcentajes["imprevistos"],
+            "porcentaje_utilidad": porcentajes["utilidad"],
+            "valor_admin": valor_admin,
+            "valor_imprevistos": valor_imprevistos,
+            "valor_utilidad": valor_utilidad,
+            "total_aiu": total_aiu,
+            "subtotal_con_aiu": subtotal_con_aiu,
+            "aiu_es_final": porcentajes["es_final"],
+            # IVA
+            "aplica_iva": aplica_iva,
+            "iva_pct": iva_pct,
+            "iva_base": iva_base,
+            "iva_valor": iva_valor,
+            "iva_label": iva_label,
+            # Total
+            "total_final": total_final,
+            # Bloques relacionales
+            "garantia": garantia_info,
+            "cliente": cliente,
+            "contacto": contacto,
+            "proyecto": proyecto,
+            "solicitud": solicitud,
+            "sistema": sistema,
+            "subsistema": subsistema,
+            # Aprobación
+            "aprobado_por": self.aprobado_por,
+            "fecha_aprobacion": self.fecha_aprobacion,
         }
 
 
@@ -690,6 +1088,37 @@ class APULinea(models.Model):
         null=True, blank=True,
         related_name="apu_lineas",
         help_text="Ítem del despiece de materiales (solo para tipo MATERIALES).",
+    )
+
+    # ── Fase 11.4 — Trazabilidad multi-despiece ───────────────────────────
+    # Sólo aplica a líneas de tipo MATERIALES. Permite agrupar materiales por
+    # sistema/subsistema/despiece en apu_detail y PDFs cuando el APU consolida
+    # varios DespieceMaestro seleccionados manualmente.
+    despiece_maestro = models.ForeignKey(
+        "ingenieria.DespieceMaestro",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="apu_lineas",
+        help_text="DespieceMaestro de origen (sólo MATERIALES). NULL en líneas legacy.",
+    )
+    sistema_nombre_snapshot = models.CharField(
+        max_length=120, blank=True, default="",
+        help_text="Snapshot textual del sistema asociado a la línea (Fase 11.4).",
+    )
+    subsistema_nombre_snapshot = models.CharField(
+        max_length=120, blank=True, default="",
+        help_text="Snapshot textual del subsistema asociado a la línea (Fase 11.4).",
+    )
+
+    # ── Fase 11.5 — Trazabilidad de APU origen en consolidados ────────────
+    # En APUs consolidados cada línea conserva el APU individual del que
+    # proviene. En APUs individuales queda NULL.
+    apu_origen = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="lineas_consolidadas",
+        help_text="APU individual de origen (sólo en APUs consolidados, Fase 11.5).",
     )
 
     # -- Descripción editable (se copia del catálogo pero puede ajustarse) --
@@ -836,6 +1265,198 @@ class APULinea(models.Model):
             "updated_at",
         ])
 
+
+
+# ---------------------------------------------------------------------------
+# 6. SubsistemaItemAPU — Ítems APU predeterminados por subsistema (Fase 6L-B)
+# ---------------------------------------------------------------------------
+
+class SubsistemaItemAPU(models.Model):
+    """
+    Asociación entre un Subsistema y un ItemCatalogoAPU.
+
+    Define los ítems APU predeterminados que aplican a un subsistema para
+    las categorías NO-Materiales (Herramientas, Transporte, Mano de Obra,
+    Administración). Materiales se generan siempre desde el despiece y
+    NO usa este modelo.
+
+    Reemplaza el patrón anterior donde APUService traía todo el catálogo
+    activo por tipo_apu. Con este modelo, APUService consulta SOLO los
+    ítems explícitamente asociados al subsistema.
+
+    Si un subsistema no tiene ítems configurados para una categoría, esa
+    categoría queda vacía (no se llena con todo el catálogo como antes).
+
+    Restricciones:
+        UNIQUE (subsistema, item_catalogo, tipo)
+            — un mismo ítem solo puede asociarse una vez por tipo a un
+              subsistema. El tipo está en la asociación (no solo derivado
+              del ítem) porque permite escenarios en los que un ítem del
+              catálogo se reusa entre categorías compatibles.
+    """
+
+    subsistema = models.ForeignKey(
+        "ingenieria.Subsistema",
+        on_delete=models.CASCADE,
+        related_name="items_apu",
+        help_text="Subsistema al que aplica este ítem APU predeterminado.",
+    )
+    item_catalogo = models.ForeignKey(
+        ItemCatalogoAPU,
+        on_delete=models.CASCADE,
+        related_name="asociaciones_subsistema",
+        help_text="Ítem del catálogo APU asociado al subsistema.",
+    )
+    tipo = models.CharField(
+        max_length=30,
+        choices=[c for c in TipoAPU.choices if c[0] != TipoAPU.MATERIALES],
+        help_text=(
+            "Tipo de APU bajo el cual aplica el ítem. Debe coincidir con "
+            "categoria.tipo_apu del item_catalogo en flujos normales."
+        ),
+    )
+    cantidad = models.PositiveIntegerField(
+        default=1,
+        help_text="Cantidad predeterminada del ítem para este subsistema.",
+    )
+    orden = models.PositiveIntegerField(
+        default=0,
+        help_text="Orden de presentación dentro de la categoría.",
+    )
+    activo = models.BooleanField(
+        default=True,
+        help_text="Si False, el ítem se ignora al generar el APU.",
+    )
+    rendimiento_override = models.DecimalField(
+        max_digits=14, decimal_places=6,
+        null=True, blank=True,
+        help_text=(
+            "Rendimiento explícito para sobrescribir el cálculo por fórmula. "
+            "Si es NULL, se respeta el cálculo estándar de APUService."
+        ),
+    )
+    observaciones = models.TextField(
+        blank=True, default="",
+        help_text="Notas internas sobre por qué este ítem aplica al subsistema.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "subsistema_items_apu"
+        unique_together = [["subsistema", "item_catalogo", "tipo"]]
+        ordering = ["subsistema", "tipo", "orden", "item_catalogo__nombre"]
+        verbose_name = "Ítem APU del subsistema"
+        verbose_name_plural = "Ítems APU del subsistema"
+
+    def __str__(self):
+        return (
+            f"{self.subsistema} · {self.get_tipo_display()} · "
+            f"{self.item_catalogo.nombre} ×{self.cantidad}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 7. APUDespieceIncluido — Trazabilidad APU ↔ DespieceMaestro (Fase 11.4)
+# ---------------------------------------------------------------------------
+
+class APUDespieceIncluido(models.Model):
+    """
+    Asociación explícita entre un APU y los DespieceMaestro seleccionados
+    para él (Fase 11.4). Reemplaza la inferencia por proyecto+subsistema.
+
+    El APU mantiene `proyecto_sistema` como PS raíz (configuración base de
+    no-materiales). Los despieces adicionales seleccionados se registran
+    aquí con snapshots de sistema/subsistema para que el PDF y las vistas
+    sigan mostrando información incluso si los nombres cambian.
+    """
+
+    apu = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.CASCADE,
+        related_name="despieces_incluidos",
+        help_text="APU al que pertenece este despiece.",
+    )
+    despiece_maestro = models.ForeignKey(
+        "ingenieria.DespieceMaestro",
+        on_delete=models.PROTECT,
+        related_name="apus_incluidos",
+        help_text="DespieceMaestro seleccionado para el APU.",
+    )
+    sistema_nombre_snapshot = models.CharField(
+        max_length=120, blank=True, default="",
+        help_text="Snapshot textual del sistema en el momento de la inclusión.",
+    )
+    subsistema_nombre_snapshot = models.CharField(
+        max_length=120, blank=True, default="",
+        help_text="Snapshot textual del subsistema en el momento de la inclusión.",
+    )
+    orden = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Orden de presentación dentro del APU.",
+    )
+    activo = models.BooleanField(
+        default=True,
+        help_text="Si False, no se considera incluido (no se borra para preservar histórico).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "apu_despieces_incluidos"
+        unique_together = [["apu", "despiece_maestro"]]
+        ordering = ["apu", "orden", "id"]
+        verbose_name = "Despiece incluido en APU"
+        verbose_name_plural = "Despieces incluidos en APU"
+
+    def __str__(self):
+        return (
+            f"APU #{self.apu_id} ⇐ DM #{self.despiece_maestro_id} "
+            f"({self.subsistema_nombre_snapshot or 'sin subsistema'})"
+        )
+
+
+class APUConsolidadoOrigen(models.Model):
+    """
+    Asociación M2M-through entre un APU consolidado (Fase 11.5) y los APUs
+    individuales que lo originaron.
+
+    La consolidación es **opcional** y solo ocurre por confirmación explícita
+    del usuario. Los APUs origen conservan su independencia y trazabilidad.
+    """
+
+    apu_consolidado = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.CASCADE,
+        related_name="origenes_consolidado",
+        help_text="APU consolidado contenedor.",
+    )
+    apu_origen = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.PROTECT,
+        related_name="consolidaciones_destino",
+        help_text="APU individual de origen.",
+    )
+    orden = models.PositiveSmallIntegerField(default=0)
+    incluido_en_pdf_cliente = models.BooleanField(
+        default=True,
+        help_text="Si False, este origen no se lista en el PDF Cliente del consolidado.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "apu_consolidado_origenes"
+        unique_together = [["apu_consolidado", "apu_origen"]]
+        ordering = ["apu_consolidado", "orden", "id"]
+        verbose_name = "Origen de APU consolidado"
+        verbose_name_plural = "Orígenes de APUs consolidados"
+
+    def __str__(self):
+        return f"APU consolidado #{self.apu_consolidado_id} ⇐ APU #{self.apu_origen_id}"
 
 
 from django.db.models.signals import post_delete, post_save

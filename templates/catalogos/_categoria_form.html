@@ -1,0 +1,46 @@
+{% comment %}
+   ============================================================
+   Partial fields-only: campos de Categoría de producto.
+
+   El contenedor (<form>, csrf, botones, action) lo aporta
+   el template incluyente:
+     - catalogos/categoria_form.html       (vista completa)
+     - catalogos/catalogos.html #modalCategoria (modal)
+
+   Uso:
+     {% include "catalogos/_categoria_form.html" with form=mi_form %}
+   ============================================================
+{% endcomment %}
+
+<div class="form-grid-2">
+  <div class="form-group">
+    <label>Código <span style="color:var(--red)">*</span></label>
+    {{ form.codigo }}
+  </div>
+  <div class="form-group">
+    <label>Nombre <span style="color:var(--red)">*</span></label>
+    {{ form.nombre }}
+  </div>
+</div>
+
+<div class="form-group">
+  <label>Descripción</label>
+  {{ form.descripcion }}
+</div>
+
+<div class="form-group">
+  <div class="form-check">
+    {{ form.activa }}
+    <label class="form-check-label" style="font-size:13px;">Categoría activa</label>
+  </div>
+</div>
+
+{% if form.errors %}
+<div style="background:var(--red-bg);border:1px solid rgba(230,40,51,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
+  {% for field in form %}
+    {% for error in field.errors %}
+    <div style="font-size:12.5px;color:var(--red);">{{ field.label }}: {{ error }}</div>
+    {% endfor %}
+  {% endfor %}
+</div>
+{% endif %}

@@ -5,37 +5,11 @@
 {% block nav_ingenieria %}active{% endblock %}
 {% block page_title %}Despiece Maestro{% endblock %}
 {% block breadcrumb %}
-  {% if despiece.proyecto %}
-    <a href="{% url 'comercial:solicitud_list' %}" style="color:inherit;text-decoration:none;">Solicitudes</a>
-    {% if despiece.proyecto.solicitud %}
-      → <a href="{% url 'comercial:solicitud_detail' despiece.proyecto.solicitud.pk %}" style="color:inherit;text-decoration:none;">{{ despiece.proyecto.solicitud.consecutivo }}</a>
-    {% endif %}
-    → <a href="{% url 'comercial:proyecto_detail' despiece.proyecto.pk %}" style="color:inherit;text-decoration:none;">{{ despiece.proyecto.consecutivo }}</a>
-    → Despiece
-  {% else %}
-    Despiece rápido — {{ despiece.subsistema.sistema.codigo }} · {{ despiece.subsistema.codigo }}
-  {% endif %}
+  {% include "ingenieria/partials/_despiece_breadcrumb.html" %}
 {% endblock %}
 
 {% block topbar_actions %}
-{% if proyecto %}
-<a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
-  <i class="bi bi-arrow-left"></i> {{ proyecto.consecutivo }}
-</a>
-{% else %}
-<a href="{% url 'ingenieria:despiece_list' %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
-  <i class="bi bi-arrow-left"></i> Despieces
-</a>
-{% endif %}
-<span class="badge {% if despiece.esta_guardado %}bg-success{% else %}bg-warning text-dark{% endif %} ms-1">
-  {{ despiece.estado }}
-</span>
-{% if apu_pk %}
-<a href="{% url 'presupuestos:apu_detail' apu_pk %}"
-   class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 ms-1">
-  <i class="bi bi-file-earmark-bar-graph"></i> Ver APU
-</a>
-{% endif %}
+  {% include "ingenieria/partials/_despiece_topbar_actions.html" %}
 {% endblock %}
 
 {% block extra_head %}
@@ -255,6 +229,22 @@
 .prod-opt-meta   { font-size: 11px; color: #888; margin-top: 2px; }
 .prod-opt-empty  { padding: 10px 12px; text-align: center; color: #bbb; font-size: 12px; }
 
+/* Chip de advertencia no bloqueante por unidad/presentación */
+.prod-warning-slot { margin-top: 4px; min-height: 0; }
+.prod-warning-slot:empty { display: none; }
+.prod-warning-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(245,158,11,.13);
+  color: #92400e;
+  border: 1px solid rgba(245,158,11,.35);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 10.5px; font-weight: 600;
+  line-height: 1.35;
+  max-width: 100%;
+}
+.prod-warning-chip i { font-size: 12px; flex-shrink: 0; }
+
 /* ── Empty ────────────────────────────────────────────────────────────────── */
 .wb-empty {
   padding: 52px 20px; text-align: center; color: #bbb;
@@ -441,17 +431,18 @@
         <span id="guardarText">Guardar despiece</span>
       </button>
       {% if puede_generar_apu %}
-      <form method="post" action="{% url 'presupuestos:apu_generar_despiece' despiece.pk %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1">
-          <i class="bi bi-file-earmark-bar-graph"></i>
-          {% if apu_pk %}Actualizar APU{% else %}Generar APU{% endif %}
-        </button>
-      </form>
+      {# ── Fase 6D: botón principal "Armar mi APU" abre el modal. ────────── #}
+      {# El modal exige seleccionar producto principal antes de generar. ── #}
+      <button type="button"
+              class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1"
+              data-bs-toggle="modal" data-bs-target="#modalArmarApu">
+        <i class="bi bi-file-earmark-bar-graph"></i>
+        Armar mi APU
+      </button>
       {% if apu_pk %}
       <a href="{% url 'presupuestos:apu_detail' apu_pk %}"
-         class="btn btn-outline-primary btn-sm text-center">
-        <i class="bi bi-box-arrow-right"></i> Ver APU
+         class="btn btn-outline-secondary btn-sm text-center">
+        <i class="bi bi-box-arrow-right"></i> Ver APU existente
       </a>
       {% endif %}
       {% endif %}
@@ -497,70 +488,21 @@
     <div id="resultBody"></div>
   </div>
 
-  {% if notas_tecnicas %}
-  <!-- ── Zona 3: Notas técnicas (consulta) ── -->
-  <aside class="wb-notas">
-    <div class="wb-notas__head">
-      <div class="wb-notas__title"><i class="bi bi-info-circle"></i> Notas técnicas</div>
-    </div>
-    <div class="wb-notas__body">{{ notas_tecnicas }}</div>
-  </aside>
-  {% endif %}
+  {% include "ingenieria/partials/_despiece_notas.html" %}
 </div>
 
-<!-- Modal: Detalle de cálculo (ojo) -->
-<div class="modal fade" id="modalDetalle" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-eye me-2"></i>Detalle del cálculo</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" id="modalDetalleBody"></div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% include "ingenieria/partials/_modal_detalle_calculo.html" %}
 
 <!-- Toast -->
 <div class="wb-toast" id="wbToast"></div>
 
-<!-- Modal: Consolidar materiales -->
-<div class="modal fade" id="modalConsolidar" tabindex="-1" aria-labelledby="modalConsolidarLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="modalConsolidarLabel"><i class="bi bi-layers me-2"></i>Consolidar materiales</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" id="modalConsolidarBody"></div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-success" id="btnConfirmarConsolidacion">
-          <i class="bi bi-check2"></i> Confirmar consolidación
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+{% include "ingenieria/partials/_modal_consolidar.html" %}
 
-<!-- Modal: Ver origen de consolidación -->
-<div class="modal fade" id="modalOrigen" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-diagram-3 me-2"></i>Líneas de origen</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" id="modalOrigenBody"></div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% include "ingenieria/partials/_modal_origen.html" %}
+
+{% if puede_generar_apu %}
+{% include "ingenieria/partials/_modal_armar_apu.html" %}
+{% endif %}
 
 <script>
 const CALCULAR_URL         = "{% url 'ingenieria:despiece_calcular' despiece.pk %}";
@@ -682,7 +624,54 @@ function _buildProdObj(p) {
     precio_unitario: p.precio_unitario,
     moneda:          p.moneda,
     fecha_precio:    p.fecha_actualizacion_precio,
+    // Unidad principal del producto (para advertencia no bloqueante)
+    unidad_producto:       p.unidad || '',
+    // ── Presentación técnica (snapshot ligero, para advertencias futuras) ──
+    presentacion_nombre:   p.presentacion_nombre || '',
+    ancho_presentacion:    p.ancho_presentacion ?? null,
+    largo_presentacion:    p.largo_presentacion ?? null,
+    unidad_dimension:      p.unidad_dimension || '',
+    cantidad_presentacion: p.cantidad_presentacion ?? null,
+    unidad_presentacion:   p.unidad_presentacion || '',
   };
+}
+
+/* ── Advertencia no bloqueante por unidad ──────────────────────────────────
+ * Compara la unidad de la línea contra la unidad principal del producto y
+ * contra la unidad de presentación si existe. Si la línea no coincide con
+ * ninguna de las dos, retorna un texto descriptivo; en caso contrario null.
+ */
+function _normUnidad(u) {
+  return String(u || '').trim().toLowerCase();
+}
+function _unidadWarning(lineaUnidad, prod) {
+  if (!prod) return null;
+  const uLinea = _normUnidad(lineaUnidad);
+  if (!uLinea) return null;
+  const uProd  = _normUnidad(prod.unidad_producto);
+  const uPres  = _normUnidad(prod.unidad_presentacion);
+  // Si no tenemos información del producto, no se puede comparar.
+  if (!uProd && !uPres) return null;
+  if (uProd && uProd === uLinea) return null;
+  if (uPres && uPres === uLinea) return null;
+  // Mensaje corto: prioriza unidad principal del producto.
+  const uMostrar = prod.unidad_producto || prod.unidad_presentacion || '—';
+  return `La línea usa ${lineaUnidad} y el producto está configurado en ${uMostrar}. Revise si corresponde.`;
+}
+function _renderProdWarning(tr, lineaUnidad, prod) {
+  const slot = tr.querySelector('.prod-warning-slot');
+  if (!slot) return;
+  const text = _unidadWarning(lineaUnidad, prod);
+  if (!text) { slot.innerHTML = ''; return; }
+  slot.innerHTML =
+    `<span class="prod-warning-chip" title="${esc(text)}">` +
+    `<i class="bi bi-exclamation-triangle-fill"></i>${esc(text)}</span>`;
+}
+
+function _displayProductoLabel(p) {
+  // Etiqueta visible cuando se selecciona un producto: nombre + presentación si existe.
+  const presentacion = (p && p.presentacion_nombre) ? p.presentacion_nombre : '';
+  return presentacion ? `${p.nombre} — ${presentacion}` : (p ? p.nombre : '');
 }
 
 function _updateProdUI(tr, prod) {
@@ -713,7 +702,11 @@ async function _buscar(q, categoria, drop, onSelect) {
     data.productos.forEach(p => {
       const opt = document.createElement('div');
       opt.className = 'prod-option';
+      const presentacionHtml = p.presentacion_nombre
+        ? `<div class="prod-opt-meta" style="color:#1470e6;">${esc(p.presentacion_nombre)}</div>`
+        : '';
       opt.innerHTML = `<div class="prod-opt-nombre">${esc(p.nombre)}</div>
+        ${presentacionHtml}
         <div class="prod-opt-meta">${esc(p.codigo)} · ${esc(p.unidad)} · $${fmt(p.precio_unitario)}</div>`;
       opt.addEventListener('click', () => { onSelect(p); drop.classList.remove('open'); });
       drop.appendChild(opt);
@@ -728,11 +721,17 @@ function initSelector(tr, fila) {
   const drop  = tr.querySelector('.prod-dropdown');
   if (!inp) return;
 
+  const lineaUnidad = fila.unidad_apu || fila.unidad || '';
+
   if (fila._prod?.producto_nombre) {
-    inp.value = fila._prod.producto_nombre;
+    inp.value = _displayProductoLabel({
+      nombre: fila._prod.producto_nombre,
+      presentacion_nombre: fila._prod.presentacion_nombre || '',
+    });
     inp.classList.add('has-product');
     clear.classList.add('visible');
   }
+  _renderProdWarning(tr, lineaUnidad, fila._prod);
 
   inp.addEventListener('input', () => {
     const q = inp.value.trim();
@@ -740,18 +739,20 @@ function initSelector(tr, fila) {
     if (!q) { drop.classList.remove('open'); return; }
     _searchTimer = setTimeout(() =>
       _buscar(q, fila.categoria_nombre || '', drop, p => {
-        inp.value = p.nombre; inp.classList.add('has-product'); clear.classList.add('visible');
+        inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
         fila._prod = _buildProdObj(p);
         _updateProdUI(tr, fila._prod);
+        _renderProdWarning(tr, lineaUnidad, fila._prod);
       }), 260);
   });
 
   inp.addEventListener('focus', () => {
     const q = inp.value.trim();
     if (q) _buscar(q, fila.categoria_nombre || '', drop, p => {
-      inp.value = p.nombre; inp.classList.add('has-product'); clear.classList.add('visible');
+      inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
       fila._prod = _buildProdObj(p);
       _updateProdUI(tr, fila._prod);
+      _renderProdWarning(tr, lineaUnidad, fila._prod);
     });
   });
 
@@ -763,6 +764,7 @@ function initSelector(tr, fila) {
     const fechaEl  = tr.querySelector('.td-fecha-val');
     if (precioEl) precioEl.innerHTML  = '<span class="text-pendiente">Sin producto</span>';
     if (fechaEl)  fechaEl.textContent = '—';
+    _renderProdWarning(tr, lineaUnidad, null);
   });
 }
 
@@ -773,16 +775,23 @@ function initSelectorConsolidada(tr, c) {
   const drop  = tr.querySelector('.prod-dropdown');
   if (!inp) return;
 
+  const lineaUnidad = c.unidad || '';
+
   if (c._prod?.producto_nombre) {
-    inp.value = c._prod.producto_nombre;
+    inp.value = _displayProductoLabel({
+      nombre: c._prod.producto_nombre,
+      presentacion_nombre: c._prod.presentacion_nombre || '',
+    });
     inp.classList.add('has-product');
     clear.classList.add('visible');
   }
+  _renderProdWarning(tr, lineaUnidad, c._prod);
 
   const onSelect = p => {
-    inp.value = p.nombre; inp.classList.add('has-product'); clear.classList.add('visible');
+    inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
     c._prod = _buildProdObj(p);
     _updateProdUI(tr, c._prod);
+    _renderProdWarning(tr, lineaUnidad, c._prod);
   };
 
   inp.addEventListener('input', () => {
@@ -805,6 +814,7 @@ function initSelectorConsolidada(tr, c) {
     const fechaEl  = tr.querySelector('.td-fecha-val');
     if (precioEl) precioEl.innerHTML  = '<span class="text-pendiente">Sin producto</span>';
     if (fechaEl)  fechaEl.textContent = '—';
+    _renderProdWarning(tr, lineaUnidad, null);
   });
 }
 
@@ -835,7 +845,7 @@ function _rowNormal(f, i, cols) {
       <input type="text" class="prod-input" placeholder="Buscar producto…" autocomplete="off">
       <button type="button" class="prod-clear">×</button>
       <div class="prod-dropdown"></div>
-    </div></td>
+    </div><div class="prod-warning-slot"></div></td>
     <td class="td-precio"><span class="td-precio-val">${_precioHtml(f._prod)}</span></td>
     <td class="td-fecha"><span class="td-fecha-val">${esc(_fechaStr(f._prod))}</span></td>
   </tr>`;
@@ -862,7 +872,7 @@ function _rowConsolidada(c, cols) {
       <input type="text" class="prod-input" placeholder="Buscar producto…" autocomplete="off">
       <button type="button" class="prod-clear">×</button>
       <div class="prod-dropdown"></div>
-    </div></td>
+    </div><div class="prod-warning-slot"></div></td>
     <td class="td-precio"><span class="td-precio-val">${_precioHtml(c._prod)}</span></td>
     <td class="td-fecha"><span class="td-fecha-val">${esc(_fechaStr(c._prod))}</span></td>
   </tr>`;
@@ -879,6 +889,9 @@ function renderTabla(lineas) {
       precio_unitario: l.precio_unitario,
       moneda:          l.moneda || '',
       fecha_precio:    l.fecha_precio || null,
+      presentacion_nombre: l.presentacion_nombre || '',
+      unidad_producto:     l.unidad_producto || '',
+      unidad_presentacion: l.unidad_presentacion || '',
     } : null,
   }));
   _renderBody();
@@ -1507,6 +1520,9 @@ document.addEventListener('DOMContentLoaded', () => {
         precio_unitario: c.precio_unitario,
         moneda:          c.moneda || '',
         fecha_precio:    c.fecha_precio || null,
+        presentacion_nombre: c.presentacion_nombre || '',
+        unidad_producto:     c.unidad_producto || '',
+        unidad_presentacion: c.unidad_presentacion || '',
       } : null,
     }));
 
@@ -1592,23 +1608,7 @@ window.abrirResumen = function () {
 };
 </script>
 
-<!-- ── Botón "Resumen" → se reubica en el dock de asistencia (inferior derecha) ── -->
-<button class="assist-fab assist-fab--resumen" id="resumenFab" type="button"
-        onclick="abrirResumen()" title="Resumen de lo realizado">
-  <span class="assist-fab__icon"><i class="bi bi-clipboard-data-fill"></i></span>
-  <span class="assist-fab__label">Resumen</span>
-</button>
-
-<div class="offcanvas offcanvas-end" id="resumenOffcanvas" tabindex="-1" aria-labelledby="resumenOffcanvasTitle">
-  <div class="offcanvas-header" style="border-bottom:1px solid var(--border,#eee);">
-    <div>
-      <h6 class="offcanvas-title mb-0" id="resumenOffcanvasTitle">Resumen del despiece</h6>
-      <p style="font-size:11px;color:#888;margin:2px 0 0;">Lo que has hecho en esta pantalla</p>
-    </div>
-    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
-  </div>
-  <div class="offcanvas-body p-0" id="resumenOffcanvasBody"></div>
-</div>
+{% include "ingenieria/partials/_despiece_resumen_offcanvas.html" %}
 
 {% include "ingenieria/_checkpoint_panel.html" %}
 {% endblock %}

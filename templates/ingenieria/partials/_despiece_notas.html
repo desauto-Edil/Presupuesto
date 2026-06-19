@@ -1,0 +1,30 @@
+{% comment %}
+   ============================================================
+   Partial: Panel "Notas técnicas" del Despiece Maestro.
+
+   Uso (dentro del workbench, columna derecha del wb-layout):
+       {% include "ingenieria/partials/_despiece_notas.html" %}
+
+   Contrato:
+     notas_tecnicas   String/HTML. Si está vacío, el partial NO emite nada
+                      (preserva el comportamiento original del bloque
+                      {% if notas_tecnicas %} … {% endif %}).
+
+   CSS:
+     Las clases wb-notas, wb-notas__head, wb-notas__title y wb-notas__body
+     siguen definidas en el <style> de despiece_maestro.html. Este partial
+     no inyecta estilos propios.
+
+   JS:
+     Cero JavaScript. Render puro.
+   ============================================================
+{% endcomment %}
+{% if notas_tecnicas %}
+<!-- ── Zona 3: Notas técnicas (consulta) ── -->
+<aside class="wb-notas">
+  <div class="wb-notas__head">
+    <div class="wb-notas__title"><i class="bi bi-info-circle"></i> Notas técnicas</div>
+  </div>
+  <div class="wb-notas__body">{{ notas_tecnicas }}</div>
+</aside>
+{% endif %}

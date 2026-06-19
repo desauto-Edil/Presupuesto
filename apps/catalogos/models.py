@@ -59,6 +59,14 @@ class CategoriaProducto(models.Model):
 # PRODUCTOS
 # ---------------------------------------------------------------------------
 
+class UnidadDimension(models.TextChoices):
+    METRO      = "m",  "metros (m)"
+    CENTIMETRO = "cm", "centímetros (cm)"
+    MILIMETRO  = "mm", "milímetros (mm)"
+    PIE        = "ft", "pies (ft)"
+    PULGADA    = "in", "pulgadas (in)"
+
+
 class Producto(models.Model):
     codigo = models.CharField(max_length=50, unique=True)
     nombre = models.CharField(max_length=300)
@@ -110,6 +118,39 @@ class Producto(models.Model):
         null=True,
         verbose_name='Ficha técnica',
         help_text='PDF o imagen con las especificaciones técnicas del producto (opcional).',
+    )
+    # ── Presentación técnica (opcional) ───────────────────────────────────────
+    # Describe el formato físico/comercial en que viene el producto.
+    # Independiente de `unidades_por_presentacion` (que es divisor de precio).
+    presentacion_nombre = models.CharField(
+        max_length=200, blank=True, default="",
+        verbose_name="Nombre de presentación",
+        help_text="Ej: 'Rollo 3.05 x 30.48 m', 'Lámina 1.00 x 3.00 m', 'Caja x 100 und'.",
+    )
+    ancho_presentacion = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True,
+        verbose_name="Ancho",
+    )
+    largo_presentacion = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True,
+        verbose_name="Largo",
+    )
+    unidad_dimension = models.CharField(
+        max_length=4, choices=UnidadDimension.choices, blank=True, default="",
+        verbose_name="Unidad de dimensión",
+        help_text="Unidad de ancho/largo (m, cm, mm, ft, in).",
+    )
+    cantidad_presentacion = models.DecimalField(
+        max_digits=14, decimal_places=4, null=True, blank=True,
+        verbose_name="Cantidad por presentación",
+        help_text="Ej: 92.96 (área total m² de un rollo 3.05 x 30.48).",
+    )
+    unidad_presentacion = models.ForeignKey(
+        UnidadMedida, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="productos_unidad_presentacion",
+        verbose_name="Unidad de presentación",
+        help_text="Unidad en la que se expresa la cantidad por presentación (m², m, und, gal).",
     )
     activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

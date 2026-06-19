@@ -4,8 +4,9 @@ from django.urls import path
 from apps.ingenieria.views import (
     SistemaListView, SistemaDetailView,
     SistemaCreateView, SistemaUpdateView, SistemaDeleteView,
-    SubsistemaListView, SubsistemaDetailView,
+    SubsistemaDetailView,
     SubsistemaCreateView, SubsistemaUpdateView, SubsistemaDeleteView,
+    SubsistemaConfigApuGuardarView,
     CalculadoraConsumoView,
     FuncionConsumoCreateView, FuncionConsumoDeleteView,
     ProblemaResueltoCreateView, ProblemaResueltoDeleteView,
@@ -37,11 +38,14 @@ urlpatterns = [
     path("sistemas/<int:pk>/calcular/", CalculadoraConsumoView.as_view(), name="calculadora_consumo"),
 
     # Subsistemas
-    path("subsistemas/", SubsistemaListView.as_view(),   name="subsistema_list"),
     path("subsistemas/nuevo/", SubsistemaCreateView.as_view(), name="subsistema_create"),
     path("subsistemas/<int:pk>/", SubsistemaDetailView.as_view(), name="subsistema_detail"),
     path("subsistemas/<int:pk>/editar/", SubsistemaUpdateView.as_view(), name="subsistema_update"),
     path("subsistemas/<int:pk>/eliminar/", SubsistemaDeleteView.as_view(), name="subsistema_delete"),
+    # Fase 6L-4: guardado del modal "Configurar APU del subsistema"
+    path("subsistemas/<int:pk>/config-apu/guardar/",
+         SubsistemaConfigApuGuardarView.as_view(),
+         name="subsistema_config_apu_guardar"),
 
     # Catálogos de consumo
     path("catalogo/funciones/nueva/", FuncionConsumoCreateView.as_view(), name="funcion_consumo_create"),

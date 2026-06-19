@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Unir APUs — {{ proyecto.consecutivo }}{% endblock %}
+{% block nav_apu %}active{% endblock %}
+
+{% block content %}
+<div class="wrap" style="max-width:1080px;margin:0 auto;padding:24px;">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;">
+    <div>
+      <h2 style="margin:0 0 4px;">Unir APUs y consolidar materiales — {{ proyecto.consecutivo }}</h2>
+      <div style="color:var(--ink-soft);font-size:13px;">
+        Selecciona dos o más APUs individuales. Los materiales se suman por APU; los no-materiales equivalentes se dejan una sola vez. La consolidación es opcional y requiere confirmación.
+      </div>
+    </div>
+    <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-light btn-sm">← Volver al proyecto</a>
+  </div>
+
+  {% if not apus_individuales %}
+    <div class="panel" style="padding:20px;text-align:center;color:var(--ink-soft);">
+      Este proyecto no tiene APUs individuales todavía. Genera al menos un APU antes de poder consolidar.
+    </div>
+  {% else %}
+
+  <form method="post" action="{% url 'presupuestos:apu_consolidar_preview' proyecto.pk %}">
+    {% csrf_token %}
+    <div class="panel" style="padding:0;overflow:hidden;">
+      <div style="padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;">
+        <strong>APUs individuales disponibles</strong>
+        <span style="font-size:12px;color:var(--ink-soft);">Selecciona al menos 2</span>
+      </div>
+      <table class="table" style="width:100%;border-collapse:collapse;">
+        <thead style="background:var(--bg-soft);">
+          <tr>
+            <th style="width:42px;"></th>
+            <th>APU</th>
+            <th>Sistema · Subsistema</th>
+            <th>Estado</th>
+            <th>Modalidad</th>
+            <th style="text-align:right;">Total venta</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for apu in apus_individuales %}
+          <tr>
+            <td style="text-align:center;">
+              <input type="checkbox" name="apus" value="{{ apu.pk }}" id="apu_{{ apu.pk }}">
+            </td>
+            <td>
+              <label for="apu_{{ apu.pk }}" style="cursor:pointer;">
+                <strong>#{{ apu.pk }}</strong> — {{ apu.nombre }}
+              </label>
+            </td>
+            <td>
+              {% if apu.proyecto_sistema %}
+                {{ apu.proyecto_sistema.subsistema.sistema.nombre }} · {{ apu.proyecto_sistema.subsistema.nombre }}
+              {% else %}
+                <span style="color:var(--ink-soft);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if apu.modalidad_aiu_seleccionada %}
+                <span class="badge" style="background:#dcfce7;color:#166534;">Aprobado</span>
+              {% elif apu.fecha_envio_revision %}
+                <span class="badge" style="background:#fef3c7;color:#92400e;">En revisión</span>
+              {% else %}
+                <span class="badge" style="background:#e5e7eb;color:#374151;">Borrador</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if apu.modalidad_aiu_seleccionada %}
+                Modalidad {{ apu.modalidad_aiu_seleccionada }}
+              {% else %}
+                <span style="color:var(--ink-soft);">—</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums;">
+              ${{ apu.total_valor_venta|floatformat:0 }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:16px;display:flex;justify-content:space-between;gap:12px;align-items:center;">
+      <div style="color:var(--ink-soft);font-size:12px;max-width:560px;">
+        Los APUs origen quedarán intactos. El APU consolidado nace sin garantía aplicada y sin modalidad AIU; deberá pasar por su propio flujo de revisión.
+      </div>
+      <div style="display:flex;gap:10px;">
+        <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-light">Cancelar</a>
+        <button type="submit" class="btn btn-primary">Ver preview de consolidación →</button>
+      </div>
+    </div>
+  </form>
+
+  {% if apus_consolidados %}
+    <div style="margin-top:32px;">
+      <h3 style="margin:0 0 8px;font-size:14px;color:var(--ink-soft);">APUs consolidados existentes</h3>
+      <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;">
+        {% for apu in apus_consolidados %}
+        <li style="padding:10px 14px;background:var(--bg-soft);border-radius:6px;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <span class="badge" style="background:#e0e7ff;color:#3730a3;">Consolidado</span>
+            <a href="{% url 'presupuestos:apu_detail' apu.pk %}"><strong>#{{ apu.pk }}</strong> — {{ apu.nombre }}</a>
+          </div>
+          <span style="font-variant-numeric:tabular-nums;color:var(--ink-soft);">${{ apu.total_valor_venta|floatformat:0 }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% endif %}
+</div>
+{% endblock %}

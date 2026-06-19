@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load l10n %}
 
 {% block title %}{% if form.instance.pk %}Editar subsistema{% else %}Nuevo subsistema{% endif %}{% endblock %}
 {% block nav_ingenieria %}active{% endblock %}
@@ -240,6 +241,15 @@ html, body { overflow-y: auto !important; height: auto !important; }
   text-align: center;
   padding: 24px 0 8px;
 }
+
+/* ══ Fase 6L: ocultar pill de progreso y FABs de ayuda/resumen mientras el
+   modal de config APU está visible — evita que tapen el contenido del modal.
+   Bootstrap añade body.modal-open al mostrar un modal y lo quita al cerrarlo. ══ */
+body.modal-open #cpPill,
+body.modal-open .cp-offcanvas-toggle,
+body.modal-open .assist-fab,
+body.modal-open .assist-fab--help,
+body.modal-open .assist-fab--resumen { display: none !important; }
 
 /* ══ Botones de agregar — más visibles ═══════════════════════════════════ */
 #btnAddSubconjunto,
@@ -700,7 +710,7 @@ html, body { overflow-y: auto !important; height: auto !important; }
                     <tbody id="varRows">
                       {% for v in variables_existentes %}
                       <tr class="var-row">
-                        <td><input type="text" name="var_variable[]" class="form-control form-control-sm" value="{{ v.variable }}" placeholder="mi_variable" style="font-family:monospace;" required><input type="hidden" name="var_default[]" value="{{ v.valor_default }}"></td>
+                        <td><input type="text" name="var_variable[]" class="form-control form-control-sm" value="{{ v.variable }}" placeholder="mi_variable" style="font-family:monospace;" required><input type="hidden" name="var_default[]" value="{{ v.valor_default|unlocalize }}"></td>
                         <td><input type="text" name="var_label[]" class="form-control form-control-sm" value="{{ v.label }}" placeholder="Etiqueta legible" required></td>
                         <td><select name="var_unidad[]" class="form-select form-select-sm var-unidad-sel" data-current="{{ v.unidad }}"></select></td>
                         <td>
@@ -815,7 +825,10 @@ html, body { overflow-y: auto !important; height: auto !important; }
               </div>
             </div>
 
-          </div>{# /seccionConstructivo #}
+            <!-- Fase 6L-2: la configuración APU del subsistema vive en un modal
+                 separado (#modalConfigApu) — ya no es una sección permanente del form. -->
+
+          </div><!-- /seccionConstructivo -->
 
           <!-- Input oculto: subconjuntos serializados a JSON antes del submit -->
           <input type="hidden" name="subconjuntos_json" id="subconjuntosJson">
@@ -824,11 +837,189 @@ html, body { overflow-y: auto !important; height: auto !important; }
           <div class="d-flex gap-2 justify-content-end">
             <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">Cancelar</a>
             <button type="submit" class="btn btn-primary btn-sm">
-              {% if form.instance.pk %}Guardar cambios{% else %}Crear subsistema{% endif %}
+              Guardar y continuar
             </button>
           </div>
 
         </form>
+
+        <!-- ══════════════════════════════════════════════════════════════════
+             MODAL: Configurar APU del subsistema (Fase 6L-3)
+             - Se abre automáticamente al cargar la página con ?abrir_modal_apu=1
+               (redirect desde form_valid de Create/Update).
+             - Form independiente del form principal; postea a
+               ingenieria:subsistema_config_apu_guardar.
+             - Solo muestra Categoría + Ítem (checkbox). NO precio, NO cantidad,
+               NO rendimiento, NO fórmula, NO observaciones.
+             ══════════════════════════════════════════════════════════════════ -->
+        {% if form.instance.pk %}
+        <div class="modal fade" id="modalConfigApu" tabindex="-1" aria-labelledby="modalConfigApuLabel" aria-hidden="true">
+          <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+            <div class="modal-content" style="max-height:85vh;">
+              <div class="modal-header" style="padding:14px 18px;">
+                <h5 class="modal-title" id="modalConfigApuLabel" style="font-size:14px;font-weight:700;">
+                  <i class="bi bi-sliders" style="margin-right:6px;"></i>
+                  Configurar APU del subsistema
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+              </div>
+              <form method="post" action="{% url 'ingenieria:subsistema_config_apu_guardar' form.instance.pk %}" id="formConfigApu">
+                {% csrf_token %}
+                <div class="modal-body" style="padding:16px 18px;overflow-y:auto;max-height:calc(85vh - 120px);">
+                  <div class="sf-hint">
+                    Selecciona los <strong>ítems APU predeterminados</strong> que aplicarán
+                    a este subsistema. El APU del proyecto traerá <strong>solo estos ítems</strong>
+                    para Herramientas, Transporte, Mano de obra y Administración.<br>
+                    <strong>Materiales</strong> no se configura aquí — se genera siempre
+                    desde el despiece.
+                  </div>
+
+                  {% for sia in sia_tipos %}
+                  <div class="sia-tipo-block" style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card);">
+                    <div class="sia-tipo-head"
+                         style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface);cursor:pointer;border-bottom:1px solid var(--border);user-select:none;">
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <i class="bi {{ sia.icon }}" style="color:{{ sia.color }};font-size:14px;"></i>
+                        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:{{ sia.color }};">{{ sia.label }}</span>
+                        <span style="font-size:10.5px;color:var(--ink-soft);margin-left:4px;">
+                          ({{ sia.total_seleccionados }}/{{ sia.total_items }})
+                        </span>
+                      </div>
+                      <i class="bi bi-chevron-down sia-chev" style="font-size:11px;color:var(--ink-soft);transition:transform .15s;"></i>
+                    </div>
+                    <div class="sia-tipo-body" style="display:none;padding:12px 14px;">
+
+                      {% if sia.items_por_categoria %}
+                      <div style="margin-bottom:10px;position:relative;">
+                        <input type="search" class="form-control form-control-sm sia-search-input"
+                               data-target="sia-list-{{ sia.tipo }}"
+                               data-empty="sia-empty-{{ sia.tipo }}"
+                               placeholder="Buscar por nombre, código, categoría o unidad…"
+                               oninput="siaFilter(this)">
+                      </div>
+                      <div class="sia-list" id="sia-list-{{ sia.tipo }}">
+                        {% for cat_group in sia.items_por_categoria %}
+                        <div class="sia-cat-group" data-cat="{{ cat_group.categoria|lower }}">
+                          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:{{ sia.color }};margin:8px 0 4px;">
+                            {{ cat_group.categoria }}
+                          </div>
+                          {% for item in cat_group.items %}
+                          <div class="sia-item-row"
+                               data-search="{{ item.nombre|lower }} {{ item.codigo|default:''|lower }} {{ cat_group.categoria|lower }} {{ item.unidad|lower }}"
+                               style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid rgba(14,17,23,.04);">
+                            <input type="checkbox"
+                                   name="sia_{{ sia.tipo }}_item_id[]"
+                                   value="{{ item.pk }}"
+                                   id="sia-{{ sia.tipo }}-{{ item.pk }}"
+                                   {% if item.sia_checked %}checked{% endif %}
+                                   style="width:15px;height:15px;cursor:pointer;flex-shrink:0;">
+                            <label for="sia-{{ sia.tipo }}-{{ item.pk }}"
+                                   style="flex:1;font-size:12px;cursor:pointer;margin:0;line-height:1.3;">
+                              {{ item.nombre }}
+                              {% if item.codigo %}
+                                <span style="font-size:10px;color:var(--ink-soft);">· {{ item.codigo }}</span>
+                              {% endif %}
+                              <span style="font-size:10px;color:var(--ink-soft);">· {{ item.unidad }}</span>
+                            </label>
+                          </div>
+                          {% endfor %}
+                        </div>
+                        {% endfor %}
+                      </div>
+                      <p class="sia-empty-search" id="sia-empty-{{ sia.tipo }}"
+                         style="display:none;font-size:11.5px;color:var(--ink-soft);font-style:italic;margin-top:8px;">
+                        Sin resultados para la búsqueda.
+                      </p>
+                      {% else %}
+                      <p style="font-size:12px;color:var(--ink-soft);font-style:italic;margin:6px 0;">
+                        No hay ítems en el catálogo APU para esta categoría.
+                        <a href="{% url 'presupuestos:catalogo_apu' %}">Ir al catálogo APU</a>
+                      </p>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                <div class="modal-footer" style="padding:12px 18px;">
+                  <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                  <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-check-lg" style="margin-right:4px;"></i> Guardar configuración APU
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <script>
+          // Fase 6L: mover el modal al <body> antes de mostrarlo.
+          // El modal está dentro del .panel y de un .fade-up que crean stacking
+          // context — sin esto, el .modal-backdrop queda visualmente encima
+          // del .modal-content y la pantalla se ve atenuada en gris.
+          document.addEventListener('DOMContentLoaded', function () {
+            var modalEl = document.getElementById('modalConfigApu');
+            if (modalEl && modalEl.parentElement !== document.body) {
+              document.body.appendChild(modalEl);
+            }
+
+            // Auto-abrir el modal cuando llega ?abrir_modal_apu=1
+            try {
+              var params = new URLSearchParams(window.location.search);
+              if (params.get('abrir_modal_apu') === '1') {
+                if (modalEl && window.bootstrap && bootstrap.Modal) {
+                  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                }
+                // Limpiar el query param para que un refresh no reabra el modal
+                if (window.history && window.history.replaceState) {
+                  params.delete('abrir_modal_apu');
+                  var qs = params.toString();
+                  var url = window.location.pathname + (qs ? '?' + qs : '') + window.location.hash;
+                  window.history.replaceState({}, '', url);
+                }
+              }
+            } catch (e) { /* noop */ }
+          });
+
+          // Fase 6L: toggle de acordeones del modal por delegación de eventos
+          // (más robusto que onclick inline, sobre todo tras moveTo body).
+          document.addEventListener('click', function (ev) {
+            var head = ev.target.closest('.sia-tipo-head');
+            if (!head) return;
+            var body = head.nextElementSibling;
+            if (!body) return;
+            // Tratamos como oculto SOLO cuando display === 'none' (inline).
+            // Si display === '' (default tras mostrar), el siguiente click cierra.
+            var hidden = body.style.display === 'none';
+            body.style.display = hidden ? '' : 'none';
+            var chev = head.querySelector('.sia-chev');
+            if (chev) {
+              chev.style.transform = hidden ? 'rotate(180deg)' : '';
+            }
+          });
+
+          // Filtro frontend reutilizado del bloque anterior
+          function siaFilter(input) {
+            var listId  = input.dataset.target;
+            var emptyId = input.dataset.empty;
+            var list    = document.getElementById(listId);
+            var empty   = document.getElementById(emptyId);
+            if (!list) return;
+            var q = (input.value || '').trim().toLowerCase();
+            var anyVisible = false;
+            list.querySelectorAll('.sia-cat-group').forEach(function (grp) {
+              var groupVisible = false;
+              grp.querySelectorAll('.sia-item-row').forEach(function (row) {
+                var hay = (row.dataset.search || '').includes(q);
+                row.style.display = hay ? '' : 'none';
+                if (hay) { groupVisible = true; anyVisible = true; }
+              });
+              grp.style.display = groupVisible ? '' : 'none';
+            });
+            if (empty) empty.style.display = anyVisible ? 'none' : '';
+          }
+          window.siaFilter = siaFilter;
+        </script>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -864,6 +1055,26 @@ function evalImagen() {
   return { puntaje: 2, maximo: 5, estado: 'advertencia', errores: [],
            advertencias: ['Se recomienda cargar una imagen técnica del sistema'] };
 }
+/**
+ * normalizarNumeroES — Devuelve la representación con punto decimal de un
+ * número escrito al estilo es-CO ("0,000000", "12,5"), o el valor original
+ * si ya usa punto decimal y es numérico. Retorna null para ambigüedades
+ * (separador de miles + decimal) o texto no numérico.
+ */
+function normalizarNumeroES(raw) {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim();
+  if (s === '') return '';
+  const tienePunto = s.includes('.');
+  const tieneComa  = s.includes(',');
+  // Ambiguo: usa punto y coma — no normalizamos.
+  if (tienePunto && tieneComa) return null;
+  // Si trae coma, intenta como decimal estilo es-CO.
+  const candidato = tieneComa ? s.replace(/,/g, '.') : s;
+  if (!/^-?\d+(\.\d+)?$/.test(candidato)) return null;
+  return candidato;
+}
+
 function evalVariables() {
   if (_esConsumoActivo()) return { puntaje: 20, maximo: 20, estado: 'ok', errores: [], advertencias: [] };
   const errores = [], advertencias = [];
@@ -883,7 +1094,13 @@ function evalVariables() {
     else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(v)) errores.push(`"${v}": solo letras, números y guión bajo`);
     if (vistos.has(v)) errores.push(`"${v}": nombre duplicado`); else vistos.add(v);
     if (!l)            errores.push(`"${v}": etiqueta obligatoria`);
-    if (d.includes(',')) errores.push(`"${v}": valor "${d}" usa coma — cambiar a punto decimal`);
+    // Normalización numérica defensiva (Fase ajuste 1):
+    //   "0,000000" → "0.000000", "12,5" → "12.5", "12.5" → "12.5".
+    //   "1.250,50" → ambiguo (mantener error). "abc" → error. "" → respetar.
+    const dNorm = normalizarNumeroES(d);
+    if (dNorm === null && d !== '' && d.includes(',')) {
+      errores.push(`"${v}": valor "${d}" usa coma — cambiar a punto decimal`);
+    }
     if (tipo === 'OPCION_UNICA') {
       if (!ops) { errores.push(`"${v}": Opción única requiere al menos una opción`); return; }
       const lista = ops.split(';').map(o => o.trim()).filter(o => o !== '');
@@ -1153,12 +1370,12 @@ window.CP_SECCIONES = [
       <td style="width:90px;">
         <select class="form-select form-select-sm comp-f-unidad">${unidadesOpts(comp.unidad || '')}</select>
       </td>
-      <td style="width:110px;">
+      <td class="apu-col" style="display:none;width:110px;">
         <input type="text" class="form-control form-control-sm comp-f-var_ref_apu"
                style="font-family:monospace;font-size:10.5px;"
                value="${esc(comp.variable_referencia_apu)}">
       </td>
-      <td style="width:90px;">
+      <td class="apu-col" style="display:none;width:90px;">
         <select class="form-select form-select-sm comp-f-unidad_apu">${unidadesOpts(comp.unidad_apu || '')}</select>
       </td>
       <td style="width:36px;">
@@ -1215,8 +1432,8 @@ window.CP_SECCIONES = [
                 <th style="min-width:180px;">Fórmula *</th>
                 <th style="width:100px;">Var. salida</th>
                 <th style="width:90px;">Unidad</th>
-                <th style="width:110px;">Ref. APU</th>
-                <th style="width:90px;">Und. APU</th>
+                <th class="apu-col" style="display:none;width:110px;">Ref. APU</th>
+                <th class="apu-col" style="display:none;width:90px;">Und. APU</th>
                 <th style="width:36px;"></th>
               </tr>
             </thead>
@@ -1228,9 +1445,15 @@ window.CP_SECCIONES = [
           Sin componentes. Usa "+ Agregar componente".
         </p>
 
-        <button type="button" class="btn btn-ghost btn-xs sq-add-comp-btn">
-          <i class="bi bi-plus"></i> Agregar componente
-        </button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="btn btn-ghost btn-xs sq-add-comp-btn">
+            <i class="bi bi-plus"></i> Agregar componente
+          </button>
+          <button type="button" class="btn btn-ghost btn-xs sq-toggle-apu-btn"
+                  title="Mostrar/ocultar columnas técnicas de configuración APU (Ref. APU, Und. APU)">
+            <i class="bi bi-sliders"></i> Configurar APU
+          </button>
+        </div>
       </div>
     `;
 
@@ -1268,6 +1491,24 @@ window.CP_SECCIONES = [
         emptyMsg.style.display = '';
       }
     });
+
+    // Toggle Configurar APU — muestra/oculta columnas técnicas Ref. APU y Und. APU
+    // de esta tarjeta de subconjunto. Los inputs siempre existen para persistencia.
+    const toggleApuBtn = card.querySelector('.sq-toggle-apu-btn');
+    if (toggleApuBtn) {
+      toggleApuBtn.addEventListener('click', () => {
+        const cols = card.querySelectorAll('.apu-col');
+        // Detectar estado actual mirando el primer th
+        const primerTh = card.querySelector('th.apu-col');
+        const ocultas = !primerTh || primerTh.style.display === 'none';
+        cols.forEach(el => {
+          el.style.display = ocultas ? (el.tagName === 'TH' || el.tagName === 'TD' ? 'table-cell' : '') : 'none';
+        });
+        toggleApuBtn.innerHTML = ocultas
+          ? '<i class="bi bi-sliders"></i> Ocultar configuración APU'
+          : '<i class="bi bi-sliders"></i> Configurar APU';
+      });
+    }
 
     return card;
   }
@@ -1472,6 +1713,9 @@ window.CP_SECCIONES = [
   });
 
 })();
+
+/* Fase 6L: la búsqueda y rotación del chevron viven dentro del script
+   del modal (#modalConfigApu). Aquí se removió el código legacy duplicado. */
 
 /* El motor del checkpoint vive en _checkpoint_panel.html */
 /* Trigger recálculo después de que el formulario se inicialice */

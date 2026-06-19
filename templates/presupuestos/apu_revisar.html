@@ -27,7 +27,46 @@
 {% endblock %}
 
 {% block content %}
-<div style="max-width:860px;margin:0 auto;">
+<div style="max-width:980px;margin:0 auto;">
+
+  {# Fase 12.3 — Accesos rápidos del aprobador: Ver APU y Ver despiece(s) #}
+  {% with despieces_revisor=apu.get_despieces_incluidos %}
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    <span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);">
+      Material de revisión:
+    </span>
+    <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
+       class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+      <i class="bi bi-file-earmark-text"></i> Ver APU
+    </a>
+    {% if despieces_revisor|length == 1 %}
+      {% with dm=despieces_revisor.0 %}
+      <a href="{% url 'ingenieria:despiece_maestro' dm.pk %}"
+         class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+        <i class="bi bi-diagram-3"></i> Ver despiece
+      </a>
+      {% endwith %}
+    {% elif despieces_revisor|length > 1 %}
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1"
+                type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-diagram-3"></i> Ver despieces ({{ despieces_revisor|length }})
+        </button>
+        <ul class="dropdown-menu">
+          {% for dm in despieces_revisor %}
+          <li>
+            <a class="dropdown-item" href="{% url 'ingenieria:despiece_maestro' dm.pk %}">
+              {{ dm.nombre|default:dm.subsistema.nombre }}
+              <span style="color:var(--ink-soft);font-size:11px;"> — {{ dm.subsistema.sistema.nombre }}</span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+  {% endwith %}
+
 
   <!-- ── Header APU ─────────────────────────────────────────────────────── -->
   <div style="background:var(--card);border:1px solid var(--border);border-left:4px solid var(--theme-accent);border-radius:14px;padding:20px 28px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:20px;">
@@ -76,13 +115,116 @@
   {% endfor %}
   {% endif %}
 
-  <!-- ── Tabla Modalidades AIU ─────────────────────────────────────────── -->
+  {# Fase 12.2 — Banner de identidad del aprobador #}
+  {% if es_aprobador_asignado %}
+  <div style="background:#e8f5ff;border:1px solid #b6dcff;border-left:4px solid #0d6efd;border-radius:12px;padding:14px 20px;margin-bottom:18px;display:flex;align-items:center;gap:12px;">
+    <i class="bi bi-shield-check" style="color:#0d6efd;font-size:22px;"></i>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#0d4d8c;">Está revisando este APU porque fue asignado como aprobador.</div>
+      <div style="font-size:11.5px;color:#1e5a91;margin-top:2px;">
+        Solo usted o un administrador puede aprobar o devolver esta cotización.
+      </div>
+    </div>
+  </div>
+  {% elif es_administrador %}
+  <div style="background:#fff7e6;border:1px solid #ffe0a8;border-left:4px solid #d97706;border-radius:12px;padding:14px 20px;margin-bottom:18px;display:flex;align-items:center;gap:12px;">
+    <i class="bi bi-key" style="color:#b45309;font-size:22px;"></i>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#7c2d12;">Está aprobando como administrador.</div>
+      <div style="font-size:11.5px;color:#9a3412;margin-top:2px;">
+        Aprobador asignado:
+        {% if apu.revisor %}{{ apu.revisor.nombre_completo|default:apu.revisor.email }}{% else %}— sin asignar —{% endif %}.
+      </div>
+    </div>
+  </div>
+  {% elif not puede_aprobar %}
+  <div style="background:#f8f9fa;border:1px solid var(--border);border-left:4px solid #6c757d;border-radius:12px;padding:14px 20px;margin-bottom:18px;display:flex;align-items:center;gap:12px;">
+    <i class="bi bi-eye" style="color:#6c757d;font-size:22px;"></i>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--ink);">Modo solo lectura.</div>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
+        Pendiente de aprobación por:
+        <strong>{% if apu.revisor %}{{ apu.revisor.nombre_completo|default:apu.revisor.email }}{% else %}— sin asignar —{% endif %}</strong>.
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% with m=modalidades_aiu %}
+
+  <!-- ── Resumen subtotales técnicos + garantía ────────────────────────── -->
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 24px;margin-bottom:20px;">
+    <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;">Resumen técnico del APU</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 18px;font-size:12.5px;">
+      <div><div style="color:var(--ink-soft);font-size:11px;">Materiales (técnico)</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.materiales|floatformat:0 }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Herramientas</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.herramientas|floatformat:0 }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Transporte</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.transporte|floatformat:0 }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Mano de obra</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.mano_obra|floatformat:0 }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Administración</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.administracion|floatformat:0 }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Subtotal directos</div><div style="font-weight:700;font-variant-numeric:tabular-nums;">${{ m.subtotales.total|floatformat:0 }}</div></div>
+    </div>
+    {% if apu.aplica_garantia and apu.garantia_valor_recargo %}
+    <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);font-size:12px;color:var(--ink);">
+      <i class="bi bi-shield-check me-1" style="color:#e74c3c;"></i>
+      <strong>Garantía Red Shield:</strong>
+      recargo de <span style="font-variant-numeric:tabular-nums;">${{ apu.garantia_valor_recargo|floatformat:0 }}</span>
+      sobre Materiales ({{ apu.garantia_porcentaje_aplicado|floatformat:2 }}%).
+      <span style="color:var(--ink-soft);">No entra en la base AIU; se suma al gran total.</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Formulario: ajustar A/I/U + preview ──────────────────────────── -->
+  <form method="post" action="{% url 'presupuestos:apu_revisar' apu.pk %}" id="form-revisar"
+        style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px;">
+    {% csrf_token %}
+    <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;">
+      Porcentajes A/I/U del proyecto
+      {% if pct_efectivos.es_final %}
+      <span class="badge bg-primary" style="font-size:10.5px;font-weight:600;margin-left:6px;">Snapshot del revisor</span>
+      {% else %}
+      <span class="badge bg-secondary" style="font-size:10.5px;font-weight:600;margin-left:6px;">Base del proyecto</span>
+      {% endif %}
+      {% if es_preview %}
+      <span class="badge bg-info text-dark" style="font-size:10.5px;font-weight:600;margin-left:4px;">Preview</span>
+      {% endif %}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;">
+      <div>
+        <label style="font-size:11.5px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Administración (%)</label>
+        <input type="number" step="0.01" min="0" name="aiu_final_admin_pct" form="form-revisar"
+               value="{{ pct_form.admin }}" class="form-control form-control-sm" required>
+      </div>
+      <div>
+        <label style="font-size:11.5px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Imprevistos (%)</label>
+        <input type="number" step="0.01" min="0" name="aiu_final_imprevistos_pct" form="form-revisar"
+               value="{{ pct_form.imprevistos }}" class="form-control form-control-sm" required>
+      </div>
+      <div>
+        <label style="font-size:11.5px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Utilidad (%)</label>
+        <input type="number" step="0.01" min="0" name="aiu_final_utilidad_pct" form="form-revisar"
+               value="{{ pct_form.utilidad }}" class="form-control form-control-sm" required>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button type="submit" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1">
+        <i class="bi bi-arrow-repeat"></i> Recalcular preview
+      </button>
+      <span style="font-size:11.5px;color:var(--ink-soft);align-self:center;">
+        Los porcentajes solo se guardan al aprobar una modalidad abajo.
+      </span>
+    </div>
+  </form>
+
+  <!-- ── Tabla Modalidades AIU ─────────────────────────────────────────── -->
   <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:24px;">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
       <div style="font-size:14px;font-weight:700;color:var(--ink);">Modalidades AIU del proyecto</div>
       <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
-        A ({{ m.pct_a|floatformat:1 }}%) + I ({{ m.pct_i|floatformat:1 }}%) + U ({{ m.pct_u|floatformat:1 }}%)
+        A ({{ m.porcentajes.admin|floatformat:2 }}%) + I ({{ m.porcentajes.imprevistos|floatformat:2 }}%) + U ({{ m.porcentajes.utilidad|floatformat:2 }}%)
+        {% if m.garantia_recargo %}
+        · + Garantía Red Shield ${{ m.garantia_recargo|floatformat:0 }}
+        {% endif %}
       </div>
     </div>
     <div style="overflow-x:auto;">
@@ -90,7 +232,7 @@
         <thead style="background:var(--sidebar);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">
           <tr>
             <th style="padding:10px 16px;">Modalidad</th>
-            <th style="padding:10px 16px;text-align:right;">Base de cálculo</th>
+            <th style="padding:10px 16px;text-align:right;">Base AIU</th>
             <th style="padding:10px 16px;text-align:right;">Administración</th>
             <th style="padding:10px 16px;text-align:right;">Imprevistos</th>
             <th style="padding:10px 16px;text-align:right;">Utilidad</th>
@@ -127,57 +269,117 @@
       </table>
     </div>
   </div>
+
   {% endwith %}
 
   <!-- ── Formulario de aprobación ──────────────────────────────────────── -->
   {% if not ya_aprobado %}
-  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px 28px;">
-    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:16px;">
-      Aprobar modalidad AIU oficial
-    </div>
-    <form method="post" action="{% url 'presupuestos:apu_aprobar_modalidad' apu.pk %}">
-      {% csrf_token %}
+    {% if puede_aprobar %}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px 28px;">
+      <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:16px;">
+        Aprobar modalidad AIU oficial
+      </div>
+      <form method="post" action="{% url 'presupuestos:apu_aprobar_modalidad' apu.pk %}">
+        {% csrf_token %}
+        <!-- Mantener los porcentajes ajustados arriba -->
+        <input type="hidden" name="aiu_final_admin_pct"       value="{{ pct_form.admin }}">
+        <input type="hidden" name="aiu_final_imprevistos_pct" value="{{ pct_form.imprevistos }}">
+        <input type="hidden" name="aiu_final_utilidad_pct"    value="{{ pct_form.utilidad }}">
 
-      <div style="margin-bottom:20px;">
-        <div style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:10px;">Seleccione la modalidad oficial:</div>
-        <div class="d-flex gap-3 flex-wrap">
-          <label style="display:flex;align-items:center;gap:10px;padding:14px 20px;border:2px solid var(--border);border-radius:10px;cursor:pointer;flex:1;min-width:200px;" id="lbl-mod1">
-            <input type="radio" name="modalidad_aiu" value="1" required
-                   onchange="document.getElementById('lbl-mod1').style.borderColor='var(--theme-accent)';document.getElementById('lbl-mod2').style.borderColor='var(--border)';">
-            <div>
-              <div style="font-weight:700;font-size:13px;">Modalidad 1</div>
-              <div style="font-size:11px;color:var(--ink-soft);">AIU sobre todos los costos directos</div>
+        <div style="margin-bottom:20px;">
+          <div style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:10px;">Seleccione la modalidad oficial:</div>
+          <div class="d-flex gap-3 flex-wrap">
+            <label style="display:flex;align-items:center;gap:10px;padding:14px 20px;border:2px solid var(--border);border-radius:10px;cursor:pointer;flex:1;min-width:200px;" id="lbl-mod1">
+              <input type="radio" name="modalidad_aiu" value="1" required
+                     onchange="document.getElementById('lbl-mod1').style.borderColor='var(--theme-accent)';document.getElementById('lbl-mod2').style.borderColor='var(--border)';">
+              <div>
+                <div style="font-weight:700;font-size:13px;">Modalidad 1</div>
+                <div style="font-size:11px;color:var(--ink-soft);">AIU sobre todos los costos directos</div>
+              </div>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;padding:14px 20px;border:2px solid var(--border);border-radius:10px;cursor:pointer;flex:1;min-width:200px;" id="lbl-mod2">
+              <input type="radio" name="modalidad_aiu" value="2" required
+                     onchange="document.getElementById('lbl-mod2').style.borderColor='var(--theme-accent)';document.getElementById('lbl-mod1').style.borderColor='var(--border)';">
+              <div>
+                <div style="font-weight:700;font-size:13px;">Modalidad 2</div>
+                <div style="font-size:11px;color:var(--ink-soft);">AIU sobre costos directos sin materiales</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {# Fase 12.2 — aprobado_por se toma del usuario en sesión, no del form. #}
+        <div style="margin-bottom:18px;font-size:11.5px;color:var(--ink-soft);">
+          <i class="bi bi-info-circle me-1"></i>
+          Al aprobar, quedará registrado como aprobador:
+          <strong>{% if usuario_actual %}{{ usuario_actual.nombre_completo|default:usuario_actual.email }}{% else %}—{% endif %}</strong>.
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-success d-flex align-items-center gap-2">
+            <i class="bi bi-check-circle-fill"></i>
+            Aprobar y fijar modalidad oficial
+          </button>
+          {% if apu.proyecto_sistema and apu.proyecto_sistema.proyecto.solicitud %}
+          <button type="button" class="btn btn-outline-danger d-flex align-items-center gap-2"
+                  data-bs-toggle="modal" data-bs-target="#modalDevolverSolicitud">
+            <i class="bi bi-arrow-counterclockwise"></i>
+            Devolver para ajustes
+          </button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+
+    {% if apu.proyecto_sistema and apu.proyecto_sistema.proyecto.solicitud %}
+    {# Fase 12.2 — Modal de devolución (motivo obligatorio) #}
+    <div class="modal fade" id="modalDevolverSolicitud" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="post"
+                action="{% url 'comercial:solicitud_devolver' apu.proyecto_sistema.proyecto.solicitud.pk %}">
+            {% csrf_token %}
+            <div class="modal-header">
+              <h5 class="modal-title">Devolver solicitud para ajustes</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
-          </label>
-          <label style="display:flex;align-items:center;gap:10px;padding:14px 20px;border:2px solid var(--border);border-radius:10px;cursor:pointer;flex:1;min-width:200px;" id="lbl-mod2">
-            <input type="radio" name="modalidad_aiu" value="2" required
-                   onchange="document.getElementById('lbl-mod2').style.borderColor='var(--theme-accent)';document.getElementById('lbl-mod1').style.borderColor='var(--border)';">
-            <div>
-              <div style="font-weight:700;font-size:13px;">Modalidad 2</div>
-              <div style="font-size:11px;color:var(--ink-soft);">AIU sobre costos directos sin materiales</div>
+            <div class="modal-body">
+              <p style="font-size:13px;color:var(--ink);">
+                Se devolverá la solicitud
+                <strong>{{ apu.proyecto_sistema.proyecto.solicitud.consecutivo }}</strong>
+                para ajustes internos. No se crea un nuevo snapshot de cotización.
+              </p>
+              <label for="motivo_devolucion" style="font-size:12px;font-weight:600;color:var(--ink);">
+                Motivo (obligatorio)
+              </label>
+              <textarea name="motivo" id="motivo_devolucion" class="form-control" rows="3" required
+                        placeholder="Explique brevemente el ajuste solicitado…"></textarea>
             </div>
-          </label>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+              <button type="submit" class="btn btn-sm btn-danger">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Devolver
+              </button>
+            </div>
+          </form>
         </div>
       </div>
+    </div>
+    {% endif %}
 
-      <div style="margin-bottom:20px;">
-        <label style="font-size:12px;font-weight:600;color:var(--ink);display:block;margin-bottom:6px;">
-          Aprobado por (opcional)
-        </label>
-        <select name="aprobado_por_id" class="form-select form-select-sm" style="max-width:320px;">
-          <option value="">— Sin asignar —</option>
-          {% for r in revisores %}
-          <option value="{{ r.pk }}" {% if apu.revisor and apu.revisor.pk == r.pk %}selected{% endif %}>{{ r.nombre_completo }}</option>
-          {% endfor %}
-        </select>
+    {% else %}
+    {# Fase 12.2 — Usuario sin permisos: bloque solo lectura. #}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px 28px;text-align:center;">
+      <i class="bi bi-lock" style="font-size:28px;color:var(--ink-soft);"></i>
+      <div style="font-size:15px;font-weight:700;color:var(--ink);margin-top:8px;">
+        Pendiente de aprobación por:
+        {% if apu.revisor %}{{ apu.revisor.nombre_completo|default:apu.revisor.email }}{% else %}— sin asignar —{% endif %}
       </div>
-
-      <button type="submit" class="btn btn-success d-flex align-items-center gap-2">
-        <i class="bi bi-check-circle-fill"></i>
-        Aprobar y fijar modalidad oficial
-      </button>
-    </form>
-  </div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">
+        Solo el aprobador asignado o un administrador puede aprobar o devolver esta cotización.
+      </div>
+    </div>
+    {% endif %}
   {% else %}
   <!-- Ya aprobado — mostrar resumen -->
   <div style="background:var(--card);border:1px solid #28a745;border-radius:14px;padding:24px 28px;text-align:center;">
@@ -191,15 +393,23 @@
       {% if apu.fecha_aprobacion %}el {{ apu.fecha_aprobacion|date:"d/m/Y \a \l\a\s H:i" }}{% endif %}
     </div>
     {% endif %}
+    <div style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">
+      A {{ pct_efectivos.admin|floatformat:2 }}% · I {{ pct_efectivos.imprevistos|floatformat:2 }}% · U {{ pct_efectivos.utilidad|floatformat:2 }}%
+    </div>
     <div style="margin-top:16px;">
-      <form method="post" action="{% url 'presupuestos:apu_aprobar_modalidad' apu.pk %}" style="display:inline;">
+      {% if puede_aprobar %}
+      <form method="post" action="{% url 'presupuestos:apu_reset_modalidad' apu.pk %}" style="display:inline;">
         {% csrf_token %}
-        <input type="hidden" name="modalidad_aiu" value="">
         <button type="submit" class="btn btn-sm btn-outline-secondary"
-                onclick="if(!confirm('¿Resetear la aprobación?'))return false; this.form.querySelector('[name=modalidad_aiu]').required=false;">
+                onclick="return confirm('¿Resetear la aprobación de modalidad? Los porcentajes A/I/U se conservan.');">
           <i class="bi bi-arrow-counterclockwise me-1"></i>Cambiar modalidad
         </button>
       </form>
+      {% else %}
+      <div style="font-size:11.5px;color:var(--ink-soft);">
+        Solo el aprobador asignado o un administrador puede cambiar la modalidad.
+      </div>
+      {% endif %}
     </div>
   </div>
   {% endif %}

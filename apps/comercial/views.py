@@ -2,7 +2,8 @@
 
 import logging
 from django.contrib import messages
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
+from django.db.models import ProtectedError
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
@@ -10,14 +11,16 @@ from django.views import View
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView,
 )
-from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto, LogSistema
+from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto, LogSistema, TipoGarantia
 from .forms import (
     ClienteConContactoForm, ContactoClienteForm,
     TipoProyectoForm, SolicitudForm, SolicitudArchivoForm,
     ProyectoForm, ProyectoFromSolicitudForm,
+    TipoGarantiaForm,
 )
-from apps.common.mixins import WithCreateFormMixin, UnidadFilterMixin
+from apps.common.mixins import WithCreateFormMixin, UnidadFilterMixin, UnidadObjectAccessMixin
 from apps.common.choices import EstadoSolicitud
+from apps.common.auth import puede_gestionar_unidad as _puede_gestionar_unidad
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +36,13 @@ def _usuario_sistema(request):
         return request.configuracion_sistema
     if getattr(request, "user", None) and request.user.is_authenticated:
         return ConfiguracionSistema.objects.filter(email=request.user.email).first()
-    # Fallback: autenticación por sesión personalizada
+    # Fallback: autenticación por sesión personalizada del proyecto
     try:
-        configuracion_id = request.session.get("configuracion_id")
-        if configuracion_id:
-            return ConfiguracionSistema.objects.filter(pk=configuracion_id).first()
+        # Fase 12.2 — la clave real seteada por el login es "usuario_id".
+        # Mantenemos "configuracion_id" como fallback histórico.
+        usuario_id = request.session.get("usuario_id") or request.session.get("configuracion_id")
+        if usuario_id:
+            return ConfiguracionSistema.objects.filter(pk=usuario_id).first()
     except Exception:
         pass
     return None
@@ -97,7 +102,9 @@ class DashboardView(TemplateView):
         ctx = super().get_context_data(**kwargs)
 
         # ── Unidad del usuario en sesión ────────────────────────────────────
-        unidad = self.request.session.get("unidad_negocio", "") or ""
+        # Fase 12.3 ext: ADMINISTRADOR ve global (unidad efectiva = "").
+        from apps.common.auth import unidad_efectiva as _unidad_efectiva
+        unidad = _unidad_efectiva(self.request)
 
         try:
             # Filtrar por unidad si aplica
@@ -236,7 +243,7 @@ class ClienteListView(UnidadFilterMixin, WithCreateFormMixin, ListView):
         return super().get_queryset().prefetch_related("contactos")
 
 
-class ClienteDetailView(DetailView):
+class ClienteDetailView(UnidadObjectAccessMixin, DetailView):
     model = Cliente
     template_name = "comercial/cliente_list.html"
     context_object_name = "cliente"
@@ -429,70 +436,150 @@ class SolicitudListView(UnidadFilterMixin, WithCreateFormMixin, ListView):
         # Sobrescribir create_form con filtro de unidad de negocio
         unidad = self.request.session.get("unidad_negocio", "") or ""
         ctx["create_form"] = SolicitudForm(unidad_negocio=unidad)
+
+        # ── Panel master-detail: cargar detalle de la solicitud seleccionada
+        # vía ?sel=<pk>. Respeta los gates de unidad de SolicitudDetailView —
+        # si el usuario no puede gestionar la unidad del objeto, el panel
+        # derecho queda vacío sin filtrar la lista.
+        sel_raw = self.request.GET.get("sel", "")
+        sel_pk = int(sel_raw) if sel_raw.isdigit() else None
+        ctx["sel_pk"] = sel_pk
+        ctx["solicitud_sel"] = None
+        if sel_pk:
+            sel = Solicitud.objects.select_related(
+                "cliente", "creado_por", "contacto"
+            ).filter(pk=sel_pk).first()
+            if sel is not None:
+                # Unidad efectiva del objeto: usa la del modelo y, si está vacía,
+                # cae al creador — consistente con el filtro por
+                # `creado_por__unidad_negocio` que aplica UnidadFilterMixin a la
+                # lista. Sin este fallback, una solicitud visible en la lista
+                # podía rechazarse al seleccionarla.
+                unidad_obj = (getattr(sel, "unidad_negocio", "") or "") or (
+                    getattr(sel.creado_por, "unidad_negocio", "") if sel.creado_por_id else ""
+                )
+                # Bypass del creador: si el usuario actual creó la solicitud,
+                # puede verla (igual que UnidadObjectAccessMixin).
+                from apps.common.auth import get_usuario_actual
+                usuario_actual = get_usuario_actual(self.request)
+                es_creador = (
+                    usuario_actual is not None
+                    and sel.creado_por_id == usuario_actual.pk
+                )
+                if es_creador or _puede_gestionar_unidad(self.request, unidad_obj):
+                    ctx["solicitud_sel"] = sel
+                    ctx.update(build_solicitud_detail_context(self.request, sel))
         return ctx
 
 
-class SolicitudDetailView(DetailView):
-    model = Solicitud
-    template_name = "comercial/solicitud_detail.html"
-    context_object_name = "solicitud"
+def build_solicitud_detail_context(request, solicitud):
+    """
+    Construye el contexto del detalle de una Solicitud para ser usado tanto por
+    `SolicitudDetailView` (URL directa) como por `SolicitudListView` cuando hay
+    `?sel=<pk>` (panel master-detail). No duplica lógica.
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        solicitud = self.object
-        ctx["archivos"] = solicitud.archivos.select_related("configuracion").all()
+    Devuelve un dict listo para mezclar en el contexto del template.
+    """
+    from apps.ingenieria.models import DespieceMaestro
+    from apps.presupuestos.models import ProyectoSistema, APUProyecto
+    from apps.presupuestos.models import APUProyecto as _APU
+    from django.db.models import Q as _Q
+    from apps.common.auth import puede_devolver_solicitud
 
-        # Proyectos con sus despieces y APUs — estructura sin atributos privados
-        from apps.ingenieria.models import DespieceMaestro
-        from apps.presupuestos.models import ProyectoSistema, APUProyecto
-        proyectos_qs = list(
-            solicitud.proyectos.select_related("tipo_proyecto", "creado_por").order_by("-version")
-        )
-        proyectos_data = []
-        for p in proyectos_qs:
-            despieces_raw = list(
-                DespieceMaestro.objects.filter(proyecto=p)
-                .select_related("subsistema", "subsistema__sistema")
-                .order_by("-updated_at")
-            )
-            despieces_data = []
-            for dm in despieces_raw:
-                try:
-                    ps = ProyectoSistema.objects.filter(
-                        proyecto=p,
-                        sistema=dm.subsistema.sistema,
-                        subsistema=dm.subsistema,
-                    ).first()
-                    apu_pk = (
-                        APUProyecto.objects.filter(proyecto_sistema=ps)
-                        .values_list("pk", flat=True).first()
-                    ) if ps else None
-                except Exception:
-                    apu_pk = None
-                despieces_data.append({"dm": dm, "apu_pk": apu_pk})
-            proyectos_data.append({"proy": p, "despieces": despieces_data})
-        ctx["proyectos"] = proyectos_qs
-        ctx["proyectos_data"] = proyectos_data
-        ctx["proyecto_actual"] = next((p for p in proyectos_qs if p.es_version_actual), None)
+    ctx = {"solicitud": solicitud}
+    ctx["archivos"] = solicitud.archivos.select_related("configuracion").all()
 
-        # Logs directos de la solicitud + logs de proyectos vinculados
-        from django.db.models import Q as _Q
-        proyecto_pks = [p.pk for p in proyectos_qs]
-        ctx["logs"] = (
-            LogSistema.objects.filter(
-                _Q(modelo_afectado="Solicitud", objeto_id=solicitud.pk)
-                | _Q(modelo_afectado__in=["Proyecto", "Despiece", "APU"], objeto_id__in=proyecto_pks)
-            )
-            .select_related("configuracion")
-            .order_by("-created_at")[:100]
+    proyectos_qs = list(
+        solicitud.proyectos.select_related("tipo_proyecto", "creado_por").order_by("-version")
+    )
+    proyectos_data = []
+    for p in proyectos_qs:
+        despieces_raw = list(
+            DespieceMaestro.objects.filter(proyecto=p)
+            .select_related("subsistema", "subsistema__sistema")
+            .order_by("-updated_at")
         )
-        ctx["proyecto_form"] = ProyectoFromSolicitudForm(
-            initial={"nombre": solicitud.nombre, "descripcion": solicitud.descripcion}
+        apus_map = {}
+        despieces_sin_apu = []
+        for dm in despieces_raw:
+            apu = None
+            try:
+                ps = ProyectoSistema.objects.filter(
+                    proyecto=p,
+                    sistema=dm.subsistema.sistema,
+                    subsistema=dm.subsistema,
+                ).first()
+                if ps:
+                    apu = (
+                        APUProyecto.objects
+                        .filter(proyecto_sistema=ps)
+                        .select_related("tipo_garantia", "aprobado_por")
+                        .first()
+                    )
+            except Exception:
+                apu = None
+            if apu:
+                bucket = apus_map.setdefault(apu.pk, {"apu": apu, "despieces": []})
+                bucket["despieces"].append(dm)
+            else:
+                despieces_sin_apu.append(dm)
+        apus_data = list(apus_map.values())
+        proyectos_data.append({
+            "proy": p,
+            "apus_data": apus_data,
+            "despieces_sin_apu": despieces_sin_apu,
+        })
+    ctx["proyectos"] = proyectos_qs
+    ctx["proyectos_data"] = proyectos_data
+    ctx["proyecto_actual"] = next((p for p in proyectos_qs if p.es_version_actual), None)
+
+    proyecto_pks_resumen = [p.pk for p in proyectos_qs]
+    apus_qs = _APU.objects.filter(
+        Q(proyecto_sistema__proyecto_id__in=proyecto_pks_resumen) |
+        Q(proyecto_id__in=proyecto_pks_resumen)
+    )
+    ctx["apu_resumen"] = {
+        "total": apus_qs.count(),
+        "individuales": apus_qs.filter(
+            tipo_apu=_APU.TipoAPUConsolidacion.INDIVIDUAL).count(),
+        "consolidados": apus_qs.filter(
+            tipo_apu=_APU.TipoAPUConsolidacion.CONSOLIDADO).count(),
+        "aprobados": apus_qs.exclude(
+            modalidad_aiu_seleccionada__isnull=True).exclude(
+            modalidad_aiu_seleccionada="").count(),
+        "en_revision": apus_qs.filter(
+            modalidad_aiu_seleccionada__isnull=True,
+            fecha_envio_revision__isnull=False).count(),
+    }
+
+    proyecto_pks = [p.pk for p in proyectos_qs]
+    ctx["logs"] = (
+        LogSistema.objects.filter(
+            _Q(modelo_afectado="Solicitud", objeto_id=solicitud.pk)
+            | _Q(modelo_afectado__in=["Proyecto", "Despiece", "APU"], objeto_id__in=proyecto_pks)
         )
-        # Próxima versión para el modal
-        ultima = solicitud.proyectos.order_by("-version").first()
-        ctx["proxima_version"] = (ultima.version + 1) if ultima else 1
-        return ctx
+        .select_related("configuracion")
+        .order_by("-created_at")[:100]
+    )
+    ctx["proyecto_form"] = ProyectoFromSolicitudForm(
+        initial={"nombre": solicitud.nombre, "descripcion": solicitud.descripcion}
+    )
+    ultima = solicitud.proyectos.order_by("-version").first()
+    ctx["proxima_version"] = (ultima.version + 1) if ultima else 1
+    ctx["puede_devolver"] = puede_devolver_solicitud(request, solicitud)
+    return ctx
+
+
+class SolicitudDetailView(View):
+    """
+    Redirige la URL legacy /solicitudes/<pk>/ al panel master-detail
+    /solicitudes/?sel=<pk>. Conserva bookmarks y enlaces internos sin
+    duplicar pantallas. Los gates de unidad los aplica el panel.
+    """
+    def get(self, request, pk, *args, **kwargs):
+        from django.urls import reverse
+        url = reverse("comercial:solicitud_list") + f"?sel={pk}"
+        return redirect(url)
 
 
 class SolicitudCreateView(CreateView):
@@ -594,6 +681,16 @@ class SolicitudDeleteView(View):
     def post(self, request, pk, *args, **kwargs):
         solicitud = get_object_or_404(Solicitud, pk=pk)
         consecutivo = solicitud.consecutivo
+        try:
+            solicitud.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                f"La solicitud {consecutivo} no puede eliminarse porque tiene "
+                "proyectos, APUs o cotizaciones asociadas. Para conservar la "
+                "trazabilidad, puede archivarla.",
+            )
+            return redirect("comercial:solicitud_detail", pk=pk)
         registrar_log(
             request,
             accion="ELIMINAR_SOLICITUD",
@@ -601,9 +698,80 @@ class SolicitudDeleteView(View):
             modelo_afectado="Solicitud",
             objeto_id=pk,
         )
-        solicitud.delete()
         messages.success(request, f"Solicitud {consecutivo} eliminada.")
         return redirect("comercial:solicitud_list")
+
+
+class SolicitudDevolverView(View):
+    """
+    POST /comercial/solicitudes/<pk>/devolver/
+
+    Devuelve la solicitud para ajustes internos del presupuesto.
+    No es un rechazo comercial: el cliente no aparece en este flujo.
+    """
+
+    def post(self, request, pk, *args, **kwargs):
+        from apps.common.auth import puede_devolver_solicitud
+        solicitud = get_object_or_404(Solicitud, pk=pk)
+
+        # Fase 12.2 — Gate de permisos
+        if not puede_devolver_solicitud(request, solicitud):
+            registrar_log(
+                request, accion="APROBACION_DENEGADA",
+                descripcion=f"Intento no autorizado de devolver Solicitud {solicitud.pk}.",
+                modelo_afectado="Solicitud", objeto_id=pk,
+            )
+            messages.error(
+                request,
+                "No tiene permiso para devolver esta solicitud. Solo el "
+                "aprobador asignado puede realizar esta acción.",
+            )
+            return redirect("comercial:solicitud_detail", pk=pk)
+
+        motivo = (request.POST.get("motivo") or "").strip()
+        if not motivo:
+            messages.error(
+                request,
+                "Debe indicar un motivo para devolver la solicitud.",
+            )
+            return redirect("comercial:solicitud_detail", pk=pk)
+
+        solicitud.estado = EstadoSolicitud.DEVUELTA
+        solicitud.motivo_devolucion = motivo
+        solicitud.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
+        registrar_log(
+            request,
+            accion="DEVOLVER_SOLICITUD",
+            descripcion=(
+                f"Solicitud {solicitud.consecutivo} devuelta para ajustes. "
+                f"Motivo: {motivo}"
+            ),
+            modelo_afectado="Solicitud",
+            objeto_id=pk,
+        )
+        messages.success(request, "Solicitud devuelta para ajustes.")
+        return redirect("comercial:solicitud_detail", pk=pk)
+
+
+class SolicitudArchivarView(View):
+    """POST: archiva (estado=CERRADA) una solicitud preservando trazabilidad."""
+
+    def post(self, request, pk, *args, **kwargs):
+        solicitud = get_object_or_404(Solicitud, pk=pk)
+        if solicitud.estado == EstadoSolicitud.CERRADA:
+            messages.info(request, f"La solicitud {solicitud.consecutivo} ya estaba archivada.")
+            return redirect("comercial:solicitud_detail", pk=pk)
+        solicitud.estado = EstadoSolicitud.CERRADA
+        solicitud.save(update_fields=["estado", "updated_at"])
+        registrar_log(
+            request,
+            accion="ARCHIVAR_SOLICITUD",
+            descripcion=f"Solicitud {solicitud.consecutivo} archivada (CERRADA)",
+            modelo_afectado="Solicitud",
+            objeto_id=pk,
+        )
+        messages.success(request, f"Solicitud {solicitud.consecutivo} archivada.")
+        return redirect("comercial:solicitud_detail", pk=pk)
 
 
 # ---------------------------------------------------------------------------
@@ -703,10 +871,17 @@ class ProyectoListView(View):
         return redirect("comercial:solicitud_list")
 
 
-class ProyectoDetailView(DetailView):
+class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
     model = Proyecto
     template_name = "comercial/proyecto_detail.html"
     context_object_name = "proyecto"
+
+    def get_unidad_del_objeto(self, obj):
+        # Proyecto se asocia por creado_por.unidad_negocio
+        creado_por = getattr(obj, "creado_por", None)
+        if creado_por is not None:
+            return getattr(creado_por, "unidad_negocio", "") or ""
+        return ""
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -721,25 +896,49 @@ class ProyectoDetailView(DetailView):
                 .select_related("subsistema", "subsistema__sistema")
                 .order_by("-updated_at")
             )
-            despieces_maestro = []
+            # Agrupar por APU (Fase 11.3F).
+            apus_map = {}        # apu.pk -> {"apu": apu, "despieces": [dm,...]}
+            despieces_sin_apu = []
             for dm in despieces_raw:
+                apu = None
                 try:
                     ps = ProyectoSistema.objects.filter(
                         proyecto=proyecto,
                         sistema=dm.subsistema.sistema,
                         subsistema=dm.subsistema,
                     ).first()
-                    apu_pk = (
-                        APUProyecto.objects.filter(proyecto_sistema=ps)
-                        .values_list("pk", flat=True)
-                        .first()
-                    ) if ps else None
+                    if ps:
+                        apu = (
+                            APUProyecto.objects
+                            .filter(proyecto_sistema=ps)
+                            .select_related("tipo_garantia", "aprobado_por")
+                            .first()
+                        )
                 except Exception:
-                    apu_pk = None
-                despieces_maestro.append({"dm": dm, "apu_pk": apu_pk})
-            ctx["despieces_maestro"] = despieces_maestro
+                    apu = None
+                if apu:
+                    bucket = apus_map.setdefault(apu.pk, {"apu": apu, "despieces": []})
+                    bucket["despieces"].append(dm)
+                else:
+                    despieces_sin_apu.append(dm)
+            ctx["apus_data"] = list(apus_map.values())
+            ctx["despieces_sin_apu"] = despieces_sin_apu
+            ctx["total_despieces"] = len(despieces_raw)
+            # Fase 11.5 — APUs consolidados del proyecto (opcionales)
+            ctx["apus_consolidados"] = list(
+                APUProyecto.objects
+                .filter(proyecto=proyecto,
+                        tipo_apu=APUProyecto.TipoAPUConsolidacion.CONSOLIDADO)
+                .prefetch_related("origenes_consolidado__apu_origen")
+                .order_by("-created_at")
+            )
+            ctx["puede_consolidar"] = len(apus_map) >= 2
         except Exception:
-            ctx["despieces_maestro"] = []
+            ctx["apus_data"] = []
+            ctx["despieces_sin_apu"] = []
+            ctx["total_despieces"] = 0
+            ctx["apus_consolidados"] = []
+            ctx["puede_consolidar"] = False
 
         # ── Otras versiones de la misma solicitud ─────────────────────────────
         if proyecto.solicitud_id:
@@ -843,6 +1042,43 @@ class ProyectoDeleteView(DeleteView):
     model = Proyecto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:solicitud_list")
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        try:
+            self.object.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                f"El proyecto {self.object.consecutivo} no puede eliminarse "
+                "porque tiene despieces, APUs o cotizaciones asociadas. "
+                "Puede anularlo para conservar la trazabilidad.",
+            )
+            return redirect("comercial:proyecto_detail", pk=self.object.pk)
+        messages.success(request, f"Proyecto {self.object.consecutivo} eliminado.")
+        return redirect(self.success_url)
+
+
+class ProyectoAnularView(View):
+    """POST: anula (estado=ANULADO) un proyecto preservando trazabilidad."""
+
+    def post(self, request, pk, *args, **kwargs):
+        from apps.common.choices import EstadoProyecto
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        if proyecto.estado == EstadoProyecto.ANULADO:
+            messages.info(request, f"El proyecto {proyecto.consecutivo} ya estaba anulado.")
+            return redirect("comercial:proyecto_detail", pk=pk)
+        proyecto.estado = EstadoProyecto.ANULADO
+        proyecto.save(update_fields=["estado", "updated_at"])
+        registrar_log(
+            request,
+            accion="ANULAR_PROYECTO",
+            descripcion=f"Proyecto {proyecto.consecutivo} v{proyecto.version} anulado",
+            modelo_afectado="Proyecto",
+            objeto_id=pk,
+        )
+        messages.success(request, f"Proyecto {proyecto.consecutivo} anulado.")
+        return redirect("comercial:proyecto_detail", pk=pk)
 
 
 class CrearProyectoDesdeSolicitudView(CreateView):
@@ -967,3 +1203,61 @@ class LogListView(ListView):
                 | _Q(modelo_afectado__icontains=q)
             )
         return qs
+
+
+# ---------------------------------------------------------------------------
+# Tipos de garantía (Fase 9)
+# ---------------------------------------------------------------------------
+
+class TipoGarantiaListView(ListView):
+    """Lista + modal de creación. Patrón Fase 8.1: partial fields-only + wrapper."""
+    model = TipoGarantia
+    template_name = "comercial/garantia_list.html"
+    context_object_name = "garantias"
+    ordering = ["orden", "nombre"]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["modal_garantia_form"] = TipoGarantiaForm(initial={"activo": True, "duracion_meses": 12})
+        ctx["total_activas"] = TipoGarantia.objects.filter(activo=True).count()
+        ctx["total_inactivas"] = TipoGarantia.objects.filter(activo=False).count()
+        return ctx
+
+
+class TipoGarantiaCreateView(CreateView):
+    model = TipoGarantia
+    form_class = TipoGarantiaForm
+    template_name = "comercial/garantia_form.html"
+    success_url = reverse_lazy("comercial:garantia_list")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Tipo de garantía creado correctamente.")
+        return super().form_valid(form)
+
+
+class TipoGarantiaUpdateView(UpdateView):
+    model = TipoGarantia
+    form_class = TipoGarantiaForm
+    template_name = "comercial/garantia_form.html"
+    success_url = reverse_lazy("comercial:garantia_list")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Tipo de garantía actualizado correctamente.")
+        return super().form_valid(form)
+
+
+class TipoGarantiaDeleteView(DeleteView):
+    model = TipoGarantia
+    template_name = "confirm_delete.html"
+    success_url = reverse_lazy("comercial:garantia_list")
+
+    def form_valid(self, form):
+        try:
+            return super().form_valid(form)
+        except ProtectedError:
+            messages.error(
+                self.request,
+                "No se puede eliminar esta garantía porque ya está asociada "
+                "a uno o más APU. Puede desactivarla.",
+            )
+            return redirect("comercial:garantia_list")

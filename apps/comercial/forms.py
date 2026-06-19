@@ -2,7 +2,7 @@
 
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto
+from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto, TipoGarantia
 
 
 class ClienteForm(forms.ModelForm):
@@ -206,4 +206,31 @@ class SolicitudArchivoForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "Nombre descriptivo del archivo",
             }),
+        }
+
+
+class TipoGarantiaForm(forms.ModelForm):
+    """Form de TipoGarantia (Fase 9). Patrón fields-only + wrapper."""
+
+    class Meta:
+        model = TipoGarantia
+        fields = ["nombre", "porcentaje_recargo", "descripcion", "condiciones", "orden", "activo"]
+        labels = {
+            "porcentaje_recargo": "Porcentaje de recargo (%)",
+        }
+        help_texts = {
+            "porcentaje_recargo": "Recargo comercial aplicado sobre Materiales. Ej: 5 = 5%.",
+        }
+        widgets = {
+            "nombre":             forms.TextInput(attrs={"class": "form-control",
+                                                        "placeholder": "Ej: Garantía 10 años — Membrana TPO"}),
+            "porcentaje_recargo": forms.NumberInput(attrs={"class": "form-control",
+                                                           "min": "0", "step": "0.01",
+                                                           "placeholder": "Ej: 5"}),
+            "descripcion":    forms.TextInput(attrs={"class": "form-control",
+                                                    "placeholder": "Resumen visible en la propuesta"}),
+            "condiciones":    forms.Textarea(attrs={"class": "form-control", "rows": 4,
+                                                   "placeholder": "Cláusulas, exclusiones, alcance…"}),
+            "orden":          forms.NumberInput(attrs={"class": "form-control", "min": "0"}),
+            "activo":         forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }

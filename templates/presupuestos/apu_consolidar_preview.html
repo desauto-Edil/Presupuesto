@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Preview consolidación — {{ proyecto.consecutivo }}{% endblock %}
+{% block nav_apu %}active{% endblock %}
+
+{% block content %}
+<div class="wrap" style="max-width:980px;margin:0 auto;padding:24px;">
+
+  <div style="margin-bottom:16px;">
+    <h2 style="margin:0 0 4px;">Preview de consolidación</h2>
+    <div style="color:var(--ink-soft);font-size:13px;">
+      Proyecto {{ proyecto.consecutivo }} · {{ apus_origen|length }} APUs seleccionados. Revisa el resumen y confirma para crear el APU consolidado.
+    </div>
+  </div>
+
+  {# ── APUs origen ─────────────────────────────────────────────────────── #}
+  <div class="panel" style="padding:16px;margin-bottom:16px;">
+    <strong style="display:block;margin-bottom:8px;">APUs seleccionados</strong>
+    <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;">
+      {% for apu in apus_origen %}
+      <li style="padding:8px 12px;background:var(--bg-soft);border-radius:6px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <strong>#{{ apu.pk }}</strong> — {{ apu.nombre }}
+          {% if apu.proyecto_sistema %}
+            <span style="color:var(--ink-soft);font-size:12px;">
+              · {{ apu.proyecto_sistema.subsistema.sistema.nombre }} / {{ apu.proyecto_sistema.subsistema.nombre }}
+            </span>
+          {% endif %}
+        </div>
+        <span style="font-variant-numeric:tabular-nums;">${{ apu.total_valor_venta|floatformat:0 }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {# ── Resumen numérico ─────────────────────────────────────────────────── #}
+  <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:16px;">
+    <div class="panel" style="padding:14px;text-align:center;">
+      <div style="font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Sistemas</div>
+      <div style="font-size:22px;font-weight:600;">{{ resumen.sistemas|length }}</div>
+    </div>
+    <div class="panel" style="padding:14px;text-align:center;">
+      <div style="font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Subsistemas</div>
+      <div style="font-size:22px;font-weight:600;">{{ resumen.subsistemas|length }}</div>
+    </div>
+    <div class="panel" style="padding:14px;text-align:center;">
+      <div style="font-size:11px;color:var(--ink-soft);text-transform:uppercase;">Líneas Materiales</div>
+      <div style="font-size:22px;font-weight:600;">{{ resumen.materiales_total }}</div>
+    </div>
+    <div class="panel" style="padding:14px;text-align:center;">
+      <div style="font-size:11px;color:var(--ink-soft);text-transform:uppercase;">No-materiales</div>
+      <div style="font-size:22px;font-weight:600;">
+        {{ resumen.no_materiales_origen }} → <span style="color:#15803d;">{{ resumen.no_materiales_deduplicados }}</span>
+      </div>
+      <div style="font-size:11px;color:var(--ink-soft);">Origen → Deduplicado</div>
+    </div>
+  </div>
+
+  {# ── Materiales que se consolidarán ──────────────────────────────────── #}
+  {% if resumen.materiales_por_origen %}
+  <div style="margin-bottom:8px;">
+    <h3 style="margin:0 0 6px;font-size:15px;">Materiales que se consolidarán</h3>
+    <div style="font-size:12px;color:var(--ink-soft);">
+      Todas las líneas de materiales de los APUs seleccionados se sumarán al consolidado, agrupadas por APU origen y por sistema/subsistema.
+    </div>
+  </div>
+
+  {% for bloque in resumen.materiales_por_origen %}
+  <div class="panel" style="padding:0;overflow:hidden;margin-bottom:14px;">
+    <div style="padding:10px 14px;background:#eef2ff;border-bottom:1px solid #c7d2fe;
+                display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <strong style="color:#3730a3;">
+        APU #{{ bloque.apu.pk }} — {{ bloque.apu.nombre }}
+      </strong>
+      <span style="font-size:12px;color:#3730a3;">
+        {{ bloque.total_lineas }} línea{{ bloque.total_lineas|pluralize }} de materiales
+      </span>
+    </div>
+
+    {% for g in bloque.grupos %}
+    <div style="padding:8px 14px;background:var(--bg-soft);border-bottom:1px solid var(--line);font-size:12px;">
+      <strong>Materiales — {{ g.sistema|default:"(sin sistema)" }}
+        {% if g.subsistema %} / {{ g.subsistema }}{% endif %}</strong>
+      {% if g.despiece_id %}
+      <span style="color:var(--ink-soft);">· Despiece #{{ g.despiece_id }}</span>
+      {% endif %}
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead style="background:#fff;color:var(--ink-soft);">
+        <tr>
+          <th style="padding:6px 12px;text-align:left;border-bottom:1px solid var(--line);">Material / Producto</th>
+          <th style="padding:6px 12px;text-align:left;border-bottom:1px solid var(--line);">Unidad</th>
+          <th style="padding:6px 12px;text-align:right;border-bottom:1px solid var(--line);">Cantidad</th>
+          <th style="padding:6px 12px;text-align:right;border-bottom:1px solid var(--line);">Valor total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ln in g.lineas %}
+        <tr>
+          <td style="padding:5px 12px;border-bottom:1px solid #f1f5f9;">{{ ln.descripcion }}</td>
+          <td style="padding:5px 12px;border-bottom:1px solid #f1f5f9;">{{ ln.unidad }}</td>
+          <td style="padding:5px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">
+            {{ ln.rendimiento|floatformat:2 }}
+          </td>
+          <td style="padding:5px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">
+            ${{ ln.valor_total|floatformat:0 }}
+          </td>
+        </tr>
+        {% endfor %}
+        <tr style="background:#fafafa;">
+          <td colspan="3" style="padding:6px 12px;text-align:right;font-size:11px;color:var(--ink-soft);">
+            Subtotal del subsistema
+          </td>
+          <td style="padding:6px 12px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">
+            ${{ g.subtotal_valor|floatformat:0 }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {# ── No-materiales: se conservan / se deduplican ─────────────────────── #}
+  {% if resumen.no_materiales_conservados %}
+  <div style="margin:18px 0 8px;">
+    <h3 style="margin:0 0 6px;font-size:15px;">No-materiales que se reutilizarán / deduplicarán</h3>
+    <div style="font-size:12px;color:var(--ink-soft);">
+      Cada ítem no-material aparece una sola vez en el consolidado. Si el mismo ítem aparece en más de un APU, se conserva la línea de mayor costo total.
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+
+    {# A. Ítems que se conservan (todos los no-materiales únicos del consolidado) #}
+    <div class="panel" style="padding:0;overflow:hidden;">
+      <div style="padding:10px 14px;background:#dcfce7;border-bottom:1px solid #bbf7d0;">
+        <strong style="color:#166534;">Se conservan</strong>
+        <span style="font-size:12px;color:#166534;">({{ resumen.no_materiales_deduplicados }})</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead style="background:var(--bg-soft);color:var(--ink-soft);">
+          <tr>
+            <th style="padding:5px 10px;text-align:left;">Tipo</th>
+            <th style="padding:5px 10px;text-align:left;">Descripción</th>
+            <th style="padding:5px 10px;text-align:right;">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in resumen.no_materiales_conservados %}
+          <tr>
+            <td style="padding:4px 10px;border-bottom:1px solid #f1f5f9;font-size:11px;">{{ n.tipo }}</td>
+            <td style="padding:4px 10px;border-bottom:1px solid #f1f5f9;">{{ n.descripcion }}</td>
+            <td style="padding:4px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-variant-numeric:tabular-nums;">
+              ${{ n.valor_total|floatformat:0 }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# B. Ítems deduplicados (los que aparecían en ≥2 APUs) #}
+    <div class="panel" style="padding:0;overflow:hidden;">
+      <div style="padding:10px 14px;background:#fef3c7;border-bottom:1px solid #fde68a;">
+        <strong style="color:#92400e;">Se deduplicaron</strong>
+        <span style="font-size:12px;color:#92400e;">
+          ({{ resumen.no_materiales_origen }} → {{ resumen.no_materiales_deduplicados }})
+        </span>
+      </div>
+      <div style="padding:10px 14px;font-size:12px;">
+        {% with reduccion=resumen.no_materiales_origen|add:0 %}{% endwith %}
+        {% if resumen.deduplicados_detalle %}
+          <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;">
+            {% for d in resumen.deduplicados_detalle %}
+            <li>
+              <strong>{{ d.descripcion }}</strong>
+              <span style="font-size:11px;color:var(--ink-soft);">({{ d.tipo }})</span>
+              <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
+                El ítem aparecía en
+                {% for apu_id in d.apus_ids %}APU #{{ apu_id }}{% if not forloop.last %} y {% endif %}{% endfor %}.
+                Se conserva la línea de mayor costo (${{ d.costo_total|floatformat:0 }}).
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div style="color:var(--ink-soft);">
+            No hay ítems repetidos entre los APUs seleccionados — no se eliminó ninguna línea.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+  {% endif %}
+
+  {# ── Advertencias ─────────────────────────────────────────────────────── #}
+  <div style="background:#fef9c3;border-left:4px solid #ca8a04;padding:12px 16px;border-radius:6px;margin-bottom:16px;">
+    <strong>Antes de confirmar:</strong>
+    <ul style="margin:6px 0 0 18px;padding:0;font-size:13px;">
+      <li>El APU consolidado nace <strong>sin garantía Red Shield</strong> aplicada. Si necesitas garantía, configúrala después en el detalle.</li>
+      <li>El APU consolidado nace <strong>sin modalidad AIU aprobada</strong>; deberá pasar por su propio flujo de revisión.</li>
+      <li>Los APUs origen <strong>quedan intactos</strong> — no cambian de estado ni se ocultan.</li>
+      <li>Materiales: unión acumulativa por origen. No-materiales: deduplicados por equivalencia.</li>
+    </ul>
+  </div>
+
+  {# ── Botones ──────────────────────────────────────────────────────────── #}
+  <form method="post" action="{% url 'presupuestos:apu_consolidar_confirmar' proyecto.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="ids_csv" value="{{ ids_csv }}">
+
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <label style="font-size:13px;">
+        Nombre del APU consolidado (opcional):
+        <input type="text" name="nombre" placeholder="APU Consolidado — {{ proyecto.consecutivo }}"
+               style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-top:4px;">
+      </label>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <a href="{% url 'presupuestos:apu_consolidar_seleccionar' proyecto.pk %}" class="btn btn-light">← Cambiar selección</a>
+        <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-light">Cancelar</a>
+        <button type="submit" class="btn btn-primary">Confirmar consolidación</button>
+      </div>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

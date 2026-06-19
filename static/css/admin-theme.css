@@ -1,0 +1,125 @@
+/* ============================================================================
+   admin-theme.css — Tema visual del ADMINISTRADOR global y de la unidad
+   corporativa EDILANDINA (Fase 12.3 ext).
+
+   Se aplica cuando <body> tiene `theme-admin-global` (rol ADMINISTRADOR) o
+   `theme-edilandina` (unidad corporativa). Ambas comparten paleta:
+   grises, negros y blancos. Sobria, sin colores llamativos.
+
+   Es excluyente respecto a `theme-{unidad}` operativa: cuando el rol es
+   ADMINISTRADOR el body NO lleva `theme-imperandina/solarandina/impertienda`.
+   Los roles no globales (GERENTE incluido) conservan `theme-{unidad}`.
+   ============================================================================ */
+
+body.theme-admin-global,
+body.theme-edilandina {
+  /* Acentos (botones, bordes, chips) — gris oscuro sobrio */
+  --theme-accent: #374151;
+  --theme-accent-soft: #4b5563;
+  --theme-accent-2: #111827;
+  --theme-accent-h: #1f2937;
+  --theme-accent-pale: rgba(17, 24, 39, 0.06);
+  --theme-accent-glow: rgba(17, 24, 39, 0.12);
+  --theme-accent-border: rgba(17, 24, 39, 0.20);
+  /* Sidebar claro corporativo — no azul oscuro */
+  --theme-sidebar-bg: #f9fafb;
+  --theme-sidebar-text: rgba(17, 24, 39, 0.70);
+  --theme-active-bg: rgba(17, 24, 39, 0.07);
+  /* Logo oscuro sobre sidebar claro */
+  --theme-logo-color: #111827;
+  /* Barras decorativas en degradado de grises claros */
+  --theme-bar1: #e5e7eb;
+  --theme-bar2: #d1d5db;
+  --theme-bar3: #9ca3af;
+  /* Strip del topbar — acento sobrio */
+  --theme-topbar-strip: #374151;
+  /* Superficies */
+  --surface: #f5f6f7;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --ink: #111827;
+  --ink-soft: #4b5563;
+  --sidebar: #f9fafb;
+  /* Etiqueta corporativa */
+  --theme-label: "EDILANDINA";
+}
+
+/* Borde sutil del sidebar claro */
+body.theme-admin-global .sidebar,
+body.theme-admin-global aside.sidebar,
+body.theme-edilandina .sidebar,
+body.theme-edilandina aside.sidebar {
+  border-right: 1px solid var(--border);
+}
+
+body.theme-admin-global .btn-primary,
+body.theme-edilandina .btn-primary {
+  background-color: #1f2937;
+  border-color: #1f2937;
+  color: #ffffff;
+}
+body.theme-admin-global .btn-primary:hover,
+body.theme-admin-global .btn-primary:focus,
+body.theme-edilandina .btn-primary:hover,
+body.theme-edilandina .btn-primary:focus {
+  background-color: #111827;
+  border-color: #111827;
+  color: #ffffff;
+}
+
+body.theme-admin-global .btn-secondary,
+body.theme-edilandina .btn-secondary {
+  background-color: #6b7280;
+  border-color: #6b7280;
+  color: #ffffff;
+}
+
+body.theme-admin-global .btn-outline-secondary,
+body.theme-edilandina .btn-outline-secondary {
+  color: #1f2937;
+  border-color: #d1d5db;
+}
+body.theme-admin-global .btn-outline-secondary:hover,
+body.theme-edilandina .btn-outline-secondary:hover {
+  background-color: #1f2937;
+  color: #ffffff;
+}
+
+/* Sidebar — fondo claro corporativo (sobrecarga del background dark heredado
+   por defecto desde imperandina.css). El borde fino lo ponemos arriba en el
+   bloque cercano al `:root` para evitar duplicación. */
+body.theme-admin-global .sidebar,
+body.theme-admin-global aside.sidebar,
+body.theme-edilandina .sidebar,
+body.theme-edilandina aside.sidebar {
+  background-color: var(--theme-sidebar-bg);
+  color: var(--theme-sidebar-text);
+}
+
+/* Bordes laterales decorativos en gris oscuro */
+body.theme-admin-global [style*="border-left:4px solid var(--theme-accent)"],
+body.theme-admin-global [style*="border-left:5px solid var(--theme-accent)"],
+body.theme-edilandina [style*="border-left:4px solid var(--theme-accent)"],
+body.theme-edilandina [style*="border-left:5px solid var(--theme-accent)"] {
+  border-left-color: #1f2937 !important;
+}
+
+/* Tarjetas y superficies blancas */
+body.theme-admin-global .card,
+body.theme-admin-global #appMain,
+body.theme-edilandina .card,
+body.theme-edilandina #appMain {
+  background-color: var(--surface);
+}
+
+/* Indicador visual sutil de modo administrador */
+body.theme-admin-global::before,
+body.theme-edilandina::before {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #111827 0%, #4b5563 100%);
+  z-index: 2000;
+  pointer-events: none;
+}

@@ -22,6 +22,14 @@ from apps.ingenieria.models import (
 )
 from apps.ingenieria.forms import SistemaForm, SubsistemaForm
 from apps.common.mixins import WithCreateFormMixin
+from apps.ingenieria.services.subsistema_service import (
+    guardar_variables,
+    guardar_subconjuntos_componentes,
+    guardar_reglas_apu,
+    guardar_items_apu_subsistema,
+    guardar_m2m_consumo,
+    guardar_productos_tecnicos_componentes_quimicos,
+)
 
 
 # ── Sistemas ──────────────────────────────────────────────────────────────────
@@ -102,14 +110,6 @@ class SistemaDeleteView(DeleteView):
 
 # ── Subsistemas ───────────────────────────────────────────────────────────────
 
-class SubsistemaListView(WithCreateFormMixin, ListView):
-    model = Subsistema
-    form_class = SubsistemaForm
-    template_name = "ingenieria/subsistema_list.html"
-    context_object_name = "subsistemas"
-    ordering = ["sistema__codigo", "codigo"]
-
-
 class SubsistemaDetailView(DetailView):
     model = Subsistema
     template_name = "ingenieria/subsistema_detail.html"
@@ -134,308 +134,42 @@ class SubsistemaDetailView(DetailView):
         return ctx
 
 
-# ── Helpers de guardado ───────────────────────────────────────────────────────
-
-def _guardar_reglas_apu(subsistema, post):
-    """
-    Procesa las reglas APU enviadas desde el form del subsistema.
-    Reemplaza todos los registros existentes con los nuevos valores.
-    POST arrays: regla_tipo_apu[], regla_formula[]
-    """
-    from apps.presupuestos.models import ReglaAPUSubsistema
-
-    tipos    = post.getlist("regla_tipo_apu[]")
-    formulas = post.getlist("regla_formula[]")
-
-    ReglaAPUSubsistema.objects.filter(subsistema=subsistema).delete()
-    for idx, (tipo, formula) in enumerate(zip(tipos, formulas)):
-        tipo    = tipo.strip()
-        formula = formula.strip()
-        if tipo and formula:
-            ReglaAPUSubsistema.objects.create(
-                subsistema=subsistema,
-                tipo_apu=tipo,
-                formula_costo_unitario=formula,
-                orden=idx + 1,
-            )
-
-
-def _parsear_opciones(raw: str) -> list:
-    """
-    Parsea un string de opciones separadas por punto y coma.
-    Ej: "4; 6"  →  ["4", "6"]
-    Limpia espacios y filtra entradas vacías.
-    """
-    if not raw:
-        return []
-    return [o.strip() for o in raw.split(";") if o.strip()]
-
-
-def _guardar_variables(subsistema, post):
-    """
-    Guarda las variables de entrada del subsistema desde arrays POST.
-    POST arrays: var_variable[], var_label[], var_unidad[], var_default[],
-                 var_tipo[], var_opciones[]
-
-    - tipo_entrada: NUMERO | TEXTO | OPCION_UNICA (default: NUMERO)
-    - opciones: string "4; 6" → lista ["4", "6"] (solo para OPCION_UNICA)
-    - valor_default: se guarda siempre; debe ser numérico para NUMERO/OPCION_UNICA
-    """
-    var_variables = post.getlist("var_variable[]")
-    var_labels    = post.getlist("var_label[]")
-    var_unidades  = post.getlist("var_unidad[]")
-    var_defaults  = post.getlist("var_default[]")
-    var_tipos     = post.getlist("var_tipo[]")
-    var_opciones  = post.getlist("var_opciones[]")
-
-    VariableSubsistema.objects.filter(subsistema=subsistema).delete()
-    for idx, (variable, label) in enumerate(zip(var_variables, var_labels)):
-        variable = variable.strip()
-        label    = label.strip()
-        if not (variable and label):
-            continue
-        raw_default = var_defaults[idx].strip() if idx < len(var_defaults) else ""
-        try:
-            default_val = float(raw_default) if raw_default else 0
-        except ValueError:
-            default_val = 0
-
-        tipo = (var_tipos[idx].strip() if idx < len(var_tipos) else "").upper()
-        if tipo not in ("NUMERO", "TEXTO", "OPCION_UNICA"):
-            tipo = VariableSubsistema.NUMERO
-
-        raw_ops = var_opciones[idx].strip() if idx < len(var_opciones) else ""
-        opciones = _parsear_opciones(raw_ops) if tipo == VariableSubsistema.OPCION_UNICA else []
-
-        VariableSubsistema.objects.create(
-            subsistema=subsistema,
-            variable=variable,
-            label=label,
-            unidad=var_unidades[idx].strip() if idx < len(var_unidades) else "",
-            valor_default=default_val,
-            tipo_entrada=tipo,
-            opciones=opciones,
-            orden=idx + 1,
-        )
-
-
-def _guardar_subconjuntos_componentes(subsistema, post):
-    """
-    Guarda los subconjuntos de receta técnica y sus componentes.
-
-    Espera el campo POST 'subconjuntos_json' con estructura JSON:
-    [
-      {
-        "nombre": "Estructura metálica",
-        "descripcion": "Descripción opcional",
-        "componentes": [
-          {
-            "codigo": "viga",
-            "nombre": "Viga principal",
-            "categoria_id": 3,          // null si sin categoría
-            "formula_texto": "longitud * 1.05",
-            "variable_salida": "",
-            "unidad": "ml",
-            "variable_referencia_apu": "",
-            "unidad_apu": ""
-          }
-        ]
-      }
-    ]
-
-    Si el JSON está vacío o ausente, no modifica los componentes existentes.
-    Compatibilidad: si un subsistema antiguo tiene componentes sin subconjunto,
-    se eliminan también al guardar con la nueva estructura.
-    """
-    from apps.catalogos.models import CategoriaProducto
-
-    raw = post.get("subconjuntos_json", "").strip()
-    if not raw:
-        return
-
-    try:
-        subconjuntos_data = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return
-
-    if not isinstance(subconjuntos_data, list):
-        return
-
-    # Eliminar todos los subconjuntos y componentes existentes (incluye legacy)
-    SubconjuntoRecetaTecnica.objects.filter(subsistema=subsistema).delete()
-    ComponenteSubsistema.objects.filter(subsistema=subsistema, subconjunto__isnull=True).delete()
-
-    # Set acumulativo de códigos ya asignados en este subsistema (defensa backend
-    # ante un código vacío o duplicado proveniente del frontend).
-    codigos_en_uso: set[str] = set()
-
-    for sq_idx, sq_data in enumerate(subconjuntos_data):
-        nombre_sq = str(sq_data.get("nombre", "")).strip()
-        if not nombre_sq:
-            continue
-
-        subconjunto = SubconjuntoRecetaTecnica.objects.create(
-            subsistema=subsistema,
-            nombre=nombre_sq,
-            descripcion=str(sq_data.get("descripcion", "")).strip(),
-            orden=sq_idx + 1,
-            activo=True,
-        )
-
-        componentes = sq_data.get("componentes", [])
-        if not isinstance(componentes, list):
-            continue
-
-        for comp_idx, comp_data in enumerate(componentes):
-            codigo  = str(comp_data.get("codigo", "")).strip()
-            nombre  = str(comp_data.get("nombre", "")).strip()
-            formula = str(comp_data.get("formula_texto", "")).strip()
-            if not (nombre and formula):
-                continue
-            # Red de seguridad: si no llegó código, o si colisiona con otro
-            # componente del mismo subsistema (unique_together), asignar el
-            # próximo entero libre.
-            if not codigo or codigo in codigos_en_uso:
-                codigo = _proximo_codigo_numerico(codigos_en_uso)
-            codigos_en_uso.add(codigo)
-
-            cat_id = comp_data.get("categoria_id")
-            categoria = None
-            if cat_id:
-                try:
-                    categoria = CategoriaProducto.objects.get(pk=int(cat_id))
-                except (CategoriaProducto.DoesNotExist, ValueError, TypeError):
-                    pass
-
-            ComponenteSubsistema.objects.create(
-                subsistema=subsistema,
-                subconjunto=subconjunto,
-                codigo=codigo,
-                nombre=nombre,
-                categoria=categoria,
-                formula_texto=formula,
-                variable_salida=str(comp_data.get("variable_salida", "")).strip(),
-                unidad=str(comp_data.get("unidad", "")).strip(),
-                variable_referencia_apu=str(comp_data.get("variable_referencia_apu", "")).strip(),
-                unidad_apu=str(comp_data.get("unidad_apu", "")).strip(),
-                orden=comp_idx + 1,
-            )
-
-
-def _guardar_m2m_consumo(subsistema, post):
-    """
-    Guarda los M2M de catálogo consumo: funciones, problemas_resuelve, superficies_compatibles.
-    Los checkboxes llegan como: funciones[], problemas_resuelve[], superficies_compatibles[]
-    con los PKs seleccionados.
-    """
-    funciones_pks   = [int(pk) for pk in post.getlist("funciones[]") if pk.strip().isdigit()]
-    problemas_pks   = [int(pk) for pk in post.getlist("problemas_resuelve[]") if pk.strip().isdigit()]
-    superficies_pks = [int(pk) for pk in post.getlist("superficies_compatibles[]") if pk.strip().isdigit()]
-
-    subsistema.funciones.set(funciones_pks)
-    subsistema.problemas_resuelve.set(problemas_pks)
-    subsistema.superficies_compatibles.set(superficies_pks)
-
-
-def _guardar_productos_tecnicos_componentes_quimicos(subsistema, post):
-    """
-    Procesa ProductoTecnicoAsociado y ComponenteQuimico desde el form del subsistema.
-
-    POST arrays para productos técnicos:
-        pt_nombre[], pt_estado_fisico[], pt_consumo_min[], pt_consumo_max[], pt_unidad[]
-
-    POST arrays para componentes químicos:
-        cq_nombre[], cq_porcentaje[], cq_estado_fisico[], cq_categoria[]
-    """
-    from apps.catalogos.models import CategoriaProducto
-
-    # ── Productos técnicos asociados ──────────────────────────────────────────
-    pt_nombres        = post.getlist("pt_nombre[]")
-    pt_estados_fisico = post.getlist("pt_estado_fisico[]")
-    pt_consumos_min   = post.getlist("pt_consumo_min[]")
-    pt_consumos_max   = post.getlist("pt_consumo_max[]")
-    pt_unidades       = post.getlist("pt_unidad[]")
-
-    ProductoTecnicoAsociado.objects.filter(subsistema=subsistema).delete()
-    for idx, nombre in enumerate(pt_nombres):
-        nombre = nombre.strip()
-        if not nombre:
-            continue
-
-        def _decimal_or_none(lst, i):
-            try:
-                v = lst[i].strip() if i < len(lst) else ""
-                return float(v) if v else None
-            except ValueError:
-                return None
-
-        ProductoTecnicoAsociado.objects.create(
-            subsistema=subsistema,
-            nombre=nombre,
-            estado_fisico=pt_estados_fisico[idx].strip() if idx < len(pt_estados_fisico) else "",
-            consumo_min_g_m2=_decimal_or_none(pt_consumos_min, idx),
-            consumo_max_g_m2=_decimal_or_none(pt_consumos_max, idx),
-            unidad=pt_unidades[idx].strip() if idx < len(pt_unidades) else "kg",
-            orden=idx + 1,
-        )
-
-    # ── Componentes químicos ──────────────────────────────────────────────────
-    cq_nombres        = post.getlist("cq_nombre[]")
-    cq_porcentajes    = post.getlist("cq_porcentaje[]")
-    cq_estados_fisico = post.getlist("cq_estado_fisico[]")
-    cq_categorias     = post.getlist("cq_categoria[]")
-
-    ComponenteQuimico.objects.filter(subsistema=subsistema).delete()
-    for idx, nombre in enumerate(cq_nombres):
-        nombre = nombre.strip()
-        if not nombre:
-            continue
-        try:
-            porcentaje = float(cq_porcentajes[idx].strip()) if idx < len(cq_porcentajes) and cq_porcentajes[idx].strip() else 0
-        except ValueError:
-            porcentaje = 0
-        cat_pk = cq_categorias[idx].strip() if idx < len(cq_categorias) else ""
-        categoria = None
-        if cat_pk:
-            try:
-                categoria = CategoriaProducto.objects.get(pk=int(cat_pk))
-            except (CategoriaProducto.DoesNotExist, ValueError):
-                pass
-        ComponenteQuimico.objects.create(
-            subsistema=subsistema,
-            nombre=nombre,
-            porcentaje=porcentaje,
-            estado_fisico=cq_estados_fisico[idx].strip() if idx < len(cq_estados_fisico) else "",
-            categoria=categoria,
-            orden=idx + 1,
-        )
-
-
+# ── Helpers de guardado ──────────────────────────────────────────────────────
+# Movidos a apps/ingenieria/services/subsistema_service.py (Fase 2 — Lote D).
+# Las funciones se importan al inicio del módulo.
 def _tipo_apu_choices_sin_materiales():
     from apps.common.choices import TipoAPU
     return [(v, l) for v, l in TipoAPU.choices if v != TipoAPU.MATERIALES]
 
 
-def _proximo_codigo_numerico(en_uso: set) -> str:
-    """Devuelve el menor entero positivo (como string) que NO esté en `en_uso`.
-    Replica el comportamiento del helper JS `generarCodigoComponente` del template.
-    Códigos alfanuméricos legacy (ej. "fijaciones_plus") se consideran ocupados
-    como string pero no afectan la numeración: se busca el primer hueco numérico
-    libre desde 1.
-    """
-    n = 1
-    while str(n) in en_uso:
-        n += 1
-    return str(n)
-
-
 def _build_unidades_medida_json():
-    """Catálogo de unidades de medida para selects del subsistema_form."""
-    from apps.catalogos.models import UnidadMedida
+    """Catálogo de unidades de medida para selects del subsistema_form.
+
+    Usa cache (Fase 5B). Shape emitido al JS preservada: {"abrev", "nombre"}.
+    Invalidación: signals post_save/post_delete sobre UnidadMedida
+    (apps/catalogos/signals.py).
+    """
+    from apps.common.cache import get_cached_unidades
     return json.dumps([
-        {"abrev": u.abreviatura, "nombre": u.nombre}
-        for u in UnidadMedida.objects.order_by("nombre")
+        {"abrev": u["abreviatura"], "nombre": u["nombre"]}
+        for u in get_cached_unidades()
     ])
+
+
+def _categorias_producto_para_template():
+    """Lista de categorías activas (cache-aside) en forma compatible con el
+    template subsistema_form.html, que consume cat.pk y cat.nombre.
+
+    Devuelve dicts con claves: pk, id, codigo, nombre. La clave 'pk' es alias
+    de 'id' para no romper {{ cat.pk }} en el template.
+    Invalidación: signals post_save/post_delete sobre CategoriaProducto
+    (apps/catalogos/signals.py).
+    """
+    from apps.common.cache import get_cached_categorias
+    return [
+        {"pk": c["id"], "id": c["id"], "codigo": c["codigo"], "nombre": c["nombre"]}
+        for c in get_cached_categorias()
+    ]
 
 
 def _sistemas_tipos_json():
@@ -444,6 +178,98 @@ def _sistemas_tipos_json():
         str(s.pk): s.tipo_sistema
         for s in Sistema.objects.only("pk", "tipo_sistema")
     })
+
+
+def _items_apu_subsistema_context(subsistema=None):
+    """Context para la sección 'Configuración APU del subsistema' (Fase 6L-C).
+
+    Devuelve, por tipo APU (no-Materiales), la lista completa del catálogo
+    activo agrupada por categoría y el conjunto de PKs ya seleccionados
+    para el subsistema actual (vacío si es Create). El template usa esto
+    para renderizar 4 bloques (Herramientas, Transporte, Mano de obra,
+    Administración) con checkboxes + cantidad + búsqueda frontend.
+
+    Estructura de salida:
+        {
+          "sia_tipos": [
+              {"tipo": "HERRAMIENTAS_EQUIPOS", "label": "Herramientas",
+               "icon": "bi-tools", "color": "#e07d10",
+               "items_por_categoria": [
+                   {"categoria": "Eléctrica",
+                    "items": [ItemCatalogoAPU, ...]},
+                   ...
+               ]},
+              ...
+          ],
+          "sia_seleccion": {
+              "HERRAMIENTAS_EQUIPOS": {item_id: cantidad, ...},
+              ...
+          },
+        }
+    """
+    from apps.common.choices import TipoAPU
+    from apps.presupuestos.models import ItemCatalogoAPU, SubsistemaItemAPU
+    from collections import OrderedDict
+
+    TIPOS_INFO = [
+        {"tipo": TipoAPU.HERRAMIENTAS_EQUIPOS, "label": "Herramientas",
+         "icon": "bi-tools",     "color": "#e07d10"},
+        {"tipo": TipoAPU.TRANSPORTE,           "label": "Transporte",
+         "icon": "bi-truck",     "color": "#7048d0"},
+        {"tipo": TipoAPU.MANO_DE_OBRA,         "label": "Mano de obra",
+         "icon": "bi-people",    "color": "#17a85e"},
+        {"tipo": TipoAPU.ADMINISTRACION,       "label": "Administración",
+         "icon": "bi-briefcase", "color": "#64748b"},
+    ]
+
+    # Pre-cargar todo el catálogo activo en una sola query y agrupar en Python
+    items_all = list(
+        ItemCatalogoAPU.objects.filter(activo=True)
+        .select_related("categoria")
+        .order_by("categoria__tipo_apu", "categoria__nombre", "nombre")
+    )
+
+    # Selección actual (solo si Update, no Create)
+    seleccion: dict = {info["tipo"]: {} for info in TIPOS_INFO}
+    if subsistema is not None and getattr(subsistema, "pk", None):
+        for sia in SubsistemaItemAPU.objects.filter(
+            subsistema=subsistema, activo=True
+        ).only("item_catalogo_id", "tipo", "cantidad"):
+            seleccion.setdefault(sia.tipo, {})[sia.item_catalogo_id] = sia.cantidad
+
+    sia_tipos = []
+    for info in TIPOS_INFO:
+        seleccion_tipo = seleccion.get(info["tipo"], {})
+        items_tipo = [
+            it for it in items_all
+            if it.categoria and it.categoria.tipo_apu == info["tipo"]
+        ]
+        # Anotar en runtime cada ítem con su estado de selección para no
+        # requerir custom template filters en subsistema_form.html.
+        for it in items_tipo:
+            cant = seleccion_tipo.get(it.pk)
+            it.sia_checked = cant is not None
+            it.sia_cantidad = cant if cant is not None else 1
+        # Agrupar por categoría (preservando orden)
+        por_cat: "OrderedDict[str, list]" = OrderedDict()
+        for it in items_tipo:
+            nombre_cat = it.categoria.nombre
+            por_cat.setdefault(nombre_cat, []).append(it)
+        items_por_categoria = [
+            {"categoria": nombre, "items": lista}
+            for nombre, lista in por_cat.items()
+        ]
+        sia_tipos.append({
+            **info,
+            "items_por_categoria": items_por_categoria,
+            "total_items": len(items_tipo),
+            "total_seleccionados": len(seleccion_tipo),
+        })
+
+    return {
+        "sia_tipos": sia_tipos,
+        "sia_seleccion": seleccion,
+    }
 
 
 def _catalogo_consumo_context():
@@ -542,8 +368,7 @@ class SubsistemaCreateView(CreateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        from apps.catalogos.models import CategoriaProducto
-        ctx["categorias_producto"] = CategoriaProducto.objects.filter(activa=True).order_by("nombre")
+        ctx["categorias_producto"] = _categorias_producto_para_template()
         ctx["unidades_medida_json"] = _build_unidades_medida_json()
         ctx["tipo_apu_choices"] = _tipo_apu_choices_sin_materiales()
         ctx["reglas_apu_existentes"] = []
@@ -573,6 +398,8 @@ class SubsistemaCreateView(CreateView):
         ctx["funciones_seleccionadas"] = []
         ctx["problemas_seleccionados"] = []
         ctx["superficies_seleccionadas"] = []
+        # Fase 6L-C: configuración APU del subsistema (vacía en Create)
+        ctx.update(_items_apu_subsistema_context(None))
         return ctx
 
     def get_form_kwargs(self):
@@ -584,12 +411,22 @@ class SubsistemaCreateView(CreateView):
     def form_valid(self, form):
         with transaction.atomic():
             response = super().form_valid(form)
-            _guardar_variables(self.object, self.request.POST)
-            _guardar_subconjuntos_componentes(self.object, self.request.POST)
-            _guardar_reglas_apu(self.object, self.request.POST)
-            _guardar_m2m_consumo(self.object, self.request.POST)
-            _guardar_productos_tecnicos_componentes_quimicos(self.object, self.request.POST)
+            guardar_variables(self.object, self.request.POST)
+            guardar_subconjuntos_componentes(self.object, self.request.POST)
+            guardar_reglas_apu(self.object, self.request.POST)
+            # Fase 6L-2: la configuración APU ya no viaja en este POST
+            # (vive en el modal #modalConfigApu que tiene su propio form).
+            guardar_m2m_consumo(self.object, self.request.POST)
+            guardar_productos_tecnicos_componentes_quimicos(self.object, self.request.POST)
         return response
+
+    def get_success_url(self):
+        # Fase 6L-5: tras "Guardar y continuar" se abre el modal de config APU
+        # en la vista de edición del subsistema recién creado.
+        return (
+            reverse_lazy("ingenieria:subsistema_update", args=[self.object.pk])
+            + "?abrir_modal_apu=1"
+        )
 
 
 class SubsistemaUpdateView(UpdateView):
@@ -606,10 +443,9 @@ class SubsistemaUpdateView(UpdateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        from apps.catalogos.models import CategoriaProducto
         from apps.presupuestos.models import ReglaAPUSubsistema
 
-        ctx["categorias_producto"] = CategoriaProducto.objects.filter(activa=True).order_by("nombre")
+        ctx["categorias_producto"] = _categorias_producto_para_template()
         ctx["unidades_medida_json"] = _build_unidades_medida_json()
 
         # Variables de entrada (incluye tipo_entrada y opciones para el template)
@@ -653,6 +489,8 @@ class SubsistemaUpdateView(UpdateView):
         ctx["funciones_seleccionadas"] = list(self.object.funciones.values_list("pk", flat=True))
         ctx["problemas_seleccionados"] = list(self.object.problemas_resuelve.values_list("pk", flat=True))
         ctx["superficies_seleccionadas"] = list(self.object.superficies_compatibles.values_list("pk", flat=True))
+        # Fase 6L-C: configuración APU del subsistema (con selección actual)
+        ctx.update(_items_apu_subsistema_context(self.object))
         return ctx
 
     def get_form_kwargs(self):
@@ -664,18 +502,47 @@ class SubsistemaUpdateView(UpdateView):
     def form_valid(self, form):
         with transaction.atomic():
             response = super().form_valid(form)
-            _guardar_variables(self.object, self.request.POST)
-            _guardar_subconjuntos_componentes(self.object, self.request.POST)
-            _guardar_reglas_apu(self.object, self.request.POST)
-            _guardar_m2m_consumo(self.object, self.request.POST)
-            _guardar_productos_tecnicos_componentes_quimicos(self.object, self.request.POST)
+            guardar_variables(self.object, self.request.POST)
+            guardar_subconjuntos_componentes(self.object, self.request.POST)
+            guardar_reglas_apu(self.object, self.request.POST)
+            # Fase 6L-2: la configuración APU ya no viaja en este POST
+            # (vive en el modal #modalConfigApu).
+            guardar_m2m_consumo(self.object, self.request.POST)
+            guardar_productos_tecnicos_componentes_quimicos(self.object, self.request.POST)
         return response
+
+    def get_success_url(self):
+        # Fase 6L-5: tras "Guardar y continuar" abrir el modal de config APU.
+        return (
+            reverse_lazy("ingenieria:subsistema_update", args=[self.object.pk])
+            + "?abrir_modal_apu=1"
+        )
+
+
+class SubsistemaConfigApuGuardarView(View):
+    """
+    Fase 6L-4: vista POST-only que recibe la configuración APU del subsistema
+    enviada desde el modal `#modalConfigApu`. Reutiliza el servicio
+    `guardar_items_apu_subsistema`. Tras guardar redirige al **detalle** del
+    subsistema (no al edit) para que el usuario perciba claramente que la
+    configuración quedó guardada y salga del modo edición.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk, *args, **kwargs):
+        from django.shortcuts import get_object_or_404, redirect
+        from django.contrib import messages
+        subsistema = get_object_or_404(Subsistema, pk=pk)
+        with transaction.atomic():
+            guardar_items_apu_subsistema(subsistema, request.POST)
+        messages.success(request, "Configuración APU del subsistema guardada.")
+        return redirect("ingenieria:sistema_list")
 
 
 class SubsistemaDeleteView(DeleteView):
     model = Subsistema
     template_name = "confirm_delete.html"
-    success_url = reverse_lazy("ingenieria:subsistema_list")
+    success_url = reverse_lazy("ingenieria:sistema_list")
 
 
 # ── Catálogos de consumo (FuncionConsumo, ProblemaResuelto, SuperficieCompatible) ─

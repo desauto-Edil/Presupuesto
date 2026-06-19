@@ -20,6 +20,29 @@
 
 {% block extra_head %}
 <style>
+  /* Fase 6L-12: badges para identificar ítems en los modales de configurar */
+  .apu-badge {
+    display: inline-block;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 2px 6px;
+    border-radius: 999px;
+    margin-left: 6px;
+    vertical-align: middle;
+    line-height: 1.2;
+  }
+  .apu-badge-predet {
+    background: rgba(23,168,94,0.12);
+    color: #138a4a;
+    border: 1px solid rgba(23,168,94,0.35);
+  }
+  .apu-badge-en-apu {
+    background: rgba(56,121,255,0.12);
+    color: #2b5fd0;
+    border: 1px solid rgba(56,121,255,0.35);
+  }
   /* ═══ APU DETAIL ══════════════════════════════════════════════════ */
   .apu-header {
     background: var(--card);
@@ -456,10 +479,40 @@
     </button>
   </form>
   {% endif %}
+  {# Fase 11.5.3 — Archivar APU #}
+  {% if apu.archivado %}
+    <span class="btn btn-ghost btn-sm" style="color:var(--ink-soft);cursor:default;" title="APU archivado">Archivado</span>
+  {% else %}
+    <button type="button" class="btn btn-ghost btn-sm" style="color:var(--warning,#b07a00);"
+            data-bs-toggle="modal" data-bs-target="#modalArchivarAPU">
+      Archivar
+    </button>
+  {% endif %}
 {% endblock %}
 
 
 {% block content %}
+
+{# Fase 11.5.3 — Banners contextuales #}
+{% if apu.archivado %}
+<div style="background:#f3f0e8;border:1px solid #e0d6b8;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#7a5b00;">
+  <strong>APU archivado</strong>
+  {% if apu.fecha_archivado %} · {{ apu.fecha_archivado|date:"d/m/Y H:i" }}{% endif %}
+  {% if apu.archivado_por %} · por {{ apu.archivado_por }}{% endif %}
+  {% if apu.motivo_archivado %} · {{ apu.motivo_archivado }}{% endif %}
+  · La trazabilidad se conserva intacta; este APU no participa en cálculos nuevos.
+</div>
+{% endif %}
+{% if apu.consolidaciones_destino.exists %}
+<div style="background:#eaf3ff;border:1px solid #c5dbf5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#1a4a7a;">
+  Este APU hace parte de
+  {% for rel in apu.consolidaciones_destino.all %}
+    <a href="{% url 'presupuestos:apu_detail' rel.apu_consolidado_id %}" style="font-weight:600;">consolidado #{{ rel.apu_consolidado_id }}</a>{% if not forloop.last %}, {% endif %}
+  {% endfor %}
+  · Por trazabilidad no se puede eliminar; puede archivarse.
+</div>
+{% endif %}
+
 <div class="apu-header fade-up">
   <div>
     {% if apu.proyecto_sistema %}
@@ -520,6 +573,16 @@
         <strong style="color:#17a85e;">{{ cat.subtotal_valor|currency:"COP" }}</strong>
       </div>
       {% endfor %}
+      {% if apu.aplica_garantia and apu.garantia_valor_recargo %}
+      <div class="apu-param-row" style="border-top:1px dashed rgba(0,0,0,.1);padding-top:6px;margin-top:4px;">
+        <span><i class="bi bi-shield-check" style="color:#1470e6;margin-right:4px;font-size:10px;"></i>Recargo garantía</span>
+        <strong style="color:#1470e6;">{{ apu.garantia_valor_recargo|currency:"COP" }}</strong>
+      </div>
+      <div class="apu-param-row">
+        <span style="color:var(--ink-soft);">Materiales ajustado</span>
+        <strong style="color:#138a4a;">{{ apu.subtotal_materiales_ajustado|currency:"COP" }}</strong>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -539,6 +602,210 @@
 
 </div><!-- /.apu-kpi-row -->
 
+<!-- ── Fase 9E · Garantía (no afecta cálculo) ───────────────────────────── -->
+<div class="panel fade-up-1" style="margin-bottom:14px;">
+  <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;">
+    <span class="panel-title">
+      <i class="bi bi-shield-check" style="color:var(--theme-accent);margin-right:6px;"></i>
+      Garantía
+    </span>
+    <button type="button" class="btn btn-ghost btn-xs"
+            data-bs-toggle="modal" data-bs-target="#modalEditarGarantia">
+      Editar
+    </button>
+  </div>
+  <div class="panel-body" style="padding:14px 18px;">
+    {% if apu.aplica_garantia and apu.tipo_garantia %}
+      {% if apu.garantia_legacy_sin_snapshot %}
+      <div style="background:#fff8e6;border:1px solid #ffc107;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#7a5a00;">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        Esta garantía fue creada antes del recargo porcentual.
+        <strong>Reedite la garantía para aplicar el porcentaje.</strong>
+      </div>
+      {% endif %}
+      <div style="display:grid;grid-template-columns:repeat(4,auto);gap:18px;align-items:start;">
+        <div>
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Aplica</div>
+          <div style="font-weight:700;color:#138a4a;">Sí</div>
+        </div>
+        <div>
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Tipo</div>
+          <div style="font-weight:700;">{{ apu.tipo_garantia.nombre }}</div>
+        </div>
+        <div>
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">% Aplicado</div>
+          <div style="font-weight:700;">
+            {% if apu.garantia_porcentaje_aplicado is not None %}{{ apu.garantia_porcentaje_aplicado }}%{% else %}—{% endif %}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Modo</div>
+          <div style="font-weight:700;">
+            {% if apu.garantia_modo_aplicacion == "MATERIAL_ESPECIFICO" %}Material específico
+            {% elif apu.garantia_modo_aplicacion == "TOTAL_MATERIALES" %}Total materiales
+            {% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if apu.garantia_modo_aplicacion == "MATERIAL_ESPECIFICO" %}
+      <div style="margin-top:10px;font-size:12.5px;">
+        <span style="color:var(--ink-soft);">Material objetivo:</span>
+        {% if apu.garantia_material_linea_id %}
+          <strong>{{ apu.garantia_material_nombre_snapshot|default:apu.garantia_material_linea.descripcion }}</strong>
+        {% elif apu.garantia_material_nombre_snapshot %}
+          <strong>{{ apu.garantia_material_nombre_snapshot }}</strong>
+          <span class="text-warning small" style="margin-left:6px;">
+            <i class="bi bi-exclamation-triangle"></i>
+            Material objetivo no disponible. Reedite la garantía para recalcular el recargo.
+          </span>
+        {% else %}
+          <span class="text-warning">No disponible</span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;font-size:12.5px;">
+        <div>
+          <div style="color:var(--ink-soft);">Base garantía</div>
+          <div style="font-family:monospace;font-weight:700;">{{ apu.garantia_base_valor|currency:"COP" }}</div>
+        </div>
+        <div>
+          <div style="color:var(--ink-soft);">Recargo garantía</div>
+          <div style="font-family:monospace;font-weight:700;color:#1470e6;">{{ apu.garantia_valor_recargo|currency:"COP" }}</div>
+        </div>
+      </div>
+
+      {% if apu.tipo_garantia.descripcion %}
+      <div style="margin-top:10px;font-size:13px;color:var(--ink-soft);">
+        {{ apu.tipo_garantia.descripcion }}
+      </div>
+      {% endif %}
+      {% if apu.tipo_garantia.condiciones %}
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer;font-size:12px;color:var(--theme-accent);font-weight:600;">
+          Ver condiciones y exclusiones
+        </summary>
+        <div style="margin-top:8px;padding:10px 12px;background:rgba(0,0,0,.03);border-radius:8px;font-size:12.5px;white-space:pre-wrap;">{{ apu.tipo_garantia.condiciones }}</div>
+      </details>
+      {% endif %}
+    {% else %}
+      <div style="display:flex;align-items:center;gap:10px;color:var(--ink-soft);font-size:13px;">
+        <i class="bi bi-dash-circle"></i>
+        <span>Esta propuesta <strong>no incluye garantía</strong>.</span>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal editar garantía -->
+<div class="modal fade" id="modalEditarGarantia" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Editar garantía del APU</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <form method="post" action="{% url 'presupuestos:apu_editar_garantia' apu.pk %}">
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="d-flex gap-3 mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="aplica_garantia"
+                     id="editGarSi" value="1"
+                     {% if apu.aplica_garantia %}checked{% endif %}
+                     onchange="editGarOnAplica(true)">
+              <label class="form-check-label" for="editGarSi">Sí aplica</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="aplica_garantia"
+                     id="editGarNo" value="0"
+                     {% if not apu.aplica_garantia %}checked{% endif %}
+                     onchange="editGarOnAplica(false)">
+              <label class="form-check-label" for="editGarNo">No aplica</label>
+            </div>
+          </div>
+          <div id="editGarSelector" style="display:{% if apu.aplica_garantia %}block{% else %}none{% endif %};">
+            <label class="form-label small">Tipo de garantía</label>
+            <select name="tipo_garantia_id" id="editGarTipo" class="form-select form-select-sm"
+                    onchange="editGarOnTipo(this)">
+              <option value="" data-pct="0">— Seleccione una garantía —</option>
+              {% for g in tipos_garantia_activos %}
+              <option value="{{ g.pk }}" data-pct="{{ g.porcentaje_recargo }}"
+                      {% if apu.tipo_garantia_id == g.pk %}selected{% endif %}>
+                {{ g.nombre }} — {{ g.porcentaje_recargo }}%
+              </option>
+              {% endfor %}
+            </select>
+            {% if not tipos_garantia_activos %}
+            <div class="form-text small text-warning">
+              No hay tipos de garantía activos. Crea uno en
+              <a href="{% url 'comercial:garantia_list' %}">Comercial → Garantías</a>.
+            </div>
+            {% endif %}
+            <div id="editGarPctInfo" class="form-text small mt-1"
+                 style="display:{% if apu.tipo_garantia_id %}block{% else %}none{% endif %};">
+              Porcentaje aplicado: <strong id="editGarPctValue">{{ apu.tipo_garantia.porcentaje_recargo|default:0 }}</strong>%
+            </div>
+
+            <div class="mt-3">
+              <label class="form-label small mb-1">¿Cómo aplicar la garantía?</label>
+              <div class="d-flex gap-3 flex-wrap">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="garantia_modo_aplicacion"
+                         id="editGarModoTotal" value="TOTAL_MATERIALES"
+                         {% if apu.garantia_modo_aplicacion != "MATERIAL_ESPECIFICO" %}checked{% endif %}
+                         onchange="editGarOnModo('TOTAL_MATERIALES')">
+                  <label class="form-check-label small" for="editGarModoTotal">
+                    Sobre el total de materiales
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="garantia_modo_aplicacion"
+                         id="editGarModoEsp" value="MATERIAL_ESPECIFICO"
+                         {% if apu.garantia_modo_aplicacion == "MATERIAL_ESPECIFICO" %}checked{% endif %}
+                         onchange="editGarOnModo('MATERIAL_ESPECIFICO')">
+                  <label class="form-check-label small" for="editGarModoEsp">
+                    Sobre un material específico
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div id="editGarMaterialBlock" class="mt-2"
+                 style="display:{% if apu.garantia_modo_aplicacion == 'MATERIAL_ESPECIFICO' %}block{% else %}none{% endif %};">
+              <label class="form-label small">Material objetivo</label>
+              <select name="garantia_material_linea_id" class="form-select form-select-sm">
+                <option value="">— Seleccione un material —</option>
+                {% for l in lineas_materiales_apu %}
+                <option value="{{ l.pk }}"
+                        {% if apu.garantia_material_linea_id == l.pk %}selected{% endif %}>
+                  {{ l.descripcion }}
+                </option>
+                {% endfor %}
+              </select>
+              {% if not lineas_materiales_apu %}
+              <div class="form-text small text-warning">
+                Este APU no tiene líneas de Materiales todavía.
+              </div>
+              {% endif %}
+            </div>
+
+            <div class="form-text small mt-2">
+              El recargo solo afecta el total comercial — no modifica cantidades,
+              rendimientos ni costos técnicos.
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- ── Barra de búsqueda APU ──────────────────────────────────────────── -->
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
   <div style="position:relative;flex:1;">
@@ -555,6 +822,133 @@
   </button>
   <span id="apuResultCount" style="font-size:11px;color:#aaa;white-space:nowrap;"></span>
 </div>
+
+{# ── Fase 11.4: avisos de selección manual y despieces incluidos ─────── #}
+{% if es_legacy_sin_seleccion %}
+<div class="alert alert-warning fade-up" style="font-size:13px;">
+  <strong>APU legacy.</strong> Este APU fue creado antes de la selección
+  explícita de despieces (Fase 11.4). Los despieces asociados se muestran
+  por inferencia (proyecto + subsistema). Revise los despieces asociados.
+</div>
+{% endif %}
+
+{% if despieces_incluidos_lista %}
+<div class="card fade-up mb-3">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <div>
+      <strong>Despieces incluidos en este APU</strong>
+      <span class="text-muted ms-2" style="font-size:12px;">
+        {{ despieces_incluidos_lista|length }} despiece{{ despieces_incluidos_lista|length|pluralize }}
+      </span>
+    </div>
+  </div>
+  <ul class="list-group list-group-flush" style="font-size:13px;">
+    {% for inc in despieces_incluidos_lista %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <strong>#{{ inc.despiece_maestro.pk }}</strong>
+        — {{ inc.sistema_nombre_snapshot|default:"(sin sistema)" }} /
+        {{ inc.subsistema_nombre_snapshot|default:"(sin subsistema)" }}
+      </div>
+      <a href="{% url 'ingenieria:despiece_maestro' inc.despiece_maestro.pk %}"
+         class="btn btn-outline-secondary btn-xs" style="font-size:11px;">
+        Ver despiece
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if materiales_multi_despiece %}
+<div class="alert alert-info fade-up" style="font-size:13px;">
+  Este APU incluye varios despieces. Las categorías no materiales
+  (mano de obra, herramientas, transporte y administración) se calculan
+  con la configuración base del APU y pueden ajustarse manualmente.
+</div>
+{% endif %}
+
+{# ── Fase 11.5.1 — Resumen de consolidación (siempre antes de APUs origen) ── #}
+{% if apu.es_consolidado and resumen_consolidacion %}
+<div class="card fade-up mb-3" style="border:1px solid #c7d2fe;background:#fff;">
+  <div class="card-header" style="background:#4f46e5;color:#fff;display:flex;align-items:center;gap:10px;">
+    <strong>Resumen de consolidación</strong>
+    <span style="font-size:11px;opacity:.85;">— vista general del APU consolidado.</span>
+  </div>
+  <div style="padding:12px 16px;display:grid;grid-template-columns:repeat(6,1fr);gap:10px;">
+    <div style="text-align:center;">
+      <div style="font-size:10px;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;">APUs origen</div>
+      <div style="font-size:22px;font-weight:700;color:#3730a3;">{{ resumen_consolidacion.apus_origen_count }}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:10px;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;">Sistemas</div>
+      <div style="font-size:22px;font-weight:700;">{{ resumen_consolidacion.sistemas|length }}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:10px;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;">Subsistemas</div>
+      <div style="font-size:22px;font-weight:700;">{{ resumen_consolidacion.subsistemas|length }}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:10px;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;">Materiales</div>
+      <div style="font-size:22px;font-weight:700;">{{ resumen_consolidacion.materiales_total }}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:10px;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.04em;">No-mat. antes</div>
+      <div style="font-size:22px;font-weight:700;">{{ resumen_consolidacion.no_materiales_antes }}</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:10px;text-transform:uppercase;color:#15803d;letter-spacing:.04em;">No-mat. después</div>
+      <div style="font-size:22px;font-weight:700;color:#15803d;">{{ resumen_consolidacion.no_materiales_despues }}</div>
+    </div>
+  </div>
+  {% if resumen_consolidacion.sistemas or resumen_consolidacion.subsistemas %}
+  <div style="padding:8px 16px;border-top:1px solid #eef2ff;font-size:11px;color:var(--ink-soft);">
+    {% if resumen_consolidacion.sistemas %}
+      <strong>Sistemas:</strong> {{ resumen_consolidacion.sistemas|join:", " }}
+    {% endif %}
+    {% if resumen_consolidacion.subsistemas %}
+      <span style="margin-left:14px;"><strong>Subsistemas:</strong> {{ resumen_consolidacion.subsistemas|join:", " }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ── Fase 11.5 — Identidad visual del APU consolidado ───────────────── #}
+{% if apu.es_consolidado %}
+<div class="card fade-up mb-3" style="border:1px solid #c7d2fe;background:rgba(79,70,229,.04);">
+  <div class="card-header" style="background:#eef2ff;border-bottom:1px solid #c7d2fe;display:flex;align-items:center;gap:10px;">
+    <span style="background:#4f46e5;color:#fff;font-size:11px;font-weight:700;
+                 padding:3px 10px;border-radius:4px;letter-spacing:.04em;">CONSOLIDADO</span>
+    <strong style="color:#3730a3;">APUs origen de esta consolidación</strong>
+    <span class="text-muted ms-2" style="font-size:12px;">
+      {{ apu.origenes_consolidado.count }} APU{{ apu.origenes_consolidado.count|pluralize }} individuales
+    </span>
+  </div>
+  <ul class="list-group list-group-flush" style="font-size:13px;">
+    {% for oc in apu.origenes_consolidado.all %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <strong>APU #{{ oc.apu_origen.pk }}</strong> — {{ oc.apu_origen.nombre }}
+        {% if oc.apu_origen.proyecto_sistema %}
+          <span class="text-muted ms-1" style="font-size:11px;">
+            · {{ oc.apu_origen.proyecto_sistema.subsistema.sistema.nombre }} / {{ oc.apu_origen.proyecto_sistema.subsistema.nombre }}
+          </span>
+        {% endif %}
+      </div>
+      <a href="{% url 'presupuestos:apu_detail' oc.apu_origen.pk %}"
+         class="btn btn-outline-secondary btn-xs" style="font-size:11px;">
+        Ver APU origen
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="card-body" style="font-size:12px;color:#3730a3;padding:10px 16px;">
+    Materiales: unión por origen/sistema/subsistema. No-materiales: deduplicados por equivalencia.
+    Garantía y modalidad AIU son propias de este APU consolidado.
+  </div>
+</div>
+{% endif %}
 
 <div class="apu-tabs-wrap fade-up">
 
@@ -584,7 +978,222 @@
   <div id="{{ cat.tab_id }}" class="apu-tab-pane {% if forloop.first %}active{% endif %}" style="--sec-color:{{ cat.color }};">
     <div class="apu-tab-body">
 
+      {# Fase 6L-E: tarjeta informativa de la categoría #}
+      {% include "presupuestos/partials/_apu_info_card.html" with cat=cat %}
+
       {% if cat.grupos %}
+      {% if cat.tipo == "MATERIALES" %}
+      {% if apu.es_consolidado and materiales_por_origen_consolidado %}
+      {# ── Fase 11.5.1 — Materiales consolidados por origen ──────────── #}
+      <div class="mt-2 mb-2" style="font-size:14px;font-weight:700;color:#3730a3;
+                                    background:#eef2ff;padding:8px 12px;border-radius:6px;
+                                    border-left:4px solid #4f46e5;">
+        Materiales consolidados por origen
+      </div>
+      {% for bloque in materiales_por_origen_consolidado %}
+      <details {% if forloop.first %}open{% endif %}
+               style="margin-bottom:12px;border:1px solid #c7d2fe;border-radius:6px;background:#fff;">
+        <summary style="cursor:pointer;list-style:none;padding:10px 14px;
+                        display:flex;justify-content:space-between;align-items:center;
+                        gap:10px;background:#eef2ff;border-radius:6px 6px 0 0;">
+          <div>
+            {% if bloque.apu %}
+              <span style="font-size:10px;background:#4f46e5;color:#fff;padding:2px 8px;
+                           border-radius:3px;font-weight:700;letter-spacing:.04em;">ORIGEN</span>
+              <strong style="color:#3730a3;margin-left:6px;">
+                Materiales — APU #{{ bloque.apu.pk }} — {{ bloque.apu.nombre }}
+              </strong>
+              {% if bloque.apu.proyecto_sistema %}
+              <span class="text-muted" style="font-size:11px;margin-left:4px;">
+                · {{ bloque.apu.proyecto_sistema.subsistema.sistema.nombre }} / {{ bloque.apu.proyecto_sistema.subsistema.nombre }}
+              </span>
+              {% endif %}
+            {% else %}
+              <span style="font-size:10px;background:#94a3b8;color:#fff;padding:2px 8px;
+                           border-radius:3px;font-weight:700;letter-spacing:.04em;">SIN ORIGEN</span>
+              <strong style="color:#475569;margin-left:6px;">Materiales sin APU origen vinculado</strong>
+            {% endif %}
+          </div>
+          <div style="font-size:12px;color:#3730a3;text-align:right;">
+            <div>{{ bloque.total_lineas }} línea{{ bloque.total_lineas|pluralize }}</div>
+            <div style="font-variant-numeric:tabular-nums;font-weight:600;">
+              ${{ bloque.subtotal_valor|floatformat:0 }}
+            </div>
+          </div>
+        </summary>
+        <div style="padding:8px 12px;">
+          {% for g in bloque.grupos %}
+          <div class="mt-2 mb-1" style="font-size:12.5px;font-weight:700;color:#333;">
+            {{ g.sistema|default:"(sin sistema)" }}
+            {% if g.subsistema %} · {{ g.subsistema }}{% endif %}
+            {% if g.despiece_id %}
+            <span class="text-muted" style="font-weight:500;font-size:11px;">
+              · Despiece #{{ g.despiece_id }}
+            </span>
+            {% endif %}
+          </div>
+          <table class="apu-table">
+            <thead>
+              <tr>
+                <th>Componente / producto</th>
+                <th class="text-end">Rendimiento</th>
+                <th>Unidad</th>
+                <th class="text-end">Costo unit.</th>
+                <th class="th-costo text-end">Costo total</th>
+                <th class="th-valor text-end">Valor unit.</th>
+                <th class="th-valor text-end">Valor total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for linea in g.lineas %}
+              <tr>
+                <td>{{ linea.descripcion }}</td>
+                <td class="text-end">{{ linea.rendimiento|floatformat:2 }}</td>
+                <td>{{ linea.unidad }}</td>
+                <td class="text-end">${{ linea.costo_unitario|floatformat:0 }}</td>
+                <td class="td-costo text-end">${{ linea.costo_total|floatformat:0 }}</td>
+                <td class="text-end">${{ linea.valor_unitario|floatformat:0 }}</td>
+                <td class="td-valor text-end">${{ linea.valor_total|floatformat:0 }}</td>
+              </tr>
+              {% endfor %}
+              <tr style="background:#fafafa;">
+                <td colspan="4" class="text-end" style="font-size:11px;color:var(--ink-soft);">
+                  Subtotal subsistema
+                </td>
+                <td class="td-costo text-end" style="font-weight:600;">${{ g.subtotal_costo|floatformat:0 }}</td>
+                <td></td>
+                <td class="td-valor text-end" style="font-weight:600;">${{ g.subtotal_valor|floatformat:0 }}</td>
+              </tr>
+            </tbody>
+          </table>
+          {% endfor %}
+        </div>
+      </details>
+      {% endfor %}
+      <div class="mt-2" style="font-size:13px;text-align:right;">
+        <strong>Total Materiales consolidado: ${{ apu.subtotal_materiales|floatformat:0 }}</strong>
+      </div>
+      {% elif materiales_multi_despiece and materiales_por_subsistema %}
+      {# Fase 11.4 — vista agrupada por subsistema/despiece cuando el APU
+         contiene materiales de varios DespieceMaestro. #}
+      {% for g in materiales_por_subsistema %}
+      <div class="mt-3 mb-1" style="font-size:13px;font-weight:700;color:#333;">
+        Materiales — {{ g.sistema|default:"(sin sistema)" }}
+        {% if g.subsistema %} · {{ g.subsistema }}{% endif %}
+        {% if g.despiece_id %}
+        <span class="text-muted" style="font-weight:500;font-size:11.5px;">
+          · Despiece #{{ g.despiece_id }}
+        </span>
+        {% endif %}
+      </div>
+      <table class="apu-table">
+        <thead>
+          <tr>
+            <th>Componente / producto</th>
+            <th class="text-end">Rendimiento</th>
+            <th>Unidad</th>
+            <th class="text-end">Costo unit.</th>
+            <th class="th-costo text-end">Costo total</th>
+            <th class="th-valor text-end">Valor unit.</th>
+            <th class="th-valor text-end">Valor total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for linea in g.lineas %}
+          <tr id="apu-linea-{{ linea.pk }}">
+            <td class="apu-desc">{{ linea.descripcion }}{% if linea.iva_aplicado %}<span class="badge-iva">+IVA</span>{% endif %}</td>
+            <td class="text-end font-monospace">{{ linea.rendimiento|floatformat:4 }}</td>
+            <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+            <td class="text-end font-monospace">${{ linea.costo_unitario|floatformat:2 }}</td>
+            <td class="apu-costo-total text-end">${{ linea.costo_total|floatformat:2 }}</td>
+            <td class="text-end font-monospace">${{ linea.valor_unitario|floatformat:2 }}</td>
+            <td class="apu-valor-total text-end">${{ linea.valor_total|floatformat:2 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4">Subtotal sección</td>
+            <td class="tf-costo text-end">${{ g.subtotal_costo|floatformat:2 }}</td>
+            <td></td>
+            <td class="tf-valor text-end">${{ g.subtotal_valor|floatformat:2 }}</td>
+          </tr>
+        </tfoot>
+      </table>
+      {% endfor %}
+      <div class="mt-2" style="font-size:13px;font-weight:600;text-align:right;">
+        Total Materiales: <span class="text-success">${{ cat.subtotal_valor|floatformat:2 }}</span>
+      </div>
+      {% else %}
+      <table class="apu-table">
+        <thead>
+          <tr>
+            <th>Componente</th>
+            <th>Producto</th>
+            <th class="text-end">Cantidad</th>
+            <th>Unidad</th>
+            <th class="text-end">Rendimiento</th>
+            <th class="text-end">Costo unit.</th>
+            <th class="th-costo text-end">Costo total</th>
+            <th class="th-valor text-end">Valor unit.</th>
+            <th class="th-valor text-end">Valor total</th>
+            <th style="width:60px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for grupo in cat.grupos %}
+          {% for linea in grupo.lineas_detalle %}
+          <tr id="apu-linea-{{ linea.pk }}">
+            <td class="apu-desc">
+              {{ linea.componente_nombre }}
+              {% if apu.garantia_material_linea_id == linea.pk %}
+              <span class="badge bg-info-subtle text-info-emphasis ms-1"
+                    style="font-size:10px;font-weight:600;"
+                    title="La garantía se aplica sobre esta línea.">
+                Garantía aplicada
+              </span>
+              {% endif %}
+            </td>
+            <td>
+              {{ linea.producto_nombre }}
+              {% if linea.iva_aplicado %}<span class="badge-iva">+IVA</span>{% endif %}
+            </td>
+            <td class="text-end font-monospace">
+              {% if linea.cantidad_total is not None %}{{ linea.cantidad_total|floatformat:2 }}{% else %}—{% endif %}
+            </td>
+            <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
+            <td class="text-end font-monospace">{{ linea.rendimiento|floatformat:6 }}</td>
+            <td class="text-end font-monospace">${{ linea.costo_unitario|floatformat:2 }}</td>
+            <td class="apu-costo-total text-end">${{ linea.costo_total|floatformat:2 }}</td>
+            <td class="text-end font-monospace">${{ linea.valor_unitario|floatformat:2 }}</td>
+            <td class="apu-valor-total text-end">${{ linea.valor_total|floatformat:2 }}</td>
+            <td>
+              {% if linea.editable %}
+              <button class="btn btn-ghost btn-xs"
+                      data-bs-toggle="modal" data-bs-target="#modalEditarLinea"
+                      data-linea-pk="{{ linea.pk }}"
+                      data-descripcion="{{ linea.descripcion }}"
+                      data-rendimiento="{{ linea.rendimiento }}"
+                      data-precio="{{ linea.precio_referencia }}">✎</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% endfor %}{# /grupo #}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6">Subtotal {{ cat.label|lower }}</td>
+            <td class="tf-costo text-end">${{ cat.subtotal_costo|floatformat:2 }}</td>
+            <td></td>
+            <td class="tf-valor text-end">${{ cat.subtotal_valor|floatformat:2 }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+      {% endif %}{# /materiales_multi_despiece #}
+      {% else %}
+      {# ── Categorías NO-MATERIALES: tabla original sin cambios ────────── #}
       <table class="apu-table">
         <thead>
           <tr>
@@ -687,20 +1296,29 @@
           </tr>
         </tfoot>
       </table>
+      {% endif %}{# /if cat.tipo == MATERIALES #}
 
       {% else %}
       {# ── Estado vacío por sección ──────────────────────────────────── #}
       <div class="apu-section-empty">
         <i class="bi {{ cat.icon }}"></i>
         {% if cat.tipo == "MATERIALES" %}
-        Sin líneas de materiales. Use "Actualizar" para generarlas desde el despiece.
-        {% elif cat.tipo == "MANO_DE_OBRA" %}
-        Sin mano de obra configurada.
-        {% if proyecto_num_personas %}
+        Sin líneas de materiales. Use "Armar mi APU" en el Despiece Maestro para generarlas desde el despiece.
+        {% else %}
+        {# Fase 6L-D/6L-H: si el subsistema no tiene ítems APU configurados
+           para esta categoría, mostramos un mensaje claro sin rellenar
+           automáticamente con todo el catálogo. #}
+        {% if cat.info_card.items_configurados == 0 %}
+        Este subsistema no tiene ítems APU predeterminados configurados para esta categoría.
+        <div style="margin-top:6px;font-size:11.5px;color:var(--ink-soft);">
+          Edita el subsistema y agrega ítems en "Configuración APU del subsistema".
+        </div>
+        {% else %}
+        Sin {{ cat.label|lower }} generado todavía.
+        {% if cat.tipo == "MANO_DE_OBRA" and proyecto_num_personas %}
         <div style="margin-top:8px;font-size:12px;">Proyecto requiere <strong>{{ proyecto_num_personas }} persona{{ proyecto_num_personas|pluralize }}</strong>.</div>
         {% endif %}
-        {% else %}
-        Sin {{ cat.label|lower }} configurado.
+        {% endif %}
         {% endif %}
       </div>
       {% endif %}{# /if cat.grupos #}
@@ -778,12 +1396,23 @@
           {% if apu.revisor %} · {{ apu.revisor }}{% endif %}
           {% if apu.fecha_envio_revision %} · {{ apu.fecha_envio_revision|date:"d/m/Y" }}{% endif %}
         </div>
+        {# Fase 12.2 — sólo aprobador asignado o admin entra a la pantalla de revisión #}
+        {% if puede_aprobar %}
         <a href="{% url 'presupuestos:apu_revisar' apu.pk %}"
            class="btn btn-sm btn-success d-flex align-items-center gap-1">
           <i class="bi bi-check2-circle"></i> Ir a revisión
         </a>
+        {% else %}
+        <div style="font-size:11.5px;color:var(--ink-soft);padding:6px 12px;background:var(--sidebar);border-radius:8px;">
+          <i class="bi bi-lock me-1"></i>Pendiente de aprobación por:
+          <strong>{% if apu.revisor %}{{ apu.revisor.nombre_completo|default:apu.revisor.email }}{% else %}— sin asignar —{% endif %}</strong>.
+        </div>
+        {% endif %}
       </div>
       {% endif %}
+      {# Fase 12.2 — sólo creador/comercial/presupuestos/admin pueden enviar #}
+      {# Fase 12.3 — bloqueo: si el APU ya fue aprobado, no se reenvía #}
+      {% if puede_enviar_revision and not apu.modalidad_aiu_seleccionada and not apu.fecha_aprobacion %}
       <form method="post" action="{% url 'presupuestos:apu_enviar_revision' apu.pk %}"
             style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
         {% csrf_token %}
@@ -806,21 +1435,158 @@
           {% if ya_en_revision %}Reenviar{% else %}Enviar a revisión{% endif %}
         </button>
       </form>
+      {% endif %}
     </div>
   </div>
+</div>
+
+<!-- ── Fase 12 — Cotización aprobada (snapshot inmutable) ────────────────── -->
+<div style="margin-top:18px;">
+  {% if cotizacion_vigente %}
+  <div style="background:var(--card);border:1px solid #28a745;border-left:5px solid #28a745;border-radius:14px;padding:18px 22px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="width:42px;height:42px;border-radius:10px;background:rgba(40,167,69,.12);
+                    display:flex;align-items:center;justify-content:center;">
+          <i class="bi bi-file-earmark-check-fill" style="color:#28a745;font-size:20px;"></i>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#1c7a3a;">
+            Cotización aprobada · v{{ cotizacion_vigente.version }}
+          </div>
+          <div style="font-size:11.5px;color:var(--ink-soft);margin-top:3px;">
+            <span class="badge bg-success" style="font-size:9.5px;font-weight:600;">VIGENTE</span>
+            · {{ cotizacion_vigente.consecutivo_cotizacion }}
+            {% if cotizacion_vigente.fecha_aprobacion_snapshot %}
+            · {{ cotizacion_vigente.fecha_aprobacion_snapshot|date:"d/m/Y H:i" }}
+            {% endif %}
+            {% if cotizacion_vigente.aprobado_por_snapshot %}
+            · Aprobado por {{ cotizacion_vigente.aprobado_por_snapshot }}
+            {% endif %}
+            · Modalidad {{ cotizacion_vigente.modalidad_aiu_snapshot|default:"—" }}
+          </div>
+          <div style="font-size:18px;font-weight:800;color:#1c7a3a;margin-top:6px;">
+            Total aprobado: ${{ cotizacion_vigente.total_final|floatformat:0 }}
+            <span style="font-size:11px;font-weight:600;color:var(--ink-soft);">
+              {{ cotizacion_vigente.moneda_snapshot }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="{% url 'presupuestos:cotizacion_pdf_interno' cotizacion_vigente.pk %}"
+           class="btn btn-success btn-sm" target="_blank">
+          <i class="bi bi-file-earmark-pdf" style="margin-right:4px;"></i>PDF Interno aprobado
+        </a>
+        <a href="{% url 'presupuestos:cotizacion_pdf_cliente' cotizacion_vigente.pk %}"
+           class="btn btn-success btn-sm" target="_blank">
+          <i class="bi bi-file-earmark-person" style="margin-right:4px;"></i>PDF Cliente aprobado
+        </a>
+      </div>
+    </div>
+    {% if cotizaciones_historico %}
+    <div style="margin-top:12px;padding-top:10px;border-top:1px dashed rgba(40,167,69,.3);">
+      <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+                  color:var(--ink-soft);margin-bottom:6px;">
+        Versiones anteriores (reemplazadas)
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        {% for h in cotizaciones_historico %}
+        <div style="background:rgba(14,17,23,.04);border:1px solid rgba(14,17,23,.08);
+                    border-radius:8px;padding:6px 12px;font-size:11px;color:var(--ink-soft);">
+          v{{ h.version }} · {{ h.fecha_aprobacion_snapshot|date:"d/m/Y" }}
+          · ${{ h.total_final|floatformat:0 }}
+          <a href="{% url 'presupuestos:cotizacion_pdf_interno' h.pk %}" target="_blank"
+             style="margin-left:6px;color:#28a745;text-decoration:none;" title="PDF Interno v{{ h.version }}">
+            <i class="bi bi-file-earmark-pdf"></i>
+          </a>
+          <a href="{% url 'presupuestos:cotizacion_pdf_cliente' h.pk %}" target="_blank"
+             style="color:#28a745;text-decoration:none;" title="PDF Cliente v{{ h.version }}">
+            <i class="bi bi-file-earmark-person"></i>
+          </a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <div style="margin-top:12px;font-size:10.5px;color:var(--ink-soft);">
+      <i class="bi bi-info-circle" style="margin-right:4px;"></i>
+      Los PDFs aprobados usan datos congelados al momento de la aprobación.
+      Modificaciones posteriores al APU no afectan esta versión.
+    </div>
+  </div>
+  {% else %}
+  <div style="background:var(--card);border:1px dashed rgba(14,17,23,.18);border-radius:14px;
+              padding:14px 22px;color:var(--ink-soft);font-size:12px;">
+    <i class="bi bi-clipboard-x" style="margin-right:6px;"></i>
+    Sin cotización aprobada. Cuando se apruebe una modalidad AIU se generará
+    el snapshot inmutable de la cotización.
+  </div>
+  {% endif %}
 </div>
 
 <!-- ── Panel Modalidades AIU del proyecto ───────────────────────────────── -->
 <div id="panelModalidadesAIU" style="display:none;margin-top:20px;">
 {% with m=modalidades_aiu %}
+
+{# Fase 10A-9: estado de aprobación AIU #}
+{% if apu.modalidad_aiu_seleccionada %}
+{% with mAprob=m.modalidad1 %}
+<div style="background:var(--card);border:1px solid #28a745;border-left:4px solid #28a745;border-radius:14px;padding:16px 22px;margin-bottom:14px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+    <div>
+      <span class="badge bg-success" style="font-size:11.5px;padding:5px 12px;">
+        <i class="bi bi-check-circle-fill me-1"></i>Modalidad AIU aprobada
+      </span>
+      <span style="font-size:13px;font-weight:700;color:var(--ink);margin-left:10px;">
+        Modalidad {{ apu.modalidad_aiu_seleccionada }}
+      </span>
+      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">
+        A {{ m.porcentajes.admin|floatformat:2 }}% · I {{ m.porcentajes.imprevistos|floatformat:2 }}% · U {{ m.porcentajes.utilidad|floatformat:2 }}%
+        {% if m.porcentajes.es_final %}<span class="badge bg-primary" style="font-size:9.5px;font-weight:600;margin-left:4px;">snapshot revisor</span>{% endif %}
+        {% if apu.aprobado_por %} · Aprobado por {{ apu.aprobado_por.nombre_completo }}{% endif %}
+        {% if apu.fecha_aprobacion %} · {{ apu.fecha_aprobacion|date:"d/m/Y H:i" }}{% endif %}
+      </div>
+    </div>
+    <div style="text-align:right;">
+      {% if apu.modalidad_aiu_seleccionada == "1" %}
+        {% with mApr=m.modalidad1 %}
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.06em;">Gran total aprobado</div>
+          <div style="font-size:20px;font-weight:800;color:#17a85e;font-variant-numeric:tabular-nums;">${{ mApr.gran_total|floatformat:0 }}</div>
+          <div style="font-size:11px;color:var(--ink-soft);">Total AIU ${{ mApr.total_aiu|floatformat:0 }}{% if m.garantia_recargo %} + Garantía ${{ m.garantia_recargo|floatformat:0 }}{% endif %}</div>
+        {% endwith %}
+      {% else %}
+        {% with mApr=m.modalidad2 %}
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.06em;">Gran total aprobado</div>
+          <div style="font-size:20px;font-weight:800;color:#17a85e;font-variant-numeric:tabular-nums;">${{ mApr.gran_total|floatformat:0 }}</div>
+          <div style="font-size:11px;color:var(--ink-soft);">Total AIU ${{ mApr.total_aiu|floatformat:0 }}{% if m.garantia_recargo %} + Garantía ${{ m.garantia_recargo|floatformat:0 }}{% endif %}</div>
+        {% endwith %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endwith %}
+{% else %}
+<div style="background:var(--card);border:1px solid var(--border);border-left:4px solid #f0ad4e;border-radius:14px;padding:14px 20px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">
+  <span class="badge bg-warning text-dark" style="font-size:11.5px;padding:5px 12px;">
+    <i class="bi bi-hourglass-split me-1"></i>Pendiente de revisión
+  </span>
+  <span style="font-size:12.5px;color:var(--ink-soft);">
+    El revisor aún no ha aprobado la modalidad AIU oficial. Modalidades mostradas debajo son informativas.
+  </span>
+</div>
+{% endif %}
+
 <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;">
   <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
     <div>
       <div style="font-size:14px;font-weight:700;color:var(--ink);">Modalidades AIU del proyecto</div>
       <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
-        A={{ m.porcentajes.admin }}% · I={{ m.porcentajes.imprevistos }}% · U={{ m.porcentajes.utilidad }}%
+        A={{ m.porcentajes.admin|floatformat:2 }}% · I={{ m.porcentajes.imprevistos|floatformat:2 }}% · U={{ m.porcentajes.utilidad|floatformat:2 }}%
+        {% if m.porcentajes.es_final %}<span class="badge bg-primary" style="font-size:9.5px;font-weight:600;margin-left:4px;">snapshot revisor</span>{% endif %}
+        {% if m.garantia_recargo %} · Garantía Red Shield ${{ m.garantia_recargo|floatformat:0 }} (fuera de base AIU){% endif %}
         &nbsp;—&nbsp;
-        <a href="{% url 'presupuestos:apu_update' apu.pk %}" style="color:var(--theme-accent);font-size:11px;">Editar porcentajes</a>
+        <a href="{% url 'presupuestos:apu_update' apu.pk %}" style="color:var(--theme-accent);font-size:11px;">Editar porcentajes base</a>
       </div>
     </div>
   </div>
@@ -936,23 +1702,32 @@
         </div>
         <div class="modal-body">
           {% if items_herr %}
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
             Seleccione los ítems a incluir y ajuste la cantidad. Los ítems ya activos en este APU aparecen marcados.
           </p>
+          <div style="margin-bottom:12px;">
+            <input type="search" class="form-control form-control-sm apu-modal-search"
+                   data-modal="modalHerramientas"
+                   placeholder="Buscar por nombre, código, categoría o unidad…"
+                   oninput="apuModalFilter(this)">
+          </div>
           {% regroup items_herr by categoria as herr_por_cat %}
           {% for cat_group in herr_por_cat %}
-          <div style="margin-bottom:14px;">
+          <div class="apu-modal-cat-group" data-cat="{{ cat_group.grouper.nombre|lower }}" style="margin-bottom:14px;">
             <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#e07d10;margin-bottom:8px;">
               {{ cat_group.grouper.nombre }}
             </div>
             {% for item in cat_group.list %}
-            <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
+            <div class="apu-modal-item-row"
+                 data-search="{{ item.nombre|lower }} {{ item.codigo|default:''|lower }} {{ cat_group.grouper.nombre|lower }} {{ item.unidad|lower }}"
+                 style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
               <input type="checkbox" name="item_id[]" value="{{ item.pk }}"
                      id="herr-{{ item.pk }}"
-                     {% if item.pk in lineas_item_ids %}checked{% endif %}
+                     {% if item.pk in lineas_item_ids or item.pk in sia_item_ids %}checked{% endif %}
                      style="width:16px;height:16px;cursor:pointer;">
               <label for="herr-{{ item.pk }}" style="flex:1;font-size:12.5px;cursor:pointer;margin:0;">
                 {{ item.nombre }}
+                {% if item.pk in lineas_item_ids %}<span class="apu-badge apu-badge-en-apu">Ya en APU</span>{% elif item.pk in sia_item_ids %}<span class="apu-badge apu-badge-predet">Predeterminado</span>{% endif %}
                 {% if item.vida_util_dias %}
                   <span style="font-size:10px;color:var(--muted);">— {{ item.vida_util_dias }} días útiles</span>
                 {% endif %}
@@ -1002,14 +1777,25 @@
         </div>
         <div class="modal-body">
           {% if items_transp %}
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
             Ingrese el costo total por ítem. El costo unitario se calcula dividiendo por las unidades de referencia del proyecto.
           </p>
+          <div style="margin-bottom:12px;">
+            <input type="search" class="form-control form-control-sm apu-modal-search"
+                   data-modal="modalTransporte"
+                   placeholder="Buscar por nombre, código, categoría o unidad…"
+                   oninput="apuModalFilter(this)">
+          </div>
           {% for item in items_transp %}
-          <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
+          <div class="apu-modal-item-row"
+               data-search="{{ item.nombre|lower }} {{ item.codigo|default:''|lower }} {{ item.categoria.nombre|default:''|lower }} {{ item.unidad|lower }}"
+               style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
             <i class="bi bi-truck" style="color:#7048d0;opacity:0.5;"></i>
             <input type="hidden" name="descripcion[]" value="{{ item.nombre }}">
-            <span style="flex:1;font-size:12.5px;">{{ item.nombre }}</span>
+            <span style="flex:1;font-size:12.5px;">
+              {{ item.nombre }}
+              {% if item.pk in lineas_item_ids %}<span class="apu-badge apu-badge-en-apu">Ya en APU</span>{% elif item.pk in sia_item_ids %}<span class="apu-badge apu-badge-predet">Predeterminado</span>{% endif %}
+            </span>
             <div class="input-group input-group-sm" style="width:180px;">
               <span class="input-group-text">$</span>
               <input type="number" name="precio_total[]"
@@ -1072,7 +1858,7 @@
           {% if presets %}
           <div style="margin-bottom:16px;padding:12px;background:rgba(23,168,94,0.07);border-radius:8px;">
             <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#17a85e;margin-bottom:8px;">
-              Cuadrillas preset
+              Personal preset
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               {% for preset in presets %}
@@ -1089,23 +1875,32 @@
           {% endif %}
 
           {% if items_mo %}
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
             Seleccione el personal a incluir y ajuste la cantidad. El costo se calcula por días de trabajo estimados.
           </p>
+          <div style="margin-bottom:12px;">
+            <input type="search" class="form-control form-control-sm apu-modal-search"
+                   data-modal="modalManoObra"
+                   placeholder="Buscar por nombre, código, categoría o unidad…"
+                   oninput="apuModalFilter(this)">
+          </div>
           {% regroup items_mo by categoria as mo_por_cat %}
           {% for cat_group in mo_por_cat %}
-          <div style="margin-bottom:14px;">
+          <div class="apu-modal-cat-group" data-cat="{{ cat_group.grouper.nombre|lower }}" style="margin-bottom:14px;">
             <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#17a85e;margin-bottom:8px;">
               {{ cat_group.grouper.nombre }}
             </div>
             {% for item in cat_group.list %}
-            <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
+            <div class="apu-modal-item-row"
+                 data-search="{{ item.nombre|lower }} {{ item.codigo|default:''|lower }} {{ cat_group.grouper.nombre|lower }} {{ item.unidad|lower }}"
+                 style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);">
               <input type="checkbox" name="item_id[]" value="{{ item.pk }}"
                      id="mo-{{ item.pk }}"
-                     {% if item.pk in lineas_item_ids %}checked{% endif %}
+                     {% if item.pk in lineas_item_ids or item.pk in sia_item_ids %}checked{% endif %}
                      style="width:16px;height:16px;cursor:pointer;">
               <label for="mo-{{ item.pk }}" style="flex:1;font-size:12.5px;cursor:pointer;margin:0;">
                 {{ item.nombre }}
+                {% if item.pk in lineas_item_ids %}<span class="apu-badge apu-badge-en-apu">Ya en APU</span>{% elif item.pk in sia_item_ids %}<span class="apu-badge apu-badge-predet">Predeterminado</span>{% endif %}
                 {% if item.salario_base %}
                   <span style="font-size:10px;color:var(--muted);">— sal. ${{ item.salario_base|floatformat:0 }}/mes</span>
                 {% endif %}
@@ -1152,19 +1947,30 @@
         </div>
         <div class="modal-body">
           {% if items_admin %}
-          <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
             Ingrese el costo total por ítem administrativo. Se generará una línea APU por cada uno.
           </p>
+          <div style="margin-bottom:12px;">
+            <input type="search" class="form-control form-control-sm apu-modal-search"
+                   data-modal="modalAdmin"
+                   placeholder="Buscar por nombre, código, categoría o unidad…"
+                   oninput="apuModalFilter(this)">
+          </div>
           {% regroup items_admin by categoria as admin_por_cat %}
           {% for cat_group in admin_por_cat %}
-          <div style="margin-bottom:14px;">
+          <div class="apu-modal-cat-group" data-cat="{{ cat_group.grouper.nombre|lower }}" style="margin-bottom:14px;">
             <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px;">
               {{ cat_group.grouper.nombre }}
             </div>
             {% for item in cat_group.list %}
-            <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
+            <div class="apu-modal-item-row"
+                 data-search="{{ item.nombre|lower }} {{ item.codigo|default:''|lower }} {{ cat_group.grouper.nombre|lower }} {{ item.unidad|lower }}"
+                 style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
               <input type="hidden" name="descripcion[]" value="{{ item.nombre }}">
-              <span style="flex:1;font-size:12.5px;">{{ item.nombre }}</span>
+              <span style="flex:1;font-size:12.5px;">
+                {{ item.nombre }}
+                {% if item.pk in lineas_item_ids %}<span class="apu-badge apu-badge-en-apu">Ya en APU</span>{% elif item.pk in sia_item_ids %}<span class="apu-badge apu-badge-predet">Predeterminado</span>{% endif %}
+              </span>
               <div class="input-group input-group-sm" style="width:180px;">
                 <span class="input-group-text">$</span>
                 <input type="number" name="precio_total[]"
@@ -1199,6 +2005,34 @@
   </div>
 </div>
 
+{# ── Modal: Archivar APU (Fase 11.5.3) ─────────────────────────── #}
+<div class="modal fade" id="modalArchivarAPU" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'presupuestos:apu_archivar' apu.pk %}">
+        {% csrf_token %}
+        <div class="modal-header" style="border-bottom:1px solid var(--border);">
+          <h5 class="modal-title" style="font-size:14px;">Archivar APU</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" style="font-size:13px;">
+          Marcar <strong>{{ apu.nombre }}</strong> como archivado.
+          {% if apu.es_consolidado %}<br>No se tocan los APUs origen.{% endif %}
+          {% if apu.consolidaciones_destino.exists %}<br>Este APU es origen de un consolidado; la relación se conserva.{% endif %}
+          <div style="margin-top:10px;">
+            <label style="font-size:11.5px;color:var(--ink-soft);display:block;margin-bottom:4px;">Motivo (opcional)</label>
+            <textarea name="motivo" rows="2" class="form-control form-control-sm" style="font-size:12px;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-sm" style="background:var(--warning,#b07a00);color:#fff;">Archivar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 
@@ -1221,6 +2055,28 @@ function switchTab(btn, paneId) {
 /* ── Accordion toggle (legacy) ─────────────────────────────────────── */
 function toggleSection(el) {
   el.classList.toggle('open');
+}
+
+/* ── Fase 6L-G: Búsqueda frontend en modales de configuración APU ─── */
+function apuModalFilter(input) {
+  const modalId = input.dataset.modal;
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  const q = (input.value || '').trim().toLowerCase();
+
+  // Filtrar filas individuales
+  modal.querySelectorAll('.apu-modal-item-row').forEach(row => {
+    const hay = !q || (row.dataset.search || '').indexOf(q) !== -1;
+    row.style.display = hay ? '' : 'none';
+  });
+
+  // Ocultar grupos de categoría que quedan sin filas visibles
+  modal.querySelectorAll('.apu-modal-cat-group').forEach(group => {
+    const visibles = group.querySelectorAll('.apu-modal-item-row');
+    let count = 0;
+    visibles.forEach(r => { if (r.style.display !== 'none') count++; });
+    group.style.display = count > 0 ? '' : 'none';
+  });
 }
 
 /* ── Category row collapse ────────────────────────────────────────── */
@@ -1396,6 +2252,34 @@ function apuFiltrar() {
 function apuLimpiar() {
   document.getElementById('apuSearchInput').value = '';
   apuFiltrar();
+}
+
+/* Fase 9R — JS del modal editar garantía. */
+function editGarOnAplica(aplica) {
+  const sel = document.getElementById('editGarSelector');
+  if (sel) sel.style.display = aplica ? 'block' : 'none';
+  if (!aplica) {
+    const tg = document.getElementById('editGarTipo');
+    if (tg) tg.value = '';
+    const pctInfo = document.getElementById('editGarPctInfo');
+    if (pctInfo) pctInfo.style.display = 'none';
+    const matBlock = document.getElementById('editGarMaterialBlock');
+    if (matBlock) matBlock.style.display = 'none';
+    const modoTotal = document.getElementById('editGarModoTotal');
+    if (modoTotal) modoTotal.checked = true;
+  }
+}
+function editGarOnTipo(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const pct = opt ? (opt.getAttribute('data-pct') || '0') : '0';
+  const info = document.getElementById('editGarPctInfo');
+  const val  = document.getElementById('editGarPctValue');
+  if (val) val.textContent = pct;
+  if (info) info.style.display = sel.value ? 'block' : 'none';
+}
+function editGarOnModo(modo) {
+  const block = document.getElementById('editGarMaterialBlock');
+  if (block) block.style.display = (modo === 'MATERIAL_ESPECIFICO') ? 'block' : 'none';
 }
 </script>
 {% endblock %}

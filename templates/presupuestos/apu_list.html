@@ -48,6 +48,15 @@
 
 {% block content %}
 
+{# Fase 11.5.3 — toggle de archivados #}
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;font-size:12px;">
+  {% if mostrar_archivados %}
+    <a href="?" class="btn btn-ghost btn-xs">← Ocultar archivados</a>
+  {% else %}
+    <a href="?archivados=1" class="btn btn-ghost btn-xs">Ver archivados</a>
+  {% endif %}
+</div>
+
 <div class="apu-table-wrap">
   {% if apus %}
   <table class="apu-table">
@@ -67,7 +76,10 @@
       <tr>
         <td class="td-code">{{ apu.pk }}</td>
         <td>
-          <div class="td-nombre">{{ apu.nombre|default:"APU sin nombre" }}</div>
+          <div class="td-nombre">
+            {{ apu.nombre|default:"APU sin nombre" }}
+            {% if apu.archivado %}<span style="background:#f3f0e8;color:#7a5b00;border-radius:4px;padding:1px 6px;font-size:10.5px;margin-left:6px;">Archivado</span>{% endif %}
+          </div>
         </td>
         <td>
           {% if apu.proyecto_sistema.proyecto %}
