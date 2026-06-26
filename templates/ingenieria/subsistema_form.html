@@ -689,12 +689,23 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                 </button>
               </div>
               <div class="sf-block__body">
-                <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
+                <p style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">
                   Parámetros que el usuario ingresará al calcular el despiece.
                   Ej: <code>total_powergrip</code>, <code>desperdicio</code>.
                   Para <strong>Opción única</strong>, separa las opciones con punto y coma.
                   Ej: <code>4; 6</code>
                 </p>
+                <div style="font-size:11.5px;color:var(--ink-soft);background:rgba(20,112,230,.06);
+                            border-left:3px solid var(--theme-accent);border-radius:6px;
+                            padding:8px 11px;margin-bottom:12px;line-height:1.5;">
+                  <strong style="color:var(--ink);">Columna “Base APU”</strong> — marcar
+                  solo variables de área que deben sumarse para calcular el rendimiento del APU.
+                  <span style="display:block;margin-top:4px;">
+                    <strong>Sí marcar:</strong> Área cubierta · Área remate · Área fachada.
+                    <strong style="margin-left:8px;">No marcar:</strong> desperdicio,
+                    traslapo, fijaciones, porcentajes, factores técnicos.
+                  </span>
+                </div>
                 <div style="overflow-x:auto;">
                   <table class="rows-table" id="tbVars">
                     <thead>
@@ -704,6 +715,9 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                         <th style="width:110px;">Unidad</th>
                         <th style="width:110px;">Tipo</th>
                         <th style="width:140px;">Opciones <span style="font-weight:400;font-size:9px;letter-spacing:0;">(si Opción única)</span></th>
+                        <th style="width:80px;text-align:center;" title="Marcar si esta variable representa un área que debe sumarse para calcular el rendimiento del APU.">
+                          Base APU
+                        </th>
                         <th style="width:36px;"></th>
                       </tr>
                     </thead>
@@ -727,6 +741,12 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                                  placeholder="Ej: 4; 6"
                                  {% if v.tipo_entrada != 'OPCION_UNICA' %}style="display:none;"{% endif %}>
                         </td>
+                        <td style="text-align:center;">
+                          <input type="hidden" name="var_base_apu[]" value="0">
+                          <input type="checkbox" class="var-base-apu-cb" {% if v.participa_en_base_apu %}checked{% endif %}
+                                 onchange="this.previousElementSibling.value = this.checked ? '1' : '0';"
+                                 title="Si está marcado, el valor ingresado se suma a la base del rendimiento del APU.">
+                        </td>
                         <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
                       </tr>
                       {% endfor %}
@@ -738,6 +758,77 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                   Sin variables. Usa "+ Variable" para agregar.
                 </p>
                 {% endif %}
+              </div>
+            </div>
+
+            <!-- 2.5 Dependencias entre variables (Fase 2B) -->
+            <div class="sf-block" id="anchorDependencias">
+              <div class="sf-block__head">
+                <div class="sf-block__head-left">
+                  <span class="sf-block__num">2.5</span>
+                  <span class="sf-block__label">Dependencias entre variables</span>
+                </div>
+                <button type="button" id="btnAddDep">
+                  <i class="bi bi-plus"></i> Agregar dependencia
+                </button>
+              </div>
+              <div class="sf-block__body">
+                <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
+                  Permite seleccionar automáticamente una variable cuando otra
+                  variable toma un valor específico. Solo aplica a variables de
+                  tipo <strong>Opción única</strong>.
+                </p>
+                <div style="overflow-x:auto;">
+                  <table class="rows-table" id="tbDeps">
+                    <thead>
+                      <tr>
+                        <th>Variable origen *</th>
+                        <th style="width:140px;">Valor origen *</th>
+                        <th>Variable destino *</th>
+                        <th style="width:140px;">Valor destino *</th>
+                        <th style="width:70px;text-align:center;">Activa</th>
+                        <th style="width:36px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="depRows">
+                      {% for dep in dependencias_existentes %}
+                      <tr class="dep-row">
+                        <td>
+                          <select name="dep_var_origen[]" class="form-select form-select-sm dep-var-origen"
+                                  data-current="{{ dep.variable_origen.variable }}"></select>
+                        </td>
+                        <td>
+                          <select name="dep_val_origen[]" class="form-select form-select-sm dep-val-origen"
+                                  data-current="{{ dep.valor_origen }}"></select>
+                        </td>
+                        <td>
+                          <select name="dep_var_destino[]" class="form-select form-select-sm dep-var-destino"
+                                  data-current="{{ dep.variable_destino.variable }}"></select>
+                        </td>
+                        <td>
+                          <select name="dep_val_destino[]" class="form-select form-select-sm dep-val-destino"
+                                  data-current="{{ dep.valor_destino }}"></select>
+                        </td>
+                        <td style="text-align:center;">
+                          <input type="hidden" name="dep_activa[]" value="0">
+                          <input type="checkbox" class="dep-activa-cb" {% if dep.activa %}checked{% endif %}
+                                 onchange="this.previousElementSibling.value = this.checked ? '1' : '0';">
+                        </td>
+                        <td>
+                          <button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button>
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                <p id="noDepsMsg" style="font-size:12px;color:var(--ink-soft);margin-top:8px;font-style:italic;
+                          {% if dependencias_existentes %}display:none;{% endif %}">
+                  Sin dependencias configuradas. Usa "+ Agregar dependencia" para crear una.
+                </p>
+                <p id="noVarsOpcionUnicaMsg" style="display:none;font-size:12px;color:#92400e;margin-top:8px;font-style:italic;">
+                  No hay variables de opción única disponibles para crear dependencias. Define al menos una variable de tipo <strong>Opción única</strong> arriba.
+                </p>
               </div>
             </div>
 
@@ -921,6 +1012,20 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                               {% endif %}
                               <span style="font-size:10px;color:var(--ink-soft);">· {{ item.unidad }}</span>
                             </label>
+                            {% if sia.tipo == "ADMINISTRACION" %}
+                            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                              <input type="number"
+                                     name="sia_ADMINISTRACION_rendimiento[]"
+                                     value="{{ item.sia_rendimiento_pct }}"
+                                     min="0" max="200" step="0.01"
+                                     placeholder="100"
+                                     {% if not item.sia_checked %}disabled{% endif %}
+                                     class="form-control form-control-sm sia-admin-rend-input"
+                                     style="width:72px;font-size:12px;padding:2px 6px;"
+                                     title="Porcentaje de aplicación (ej: 10 para 10%, 100 para 100%)">
+                              <span style="font-size:11px;color:var(--ink-soft);flex-shrink:0;">%</span>
+                            </div>
+                            {% endif %}
                           </div>
                           {% endfor %}
                         </div>
@@ -1018,6 +1123,18 @@ body.modal-open .assist-fab--resumen { display: none !important; }
             if (empty) empty.style.display = anyVisible ? 'none' : '';
           }
           window.siaFilter = siaFilter;
+
+          // Habilitar/deshabilitar el input de % de Administración según el checkbox.
+          // Inputs deshabilitados no se envían → preserva alineación de índices
+          // entre sia_ADMINISTRACION_item_id[] y sia_ADMINISTRACION_rendimiento[].
+          document.addEventListener('change', function (ev) {
+            var cb = ev.target;
+            if (!cb.matches('input[type="checkbox"][name="sia_ADMINISTRACION_item_id[]"]')) return;
+            var row = cb.closest('.sia-item-row');
+            if (!row) return;
+            var rendInput = row.querySelector('.sia-admin-rend-input');
+            if (rendInput) rendInput.disabled = !cb.checked;
+          });
         </script>
         {% endif %}
       </div>
@@ -1607,6 +1724,12 @@ window.CP_SECCIONES = [
         <input type="text" name="var_opciones[]" class="form-control form-control-sm var-opciones-inp"
                placeholder="Ej: 4; 6" style="display:none;">
       </td>
+      <td style="text-align:center;">
+        <input type="hidden" name="var_base_apu[]" value="0">
+        <input type="checkbox" class="var-base-apu-cb"
+               onchange="this.previousElementSibling.value = this.checked ? '1' : '0';"
+               title="Si está marcado, el valor ingresado se suma a la base del rendimiento del APU.">
+      </td>
       <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
     `;
     document.getElementById('varRows').appendChild(tr);
@@ -1711,6 +1834,150 @@ window.CP_SECCIONES = [
     document.getElementById('reglaRows').appendChild(tr);
     tr.querySelector('select').focus();
   });
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     FASE 2B — DEPENDENCIAS ENTRE VARIABLES
+     Selects dinámicos: lee del DOM las variables OPCION_UNICA actuales y sus
+     opciones (sin endpoint), y repuebla los selects de cada fila preservando
+     la selección actual. Reacciona a cambios en la tabla de variables.
+  ───────────────────────────────────────────────────────────────────────── */
+
+  function _getVariablesOpcionUnica() {
+    const out = [];
+    document.querySelectorAll('#varRows .var-row').forEach(tr => {
+      const vName = (tr.querySelector('input[name="var_variable[]"]') || {}).value || '';
+      const vLabel = (tr.querySelector('input[name="var_label[]"]') || {}).value || '';
+      const vTipo = (tr.querySelector('select[name="var_tipo[]"]') || {}).value || '';
+      const vOpsRaw = (tr.querySelector('input[name="var_opciones[]"]') || {}).value || '';
+      if (vTipo !== 'OPCION_UNICA') return;
+      const opciones = vOpsRaw.split(';').map(s => s.trim()).filter(Boolean);
+      if (!vName.trim() || opciones.length === 0) return;
+      out.push({ variable: vName.trim(), label: (vLabel || vName).trim(), opciones });
+    });
+    return out;
+  }
+
+  function _opcionesPara(varName, vars) {
+    const v = vars.find(x => x.variable === varName);
+    return v ? v.opciones : [];
+  }
+
+  function _llenarSelectVariable(sel, vars) {
+    const actual = sel.value || sel.getAttribute('data-current') || '';
+    sel.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = ''; placeholder.textContent = '— selecciona —';
+    sel.appendChild(placeholder);
+    vars.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v.variable; o.textContent = `${v.label} (${v.variable})`;
+      sel.appendChild(o);
+    });
+    if (actual && vars.find(v => v.variable === actual)) {
+      sel.value = actual;
+    }
+  }
+
+  function _llenarSelectValor(sel, varName, vars) {
+    const actual = sel.value || sel.getAttribute('data-current') || '';
+    sel.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = ''; placeholder.textContent = '— valor —';
+    sel.appendChild(placeholder);
+    _opcionesPara(varName, vars).forEach(op => {
+      const o = document.createElement('option');
+      o.value = op; o.textContent = op;
+      sel.appendChild(o);
+    });
+    if (actual && _opcionesPara(varName, vars).includes(actual)) {
+      sel.value = actual;
+    }
+  }
+
+  function _refrescarFilaDep(tr, vars) {
+    const selOrigen  = tr.querySelector('.dep-var-origen');
+    const selValOri  = tr.querySelector('.dep-val-origen');
+    const selDest    = tr.querySelector('.dep-var-destino');
+    const selValDest = tr.querySelector('.dep-val-destino');
+    _llenarSelectVariable(selOrigen, vars);
+    _llenarSelectVariable(selDest,   vars);
+    _llenarSelectValor(selValOri,  selOrigen.value, vars);
+    _llenarSelectValor(selValDest, selDest.value,   vars);
+  }
+
+  function _refrescarTodasLasFilasDep() {
+    const vars = _getVariablesOpcionUnica();
+    const noOU  = document.getElementById('noVarsOpcionUnicaMsg');
+    const noDep = document.getElementById('noDepsMsg');
+    const filas = document.querySelectorAll('#depRows .dep-row');
+    if (noOU)  noOU.style.display  = (vars.length === 0) ? '' : 'none';
+    if (noDep) noDep.style.display = (filas.length === 0) ? '' : 'none';
+    filas.forEach(tr => _refrescarFilaDep(tr, vars));
+  }
+
+  // Cambio en selects de fila → refrescar selects de valor dependientes.
+  document.addEventListener('change', e => {
+    const tr = e.target.closest('#depRows .dep-row');
+    if (!tr) return;
+    const vars = _getVariablesOpcionUnica();
+    if (e.target.classList.contains('dep-var-origen')) {
+      _llenarSelectValor(tr.querySelector('.dep-val-origen'), e.target.value, vars);
+    } else if (e.target.classList.contains('dep-var-destino')) {
+      _llenarSelectValor(tr.querySelector('.dep-val-destino'), e.target.value, vars);
+    }
+  });
+
+  // Cambios en la tabla de variables (tipo, opciones, nombre) → refrescar.
+  document.addEventListener('input', e => {
+    if (!e.target.closest('#varRows')) return;
+    const n = e.target.getAttribute('name') || '';
+    if (n === 'var_variable[]' || n === 'var_opciones[]' || n === 'var_label[]') {
+      _refrescarTodasLasFilasDep();
+    }
+  });
+  document.addEventListener('change', e => {
+    if (!e.target.closest('#varRows')) return;
+    if ((e.target.getAttribute('name') || '') === 'var_tipo[]') {
+      _refrescarTodasLasFilasDep();
+    }
+  });
+  // Cuando se borra una fila de variable también refresca.
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('#varRows .del-row');
+    if (!btn) return;
+    setTimeout(_refrescarTodasLasFilasDep, 60);
+  });
+
+  // Agregar dependencia
+  const btnAddDep = document.getElementById('btnAddDep');
+  if (btnAddDep) btnAddDep.addEventListener('click', () => {
+    const tr = document.createElement('tr');
+    tr.className = 'dep-row';
+    tr.innerHTML = `
+      <td><select name="dep_var_origen[]"  class="form-select form-select-sm dep-var-origen"></select></td>
+      <td><select name="dep_val_origen[]"  class="form-select form-select-sm dep-val-origen"></select></td>
+      <td><select name="dep_var_destino[]" class="form-select form-select-sm dep-var-destino"></select></td>
+      <td><select name="dep_val_destino[]" class="form-select form-select-sm dep-val-destino"></select></td>
+      <td style="text-align:center;">
+        <input type="hidden" name="dep_activa[]" value="1">
+        <input type="checkbox" class="dep-activa-cb" checked
+               onchange="this.previousElementSibling.value = this.checked ? '1' : '0';">
+      </td>
+      <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
+    `;
+    document.getElementById('depRows').appendChild(tr);
+    _refrescarTodasLasFilasDep();
+  });
+
+  // Eliminar fila → ocultar mensaje "Sin dependencias" si corresponde.
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('#depRows .del-row');
+    if (!btn) return;
+    setTimeout(_refrescarTodasLasFilasDep, 30);
+  });
+
+  // Hidratación inicial (filas server-rendered).
+  _refrescarTodasLasFilasDep();
 
 })();
 

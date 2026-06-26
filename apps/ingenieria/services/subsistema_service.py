@@ -34,6 +34,7 @@ from apps.ingenieria.models import (
     SubconjuntoRecetaTecnica,
     ComponenteQuimico,
     ProductoTecnicoAsociado,
+    VariableDependenciaSubsistema,
 )
 
 
@@ -81,6 +82,8 @@ def guardar_variables(subsistema, post):
     var_defaults  = post.getlist("var_default[]")
     var_tipos     = post.getlist("var_tipo[]")
     var_opciones  = post.getlist("var_opciones[]")
+    # Sub-fase D — flag por variable: ¿suma a area_base_apu?
+    var_base_apu  = post.getlist("var_base_apu[]")
 
     VariableSubsistema.objects.filter(subsistema=subsistema).delete()
     for idx, (variable, label) in enumerate(zip(var_variables, var_labels)):
@@ -101,6 +104,10 @@ def guardar_variables(subsistema, post):
         raw_ops = var_opciones[idx].strip() if idx < len(var_opciones) else ""
         opciones = parsear_opciones(raw_ops) if tipo == VariableSubsistema.OPCION_UNICA else []
 
+        flag_base_apu = False
+        if idx < len(var_base_apu):
+            flag_base_apu = str(var_base_apu[idx]).strip().lower() in ("1", "true", "on", "yes")
+
         VariableSubsistema.objects.create(
             subsistema=subsistema,
             variable=variable,
@@ -109,8 +116,135 @@ def guardar_variables(subsistema, post):
             valor_default=default_val,
             tipo_entrada=tipo,
             opciones=opciones,
+            participa_en_base_apu=flag_base_apu,
             orden=idx + 1,
         )
+
+
+# ── Guardado de dependencias entre variables (Fase 2B) ───────────────────────
+
+def guardar_dependencias_variables(subsistema, post):
+    """
+    Guarda las dependencias entre variables del subsistema desde arrays POST.
+    POST arrays paralelos:
+        dep_var_origen[]   — nombre interno de la variable origen
+        dep_val_origen[]   — valor concreto que dispara la regla
+        dep_var_destino[]  — nombre interno de la variable destino
+        dep_val_destino[]  — valor que se asignará a la destino
+        dep_activa[]       — "1" / "0" (precedido de hidden "0" para checkboxes desmarcados)
+        dep_notas[]        — opcional
+
+    Usa los nombres de variable (no PKs) porque el flujo del formulario borra y
+    recrea las VariableSubsistema en cada save, así que las PKs no son estables
+    entre saves consecutivos.
+
+    Se ejecuta DESPUÉS de guardar_variables, así que las variables nuevas ya
+    existen y se pueden resolver por nombre.
+
+    Si alguna fila falla validación (`full_clean`), TODO el guardado de
+    dependencias se revierte (savepoint) y se devuelve la lista de errores
+    como strings. Las dependencias preexistentes se conservan en ese caso.
+    Si todas las filas son válidas, se borran las existentes y se crean las
+    nuevas — devolviendo lista vacía.
+
+    Devuelve: list[str] con errores acumulados (vacía si todo OK).
+    """
+    from django.core.exceptions import ValidationError
+    from django.db import transaction
+
+    var_origenes = post.getlist("dep_var_origen[]")
+    val_origenes = post.getlist("dep_val_origen[]")
+    var_destinos = post.getlist("dep_var_destino[]")
+    val_destinos = post.getlist("dep_val_destino[]")
+    activas      = post.getlist("dep_activa[]")
+    notas        = post.getlist("dep_notas[]")
+
+    # Sin filas en POST → borrar todas las existentes (consistente con variables).
+    n = max(len(var_origenes), len(var_destinos))
+    if n == 0:
+        VariableDependenciaSubsistema.objects.filter(subsistema=subsistema).delete()
+        return []
+
+    # Index de variables del subsistema por nombre interno.
+    vars_map = {
+        v.variable: v
+        for v in VariableSubsistema.objects.filter(subsistema=subsistema)
+    }
+
+    # Construir las instancias en memoria, filtrando filas incompletas.
+    instancias = []
+    errores = []
+    for idx in range(n):
+        var_o = (var_origenes[idx] if idx < len(var_origenes) else "").strip()
+        val_o = (val_origenes[idx] if idx < len(val_origenes) else "").strip()
+        var_d = (var_destinos[idx] if idx < len(var_destinos) else "").strip()
+        val_d = (val_destinos[idx] if idx < len(val_destinos) else "").strip()
+        if not (var_o and val_o and var_d and val_d):
+            continue  # fila incompleta — se ignora silenciosamente
+
+        v_o = vars_map.get(var_o)
+        v_d = vars_map.get(var_d)
+        if v_o is None:
+            errores.append(f"Dependencia #{idx + 1}: variable origen '{var_o}' no existe en el subsistema.")
+            continue
+        if v_d is None:
+            errores.append(f"Dependencia #{idx + 1}: variable destino '{var_d}' no existe en el subsistema.")
+            continue
+
+        activa = True
+        if idx < len(activas):
+            activa = str(activas[idx]).strip().lower() in ("1", "true", "on", "yes")
+        nota = (notas[idx].strip() if idx < len(notas) else "")[:200]
+
+        instancias.append((
+            idx + 1,
+            VariableDependenciaSubsistema(
+                subsistema=subsistema,
+                variable_origen=v_o,
+                valor_origen=val_o,
+                variable_destino=v_d,
+                valor_destino=val_d,
+                activa=activa,
+                orden=idx + 1,
+                notas=nota,
+            ),
+        ))
+
+    if errores:
+        # Errores de mapping antes de tocar la BD: preservar existentes.
+        return errores
+
+    # Savepoint anidado: si una validación falla, rollback solo de esta unidad
+    # de trabajo y devolvemos errores. La transacción externa (form_valid)
+    # continúa intacta y el resto del subsistema queda guardado.
+    try:
+        with transaction.atomic():
+            VariableDependenciaSubsistema.objects.filter(subsistema=subsistema).delete()
+            for fila_num, inst in instancias:
+                try:
+                    inst.full_clean()
+                except ValidationError as exc:
+                    detalle = _format_validation_error(exc)
+                    errores.append(f"Dependencia #{fila_num}: {detalle}")
+                    raise  # forzar rollback del savepoint
+                inst.save()
+    except ValidationError:
+        # Rollback ya ocurrió; preservamos las existentes y devolvemos errores.
+        return errores
+
+    return []
+
+
+def _format_validation_error(exc):
+    if hasattr(exc, "message_dict") and exc.message_dict:
+        partes = []
+        for campo, mensajes in exc.message_dict.items():
+            if isinstance(mensajes, (list, tuple)):
+                partes.append(f"{campo}: {'; '.join(str(m) for m in mensajes)}")
+            else:
+                partes.append(f"{campo}: {mensajes}")
+        return " | ".join(partes)
+    return str(exc)
 
 
 # ── Guardado de subconjuntos y componentes ───────────────────────────────────
@@ -287,6 +421,7 @@ def guardar_items_apu_subsistema(subsistema, post):
     for tipo in TIPOS:
         items_raw     = post.getlist(f"sia_{tipo}_item_id[]")
         cantidades    = post.getlist(f"sia_{tipo}_cantidad[]")
+        rendimientos  = post.getlist(f"sia_{tipo}_rendimiento[]")
 
         # El frontend emite checkboxes + un hidden de cantidad por cada ítem
         # mostrado. Para mantener el alineamiento por índice, se procesa por
@@ -310,6 +445,13 @@ def guardar_items_apu_subsistema(subsistema, post):
             if cant < 1:
                 cant = 1
 
+            raw_rend = rendimientos[idx].strip().replace(",",".") if idx < len(rendimientos) else ""
+            try:
+                # Guardar como factor (10% -> 0.10)
+                rend = float(raw_rend) / 100.0 if raw_rend else None
+            except (TypeError, ValueError):
+                rend = None
+
             orden += 1
             SubsistemaItemAPU.objects.update_or_create(
                 subsistema=subsistema,
@@ -317,6 +459,7 @@ def guardar_items_apu_subsistema(subsistema, post):
                 tipo=tipo,
                 defaults={
                     "cantidad": cant,
+                    "rendimiento_override": rend,
                     "orden": orden,
                     "activo": True,
                 },

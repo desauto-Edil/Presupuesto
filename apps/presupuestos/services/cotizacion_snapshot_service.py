@@ -157,7 +157,14 @@ class CotizacionSnapshotService:
             "valor_imprevistos": snapshot.aiu_imprevistos_valor,
             "valor_utilidad": snapshot.aiu_utilidad_valor,
             "total_aiu": snapshot.total_aiu,
-            "subtotal_con_aiu": (snapshot.subtotal_directos_tecnico or Decimal("0")) + (snapshot.total_aiu or Decimal("0")),
+            # Derivado desde total_final para que sea correcto en cualquier
+            # modalidad (M1/M2) y en snapshots históricos con la fórmula previa.
+            # total_final = subtotal_con_aiu + garantia + iva_valor
+            "subtotal_con_aiu": (
+                (snapshot.total_final or Decimal("0"))
+                - (snapshot.garantia_valor_recargo or Decimal("0"))
+                - (snapshot.iva_valor or Decimal("0"))
+            ),
             "aiu_es_final": True,
             "aplica_iva": snapshot.aplica_iva,
             "iva_pct": snapshot.iva_pct,

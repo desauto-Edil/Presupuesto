@@ -415,3 +415,49 @@ def productos_principal_opciones(lineas_finales: List[LineaFinalAPU]) -> List[di
         if not slot["producto_nombre"] and f.get("producto_nombre"):
             slot["producto_nombre"] = f["producto_nombre"]
     return list(por_producto.values())
+
+
+def calcular_base_apu_backend(despiece) -> dict:
+    """
+    Calcula la Base APU desde el backend, sin confiar en el POST.
+
+    1. Obtiene las variables del subsistema marcadas con `participa_en_base_apu=True`.
+    2. Lee sus valores desde `despiece.variables_entrada`.
+    3. Suma los valores numéricos.
+
+    Retorna un dict con:
+        {
+            "valida": bool,
+            "total": Decimal,
+            "unidad": str,
+            "resumen": list[dict]
+        }
+    """
+    from apps.ingenieria.models import VariableSubsistema
+
+    resumen = []
+    total = Decimal("0")
+    unidad = ""
+    valida = False
+
+    try:
+        vars_base_qs = VariableSubsistema.objects.filter(
+            subsistema=despiece.subsistema, participa_en_base_apu=True,
+        ).order_by("orden")
+        vars_base = list(vars_base_qs)
+        valores_usuario = despiece.variables_entrada or {}
+
+        if vars_base:
+            for v in vars_base:
+                raw = valores_usuario.get(v.variable, v.valor_default)
+                if raw not in (None, ""):
+                    valor_num = Decimal(str(raw))
+                    resumen.append({"label": v.label, "valor": valor_num, "unidad": v.unidad})
+                    total += valor_num
+            if resumen:
+                unidad = resumen[0]["unidad"]
+            valida = total > Decimal("0")
+    except (TypeError, ValueError, Exception):
+        valida = False
+
+    return {"valida": valida, "total": total, "unidad": unidad, "resumen": resumen}

@@ -744,14 +744,20 @@ def _build_categorias_context(apu) -> list:
             subtotal_costo = sum(g["subtotal_costo"] for g in grupos)
             subtotal_valor = sum(g["subtotal_valor"] for g in grupos)
 
-        categorias.append({
+        cat_data = {
             **info,
             "grupos": grupos,
             "subtotal_costo": subtotal_costo,
             "subtotal_valor": subtotal_valor,
             "count": len(lineas_tipo),
             "info_card": info_cards.get(tipo, {}),
-        })
+        }
+
+        # Para Administración, no usar grupos. Pasar las líneas directamente.
+        if tipo == TipoAPU.ADMINISTRACION:
+            cat_data["lineas_admin_detalle"] = lineas_tipo
+
+        categorias.append(cat_data)
 
     return categorias
 
@@ -995,8 +1001,38 @@ class APUProyectoDetailView(DetailView):
                         item_catalogo__activo=True)
                 .values_list("item_catalogo_id", flat=True)
             )
+            # Datos de admin preconfigurados en SubsistemaItemAPU:
+            # {item_pk: {"cantidad": N, "porcentaje": Decimal}}
+            # Usados para pre-llenar los campos del modal "Configurar administración".
+            sia_admin_rows = (
+                _SIA.objects
+                .filter(subsistema_id=_sub_id, tipo="ADMINISTRACION",
+                        activo=True, item_catalogo__activo=True)
+                .values("item_catalogo_id", "cantidad", "rendimiento_override")
+            )
+            from decimal import Decimal as _Dec
+            ctx["sia_admin_data"] = {
+                row["item_catalogo_id"]: {
+                    "cantidad": row["cantidad"],
+                    "porcentaje": (
+                        float(row["rendimiento_override"]) * 100
+                        if row["rendimiento_override"] is not None
+                        else 100.0
+                    ),
+                }
+                for row in sia_admin_rows
+            }
         else:
             ctx["sia_item_ids"] = set()
+            ctx["sia_admin_data"] = {}
+        # Días de duración del APU — usados por el JS del modal de administración.
+        ctx["apu_dias_duracion"] = self.object.dias_duracion or 0
+        # JSON seguro de sia_admin_data para el script del modal (claves string para JSON válido).
+        import json as _json
+        ctx["sia_admin_json"] = _json.dumps(
+            {str(k): v for k, v in ctx["sia_admin_data"].items()},
+            ensure_ascii=False,
+        )
         # Modalidades AIU del proyecto
         ctx["modalidades_aiu"] = self.object.calcular_modalidades_aiu()
 
@@ -1017,11 +1053,47 @@ class APUProyectoDetailView(DetailView):
         ctx["revisores"] = ConfiguracionSistema.objects.filter(activo=True).order_by("nombre_completo")
         ctx["ya_en_revision"] = bool(self.object.fecha_envio_revision)
 
+        # Sub-fase C — "Enviado por" y "fecha/hora" inferidos del LogSistema.
+        # No se crea campo nuevo; se lee del último registro de envío.
+        ctx["enviado_revision_por_log"] = None
+        ctx["enviado_revision_at_log"] = None
+        try:
+            from apps.comercial.models import LogSistema
+            log_envio = (
+                LogSistema.objects
+                .filter(modelo_afectado="APUProyecto",
+                        objeto_id=self.object.pk,
+                        accion="ENVIAR_REVISION")
+                .select_related("configuracion")
+                .order_by("-created_at")
+                .first()
+            )
+            if log_envio:
+                ctx["enviado_revision_por_log"] = log_envio.configuracion
+                ctx["enviado_revision_at_log"] = log_envio.created_at
+        except Exception:
+            logger.exception(
+                "[APUProyectoDetailView] No se pudo inferir enviado_por del log."
+            )
+
         # Fase 12.2 — Permisos para condicionar UI
         _usuario = get_usuario_actual(self.request)
         ctx["usuario_actual"] = _usuario
         ctx["puede_aprobar"] = puede_aprobar_apu(self.request, self.object)
-        ctx["puede_enviar_revision"] = puede_enviar_a_revision(self.request, self.object)
+        # puede_enviar_revision compone permiso de rol + estado del APU:
+        #   - APU archivado: nunca
+        #   - APU aprobado (modalidad seleccionada o fecha_aprobacion): nunca
+        #   - SOLO_LECTURA / COMPRAS: nunca
+        _apu_aprobado = bool(
+            (self.object.modalidad_aiu_seleccionada or "").strip()
+            or self.object.fecha_aprobacion
+            or self.object.aprobado_por_id
+        )
+        ctx["puede_enviar_revision"] = (
+            puede_enviar_a_revision(self.request, self.object)
+            and not getattr(self.object, "archivado", False)
+            and not _apu_aprobado
+        )
         ctx["es_administrador"] = es_admin(self.request)
         ctx["es_aprobador_asignado"] = (
             _usuario is not None
@@ -1505,6 +1577,7 @@ class APUArmarDesdeDespieceView(View):
         from apps.ingenieria.services.lineas_finales_apu import (
             validar_despiece_listo_para_apu,
             productos_principal_opciones,
+            calcular_base_apu_backend,
         )
         from django.db import transaction as db_transaction
         from decimal import Decimal
@@ -1518,41 +1591,63 @@ class APUArmarDesdeDespieceView(View):
                 messages.error(request, err)
             return redirect("ingenieria:despiece_maestro", pk=dm.pk)
 
-        # ── 2. Producto principal: validar entrada ───────────────────────────
-        try:
-            producto_principal_id = int(request.POST.get("producto_principal_id", "") or 0)
-        except (TypeError, ValueError):
-            producto_principal_id = 0
-        if not producto_principal_id:
-            messages.error(
-                request,
-                "Debe seleccionar un producto principal para armar el APU.",
-            )
-            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+        # ── 2. Determinar modo de rendimiento y validar entrada ──────────────
+        modo_rendimiento = request.POST.get("modo_rendimiento")
+        parametros_rendimiento = {}
+        log_msg_part = ""
 
-        # 3. Validar que el producto pertenece a las líneas finales ──────────
-        opciones = productos_principal_opciones(validacion["lineas_finales"])
-        elegido = next(
-            (o for o in opciones if o["producto_id"] == producto_principal_id),
-            None,
-        )
-        if elegido is None:
-            messages.error(
-                request,
-                "El producto principal debe pertenecer a las líneas finales del despiece.",
-            )
-            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+        if modo_rendimiento == "BASE_APU":
+            # Modo Base APU: no requiere producto principal. La base se recalcula en backend.
+            base_apu_data = calcular_base_apu_backend(dm)
+            if not base_apu_data["valida"]:
+                messages.error(request, "No se pudo calcular una Base APU válida. Revise las variables de entrada.")
+                return redirect("ingenieria:despiece_maestro", pk=dm.pk)
 
-        cantidad_base = elegido["cantidad_base"]
-        unidad_base = elegido["unidad"] or ""
+            cantidad_base = base_apu_data["total"]
+            unidad_base = base_apu_data["unidad"]
+            parametros_rendimiento = {
+                "producto_principal_id": None,
+                "cantidad_base": str(cantidad_base),
+                "unidad_base": unidad_base,
+                "modo_rendimiento": "BASE_APU",
+            }
+            log_msg_part = f"con Base APU (cant_base={cantidad_base} {unidad_base})"
 
-        # 4. Cantidad base > 0 (regla obligatoria, recalculada en backend) ───
-        if not cantidad_base or Decimal(str(cantidad_base)) <= Decimal("0"):
-            messages.error(
-                request,
-                "La cantidad base del producto principal debe ser mayor que cero.",
+        else:  # Fallback a PRODUCTO_PRINCIPAL
+            try:
+                producto_principal_id = int(request.POST.get("producto_principal_id", "") or 0)
+            except (TypeError, ValueError):
+                producto_principal_id = 0
+            if not producto_principal_id:
+                messages.error(request, "Debe seleccionar un producto principal para armar el APU.")
+                return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+            opciones = productos_principal_opciones(validacion["lineas_finales"])
+            elegido = next(
+                (o for o in opciones if o["producto_id"] == producto_principal_id),
+                None,
             )
-            return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+            if elegido is None:
+                messages.error(request, "El producto principal debe pertenecer a las líneas finales del despiece.")
+                return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+            cantidad_base = elegido["cantidad_base"]
+            unidad_base = elegido["unidad"] or ""
+
+            if not cantidad_base or Decimal(str(cantidad_base)) <= Decimal("0"):
+                messages.error(request, "La cantidad base del producto principal debe ser mayor que cero.")
+                return redirect("ingenieria:despiece_maestro", pk=dm.pk)
+
+            parametros_rendimiento = {
+                "producto_principal_id": producto_principal_id,
+                "cantidad_base": str(cantidad_base),
+                "unidad_base": unidad_base,
+                "modo_rendimiento": "PRODUCTO_PRINCIPAL",
+            }
+            log_msg_part = (
+                f"con producto principal #{producto_principal_id} "
+                f"(cant_base={cantidad_base} {unidad_base})"
+            )
 
         # ── 5. Sincronización + generación (mismo flujo que APUGenerar…) ─────
         try:
@@ -1562,7 +1657,6 @@ class APUArmarDesdeDespieceView(View):
                     sistema=dm.subsistema.sistema,
                     subsistema=dm.subsistema,
                 )
-
                 # Variables_entrada del despiece → parametros_entrada del PS
                 if dm.variables_entrada:
                     ps.parametros_entrada = {
@@ -1570,15 +1664,9 @@ class APUArmarDesdeDespieceView(View):
                         **dm.variables_entrada,
                     }
 
-                # 6. Persistir producto principal en parametros_entrada ───────
-                # Sin migración: vive en el JSONField existente. La Fase 6F lo
-                # leerá para el cálculo de rendimiento.
                 ps.parametros_entrada = {
                     **(ps.parametros_entrada or {}),
-                    "producto_principal_id": producto_principal_id,
-                    "cantidad_base": str(cantidad_base),
-                    "unidad_base": unidad_base,
-                    "modo_rendimiento": "PRODUCTO_PRINCIPAL",
+                    **parametros_rendimiento,
                 }
                 ps.save(update_fields=["parametros_entrada"])
 
@@ -1720,17 +1808,16 @@ class APUArmarDesdeDespieceView(View):
         verbo = "actualizado" if apu_existia else "armado"
         messages.success(
             request,
-            f"APU {verbo} con producto principal: {elegido['producto_nombre']} "
-            f"({cantidad_base} {unidad_base}).",
+            f"APU {verbo} correctamente. Base de rendimiento: {cantidad_base} {unidad_base}.",
         )
 
         registrar_log(
             request,
             accion="ARMAR_APU",
             descripcion=(
-                f"APU {verbo} con producto principal #{producto_principal_id} "
-                f"(cant_base={cantidad_base} {unidad_base}) desde despiece maestro "
-                f"#{dm.pk} — {ps.proyecto.consecutivo} / {ps.sistema.nombre}"
+                f"APU {verbo} {log_msg_part} "
+                f"desde despiece maestro #{dm.pk} — "
+                f"{ps.proyecto.consecutivo} / {ps.sistema.nombre}"
                 + (f" / {ps.subsistema.nombre}" if ps.subsistema_id else "")
             ),
             modelo_afectado="Proyecto",
@@ -2026,25 +2113,41 @@ class APULineaUpdateView(View):
     def post(self, request, pk):
         from apps.presupuestos.models import APULinea
         from decimal import Decimal
+
         linea = get_object_or_404(APULinea, pk=pk, editable=True)
+        apu_pk = linea.apu_id
+
         try:
-            rend_str   = request.POST.get("rendimiento", "").strip()
-            precio_str = request.POST.get("precio_referencia", "").strip()
+            if linea.tipo == TipoAPU.ADMINISTRACION:
+                porcentaje_str = request.POST.get("rendimiento", "").strip()
+                precio_str = request.POST.get("precio_referencia", "").strip()
 
-            if rend_str:
-                linea.rendimiento = Decimal(str(float(rend_str)))
-            if precio_str:
-                linea.precio_referencia = Decimal(str(float(precio_str)))
+                linea.rendimiento = Decimal(str(porcentaje_str)) if porcentaje_str else linea.rendimiento
+                linea.precio_referencia = Decimal(str(precio_str)) if precio_str else linea.precio_referencia
 
-            linea.save(update_fields=["rendimiento", "precio_referencia", "updated_at"])
-            linea.calcular()
+                valor_total = (linea.precio_referencia * linea.admin_cantidad * linea.admin_numero_meses * linea.rendimiento)
+                linea.costo_total = valor_total
+                linea.valor_total = valor_total
+                linea.costo_unitario = valor_total
+                linea.valor_unitario = valor_total
+                linea.save(update_fields=["rendimiento", "precio_referencia", "costo_total", "valor_total", "costo_unitario", "valor_unitario", "updated_at"])
+            else:
+                rend_str = request.POST.get("rendimiento", "").strip()
+                precio_str = request.POST.get("precio_referencia", "").strip()
+                if rend_str:
+                    linea.rendimiento = Decimal(str(float(rend_str)))
+                if precio_str:
+                    linea.precio_referencia = Decimal(str(float(precio_str)))
+                linea.save(update_fields=["rendimiento", "precio_referencia", "updated_at"])
+                linea.calcular() # El método calcular() ya hace el save final
+
             linea.apu.recalcular()
             messages.success(request, f"Línea «{linea.descripcion}» actualizada.")
         except Exception as exc:
             messages.error(request, f"Error al actualizar línea: {exc}")
             logger.exception("[APULineaUpdateView] Error línea %s", pk)
 
-        return redirect(reverse("presupuestos:apu_detail", args=[linea.apu.pk]))
+        return redirect(reverse("presupuestos:apu_detail", args=[apu_pk]))
 
 
 class APUArchivarView(View):
@@ -2077,6 +2180,53 @@ class APUArchivarView(View):
         return redirect("presupuestos:apu_detail", pk=pk)
 
 
+class APUProyectoEliminarView(View):
+    """
+    POST /presupuestos/apu/<pk>/eliminar/
+
+    Eliminación física de un APU. Solo disponible para el rol
+    ADMINISTRADOR global; el resto debe usar `apu_archivar` para
+    conservar trazabilidad.
+
+    Delega en `eliminar_apu_admin` (servicio explícito) que borra en orden:
+    APUs consolidados dependientes, cotizaciones/snapshots, relaciones
+    `APUConsolidadoOrigen`, `APUDespieceIncluido` y, finalmente, el APU.
+    """
+
+    def post(self, request, pk, *args, **kwargs):
+        from apps.common.auth import es_admin, get_usuario_actual
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        if not es_admin(request):
+            messages.error(
+                request,
+                "Solo el administrador global puede eliminar físicamente un APU. "
+                "Para conservar trazabilidad, archive el APU.",
+            )
+            return redirect("presupuestos:apu_detail", pk=pk)
+        nombre = apu.nombre
+        proyecto_pk = None
+        try:
+            proyecto_pk = apu.proyecto_sistema.proyecto_id
+        except Exception:
+            try:
+                proyecto_pk = apu.proyecto_id
+            except Exception:
+                proyecto_pk = None
+        try:
+            from apps.presupuestos.services.admin_eliminacion import (
+                eliminar_apu_admin,
+            )
+            eliminar_apu_admin(apu, usuario=get_usuario_actual(request))
+        except Exception as exc:
+            logger.exception("[APUProyectoEliminarView] Error en APU pk=%s", pk)
+            messages.error(request, f"No se pudo eliminar el APU «{nombre}»: {exc}")
+            return redirect("presupuestos:apu_detail", pk=pk)
+        messages.success(request, f"APU «{nombre}» eliminado definitivamente.")
+        if proyecto_pk:
+            return redirect("comercial:proyecto_detail", pk=proyecto_pk)
+        return redirect("presupuestos:apu_list")
+
+
 class APULineaDeleteView(View):
     """
     POST /presupuestos/apu/linea/<pk>/eliminar/
@@ -2101,7 +2251,13 @@ class APUAdminView(View):
     """
     POST /presupuestos/apu/<pk>/administrativo/
 
-    Acepta ítems del catálogo como descripcion[] + precio_total[].
+    Recibe los ítems seleccionados del modal "Configurar administración":
+      item_id[]    — PK del ItemCatalogoAPU
+      cantidad[]   — cantidad para cada ítem
+      porcentaje[] — porcentaje en % (e.g. 100 → 1.0, 50 → 0.5)
+
+    Llama a generar_administracion_desde_catalogo() con la fórmula:
+      valor_total = valor_dia * dias_duracion * cantidad * porcentaje
     Reemplaza todas las líneas ADMINISTRACION previas.
     """
     def post(self, request, pk):
@@ -2109,31 +2265,35 @@ class APUAdminView(View):
         try:
             from apps.presupuestos.services.apu_service import APUService
 
-            descripciones   = request.POST.getlist("descripcion[]")
-            precios_totales = request.POST.getlist("precio_total[]")
+            item_ids   = request.POST.getlist("item_id[]")
+            cantidades = request.POST.getlist("cantidad[]")
+            porcentajes = request.POST.getlist("porcentaje[]")
 
-            items = []
-            for desc, precio_str in zip(descripciones, precios_totales):
-                desc = (desc or "").strip()
-                if not desc or not precio_str:
-                    continue
+            items_data = []
+            for item_id_str, cant_str, pct_str in zip(item_ids, cantidades, porcentajes):
                 try:
-                    precio = float(precio_str)
-                    if precio >= 0:
-                        items.append({"descripcion": desc, "precio_total": precio})
+                    item_id = int(item_id_str)
+                    cantidad = max(int(cant_str or 1), 1)
+                    pct_pct = float(pct_str or 100)
+                    porcentaje = pct_pct / 100.0
+                    if porcentaje < 0:
+                        porcentaje = 0.0
+                    items_data.append({
+                        "item_id": item_id,
+                        "cantidad": cantidad,
+                        "porcentaje": porcentaje,
+                    })
                 except (ValueError, TypeError):
-                    pass
+                    continue
 
-            if not items:
-                messages.warning(request, "No se ingresaron ítems de administración válidos.")
+            if not items_data:
+                messages.warning(request, "No se seleccionaron ítems de administración válidos.")
                 return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
-            apu.lineas.filter(tipo="ADMINISTRACION").delete()
             svc = APUService.for_apu(apu)
-            for item in items:
-                svc.generar_administracion_item(item["descripcion"], item["precio_total"])
+            svc.generar_administracion_desde_catalogo(items_data)
             svc.finalizar()
-            messages.success(request, f"{len(items)} ítem(s) de administración registrados.")
+            messages.success(request, f"{len(items_data)} ítem(s) de administración registrados.")
         except Exception as exc:
             messages.error(request, f"Error al registrar administrativo: {exc}")
             logger.exception("[APUAdminView] Error APU %s", pk)
@@ -2430,52 +2590,21 @@ class APUPDFClienteView(View):
                 + (f" / {ps.subsistema.nombre}" if ps.subsistema else "")
             )
 
-        # ── Construir secciones consolidadas ─────────────────────────────────
-        SECCIONES_CONFIG = [
-            ("MATERIALES",          "Suministro",                 moneda_principal),
-            ("MANO_DE_OBRA",        "Mano de Obra / Instalación", "COP"),
-            ("HERRAMIENTAS_EQUIPOS","Herramientas y Equipos",      "COP"),
-            ("TRANSPORTE",          "Transporte y Logística",      "COP"),
-            ("ADMINISTRACION",      "Administración",              "COP"),
-        ]
-        secciones = []
-        for tipo_key, tipo_label, moneda_sec in SECCIONES_CONFIG:
-            lineas_tipo = [l for l in lineas_qs if l.tipo == tipo_key]
-            if not lineas_tipo:
-                continue
-            valor_subtotal = sum(Decimal(str(l.valor_total or 0)) for l in lineas_tipo)
-            if valor_subtotal <= 0:
-                continue
-            # Calcular precio unitario de venta como subtotal / qty_principal
-            qty = qty_principal if qty_principal > 0 else Decimal("1")
-            valor_unitario = (valor_subtotal / qty).quantize(Decimal("0.1"))
-            iva_factor = Decimal(str(apu.iva_pct or 0)) / Decimal("100")
-            iva_monto = (valor_subtotal * iva_factor).quantize(Decimal("0.1")) if apu.aplica_iva else Decimal("0")
-            total_con_iva = valor_subtotal + iva_monto
-            secciones.append({
-                "tipo": tipo_key,
-                "label": tipo_label,
-                "descripcion": f"{tipo_label} — {desc_sistema}",
-                "unidad": unidad_principal,
-                "cantidad": qty,
-                "valor_unitario": valor_unitario,
-                "subtotal": valor_subtotal,
-                "iva_monto": iva_monto,
-                "total_con_iva": total_con_iva,
-                "moneda": moneda_sec,
-                "aplica_iva": apu.aplica_iva,
-                "iva_pct": apu.iva_pct,
-            })
-
-        # ── Fichas técnicas ───────────────────────────────────────────────────
-        productos_con_ficha = []
-        vistos = set()
-        for linea in lineas_qs:
-            if linea.despiece_linea and linea.despiece_linea.producto:
-                prod = linea.despiece_linea.producto
-                if prod.pk not in vistos and prod.ficha_tecnica:
-                    productos_con_ficha.append(prod)
-                    vistos.add(prod.pk)
+        # ── Construir ítem comercial único para cotización cliente ───────────
+        # Un solo ítem representa el alcance completo del sistema.
+        # El valor unitario deriva de resumen.subtotal_con_aiu / cantidad.
+        # No se expone el desglose interno de costos por categoría.
+        qty = qty_principal if qty_principal > 0 else Decimal("1")
+        subtotal_comercial = Decimal(str(resumen.get("subtotal_con_aiu", 0) or 0))
+        valor_unitario_c = (subtotal_comercial / qty).quantize(Decimal("0.01")) if subtotal_comercial else Decimal("0")
+        items_cliente = [{
+            "item": "1,0",
+            "descripcion": desc_sistema,
+            "unidad": unidad_principal,
+            "cantidad": qty,
+            "valor_unitario": valor_unitario_c,
+            "subtotal": subtotal_comercial,
+        }]
 
         # Fase 11.5.2 — proyecto contenedor para cabecera comercial
         # (en consolidado ps puede ser None pero apu.proyecto sí existe).
@@ -2485,8 +2614,7 @@ class APUPDFClienteView(View):
             "ps": ps,
             "proyecto": proyecto,
             "resumen": resumen,
-            "secciones": secciones,
-            "productos_con_ficha": productos_con_ficha,
+            "items_cliente": items_cliente,
             "fecha_generacion": date.today().strftime("%d/%m/%Y"),
             "request": request,
         }
@@ -2861,9 +2989,19 @@ class APUAprobarModalidadView(View):
                     raise ValueError(f"Porcentaje de {label} no puede ser negativo.")
                 return val
 
-            pct_admin = _parse_pct(request.POST.get("aiu_final_admin_pct"), "Administración")
+            # Fase AIU — el % Admin enviado por el form se IGNORA (ahora es
+            # readonly/derivado). Se persiste el % derivado calculado a partir
+            # de subtotal_administracion / base_directa_sin_admin para que el
+            # snapshot histórico refleje el valor real al momento de aprobar.
             pct_imprev = _parse_pct(request.POST.get("aiu_final_imprevistos_pct"), "Imprevistos")
             pct_util = _parse_pct(request.POST.get("aiu_final_utilidad_pct"), "Utilidad")
+
+            modalidades_calc = apu.calcular_modalidades_aiu(pct_override={
+                "imprevistos": pct_imprev or Decimal("0"),
+                "utilidad":    pct_util  or Decimal("0"),
+            })
+            modalidad_key = "modalidad1" if modalidad == "1" else "modalidad2"
+            pct_admin = modalidades_calc[modalidad_key]["admin_pct"]
 
             # Fase 12.2 — aprobado_por = usuario en sesión, ignorar campos del form.
             aprobador = get_usuario_actual(request)
@@ -3285,19 +3423,31 @@ class APUCotizacionFinalView(View):
 
     GET /presupuestos/apu/<pk>/cotizacion/
 
-    - Si el APU no tiene modalidad AIU aprobada, muestra Vista preliminar con
-      ambas modalidades como referencia y banner de advertencia.
-    - Si el APU tiene modalidad aprobada, muestra la cotización oficial.
-    - No genera PDF en esta fase; es una vista comercial calculada en pantalla.
+    - Si existe snapshot aprobado (CotizacionAPU con estado=APROBADA): muestra
+      los valores congelados del snapshot para que coincidan con el PDF oficial
+      ya entregado al cliente.
+    - Si no existe snapshot (APU sin aprobación o aprobado sin snapshot):
+      calcula en vivo con get_resumen_cotizacion().
+    - En ambos casos el template es el mismo; "resumen" conserva la misma forma.
     """
     template_name = "presupuestos/apu_cotizacion_final.html"
 
     def get(self, request, pk):
+        from apps.presupuestos.services import CotizacionSnapshotService
+
         apu = get_object_or_404(APUProyecto, pk=pk)
-        resumen = apu.get_resumen_cotizacion()
+        snapshot = CotizacionSnapshotService.obtener_snapshot_vigente(apu)
+
+        if snapshot is not None:
+            ctx_snap = CotizacionSnapshotService.construir_contexto_pdf(snapshot)
+            resumen = ctx_snap["resumen"]
+        else:
+            resumen = apu.get_resumen_cotizacion()
+
         return render(request, self.template_name, {
             "apu": apu,
             "resumen": resumen,
+            "snapshot": snapshot,
         })
 
 

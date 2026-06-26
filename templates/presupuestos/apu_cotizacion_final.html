@@ -156,29 +156,25 @@
           <td class="ps-3">Mano de obra / Personal</td>
           <td class="text-end pe-3">{{ resumen.subtotal_mano_obra|currency_nodec }}</td>
         </tr>
-        <tr>
-          <td class="ps-3">Administración</td>
-          <td class="text-end pe-3">{{ resumen.subtotal_administracion|currency_nodec }}</td>
-        </tr>
         <tr class="table-secondary fw-semibold">
-          <td class="ps-3">Subtotal costos directos</td>
+          <td class="ps-3">Subtotal costos directos (base AIU)</td>
           <td class="text-end pe-3">{{ resumen.subtotal_directos_tecnico|currency_nodec }}</td>
         </tr>
         <tr>
           <td class="ps-3">
-            Administración AIU ({{ resumen.porcentaje_admin }}%)
+            A — Administración ({{ resumen.porcentaje_admin }}%)
           </td>
           <td class="text-end pe-3">{{ resumen.valor_admin|currency_nodec }}</td>
         </tr>
         <tr>
           <td class="ps-3">
-            Imprevistos AIU ({{ resumen.porcentaje_imprevistos }}%)
+            I — Imprevistos ({{ resumen.porcentaje_imprevistos }}%)
           </td>
           <td class="text-end pe-3">{{ resumen.valor_imprevistos|currency_nodec }}</td>
         </tr>
         <tr>
           <td class="ps-3">
-            Utilidad AIU ({{ resumen.porcentaje_utilidad }}%)
+            U — Utilidad ({{ resumen.porcentaje_utilidad }}%)
           </td>
           <td class="text-end pe-3">{{ resumen.valor_utilidad|currency_nodec }}</td>
         </tr>
@@ -206,7 +202,8 @@
     </table>
   </div>
   <div class="card-footer small text-muted">
-    Fórmula: subtotal directos + AIU + garantía Red Shield + IVA sobre Utilidad.
+    Fórmula: SubtotalConAIU (base directa + A + I + U) + garantía Red Shield + IVA sobre subtotal con AIU.
+    Administración entra como A del AIU; no se suma dos veces.
   </div>
 </div>
 
@@ -243,7 +240,7 @@
     </table>
   </div>
   <div class="card-footer small text-muted">
-    El gran total aquí es solo referencia (sin IVA). El total final se calcula al aprobar una modalidad e incluye IVA sobre Utilidad.
+    Gran total de referencia (sin IVA). Al aprobar una modalidad, el IVA se calcula sobre el subtotal con AIU.
   </div>
 </div>
 {% endif %}

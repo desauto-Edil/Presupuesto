@@ -1,9 +1,6 @@
 {% extends "base.html" %}
 
-{# Template default de DeleteView. Mantiene compatibilidad con todas las
-   vistas existentes (configuracion, ingenieria, catalogos) que apuntan a
-   "confirm_delete.html". El render queda igual que antes — sólo extrae la
-   tarjeta a un partial reutilizable. #}
+{% comment %}Template default de DeleteView. Mantiene compatibilidad con todas las vistas existentes (configuracion, ingenieria, catalogos) que apuntan a "confirm_delete.html". El render queda igual que antes — sólo extrae la tarjeta a un partial reutilizable.{% endcomment %}
 
 {% block title %}Confirmar eliminación · Andicost{% endblock %}
 {% block page_title %}Eliminar{% endblock %}

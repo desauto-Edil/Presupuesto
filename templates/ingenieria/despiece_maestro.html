@@ -230,8 +230,19 @@
 .prod-opt-empty  { padding: 10px 12px; text-align: center; color: #bbb; font-size: 12px; }
 
 /* Chip de advertencia no bloqueante por unidad/presentación */
-.prod-warning-slot { margin-top: 4px; min-height: 0; }
+.prod-warning-slot { margin-top: 4px; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
 .prod-warning-slot:empty { display: none; }
+/* Coherencia Producto ↔ variable OPCION_UNICA (validación informativa) */
+.prod-warning-chip--ok {
+  background: rgba(22,101,52,.12) !important;
+  color: #166534 !important;
+  border-color: rgba(22,101,52,.30) !important;
+}
+.prod-warning-chip--info {
+  background: rgba(202,138,4,.08) !important;
+  color: #92400e !important;
+  border-color: rgba(202,138,4,.20) !important;
+}
 .prod-warning-chip {
   display: inline-flex; align-items: center; gap: 5px;
   background: rgba(245,158,11,.13);
@@ -339,6 +350,14 @@
                        color:var(--theme-accent);text-decoration:underline;cursor:pointer;">
           Ver todas
         </button>
+      </div>
+      {% endif %}
+      {% if not variables_requeridas and not variables_extra %}
+      <div style="font-size:11.5px;color:var(--ink-soft);background:var(--surface);
+                  border:1px dashed var(--border);border-radius:6px;
+                  padding:9px 12px;line-height:1.5;">
+        <i class="bi bi-info-circle" style="margin-right:4px;color:var(--theme-accent);"></i>
+        No se encontraron variables aplicables para los subconjuntos seleccionados.
       </div>
       {% endif %}
       {% if variables_requeridas %}
@@ -515,6 +534,11 @@ const PUEDE_APU            = {{ puede_generar_apu|yesno:"true,false" }};
 /* Mapa {variable_tecnica: label_visible} para mostrar etiqueta legible
    junto al nombre técnico en el modal de Detalle del cálculo. */
 const VAR_LABELS           = {{ var_labels_json|safe }};
+/* Fase 2C — Reglas de cascada entre variables OPCION_UNICA del subsistema.
+   Configuradas en Editar Subsistema (bloque 2.5). Cada regla activa:
+   { var_origen, val_origen, var_destino, val_destino }.
+   El click en un chip dispara _aplicarDependenciasVariables(). */
+const DEP_VARS             = {{ dependencias_variables_json|safe }};
 
 /* ── Estado global ───────────────────────────────────────────────────────── */
 let filasCalc       = [];   // líneas técnicas calculadas (flat)
@@ -548,6 +572,63 @@ function seleccionarChip(btn) {
   /* Sincronizar el input oculto */
   const inp = document.querySelector('.var-input[data-var="' + wrap.dataset.var + '"]');
   if (inp) inp.value = btn.dataset.val;
+  /* Fase 2C — Cascada de dependencias entre variables del subsistema. */
+  _aplicarDependenciasVariables(wrap.dataset.var, btn.dataset.val);
+}
+
+/* ── Fase 2C — Cascada de dependencias entre variables ───────────────────────
+ * Cuando el usuario selecciona un valor de una variable origen, busca reglas
+ * activas en DEP_VARS y aplica automáticamente el valor destino en la
+ * variable correspondiente. Anti-ciclo con `visited` (Set de var_origen ya
+ * procesadas en esta cadena). Si una variable destino no existe en el DOM
+ * (ej. fue oculta por filtro de subconjuntos), no rompe — se ignora.
+ */
+function _setVariableValue(varName, value) {
+  if (!varName) return false;
+  const sel = '.var-chips[data-var="' + CSS.escape(varName) + '"]';
+  const wrap = document.querySelector(sel);
+  if (!wrap) return false;
+  /* Sincronizar el input oculto (fuente de verdad). */
+  const inp = document.querySelector(
+    '.var-input[data-var="' + CSS.escape(varName) + '"]'
+  );
+  if (inp) inp.value = String(value);
+  /* Buscar el chip que corresponde al valor. */
+  const target = Array.from(wrap.querySelectorAll('.var-chip'))
+    .find(b => String(b.dataset.val) === String(value));
+  if (!target) return false;
+  /* Estilo: desactivar todos los chips del grupo, activar el target. */
+  wrap.querySelectorAll('.var-chip').forEach(b => {
+    b.classList.remove('var-chip--active');
+    b.style.background = 'transparent';
+    b.style.color = 'var(--theme-accent)';
+  });
+  target.classList.add('var-chip--active');
+  target.style.background = 'var(--theme-accent)';
+  target.style.color = '#fff';
+  return true;
+}
+
+function _aplicarDependenciasVariables(varOrigen, valOrigen, visited) {
+  if (!Array.isArray(DEP_VARS) || DEP_VARS.length === 0) return;
+  visited = visited || new Set();
+  if (visited.has(varOrigen)) return;          /* anti-ciclo */
+  visited.add(varOrigen);
+  DEP_VARS.forEach(d => {
+    if (!d || d.var_origen !== varOrigen) return;
+    if (String(d.val_origen) !== String(valOrigen)) return;
+    const ok = _setVariableValue(d.var_destino, d.val_destino);
+    if (ok) {
+      _aplicarDependenciasVariables(d.var_destino, d.val_destino, visited);
+    } else {
+      try {
+        console.warn('[deps] No se pudo aplicar',
+                     d.var_origen, '=', d.val_origen,
+                     '→', d.var_destino, '=', d.val_destino,
+                     '(chip o variable destino no encontrada)');
+      } catch (_) {}
+    }
+  });
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -661,12 +742,208 @@ function _unidadWarning(lineaUnidad, prod) {
 function _renderProdWarning(tr, lineaUnidad, prod) {
   const slot = tr.querySelector('.prod-warning-slot');
   if (!slot) return;
+  // Usar sub-span [data-warning="unidad"] para no pisar el chip de coherencia
+  // de presentación que vive en [data-warning="presentacion"].
+  let span = slot.querySelector('[data-warning="unidad"]');
   const text = _unidadWarning(lineaUnidad, prod);
-  if (!text) { slot.innerHTML = ''; return; }
-  slot.innerHTML =
-    `<span class="prod-warning-chip" title="${esc(text)}">` +
-    `<i class="bi bi-exclamation-triangle-fill"></i>${esc(text)}</span>`;
+  if (!text) { if (span) span.remove(); return; }
+  if (!span) {
+    span = document.createElement('span');
+    span.setAttribute('data-warning', 'unidad');
+    slot.prepend(span);
+  }
+  span.className = 'prod-warning-chip';
+  span.title = text;
+  span.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i>${esc(text)}`;
 }
+
+/* ── Coherencia presentación técnica ↔ variable OPCION_UNICA ────────────────
+ * Validación informativa, no bloqueante. Recorre los tokens de la fórmula del
+ * componente, identifica los que corresponden a variables OPCION_UNICA con
+ * opciones, y compara `prod.cantidad_presentacion` contra esas opciones con
+ * tolerancia 0.01.
+ *  - Verde:        match con una opción → "Presentación coherente: 87.96 m² · Label"
+ *  - Ámbar fuerte: hay variable OPCION_UNICA pero no hay match → advertencia
+ *  - Ámbar suave:  producto sin cantidad_presentacion configurada
+ *  - null:         la fórmula no usa ninguna variable OPCION_UNICA → no se pinta
+ */
+const _COHERENCIA_TOL = 0.01;
+const _TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]*/g;
+
+function _collectVarsOpcionUnica() {
+  // Lee del DOM las variables OPCION_UNICA presentes en la pantalla. Devuelve
+  // también el VALOR ACTUALMENTE SELECCIONADO desde el input oculto, que es la
+  // fuente de verdad mantenida por seleccionarChip(btn).
+  const map = {};
+  document.querySelectorAll('.var-chips[data-var]').forEach(wrap => {
+    const name = wrap.getAttribute('data-var');
+    if (!name) return;
+    const opciones = Array.from(wrap.querySelectorAll('button[data-val]'))
+      .map(b => String(b.getAttribute('data-val') || '').trim())
+      .filter(Boolean);
+    if (opciones.length === 0) return;
+    const labelEl = document.querySelector(`label[for="var_${name}"]`);
+    let label = name, unidad = '';
+    if (labelEl) {
+      const unitEl = labelEl.querySelector('.var-unit');
+      if (unitEl) unidad = unitEl.textContent.trim();
+      label = labelEl.textContent.replace(unidad, '').trim() || name;
+    }
+    const inputEl = document.querySelector(`input.var-input[data-var="${CSS.escape(name)}"]`);
+    const selected = inputEl ? String(inputEl.value || '').trim() : '';
+    map[name] = { opciones, label, unidad, selected };
+  });
+  return map;
+}
+
+function _normNum(s) {
+  // Acepta "87,96" / "87.96" / "87.9600". Devuelve Number o null.
+  if (s === null || s === undefined) return null;
+  const t = String(s).trim().replace(',', '.');
+  if (t === '') return null;
+  const n = parseFloat(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _normName(s) {
+  // Normaliza identificadores para comparación tolerante: lowercase + solo
+  // alfanuméricos. Así "anchoUtilDeck", "ancho_util_deck" y "AnchoUtilDeck"
+  // colapsan al mismo valor "anchoutildeck".
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function _coherenciaChipFor(prod, formula_texto, varsMap) {
+  // Fase 1 — Reglas estrictas:
+  //   1. Solo se valida si la fórmula referencia al menos una variable
+  //      OPCION_UNICA. Sin fallback global sobre el subsistema.
+  //   2. Se compara contra el VALOR SELECCIONADO de esa variable, NO contra
+  //      todas sus opciones.
+  //   3. Si hay varias referenciadas, se desambigua por unidad: la cuya
+  //      unidad coincide con prod.unidad_presentacion gana. Si no se puede
+  //      aislar exactamente una, info suave — nunca verde falso.
+  //   4. Producto sin cantidad_presentacion → info suave, sin búsquedas.
+  const formula = String(formula_texto || '');
+  if (!formula) return null;
+  const tokens = formula.match(_TOKEN_RE) || [];
+  const varNames = Object.keys(varsMap);
+
+  // Recolectar variables OPCION_UNICA referenciadas por la fórmula (estricto
+  // + tolerante a estilo de identificador).
+  const referenciadas = [];
+  const seen = new Set();
+  tokens.forEach(t => {
+    if (varsMap[t] && !seen.has(t)) {
+      seen.add(t);
+      referenciadas.push({ name: t, ...varsMap[t] });
+      return;
+    }
+    const tn = _normName(t);
+    if (!tn) return;
+    const found = varNames.find(v => _normName(v) === tn);
+    if (found && !seen.has(found)) {
+      seen.add(found);
+      referenciadas.push({ name: found, ...varsMap[found] });
+    }
+  });
+  if (referenciadas.length === 0) return null;  // fórmula no usa OPCION_UNICA
+
+  const prodUnidad = (prod && prod.unidad_presentacion)
+    ? ` ${prod.unidad_presentacion}` : '';
+
+  // Producto sin presentación técnica: no mostrar chip. La validación solo
+  // aplica si el producto tiene cantidad_presentacion configurada.
+  const cantNum = _normNum(prod && prod.cantidad_presentacion);
+  if (cantNum === null) return null;
+
+  // Desambiguar a UNA sola variable de presentación.
+  let candidata = null;
+  if (referenciadas.length === 1) {
+    candidata = referenciadas[0];
+  } else if (prod && prod.unidad_presentacion) {
+    const uProd = String(prod.unidad_presentacion).trim().toLowerCase();
+    const porUnidad = referenciadas.filter(
+      r => String(r.unidad || '').trim().toLowerCase() === uProd
+    );
+    if (porUnidad.length === 1) candidata = porUnidad[0];
+  }
+  if (!candidata) {
+    return {
+      kind: 'info',
+      text: 'No se pudo validar la presentación técnica contra una variable del cálculo.'
+    };
+  }
+
+  // Comparar contra el valor SELECCIONADO de la variable.
+  const selectedNum = _normNum(candidata.selected);
+  if (selectedNum === null) {
+    return {
+      kind: 'info',
+      text: `Selecciona el valor de ${candidata.label} para validar la presentación.`
+    };
+  }
+
+  if (Math.abs(selectedNum - cantNum) <= _COHERENCIA_TOL) {
+    return {
+      kind: 'ok',
+      text: `Presentación coherente: ${candidata.selected}${prodUnidad} · ${candidata.label}`
+    };
+  }
+
+  return {
+    kind: 'warn',
+    text: `El producto seleccionado tiene una presentación de ${cantNum}${prodUnidad}, pero ${candidata.label} está configurada en ${candidata.selected}${prodUnidad}.`
+  };
+}
+
+function _renderCoherenciaChip(tr, formula_texto, prod) {
+  const slot = tr.querySelector('.prod-warning-slot');
+  if (!slot) return;
+  let span = slot.querySelector('[data-warning="presentacion"]');
+  const varsMap = _collectVarsOpcionUnica();
+  const res = prod ? _coherenciaChipFor(prod, formula_texto, varsMap) : null;
+  if (!res) { if (span) span.remove(); return; }
+  if (!span) {
+    span = document.createElement('span');
+    span.setAttribute('data-warning', 'presentacion');
+    slot.appendChild(span);
+  }
+  const cls =
+    res.kind === 'ok'   ? 'prod-warning-chip prod-warning-chip--ok' :
+    res.kind === 'info' ? 'prod-warning-chip prod-warning-chip--info' :
+                          'prod-warning-chip';
+  const icon =
+    res.kind === 'ok'   ? 'bi-check-circle-fill' :
+    res.kind === 'info' ? 'bi-info-circle-fill'  :
+                          'bi-exclamation-triangle-fill';
+  span.className = cls;
+  span.title = res.text;
+  span.innerHTML = `<i class="bi ${icon}"></i>${esc(res.text)}`;
+}
+
+/* Re-pinta los chips de coherencia en todas las filas con producto cuando el
+ * usuario cambia el valor de una variable OPCION_UNICA (click en .var-chip
+ * dentro de .var-chips[data-var]). Usa tr._fila guardado por los selectores.
+ */
+function _rerenderCoherenciaTodos() {
+  document.querySelectorAll('tr').forEach(tr => {
+    if (!tr._fila || !tr.querySelector('.prod-warning-slot')) return;
+    _renderCoherenciaChip(tr, tr._fila.formula_texto, tr._fila._prod);
+  });
+}
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.var-chips[data-var] .var-chip[data-val]');
+  if (!btn) return;
+  // El handler inline seleccionarChip(btn) actualiza el input oculto antes
+  // que esto. Diferimos un tick para garantizar el orden.
+  setTimeout(_rerenderCoherenciaTodos, 0);
+});
+/* También para inputs NUMERO/TEXTO que sean OPCION_UNICA con opciones libres
+ * (no aplica al caso actual pero protege futuros estilos). */
+document.addEventListener('change', e => {
+  if (e.target && e.target.classList && e.target.classList.contains('var-input')) {
+    setTimeout(_rerenderCoherenciaTodos, 0);
+  }
+});
 
 function _displayProductoLabel(p) {
   // Etiqueta visible cuando se selecciona un producto: nombre + presentación si existe.
@@ -722,6 +999,9 @@ function initSelector(tr, fila) {
   if (!inp) return;
 
   const lineaUnidad = fila.unidad_apu || fila.unidad || '';
+  // Guardar referencia liviana para re-render desde el listener global de
+  // cambios de variable.
+  tr._fila = fila;
 
   if (fila._prod?.producto_nombre) {
     inp.value = _displayProductoLabel({
@@ -732,6 +1012,7 @@ function initSelector(tr, fila) {
     clear.classList.add('visible');
   }
   _renderProdWarning(tr, lineaUnidad, fila._prod);
+  _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
 
   inp.addEventListener('input', () => {
     const q = inp.value.trim();
@@ -743,6 +1024,7 @@ function initSelector(tr, fila) {
         fila._prod = _buildProdObj(p);
         _updateProdUI(tr, fila._prod);
         _renderProdWarning(tr, lineaUnidad, fila._prod);
+        _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
       }), 260);
   });
 
@@ -753,6 +1035,7 @@ function initSelector(tr, fila) {
       fila._prod = _buildProdObj(p);
       _updateProdUI(tr, fila._prod);
       _renderProdWarning(tr, lineaUnidad, fila._prod);
+      _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
     });
   });
 
@@ -765,6 +1048,7 @@ function initSelector(tr, fila) {
     if (precioEl) precioEl.innerHTML  = '<span class="text-pendiente">Sin producto</span>';
     if (fechaEl)  fechaEl.textContent = '—';
     _renderProdWarning(tr, lineaUnidad, null);
+    _renderCoherenciaChip(tr, fila.formula_texto, null);
   });
 }
 
@@ -776,6 +1060,7 @@ function initSelectorConsolidada(tr, c) {
   if (!inp) return;
 
   const lineaUnidad = c.unidad || '';
+  tr._fila = c;
 
   if (c._prod?.producto_nombre) {
     inp.value = _displayProductoLabel({
@@ -786,12 +1071,14 @@ function initSelectorConsolidada(tr, c) {
     clear.classList.add('visible');
   }
   _renderProdWarning(tr, lineaUnidad, c._prod);
+  _renderCoherenciaChip(tr, c.formula_texto, c._prod);
 
   const onSelect = p => {
     inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
     c._prod = _buildProdObj(p);
     _updateProdUI(tr, c._prod);
     _renderProdWarning(tr, lineaUnidad, c._prod);
+    _renderCoherenciaChip(tr, c.formula_texto, c._prod);
   };
 
   inp.addEventListener('input', () => {
@@ -815,6 +1102,7 @@ function initSelectorConsolidada(tr, c) {
     if (precioEl) precioEl.innerHTML  = '<span class="text-pendiente">Sin producto</span>';
     if (fechaEl)  fechaEl.textContent = '—';
     _renderProdWarning(tr, lineaUnidad, null);
+    _renderCoherenciaChip(tr, c.formula_texto, null);
   });
 }
 

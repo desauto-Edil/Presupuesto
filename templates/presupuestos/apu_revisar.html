@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load catalogo_tags %}
 
 {% block title %}Revisión APU — {{ apu.nombre }}{% endblock %}
 {% block nav_apu %}active{% endblock %}
@@ -156,18 +157,18 @@
   <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 24px;margin-bottom:20px;">
     <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;">Resumen técnico del APU</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 18px;font-size:12.5px;">
-      <div><div style="color:var(--ink-soft);font-size:11px;">Materiales (técnico)</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.materiales|floatformat:0 }}</div></div>
-      <div><div style="color:var(--ink-soft);font-size:11px;">Herramientas</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.herramientas|floatformat:0 }}</div></div>
-      <div><div style="color:var(--ink-soft);font-size:11px;">Transporte</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.transporte|floatformat:0 }}</div></div>
-      <div><div style="color:var(--ink-soft);font-size:11px;">Mano de obra</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.mano_obra|floatformat:0 }}</div></div>
-      <div><div style="color:var(--ink-soft);font-size:11px;">Administración</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">${{ m.subtotales.administracion|floatformat:0 }}</div></div>
-      <div><div style="color:var(--ink-soft);font-size:11px;">Subtotal directos</div><div style="font-weight:700;font-variant-numeric:tabular-nums;">${{ m.subtotales.total|floatformat:0 }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Materiales</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">{{ m.subtotales.materiales|currency:"COP" }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Herramientas</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">{{ m.subtotales.herramientas|currency:"COP" }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Transporte</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">{{ m.subtotales.transporte|currency:"COP" }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Mano de obra</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">{{ m.subtotales.mano_obra|currency:"COP" }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Administración</div><div style="font-weight:600;font-variant-numeric:tabular-nums;">{{ m.subtotales.administracion|currency:"COP" }}</div></div>
+      <div><div style="color:var(--ink-soft);font-size:11px;">Subtotal directos</div><div style="font-weight:700;font-variant-numeric:tabular-nums;">{{ m.subtotales.total|currency:"COP" }}</div></div>
     </div>
     {% if apu.aplica_garantia and apu.garantia_valor_recargo %}
     <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);font-size:12px;color:var(--ink);">
       <i class="bi bi-shield-check me-1" style="color:#e74c3c;"></i>
       <strong>Garantía Red Shield:</strong>
-      recargo de <span style="font-variant-numeric:tabular-nums;">${{ apu.garantia_valor_recargo|floatformat:0 }}</span>
+      recargo de <span style="font-variant-numeric:tabular-nums;">{{ apu.garantia_valor_recargo|currency:"COP" }}</span>
       sobre Materiales ({{ apu.garantia_porcentaje_aplicado|floatformat:2 }}%).
       <span style="color:var(--ink-soft);">No entra en la base AIU; se suma al gran total.</span>
     </div>
@@ -191,9 +192,20 @@
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;">
       <div>
-        <label style="font-size:11.5px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Administración (%)</label>
+        <label style="font-size:11.5px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">
+          Administración (%)
+          <span style="font-size:9.5px;font-weight:500;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;">
+            · Derivado
+          </span>
+        </label>
         <input type="number" step="0.01" min="0" name="aiu_final_admin_pct" form="form-revisar"
-               value="{{ pct_form.admin }}" class="form-control form-control-sm" required>
+               value="{{ pct_form.admin }}" class="form-control form-control-sm" readonly
+               style="background:var(--surface);cursor:not-allowed;">
+        <div style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;line-height:1.4;">
+          Calculado automáticamente desde Administración / base directa sin
+          administración. Si necesitas ajustarlo, modifica los costos
+          administrativos del APU.
+        </div>
       </div>
       <div>
         <label style="font-size:11.5px;font-weight:600;color:var(--ink);display:block;margin-bottom:4px;">Imprevistos (%)</label>
@@ -216,57 +228,125 @@
     </div>
   </form>
 
-  <!-- ── Tabla Modalidades AIU ─────────────────────────────────────────── -->
+  <!-- ── Cards verticales de modalidades AIU ───────────────────────────── -->
   <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:24px;">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);">
       <div style="font-size:14px;font-weight:700;color:var(--ink);">Modalidades AIU del proyecto</div>
       <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
         A ({{ m.porcentajes.admin|floatformat:2 }}%) + I ({{ m.porcentajes.imprevistos|floatformat:2 }}%) + U ({{ m.porcentajes.utilidad|floatformat:2 }}%)
         {% if m.garantia_recargo %}
-        · + Garantía Red Shield ${{ m.garantia_recargo|floatformat:0 }}
+        · + Garantía Red Shield {{ m.garantia_recargo|currency:"COP" }}
         {% endif %}
       </div>
     </div>
-    <div style="overflow-x:auto;">
-      <table class="table table-sm mb-0" style="font-size:12.5px;">
-        <thead style="background:var(--sidebar);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">
-          <tr>
-            <th style="padding:10px 16px;">Modalidad</th>
-            <th style="padding:10px 16px;text-align:right;">Base AIU</th>
-            <th style="padding:10px 16px;text-align:right;">Administración</th>
-            <th style="padding:10px 16px;text-align:right;">Imprevistos</th>
-            <th style="padding:10px 16px;text-align:right;">Utilidad</th>
-            <th style="padding:10px 16px;text-align:right;">Total AIU</th>
-            <th style="padding:10px 16px;text-align:right;">Gran Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr style="border-bottom:1px solid var(--border);">
-            <td style="padding:14px 16px;font-weight:600;color:var(--ink);">
-              <span style="display:block;">Modalidad 1</span>
-              <span style="font-size:11px;color:var(--ink-soft);font-weight:400;">{{ m.modalidad1.label }}</span>
-            </td>
-            <td style="padding:14px 16px;text-align:right;font-variant-numeric:tabular-nums;">${{ m.modalidad1.base|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-variant-numeric:tabular-nums;">${{ m.modalidad1.admin|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-variant-numeric:tabular-nums;">${{ m.modalidad1.imprevistos|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-variant-numeric:tabular-nums;">${{ m.modalidad1.utilidad|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${{ m.modalidad1.total_aiu|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-weight:800;font-size:14px;color:#17a85e;font-variant-numeric:tabular-nums;">${{ m.modalidad1.gran_total|floatformat:0 }}</td>
-          </tr>
-          <tr>
-            <td style="padding:14px 16px;font-weight:600;color:var(--ink);">
-              <span style="display:block;">Modalidad 2</span>
-              <span style="font-size:11px;color:var(--ink-soft);font-weight:400;">{{ m.modalidad2.label }}</span>
-            </td>
-            <td style="padding:14px 16px;text-align:right;font-variant-numeric:tabular-nums;">${{ m.modalidad2.base|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-variant-numeric:tabular-nums;">${{ m.modalidad2.admin|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-variant-numeric:tabular-nums;">${{ m.modalidad2.imprevistos|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-variant-numeric:tabular-nums;">${{ m.modalidad2.utilidad|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">${{ m.modalidad2.total_aiu|floatformat:0 }}</td>
-            <td style="padding:14px 16px;text-align:right;font-weight:800;font-size:14px;color:#17a85e;font-variant-numeric:tabular-nums;">${{ m.modalidad2.gran_total|floatformat:0 }}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;padding:16px 20px 20px;">
+
+      {# ── Card Modalidad 1 #}
+      {% with md=m.modalidad1 %}
+      <div style="border:{% if apu.modalidad_aiu_seleccionada == '1' %}2px solid #28a745{% else %}1px solid var(--border){% endif %};border-radius:12px;overflow:hidden;background:{% if apu.modalidad_aiu_seleccionada == '1' %}rgba(40,167,69,0.04){% else %}var(--card){% endif %};">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);">
+          <span style="font-size:13px;font-weight:700;color:var(--ink);">Modalidad 1</span>
+          {% if apu.modalidad_aiu_seleccionada == "1" %}<span class="badge bg-success ms-2" style="font-size:10px;">Aprobada</span>{% endif %}
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">{{ md.label }}</div>
+        </div>
+        <div style="padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+            <span style="font-size:12px;color:var(--ink-soft);">Base AIU</span>
+            <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;">{{ md.base|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0 2px;">
+            <span style="font-size:12px;color:var(--ink);">A — Administración <span style="font-size:11px;color:var(--ink-soft);">{{ md.admin_pct|floatformat:2 }}%</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.admin|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 2px;">
+            <span style="font-size:12px;color:var(--ink);">I — Imprevistos <span style="font-size:11px;color:var(--ink-soft);">{{ m.porcentajes.imprevistos|floatformat:2 }}%</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.imprevistos|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
+            <span style="font-size:12px;color:var(--ink);">U — Utilidad <span style="font-size:11px;color:var(--ink-soft);">{{ m.porcentajes.utilidad|floatformat:2 }}%</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.utilidad|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;">
+            <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Subtotal con AIU</span>
+            <span style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;">{{ md.subtotal_con_aiu|currency:"COP" }}</span>
+          </div>
+          {% if m.garantia_recargo %}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 4px;">
+            <span style="font-size:12px;color:var(--ink-soft);">Garantía Red Shield</span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ m.garantia_recargo|currency:"COP" }}</span>
+          </div>
+          {% endif %}
+          {% if apu.aplica_iva and md.iva_valor %}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
+            <span style="font-size:12px;color:var(--ink-soft);">IVA final sobre subtotal con AIU <span style="font-size:11px;">({{ apu.iva_pct|floatformat:0 }}%)</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.iva_valor|currency:"COP" }}</span>
+          </div>
+          {% else %}
+          <div style="height:1px;background:var(--border);margin:6px 0;"></div>
+          {% endif %}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 0;">
+            <span style="font-size:13px;font-weight:700;color:var(--ink);">Gran total</span>
+            <span style="font-size:18px;font-weight:800;color:#17a85e;font-variant-numeric:tabular-nums;">{{ md.total_con_iva|currency:"COP" }}</span>
+          </div>
+        </div>
+      </div>
+      {% endwith %}
+
+      {# ── Card Modalidad 2 #}
+      {% with md=m.modalidad2 %}
+      <div style="border:{% if apu.modalidad_aiu_seleccionada == '2' %}2px solid #28a745{% else %}1px solid var(--border){% endif %};border-radius:12px;overflow:hidden;background:{% if apu.modalidad_aiu_seleccionada == '2' %}rgba(40,167,69,0.04){% else %}var(--card){% endif %};">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);">
+          <span style="font-size:13px;font-weight:700;color:var(--ink);">Modalidad 2</span>
+          {% if apu.modalidad_aiu_seleccionada == "2" %}<span class="badge bg-success ms-2" style="font-size:10px;">Aprobada</span>{% endif %}
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">{{ md.label }}</div>
+        </div>
+        <div style="padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0 4px;">
+            <span style="font-size:12px;color:var(--ink-soft);">Materiales (precio venta)</span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.valor_total_mat|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
+            <span style="font-size:12px;color:var(--ink-soft);">Base AIU <span style="font-size:10.5px;">(sin mat. ni adm.)</span></span>
+            <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;">{{ md.base|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0 2px;">
+            <span style="font-size:12px;color:var(--ink);">A — Administración <span style="font-size:11px;color:var(--ink-soft);">{{ md.admin_pct|floatformat:2 }}%</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.admin|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 2px;">
+            <span style="font-size:12px;color:var(--ink);">I — Imprevistos <span style="font-size:11px;color:var(--ink-soft);">{{ m.porcentajes.imprevistos|floatformat:2 }}%</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.imprevistos|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
+            <span style="font-size:12px;color:var(--ink);">U — Utilidad <span style="font-size:11px;color:var(--ink-soft);">{{ m.porcentajes.utilidad|floatformat:2 }}%</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.utilidad|currency:"COP" }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;">
+            <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Subtotal con AIU</span>
+            <span style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;">{{ md.subtotal_con_aiu|currency:"COP" }}</span>
+          </div>
+          {% if m.garantia_recargo %}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 4px;">
+            <span style="font-size:12px;color:var(--ink-soft);">Garantía Red Shield</span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ m.garantia_recargo|currency:"COP" }}</span>
+          </div>
+          {% endif %}
+          {% if apu.aplica_iva and md.iva_valor %}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
+            <span style="font-size:12px;color:var(--ink-soft);">IVA final sobre subtotal con AIU <span style="font-size:11px;">({{ apu.iva_pct|floatformat:0 }}%)</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.iva_valor|currency:"COP" }}</span>
+          </div>
+          {% else %}
+          <div style="height:1px;background:var(--border);margin:6px 0;"></div>
+          {% endif %}
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 0;">
+            <span style="font-size:13px;font-weight:700;color:var(--ink);">Gran total</span>
+            <span style="font-size:18px;font-weight:800;color:#17a85e;font-variant-numeric:tabular-nums;">{{ md.total_con_iva|currency:"COP" }}</span>
+          </div>
+        </div>
+      </div>
+      {% endwith %}
+
     </div>
   </div>
 

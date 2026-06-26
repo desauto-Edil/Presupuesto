@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load catalogo_tags %}
 
 {% block title %}APU — Lista{% endblock %}
 {% block nav_apu %}active{% endblock %}
@@ -101,9 +102,9 @@
         <td style="text-align:center;">{{ apu.total_lineas }}</td>
         <td class="td-sub" style="white-space:nowrap;">{{ apu.updated_at|date:"d/m/Y H:i" }}</td>
         <td>
-          <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
+          <a href="{% url 'presupuestos:apu_revisar' apu.pk %}"
              class="btn btn-sm btn-outline-primary" style="font-size:12px;">
-            <i class="bi bi-file-earmark-bar-graph"></i> Ver APU
+            <i class="bi bi-search"></i> Ir a la revisión
           </a>
         </td>
       </tr>

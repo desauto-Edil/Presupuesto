@@ -325,37 +325,50 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Limpieza defensiva de backdrops / body.modal-open / scroll-lock.
-   Razón: si por alguna razón Bootstrap deja huérfano un .modal-backdrop o
-   un .offcanvas-backdrop al cerrar (por ejemplo, al intentar cambiar entre
-   un modal y otro), la pantalla queda gris y bloqueada. Este observer
-   garantiza que al cerrar cualquier modal/offcanvas se restablece el body.
+   FASE 1 — Fix modales bloqueados en Solicitudes.
+
+   1) Cleanup conservador: solo escucha `hidden.bs.modal` / `hidden.bs.offcanvas`
+      con timeout largo (150ms) — deja que Bootstrap termine su flujo antes de
+      verificar si hay huérfanos. NO escucha Escape ni clicks de backdrop
+      (Bootstrap ya los maneja; agregar listeners propios producía backdrops
+      borrados prematuramente y la "pantalla gris" intermitente).
+
+   2) Relocate de modales al `<body>`: cualquier `.modal` que el partial detail
+      haya renderizado dentro de `.solpanel-detail` se reubica como hijo
+      directo de `<body>` antes del primer uso. Patrón Bootstrap-safe — elimina
+      el riesgo de stacking contexts ancestros (sidebar transform, etc.) que
+      puedan atrapar el modal.
    ───────────────────────────────────────────────────────────────────────── */
 (function () {
   function limpiarSiNoHayActivos() {
     var hayModalAbierto = document.querySelector('.modal.show');
     var hayOffcanvasAbierto = document.querySelector('.offcanvas.show');
-    if (!hayModalAbierto && !hayOffcanvasAbierto) {
-      document.body.classList.remove('modal-open');
-      document.body.style.removeProperty('overflow');
-      document.body.style.removeProperty('padding-right');
-      document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
-      document.querySelectorAll('.offcanvas-backdrop').forEach(function (b) { b.remove(); });
-    }
+    if (hayModalAbierto || hayOffcanvasAbierto) return;
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
+    document.querySelectorAll('.offcanvas-backdrop').forEach(function (b) { b.remove(); });
   }
-  document.addEventListener('hidden.bs.modal', function () { setTimeout(limpiarSiNoHayActivos, 20); });
-  document.addEventListener('hidden.bs.offcanvas', function () { setTimeout(limpiarSiNoHayActivos, 20); });
-  /* Salvavidas extra: tecla Escape — si quedó algo huérfano, lo limpia. */
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') setTimeout(limpiarSiNoHayActivos, 50);
+  document.addEventListener('hidden.bs.modal', function () {
+    setTimeout(limpiarSiNoHayActivos, 150);
   });
-  /* Doble clic en cualquier backdrop huérfano que quede después de 600ms
-     sin un modal visible: se considera basura y se remueve. */
-  document.addEventListener('click', function (e) {
-    if (e.target && e.target.classList && (e.target.classList.contains('modal-backdrop') || e.target.classList.contains('offcanvas-backdrop'))) {
-      setTimeout(limpiarSiNoHayActivos, 50);
-    }
+  document.addEventListener('hidden.bs.offcanvas', function () {
+    setTimeout(limpiarSiNoHayActivos, 150);
   });
+
+  /* Relocate de modales del panel detalle al <body>. Se ejecuta al cargar la
+     página y de nuevo cada vez que el evento `show.bs.modal` se dispara (por
+     si el detalle se re-renderizó por navegación con ?sel=). */
+  function reubicarModalesAlBody() {
+    document.querySelectorAll('.solpanel-detail .modal').forEach(function (m) {
+      if (m.parentElement !== document.body) {
+        document.body.appendChild(m);
+      }
+    });
+  }
+  document.addEventListener('DOMContentLoaded', reubicarModalesAlBody);
+  document.addEventListener('show.bs.modal', reubicarModalesAlBody);
 })();
 
 /* Toggle mostrar/ocultar la lista de solicitudes — estado persistido en localStorage */

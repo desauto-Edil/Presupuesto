@@ -164,10 +164,14 @@ class APUService:
             .filter(subsistema_id=ps.subsistema_id, tipo=tipo_apu, activo=True,
                     item_catalogo__activo=True)
             .order_by("orden", "item_catalogo__nombre")
-            .values("item_catalogo_id", "cantidad")
+            .values("item_catalogo_id", "cantidad", "rendimiento_override")
         )
         return [
-            {"item_id": row["item_catalogo_id"], "cantidad": row["cantidad"]}
+            {
+                "item_id": row["item_catalogo_id"],
+                "cantidad": row["cantidad"],
+                "porcentaje": row["rendimiento_override"],
+            }
             for row in qs
         ]
 
@@ -229,12 +233,90 @@ class APUService:
                     self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
                 )
 
+    @transaction.atomic
+    def _generar_administracion_detallada(self, items_data: List[Dict]) -> List[dict]:
+        """
+        Genera líneas de ADMINISTRACION usando valor diario real del ítem.
+
+        Fórmula: valor_total = valor_dia * dias_duracion * cantidad * porcentaje
+
+        Cálculo de valor_dia según tipo de ítem:
+          - Personal (salario_base > 0 o prestaciones > 0): (salario_base + prestaciones) / 30
+          - Herramienta (vida_util_dias):                    precio_base / vida_util_dias
+          - Unidad "mes":                                     precio_base / 30
+          - Unidad "dia":                                     precio_base
+          - Otros (hora, und, global…):                       precio_base
+            NOTA: unidad "hora" usa precio_base como fallback; no se multiplica por
+            horas/día porque no hay ese parámetro configurado en el sistema aún.
+
+        precio_referencia en APULinea almacena valor_dia (no precio_base bruto).
+        """
+        from apps.presupuestos.models import APULinea, ItemCatalogoAPU
+        from apps.common.choices import TipoAPU
+
+        if not items_data:
+            return []
+
+        self.apu.lineas.filter(tipo=TipoAPU.ADMINISTRACION).delete()
+
+        dias_duracion = self.apu.dias_duracion or 0
+        if dias_duracion <= 0:
+            raise ValueError("El parámetro 'Días de duración' del APU debe ser mayor que cero.")
+        dias_d = Decimal(str(dias_duracion))
+
+        creadas = []
+        for data in items_data:
+            item = ItemCatalogoAPU.objects.get(pk=data["item_id"])
+            cantidad = Decimal(str(data.get("cantidad", 1)))
+            porcentaje_raw = data.get("porcentaje")
+            porcentaje = Decimal(str(porcentaje_raw)) if porcentaje_raw is not None else Decimal("1.0")
+
+            # Calcular valor diario según tipo de ítem
+            if (item.salario_base and item.salario_base > 0) or (item.prestaciones and item.prestaciones > 0):
+                valor_dia = (item.salario_base + item.prestaciones) / Decimal("30")
+            elif item.vida_util_dias and item.vida_util_dias > 0:
+                valor_dia = item.precio_base / Decimal(str(item.vida_util_dias))
+            elif item.unidad == "mes":
+                valor_dia = item.precio_base / Decimal("30")
+            else:
+                # "dia", "hora" (fallback sin horas/día), "und", "global", etc.
+                valor_dia = item.precio_base
+
+            valor_dia = valor_dia.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+            valor_total = (valor_dia * dias_d * cantidad * porcentaje).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+
+            linea = APULinea.objects.create(
+                apu=self.apu,
+                tipo=TipoAPU.ADMINISTRACION,
+                item_catalogo=item,
+                descripcion=item.nombre,
+                rendimiento=porcentaje,
+                unidad=item.unidad,
+                precio_referencia=valor_dia,   # almacena valor_dia (no precio_base bruto)
+                costo_total=valor_total,
+                valor_total=valor_total,
+                costo_unitario=valor_total,
+                valor_unitario=valor_total,
+                iva_aplicado=False,
+                editable=True,
+            )
+            creadas.append(linea)
+
+        logger.info(
+            "[APUService] %d líneas de Administración para APU %s.", len(creadas), self.apu.pk
+        )
+        return creadas
+
     # ── Helpers: referencia del producto base (PowerGrip) ─────────────────────
 
     def _get_total_unidades(self) -> float:
         """
         Determina la cantidad de referencia del sistema (denominador del APU por unidad).
-        Prioridad:
+        Prioridad (Sub-fase D — base APU declarativa):
+          0. Suma de variables con `participa_en_base_apu=True` (NUEVO).
+             Si hay al menos una variable marcada y el resultado es > 0, se usa.
           1. variable_referencia_apu del subsistema (si está definida en parametros_entrada)
           2. Búsqueda genérica por _CLAVES_UNIDAD_REFERENCIA
           3. Fallback: area_total_m2 del proyecto
@@ -242,8 +324,47 @@ class APUService:
         """
         params = self.ps.parametros_entrada or {}
 
-        # 1. Variable explícita definida en el subsistema
+        # 0. Sub-fase D — Suma de variables marcadas como base APU.
         sub = self.ps.subsistema
+        if sub is not None:
+            try:
+                from apps.ingenieria.models import VariableSubsistema
+                vars_base = VariableSubsistema.objects.filter(
+                    subsistema=sub, participa_en_base_apu=True,
+                ).values_list("variable", flat=True)
+                area_base_apu = 0.0
+                hubo_marcadas = False
+                for nombre in vars_base:
+                    hubo_marcadas = True
+                    raw = params.get(nombre)
+                    if raw in (None, ""):
+                        continue
+                    try:
+                        area_base_apu += float(raw)
+                    except (ValueError, TypeError):
+                        continue
+                if hubo_marcadas and area_base_apu > 0:
+                    logger.debug(
+                        "[APUService] _get_total_unidades: area_base_apu=%.4f desde "
+                        "variables marcadas (PS %s)",
+                        area_base_apu, self.ps.pk,
+                    )
+                    return area_base_apu
+                if hubo_marcadas:
+                    # Hay variables marcadas pero suma <= 0: advertencia y caer al fallback.
+                    logger.warning(
+                        "[APUService] PS=%s: variables con participa_en_base_apu=True "
+                        "presentes pero su suma es 0 o no numérica. Cayendo al "
+                        "comportamiento anterior (variable_referencia_apu / producto principal).",
+                        self.ps.pk,
+                    )
+            except Exception:
+                logger.exception(
+                    "[APUService] PS=%s: error calculando area_base_apu — fallback al flujo previo.",
+                    self.ps.pk,
+                )
+
+        # 1. Variable explícita definida en el subsistema
         if sub and getattr(sub, "variable_referencia_apu", ""):
             val = params.get(sub.variable_referencia_apu)
             if val:
@@ -755,8 +876,13 @@ class APUService:
     def generar_administracion_desde_catalogo(self, items_data: List[Dict]) -> List[dict]:
         """Genera APULineas ADMINISTRACION usando ReglaAPUSubsistema del subsistema."""
         from apps.common.choices import TipoAPU
-        creadas = self._generar_categoria_desde_catalogo(TipoAPU.ADMINISTRACION, items_data)
-        logger.info("[APUService] %d categorías administración para APU %s.", len(creadas), self.apu.pk)
+
+        # Usar el nuevo flujo detallado para Administración
+        creadas = self._generar_administracion_detallada(items_data)
+        logger.info(
+            "[APUService] %d líneas de administración (detallado) para APU %s.",
+            len(creadas), self.apu.pk
+        )
         return creadas
 
     # ── Métodos legados (mantenidos por compatibilidad con vistas existentes) ──

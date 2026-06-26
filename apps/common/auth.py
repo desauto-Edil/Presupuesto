@@ -127,34 +127,33 @@ def puede_aprobar_apu(request, apu) -> bool:
 
 def puede_enviar_a_revision(request, apu) -> bool:
     """
-    Pueden enviar a revisión (Fase 12.3 ext):
-      - ADMINISTRADOR (global, cualquier unidad).
-      - GERENTE, PRESUPUESTOS, ASESOR_COMERCIAL — sólo dentro de su unidad.
-      - Creador del proyecto (cualquier rol distinto de SOLO_LECTURA).
-    COMPRAS y SOLO_LECTURA no pueden enviar a revisión.
+    Puede enviar a revisión: ADMINISTRADOR, GERENTE, PRESUPUESTOS, ASESOR_COMERCIAL.
+    COMPRAS y SOLO_LECTURA no pueden enviar.
+    No evalúa estado del APU (archivado/aprobado) — eso se compone en la vista.
     """
     usuario = get_usuario_actual(request)
     if usuario is None:
         return False
     rol = get_rol(request)
+    _ROLES_PUEDEN_ENVIAR = {"ADMINISTRADOR", "GERENTE", "PRESUPUESTOS", "ASESOR_COMERCIAL"}
+    return rol in _ROLES_PUEDEN_ENVIAR
 
-    # Validación de unidad para roles no globales
-    proyecto = apu.get_proyecto()
-    unidad_obj = ""
-    if proyecto is not None and proyecto.creado_por_id:
-        unidad_obj = getattr(proyecto.creado_por, "unidad_negocio", "") or ""
 
-    if es_admin(request):
-        return True
+def puede_editar_apu(request, apu) -> bool:
+    """
+    Permiso de edición del APU (Parámetros, líneas, garantía).
+    Misma regla que `puede_enviar_a_revision` para coherencia operativa:
+      - ADMINISTRADOR global.
+      - GERENTE, PRESUPUESTOS, ASESOR_COMERCIAL si gestionan la unidad del
+        proyecto (con fallback a la unidad del usuario actual si el proyecto
+        no la declara — datos huérfanos).
+      - Creador del proyecto (cualquier rol salvo SOLO_LECTURA).
+    COMPRAS y SOLO_LECTURA no editan APUs.
 
-    if rol in ("GERENTE", "PRESUPUESTOS", "ASESOR_COMERCIAL"):
-        if puede_gestionar_unidad(request, unidad_obj):
-            return True
-
-    # Creador del proyecto (independiente de rol, salvo SOLO_LECTURA)
-    if rol != "SOLO_LECTURA" and proyecto is not None and proyecto.creado_por_id == usuario.pk:
-        return True
-    return False
+    NOTA: este helper NO evalúa el estado del APU. La UI debe componer:
+        `puede_editar_apu AND not aprobado AND not archivado`.
+    """
+    return puede_enviar_a_revision(request, apu)
 
 
 def puede_devolver_solicitud(request, solicitud) -> bool:

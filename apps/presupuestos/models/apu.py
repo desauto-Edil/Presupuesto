@@ -813,56 +813,133 @@ class APUProyecto(models.Model):
         """
         Calcula las dos modalidades de AIU del proyecto sobre subtotales técnicos.
 
-        Modalidad 1 — AIU sobre todos los costos directos técnicos:
-          base = materiales + herramientas + transporte + mano_obra + administracion
+        Fase AIU — corrección conceptual:
+          A (Administración) ya NO se calcula como `base × pct_admin`. El valor
+          A es literalmente `subtotal_administracion` (la categoría técnica
+          administrativa cargada desde el catálogo APU). El % A es derivado
+          informativo: A_valor / base_directa_sin_admin × 100. Esto evita la
+          doble administración (subtotal + porcentaje sobre subtotal).
 
-        Modalidad 2 — AIU sobre costos directos técnicos sin materiales:
-          base_aiu = herramientas + transporte + mano_obra + administracion
+          I y U siguen siendo porcentajes manuales (configurados por proyecto o
+          ajustados por revisor) aplicados sobre la base directa SIN
+          administración. Esto da coherencia: misma base para A%, I% y U%.
+
+        Modalidad 1 — base directa sin administración:
+          base = materiales + herramientas + transporte + mano_obra
+          A_valor = subtotal_administracion (literal)
+          I_valor = base × pct_i / 100
+          U_valor = base × pct_u / 100
+          gran_total = subtotal_directo_completo (con adm) + I + U + garantia
+                       — A_valor NO se suma extra: ya está en subtotal_directo_completo.
+
+        Modalidad 2 — sin materiales:
+          base = herramientas + transporte + mano_obra
+          A_valor, I_valor, U_valor con la misma regla.
+
+        Compatibilidad histórica:
+          Si el APU ya está aprobado con `aiu_final_admin_pct` no NULL, ese
+          valor histórico se respeta para el % A. El valor en pesos sigue
+          tomándose de subtotal_administracion para coherencia con líneas
+          actuales del APU, pero el snapshot/aprobación queda intocable.
 
         Decisión Fase 10A-2: la garantía Red Shield NO entra en la base AIU.
-        Sigue afectando total_valor_venta como recargo comercial posterior.
-
-        Porcentajes:
-          - Si `pct_override` está dado (preview en revisor), se usa.
-          - Si no, get_aiu_pct_efectivos() (finales del revisor o base del proyecto).
-
-        Gran total aprobado = subtotal_directos_tecnico + total_aiu + garantia_valor_recargo
         """
-        mat  = self.subtotal_materiales
-        herr = self.subtotal_herramientas
-        tran = self.subtotal_transporte
-        mo   = self.subtotal_mano_obra
-        adm  = self.subtotal_administracion
+        # AIU usa valor_total (precio comercial) en todos los tipos, no costo_total.
+        _vt = {
+            row["tipo"]: Decimal(str(row["v"] or 0))
+            for row in self.lineas.values("tipo").annotate(v=Sum("valor_total"))
+        }
+        mat  = _vt.get(TipoAPU.MATERIALES.value,           Decimal("0"))
+        herr = _vt.get(TipoAPU.HERRAMIENTAS_EQUIPOS.value, Decimal("0"))
+        tran = _vt.get(TipoAPU.TRANSPORTE.value,           Decimal("0"))
+        mo   = _vt.get(TipoAPU.MANO_DE_OBRA.value,         Decimal("0"))
+        adm  = _vt.get(TipoAPU.ADMINISTRACION.value,       Decimal("0"))
+        valor_total_mat = mat  # alias para M2 display en template
 
         if pct_override is not None:
-            pct_a = Decimal(str(pct_override.get("admin", 0)))
             pct_i = Decimal(str(pct_override.get("imprevistos", 0)))
             pct_u = Decimal(str(pct_override.get("utilidad", 0)))
+            # El override de admin se ignora — la A se deriva. Pero si quien
+            # llama insiste (vista de aprobación legacy), respetarlo solo
+            # cuando el APU ya estaba aprobado con un valor histórico.
+            pct_a_override = pct_override.get("admin")
         else:
             efectivos = self.get_aiu_pct_efectivos()
-            pct_a = efectivos["admin"]
             pct_i = efectivos["imprevistos"]
             pct_u = efectivos["utilidad"]
+            pct_a_override = None
 
-        subtotal = mat + herr + tran + mo + adm
-        # Fase 10A-2: garantía se suma DESPUÉS del AIU, no entra en su base.
+        subtotal = mat + herr + tran + mo + adm  # subtotal_directo_completo
         garantia = Decimal(str(self.garantia_valor_recargo or 0))
 
-        # Modalidad 1: base = todos los costos directos técnicos
-        base1 = subtotal
-        a1 = (base1 * pct_a / 100).quantize(Decimal("0.01"))
-        i1 = (base1 * pct_i / 100).quantize(Decimal("0.01"))
-        u1 = (base1 * pct_u / 100).quantize(Decimal("0.01"))
-        total_aiu1 = a1 + i1 + u1
-        gran_total1 = subtotal + total_aiu1 + garantia
+        # ── % A histórico (APU ya aprobado) — se respeta ──────────────────
+        es_historico = (
+            self.aiu_final_admin_pct is not None
+            and (self.modalidad_aiu_seleccionada or "").strip() in ("1", "2")
+            and self.fecha_aprobacion is not None
+        )
 
-        # Modalidad 2: base AIU = costos directos técnicos sin materiales
-        base2 = herr + tran + mo + adm
-        a2 = (base2 * pct_a / 100).quantize(Decimal("0.01"))
-        i2 = (base2 * pct_i / 100).quantize(Decimal("0.01"))
-        u2 = (base2 * pct_u / 100).quantize(Decimal("0.01"))
-        total_aiu2 = a2 + i2 + u2
-        gran_total2 = subtotal + total_aiu2 + garantia
+        # Helper de % A derivado con guardia de división por cero.
+        # Se cuantiza a 2 decimales para que el valor mostrado y el calculado sean coherentes:
+        # pct_mostrado = floatformat:2 → a_valor = base × pct_mostrado / 100.
+        def _pct_a_derivado(base_sin_admin: Decimal) -> tuple:
+            if base_sin_admin and base_sin_admin > 0:
+                pct = (adm / base_sin_admin * Decimal("100")).quantize(Decimal("0.01"))
+                return pct, False
+            return Decimal("0"), True  # warning de base 0
+
+        # ── Modalidad 1: base = materiales + mo + transporte + herramientas
+        base1 = mat + herr + tran + mo
+        pct_a1, warn1 = _pct_a_derivado(base1)
+        if es_historico:
+            pct_a1 = Decimal(str(self.aiu_final_admin_pct)).quantize(Decimal("0.01"))
+        # A_valor = base * A% / 100 (fórmula matemática, no copia directa del subtotal).
+        # Fallback a adm cuando base es 0 para no perder el valor informativo.
+        a1_valor = (
+            (base1 * pct_a1 / Decimal("100")).quantize(Decimal("0.01"))
+            if base1 > 0
+            else Decimal(str(adm)).quantize(Decimal("0.01"))
+        )
+        i1_valor = (base1 * pct_i / 100).quantize(Decimal("0.01"))
+        u1_valor = (base1 * pct_u / 100).quantize(Decimal("0.01"))
+        total_aiu1 = a1_valor + i1_valor + u1_valor
+        # gran_total: subtotal completo (que ya incluye adm) + I + U + garantia.
+        # NO se suma A_valor extra: ya está dentro de subtotal_administracion.
+        gran_total1 = subtotal + i1_valor + u1_valor + garantia
+
+        # ── Modalidad 2: base = sin materiales y sin admin
+        base2 = herr + tran + mo
+        pct_a2, warn2 = _pct_a_derivado(base2)
+        if es_historico:
+            pct_a2 = Decimal(str(self.aiu_final_admin_pct)).quantize(Decimal("0.01"))
+        a2_valor = (
+            (base2 * pct_a2 / Decimal("100")).quantize(Decimal("0.01"))
+            if base2 > 0
+            else Decimal(str(adm)).quantize(Decimal("0.01"))
+        )
+        i2_valor = (base2 * pct_i / 100).quantize(Decimal("0.01"))
+        u2_valor = (base2 * pct_u / 100).quantize(Decimal("0.01"))
+        total_aiu2 = a2_valor + i2_valor + u2_valor
+        # M2: materiales entran por valor_total en lugar de costo_total
+        gran_total2 = valor_total_mat + herr + tran + mo + adm + i2_valor + u2_valor + garantia
+
+        # ── IVA por modalidad (para cards de detalle en apu_detail) ───────
+        iva_pct_d = Decimal(str(self.iva_pct or 0))
+        _aplica_iva = bool(self.aplica_iva) and iva_pct_d > 0
+
+        subtotal_con_aiu1 = gran_total1 - garantia
+        iva_valor1 = (
+            (subtotal_con_aiu1 * iva_pct_d / Decimal("100")).quantize(Decimal("0.01"))
+            if _aplica_iva else Decimal("0")
+        )
+        total_con_iva1 = subtotal_con_aiu1 + garantia + iva_valor1
+
+        subtotal_con_aiu2 = gran_total2 - garantia
+        iva_valor2 = (
+            (subtotal_con_aiu2 * iva_pct_d / Decimal("100")).quantize(Decimal("0.01"))
+            if _aplica_iva else Decimal("0")
+        )
+        total_con_iva2 = subtotal_con_aiu2 + garantia + iva_valor2
 
         return {
             "subtotales": {
@@ -874,29 +951,42 @@ class APUProyecto(models.Model):
                 "total":         subtotal,
             },
             "porcentajes": {
-                "admin":       pct_a,
+                "admin":       pct_a1,    # informativo (modalidad 1)
                 "imprevistos": pct_i,
                 "utilidad":    pct_u,
                 "es_final":    (pct_override is None) and self.get_aiu_pct_efectivos()["es_final"],
+                "admin_es_derivado": not es_historico,
+                "admin_warning_base_cero": warn1,
             },
             "garantia_recargo": garantia,
             "modalidad1": {
-                "label":       "AIU sobre todos los costos directos",
-                "base":        base1,
-                "admin":       a1,
-                "imprevistos": i1,
-                "utilidad":    u1,
-                "total_aiu":   total_aiu1,
-                "gran_total":  gran_total1,
+                "label":           "AIU con base directa sin administración",
+                "base":            base1,                # base directa sin admin
+                "admin":           a1_valor,             # valor literal = subtotal_admin
+                "admin_pct":       pct_a1,               # % derivado o histórico
+                "admin_warning":   warn1,
+                "imprevistos":     i1_valor,
+                "utilidad":        u1_valor,
+                "total_aiu":       total_aiu1,
+                "gran_total":      gran_total1,
+                "subtotal_con_aiu": subtotal_con_aiu1,
+                "iva_valor":        iva_valor1,
+                "total_con_iva":    total_con_iva1,
             },
             "modalidad2": {
-                "label":       "AIU sobre costos directos sin materiales",
-                "base":        base2,
-                "admin":       a2,
-                "imprevistos": i2,
-                "utilidad":    u2,
-                "total_aiu":   total_aiu2,
-                "gran_total":  gran_total2,
+                "label":           "AIU sobre directos sin materiales ni administración",
+                "base":            base2,
+                "admin":           a2_valor,
+                "admin_pct":       pct_a2,
+                "admin_warning":   warn2,
+                "imprevistos":     i2_valor,
+                "utilidad":        u2_valor,
+                "total_aiu":       total_aiu2,
+                "gran_total":      gran_total2,
+                "valor_total_mat": valor_total_mat,
+                "subtotal_con_aiu": subtotal_con_aiu2,
+                "iva_valor":        iva_valor2,
+                "total_con_iva":    total_con_iva2,
             },
         }
 
@@ -908,14 +998,13 @@ class APUProyecto(models.Model):
         Reglas (Excel técnico + decisiones Fase 9R/10A/11):
           - Si hay modalidad aprobada: usa esa modalidad como bloque oficial.
           - Si no hay modalidad aprobada: es_preliminar=True, modalidades como referencia.
-          - Garantía Red Shield: recargo separado, fuera de base AIU y base IVA.
-          - IVA sobre la Utilidad (decisión Fase 11): iva_valor = valor_utilidad * iva_pct / 100.
+          - Garantía Red Shield: recargo separado, fuera de base AIU. Sí entra en total_final.
+          - IVA sobre SubtotalConAIU: iva_valor = subtotal_con_aiu * iva_pct / 100.
           - Si aplica_iva=False: iva_valor=0, label "Exento / No aplica".
-          - Fórmula final:
-                total_final = subtotal_directos_tecnico
-                            + total_aiu
-                            + garantia_valor_recargo
-                            + iva_sobre_utilidad
+          - Administración entra UNA vez como A del AIU (no como costo directo).
+          - Fórmula M1: SubtotalConAIU = base1 + A + I + U
+          - Fórmula M2: SubtotalConAIU = valor_total_mat + base2 + A + I + U
+          - total_final = subtotal_con_aiu + garantia_valor_recargo + iva_valor
         """
         modalidades = self.calcular_modalidades_aiu()
         modalidad_aprobada = (self.modalidad_aiu_seleccionada or "").strip()
@@ -933,27 +1022,38 @@ class APUProyecto(models.Model):
         subtotales = modalidades["subtotales"]
         porcentajes = modalidades["porcentajes"]
 
-        subtotal_directos = subtotales["total"]
-        total_aiu = bloque["total_aiu"]
         valor_admin = bloque["admin"]
         valor_imprevistos = bloque["imprevistos"]
         valor_utilidad = bloque["utilidad"]
+        total_aiu = bloque["total_aiu"]
+        # base_directa: costos directos sin administración.
+        # M1: mat + herr + tran + mo  |  M2: herr + tran + mo
+        base_directa = bloque["base"]
 
         garantia_recargo = Decimal(str(self.garantia_valor_recargo or 0))
-        subtotal_con_aiu = subtotal_directos + total_aiu
+
+        # En M2, materiales entran por valor_total (no costo_total).
+        # SubtotalConAIU = base_directa + A + I + U  [+ valor_total_mat si M2]
+        # Administración entra UNA sola vez como A del AIU, no como costo directo.
+        if modalidad_key == "modalidad2":
+            mat_display = bloque.get("valor_total_mat", subtotales["materiales"])
+            subtotal_con_aiu = mat_display + base_directa + valor_admin + valor_imprevistos + valor_utilidad
+        else:
+            mat_display = subtotales["materiales"]
+            subtotal_con_aiu = base_directa + valor_admin + valor_imprevistos + valor_utilidad
 
         iva_pct = Decimal(str(self.iva_pct or 0))
         aplica_iva = bool(self.aplica_iva) and iva_pct > 0
         if aplica_iva:
-            iva_base = valor_utilidad
+            iva_base = subtotal_con_aiu
             iva_valor = (iva_base * iva_pct / Decimal("100")).quantize(Decimal("0.01"))
-            iva_label = f"IVA {iva_pct}% sobre Utilidad"
+            iva_label = f"IVA {iva_pct}% sobre subtotal con AIU"
         else:
             iva_base = Decimal("0")
             iva_valor = Decimal("0")
             iva_label = "Exento / No aplica"
 
-        total_final = subtotal_directos + total_aiu + garantia_recargo + iva_valor
+        total_final = subtotal_con_aiu + garantia_recargo + iva_valor
 
         # Garantía detalle
         garantia_info = {
@@ -983,16 +1083,24 @@ class APUProyecto(models.Model):
             "modalidad_oficial_label": modalidad_label_oficial,
             "modalidades_disponibles": modalidades if es_preliminar else None,
             # Subtotales técnicos
-            "subtotal_materiales": subtotales["materiales"],
+            # subtotal_materiales: valor de venta en M2, costo_total en M1
+            "subtotal_materiales": mat_display,
             "garantia_valor_recargo": garantia_recargo,
             "subtotal_materiales_ajustado": self.subtotal_materiales_ajustado,
             "subtotal_herramientas": subtotales["herramientas"],
             "subtotal_transporte": subtotales["transporte"],
             "subtotal_mano_obra": subtotales["mano_obra"],
+            # subtotal_administracion se conserva para trazabilidad interna;
+            # el template ya no lo muestra como costo directo (entra como A del AIU).
             "subtotal_administracion": subtotales["administracion"],
-            "subtotal_directos_tecnico": subtotal_directos,
+            # base_directa: SumaCostosDirectos sin admin (M1: mat+h+t+mo; M2: h+t+mo)
+            "subtotal_directos_tecnico": base_directa,
             # AIU
-            "porcentaje_admin": porcentajes["admin"],
+            # Fase AIU — `porcentaje_admin` se toma del bloque (por modalidad)
+            # porque el % derivado depende de la base elegida; en modalidad 1
+            # la base incluye materiales, en modalidad 2 no. Esto asegura que
+            # el snapshot guarde el % correcto para la modalidad aprobada.
+            "porcentaje_admin": bloque.get("admin_pct", porcentajes["admin"]),
             "porcentaje_imprevistos": porcentajes["imprevistos"],
             "porcentaje_utilidad": porcentajes["utilidad"],
             "valor_admin": valor_admin,
@@ -1208,6 +1316,44 @@ class APULinea(models.Model):
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.descripcion}"
 
+    @property
+    def admin_cantidad(self) -> Decimal:
+        """Cantidad para líneas de Administración (desde SubsistemaItemAPU)."""
+        from apps.presupuestos.models import SubsistemaItemAPU
+        if self.tipo == TipoAPU.ADMINISTRACION and self.item_catalogo_id and self.apu.proyecto_sistema_id:            
+            sia = SubsistemaItemAPU.objects.filter(
+                subsistema=self.apu.proyecto_sistema.subsistema,
+                item_catalogo_id=self.item_catalogo_id,
+                tipo=TipoAPU.ADMINISTRACION,
+            ).first()
+            return Decimal(str(sia.cantidad if sia else 1))
+        return Decimal("1")
+
+    @property
+    def admin_numero_meses(self) -> Decimal:
+        """Número de meses para líneas de Administración (desde APUProyecto.dias_duracion)."""
+        if self.tipo == TipoAPU.ADMINISTRACION:
+            return (Decimal(str(self.apu.dias_duracion or 0)) / Decimal("30")).quantize(Decimal("0.001"))
+        return Decimal("0")
+
+    @property
+    def admin_porcentaje(self) -> Decimal:
+        """Porcentaje de aplicación (reutilizando `rendimiento` como snapshot)."""
+        return (self.rendimiento or Decimal("0")) * Decimal("100")
+
+    @property
+    def admin_porcentaje_aplicado(self) -> Decimal:
+        from apps.presupuestos.models import SubsistemaItemAPU
+        """Porcentaje de aplicación (desde SubsistemaItemAPU.rendimiento_override)."""
+        if self.tipo == TipoAPU.ADMINISTRACION and self.item_catalogo_id and self.apu.proyecto_sistema_id:
+            sia = SubsistemaItemAPU.objects.filter(
+                subsistema=self.apu.proyecto_sistema.subsistema,
+                item_catalogo_id=self.item_catalogo_id,
+                tipo=TipoAPU.ADMINISTRACION,
+            ).first()
+            return (Decimal(str(sia.rendimiento_override)) if sia and sia.rendimiento_override is not None else Decimal("1")) * Decimal("100")
+        return Decimal("100")
+
     def calcular(self):
 
         apu = self.apu
@@ -1219,6 +1365,11 @@ class APULinea(models.Model):
         ):
             self.salario_base = self.item_catalogo.salario_base
             self.prestaciones = self.item_catalogo.prestaciones
+
+        # Para Administración, el cálculo ya se hizo. No recalcular con lógica de rendimiento.
+        if self.tipo == TipoAPU.ADMINISTRACION:
+            # El valor ya está en costo_total/valor_total. No hacer nada.
+            return
 
         vu = self.vida_util_dias or (
             self.item_catalogo.vida_util_dias if self.item_catalogo_id else None

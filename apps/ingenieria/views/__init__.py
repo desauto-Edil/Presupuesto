@@ -29,6 +29,7 @@ from apps.ingenieria.services.subsistema_service import (
     guardar_items_apu_subsistema,
     guardar_m2m_consumo,
     guardar_productos_tecnicos_componentes_quimicos,
+    guardar_dependencias_variables,
 )
 
 
@@ -231,15 +232,18 @@ def _items_apu_subsistema_context(subsistema=None):
 
     # Selección actual (solo si Update, no Create)
     seleccion: dict = {info["tipo"]: {} for info in TIPOS_INFO}
+    rendimientos_seleccion: dict = {info["tipo"]: {} for info in TIPOS_INFO}
     if subsistema is not None and getattr(subsistema, "pk", None):
         for sia in SubsistemaItemAPU.objects.filter(
             subsistema=subsistema, activo=True
-        ).only("item_catalogo_id", "tipo", "cantidad"):
+        ).only("item_catalogo_id", "tipo", "cantidad", "rendimiento_override"):
             seleccion.setdefault(sia.tipo, {})[sia.item_catalogo_id] = sia.cantidad
+            rendimientos_seleccion.setdefault(sia.tipo, {})[sia.item_catalogo_id] = sia.rendimiento_override
 
     sia_tipos = []
     for info in TIPOS_INFO:
         seleccion_tipo = seleccion.get(info["tipo"], {})
+        rend_tipo = rendimientos_seleccion.get(info["tipo"], {})
         items_tipo = [
             it for it in items_all
             if it.categoria and it.categoria.tipo_apu == info["tipo"]
@@ -250,6 +254,10 @@ def _items_apu_subsistema_context(subsistema=None):
             cant = seleccion_tipo.get(it.pk)
             it.sia_checked = cant is not None
             it.sia_cantidad = cant if cant is not None else 1
+            # Porcentaje de aplicación para ADMINISTRACIÓN (factor → %).
+            # None si no está guardado (el template muestra placeholder 100).
+            rend = rend_tipo.get(it.pk)
+            it.sia_rendimiento_pct = float(rend) * 100 if rend is not None else ""
         # Agrupar por categoría (preservando orden)
         por_cat: "OrderedDict[str, list]" = OrderedDict()
         for it in items_tipo:
@@ -375,6 +383,7 @@ class SubsistemaCreateView(CreateView):
         ctx["productos_tecnicos_existentes"] = []
         ctx["componentes_quimicos_existentes"] = []
         ctx["variables_existentes"] = []
+        ctx["dependencias_existentes"] = []
         # Solo NUMERO y OPCION_UNICA disponibles en el formulario (TEXTO se conserva
         # en el modelo por compatibilidad con datos existentes, pero no se ofrece).
         ctx["tipo_entrada_choices"] = [
@@ -409,6 +418,7 @@ class SubsistemaCreateView(CreateView):
         return kwargs
 
     def form_valid(self, form):
+        errores_dep = []
         with transaction.atomic():
             response = super().form_valid(form)
             guardar_variables(self.object, self.request.POST)
@@ -418,6 +428,11 @@ class SubsistemaCreateView(CreateView):
             # (vive en el modal #modalConfigApu que tiene su propio form).
             guardar_m2m_consumo(self.object, self.request.POST)
             guardar_productos_tecnicos_componentes_quimicos(self.object, self.request.POST)
+            errores_dep = guardar_dependencias_variables(self.object, self.request.POST)
+        if errores_dep:
+            from django.contrib import messages
+            for e in errores_dep:
+                messages.warning(self.request, e)
         return response
 
     def get_success_url(self):
@@ -451,6 +466,14 @@ class SubsistemaUpdateView(UpdateView):
         # Variables de entrada (incluye tipo_entrada y opciones para el template)
         ctx["variables_existentes"] = list(
             VariableSubsistema.objects.filter(subsistema=self.object).order_by("orden")
+        )
+        # Fase 2B — Dependencias entre variables del subsistema.
+        from apps.ingenieria.models import VariableDependenciaSubsistema
+        ctx["dependencias_existentes"] = list(
+            VariableDependenciaSubsistema.objects
+            .filter(subsistema=self.object)
+            .select_related("variable_origen", "variable_destino")
+            .order_by("orden", "id")
         )
         # Solo NUMERO y OPCION_UNICA disponibles en el formulario (TEXTO se conserva
         # en el modelo por compatibilidad con datos existentes, pero no se ofrece).
@@ -500,6 +523,7 @@ class SubsistemaUpdateView(UpdateView):
         return kwargs
 
     def form_valid(self, form):
+        errores_dep = []
         with transaction.atomic():
             response = super().form_valid(form)
             guardar_variables(self.object, self.request.POST)
@@ -509,6 +533,11 @@ class SubsistemaUpdateView(UpdateView):
             # (vive en el modal #modalConfigApu).
             guardar_m2m_consumo(self.object, self.request.POST)
             guardar_productos_tecnicos_componentes_quimicos(self.object, self.request.POST)
+            errores_dep = guardar_dependencias_variables(self.object, self.request.POST)
+        if errores_dep:
+            from django.contrib import messages
+            for e in errores_dep:
+                messages.warning(self.request, e)
         return response
 
     def get_success_url(self):

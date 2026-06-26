@@ -7,6 +7,7 @@ from .sistemas import (
     SubconjuntoRecetaTecnica,
     FuncionConsumo, ProblemaResuelto, SuperficieCompatible,
     ProductoTecnicoAsociado, ComponenteQuimico, CapaConsumo,
+    VariableDependenciaSubsistema,
 )
 from .reglas import ReglaCalculo
 from .dependencias import DependenciaTecnica
@@ -24,6 +25,7 @@ __all__ = [
     "ProductoTecnicoAsociado",
     "ComponenteQuimico",
     "CapaConsumo",
+    "VariableDependenciaSubsistema",
     "ReglaCalculo",
     "DependenciaTecnica",
     "DespieceMaestro",

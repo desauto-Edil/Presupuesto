@@ -325,15 +325,19 @@ class DespieceMaestroService:
         Si no hay subconjuntos seleccionados (subsistema sin subconjuntos),
         devuelve todas las variables del subsistema.
 
-        El filtrado es best-effort: si ninguna variable coincide, devuelve todas.
+        Sub-fase A — Sin fallback "devuelve todas si no hay match". Antes:
+            return filtradas if filtradas else todas
+        ese fallback hacía que el Despiece Maestro mostrara TODAS las variables
+        cuando el parser no encontraba tokens en las fórmulas. Ahora se
+        devuelve la lista filtrada tal cual; el template muestra un mensaje
+        controlado si queda vacía.
         """
         todas = self.get_variables_requeridas()
         tokens_usados = self._tokens_subconjuntos_seleccionados()
         if tokens_usados is None:
             return todas
 
-        filtradas = [v for v in todas if v["variable"] in tokens_usados]
-        return filtradas if filtradas else todas
+        return [v for v in todas if v["variable"] in tokens_usados]
 
     def validar_variables_entrada(self, variables: dict) -> list[str]:
         """

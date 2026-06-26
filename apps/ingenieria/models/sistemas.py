@@ -9,7 +9,9 @@ Un subsistema es una receta técnica REUTILIZABLE.
 No define el producto comercial final; eso ocurre en presupuestos.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import F, Q
 from apps.common.choices import (
     LineaNegocio, TipoSistema, TipoProductoConsumo,
     EstadoFisicoProducto, InteriorExterior,
@@ -287,6 +289,18 @@ class VariableSubsistema(models.Model):
         blank=True,
         verbose_name="Opciones",
         help_text='Lista de valores permitidos para OPCION_UNICA. Ej: ["4", "6"]',
+    )
+    # Sub-fase D — Marca declarativa: si True, el valor ingresado por el
+    # usuario para esta variable se suma a `area_base_apu`, que es el
+    # denominador del rendimiento del APU.
+    participa_en_base_apu = models.BooleanField(
+        default=False,
+        verbose_name="Participa en base APU",
+        help_text=(
+            "Si está marcado, el valor ingresado por el usuario en esta "
+            "variable se suma a la base del rendimiento del APU "
+            "(area_base_apu). No usar para porcentajes ni opciones únicas."
+        ),
     )
     orden = models.PositiveIntegerField(default=1)
 
@@ -579,3 +593,181 @@ class CapaConsumo(models.Model):
 
     def __str__(self):
         return f"{self.subsistema.codigo} / {self.nombre}"
+
+
+# ---------------------------------------------------------------------------
+# DEPENDENCIAS ENTRE VARIABLES DE ENTRADA — Fase 2A
+# ---------------------------------------------------------------------------
+
+class VariableDependenciaSubsistema(models.Model):
+    """
+    Regla de cascada entre variables de entrada de un subsistema.
+
+    Cuando `variable_origen` toma `valor_origen`, el sistema selecciona
+    automáticamente `valor_destino` en `variable_destino`.
+
+    Lectura: "si areaMem = 87.96 entonces traslapoMem = 0.3".
+
+    La regla se configura en Editar Subsistema y se ejecuta en
+    Despiece Maestro (front), sin tocar el motor de cálculo.
+    """
+    subsistema = models.ForeignKey(
+        Subsistema, on_delete=models.CASCADE,
+        related_name="dependencias_variables",
+        verbose_name="Subsistema",
+    )
+    variable_origen = models.ForeignKey(
+        VariableSubsistema, on_delete=models.CASCADE,
+        related_name="dependencias_como_origen",
+        verbose_name="Variable origen",
+    )
+    valor_origen = models.CharField(
+        max_length=80,
+        verbose_name="Valor origen",
+        help_text=(
+            "Valor concreto (string) de la variable origen que dispara la "
+            "regla. Debe existir dentro de las opciones de la variable origen."
+        ),
+    )
+    variable_destino = models.ForeignKey(
+        VariableSubsistema, on_delete=models.CASCADE,
+        related_name="dependencias_como_destino",
+        verbose_name="Variable destino",
+    )
+    valor_destino = models.CharField(
+        max_length=80,
+        verbose_name="Valor destino",
+        help_text=(
+            "Valor que se asignará a la variable destino. Debe existir en "
+            "las opciones de la variable destino."
+        ),
+    )
+    activa = models.BooleanField(default=True, verbose_name="Activa")
+    orden = models.PositiveIntegerField(default=1)
+    notas = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        app_label = "ingenieria"
+        db_table = "variable_dependencia_subsistema"
+        ordering = ["orden", "id"]
+        verbose_name = "Dependencia entre variables"
+        verbose_name_plural = "Dependencias entre variables"
+        constraints = [
+            models.CheckConstraint(
+                check=~Q(variable_origen=F("variable_destino")),
+                name="dep_var_origen_distinto_destino",
+            ),
+        ]
+        unique_together = [
+            ("subsistema", "variable_origen", "valor_origen", "variable_destino"),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.subsistema.codigo}: "
+            f"{self.variable_origen.variable}={self.valor_origen} → "
+            f"{self.variable_destino.variable}={self.valor_destino}"
+        )
+
+    # ── Validaciones a nivel modelo ─────────────────────────────────────────
+    def clean(self):
+        """
+        Reglas:
+          1. variable_origen != variable_destino (también en CheckConstraint).
+          2. Ambas variables pertenecen al mismo subsistema declarado en la regla.
+          3. valor_origen está en las opciones de variable_origen.
+          4. valor_destino está en las opciones de variable_destino.
+          5. No introducir ciclos en el grafo de dependencias del subsistema
+             (DFS sobre las dependencias activas).
+        """
+        super().clean()
+        errores = {}
+
+        # 1. origen != destino (defensa además del CheckConstraint).
+        if self.variable_origen_id and self.variable_destino_id \
+                and self.variable_origen_id == self.variable_destino_id:
+            errores["variable_destino"] = (
+                "La variable destino no puede ser igual a la variable origen."
+            )
+
+        # 2. Ambas variables del mismo subsistema.
+        if self.subsistema_id and self.variable_origen_id \
+                and self.variable_origen.subsistema_id != self.subsistema_id:
+            errores["variable_origen"] = (
+                "La variable origen debe pertenecer al mismo subsistema."
+            )
+        if self.subsistema_id and self.variable_destino_id \
+                and self.variable_destino.subsistema_id != self.subsistema_id:
+            errores["variable_destino"] = (
+                "La variable destino debe pertenecer al mismo subsistema."
+            )
+
+        # 3. valor_origen ∈ opciones(variable_origen)
+        if self.variable_origen_id and self.valor_origen:
+            opciones = self._opciones_normalizadas(self.variable_origen)
+            if opciones and self._norm_valor(self.valor_origen) not in opciones:
+                errores["valor_origen"] = (
+                    f"El valor '{self.valor_origen}' no está en las opciones de "
+                    f"{self.variable_origen.variable}."
+                )
+
+        # 4. valor_destino ∈ opciones(variable_destino)
+        if self.variable_destino_id and self.valor_destino:
+            opciones = self._opciones_normalizadas(self.variable_destino)
+            if opciones and self._norm_valor(self.valor_destino) not in opciones:
+                errores["valor_destino"] = (
+                    f"El valor '{self.valor_destino}' no está en las opciones de "
+                    f"{self.variable_destino.variable}."
+                )
+
+        # 5. Sin ciclos. La regla nueva añade una arista
+        #    (variable_origen → variable_destino). Si desde variable_destino se
+        #    puede llegar de vuelta a variable_origen siguiendo dependencias
+        #    activas existentes, hay ciclo.
+        if not errores and self.subsistema_id \
+                and self.variable_origen_id and self.variable_destino_id:
+            if self._introduce_ciclo():
+                errores["variable_destino"] = (
+                    "Esta dependencia introduce un ciclo en el grafo de "
+                    "dependencias del subsistema."
+                )
+
+        if errores:
+            raise ValidationError(errores)
+
+    @staticmethod
+    def _norm_valor(v):
+        return str(v).strip()
+
+    @classmethod
+    def _opciones_normalizadas(cls, variable):
+        opciones = variable.opciones or []
+        return {cls._norm_valor(o) for o in opciones}
+
+    def _introduce_ciclo(self):
+        """
+        DFS desde variable_destino siguiendo dependencias activas del mismo
+        subsistema. Si alcanza variable_origen → hay ciclo.
+        """
+        qs = type(self).objects.filter(
+            subsistema_id=self.subsistema_id, activa=True,
+        )
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        # grafo: var_origen_id → [var_destino_id, ...]
+        grafo = {}
+        for dep in qs.values_list("variable_origen_id", "variable_destino_id"):
+            grafo.setdefault(dep[0], []).append(dep[1])
+
+        objetivo = self.variable_origen_id
+        visitadas = set()
+        pila = [self.variable_destino_id]
+        while pila:
+            nodo = pila.pop()
+            if nodo == objetivo:
+                return True
+            if nodo in visitadas:
+                continue
+            visitadas.add(nodo)
+            pila.extend(grafo.get(nodo, []))
+        return False

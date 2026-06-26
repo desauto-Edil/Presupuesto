@@ -1,0 +1,209 @@
+{% comment %}
+apps/ingenieria/partials/_modal_armar_apu.html
+
+Modal para armar el APU desde el Despiece Maestro.
+
+Lógica principal:
+  - Si `base_apu_valida` es True, muestra el resumen de la Base APU y oculta
+    el selector de producto principal. Envía `modo_rendimiento=BASE_APU`.
+  - Si no, muestra el selector de producto principal. Envía
+    `modo_rendimiento=PRODUCTO_PRINCIPAL`.
+
+Contexto esperado:
+  - despiece: DespieceMaestro
+  - armar_apu_validacion: dict de validacion_despiece_listo_para_apu()
+  - armar_apu_productos_opciones: list de productos_principal_opciones()
+  - base_apu_valida: bool
+  - base_apu_total: Decimal
+  - base_apu_resumen: list
+  - tipos_garantia_activos: QuerySet
+{% endcomment %}
+<div class="modal fade" id="modalArmarApu" tabindex="-1" aria-labelledby="modalArmarApuLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="formArmarApu"
+            action="{% url 'presupuestos:apu_armar_desde_despiece' pk=despiece.pk %}"
+            method="POST">
+        {% csrf_token %}
+
+        {# Cambio 1: Hidden para indicar el modo de rendimiento #}
+        <input type="hidden" name="modo_rendimiento"
+               id="armarApuModoRendimiento"
+               value="{% if base_apu_valida %}BASE_APU{% else %}PRODUCTO_PRINCIPAL{% endif %}">
+
+        {# Hidden fields que se poblarán con JS o con valores de Base APU #}
+        <input type="hidden" name="producto_principal_id"
+               id="armarApuProductoId"
+               value="">
+
+        <input type="hidden" name="cantidad_base"
+               id="armarApuCantidadBase"
+               value="{% if base_apu_valida %}{{ base_apu_total }}{% endif %}">
+
+        <input type="hidden" name="unidad_base"
+               id="armarApuUnidadBase"
+               value="{% if base_apu_valida and base_apu_resumen.0.unidad %}{{ base_apu_resumen.0.unidad }}{% endif %}">
+
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalArmarApuLabel">
+            <i class="bi bi-box-arrow-in-down-right me-2"></i>Armar mi APU
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+
+        <div class="modal-body">
+          {% if armar_apu_validacion.ok %}
+            {# ─── A. MODO BASE APU ─────────────────────────────────────────── #}
+            {% if base_apu_valida %}
+              <div class="alert alert-info">
+                <h6 class="alert-heading">
+                  <i class="bi bi-calculator me-2"></i>Base APU Calculada
+                </h6>
+                <p>
+                  Este subsistema está configurado para usar una <strong>Base APU</strong>
+                  calculada a partir de las variables de entrada. No se requiere
+                  seleccionar un producto principal.
+                </p>
+                <hr>
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    {% for item in base_apu_resumen %}
+                      <div class="fs-sm">
+                        {{ item.label }}:
+                        <span class="fw-bold">{{ item.valor|floatformat:2 }}</span>
+                        <span class="text-muted">{{ item.unidad }}</span>
+                      </div>
+                    {% endfor %}
+                  </div>
+                  <div class="text-end">
+                    <div class="fs-sm text-muted">Total Base APU</div>
+                    <div class="fs-4 fw-bold">
+                      {{ base_apu_total|floatformat:2 }}
+                      {% if base_apu_resumen.0.unidad %}
+                        <span class="fs-6 text-muted">{{ base_apu_resumen.0.unidad }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            {# ─── B. MODO PRODUCTO PRINCIPAL (FALLBACK) ──────────────────── #}
+            {% else %}
+              <div class="mb-3">
+                <label for="selectProductoPrincipal" class="form-label">
+                  <strong>1. Selecciona el producto principal</strong>
+                </label>
+                <p class="form-text">
+                  El rendimiento de los materiales se calculará con base en la cantidad
+                  total de este producto.
+                </p>
+                <select class="form-select" id="selectProductoPrincipal" required>
+                  <option value="" data-cantidad="" data-unidad="">
+                    -- Selecciona un producto --
+                  </option>
+                  {% for p in armar_apu_productos_opciones %}
+                    <option value="{{ p.producto_id }}"
+                            data-cantidad="{{ p.cantidad_base }}"
+                            data-unidad="{{ p.unidad }}">
+                      {{ p.producto_nombre }} ({{ p.cantidad_base|floatformat:2 }} {{ p.unidad }})
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+            {% endif %}
+
+            {# ─── C. GARANTÍA (COMÚN A AMBOS MODOS) ──────────────────────── #}
+            <div class="border-top pt-3 mt-3">
+              <label class="form-label">
+                <strong>2. Garantía Red Shield (Opcional)</strong>
+              </label>
+              <div class="mb-3">
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="aplica_garantia" id="aplicaGarantiaNo" value="0" checked>
+                  <label class="form-check-label" for="aplicaGarantiaNo">No aplica</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="aplica_garantia" id="aplicaGarantiaSi" value="1">
+                  <label class="form-check-label" for="aplicaGarantiaSi">Sí aplica</label>
+                </div>
+              </div>
+
+              <div id="garantiaFields" class="vstack gap-2" style="display: none;">
+                <div class="row g-2">
+                  <div class="col-md-6">
+                    <label for="selectTipoGarantia" class="form-label fs-sm">Tipo de garantía</label>
+                    <select class="form-select form-select-sm" name="tipo_garantia_id" id="selectTipoGarantia">
+                      <option value="">-- Selecciona un tipo --</option>
+                      {% for tg in tipos_garantia_activos %}
+                        <option value="{{ tg.pk }}" data-pct="{{ tg.porcentaje_recargo|floatformat:2 }}">
+                          {{ tg.nombre }} ({{ tg.porcentaje_recargo|floatformat:2 }}%)
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="selectModoGarantia" class="form-label fs-sm">Modo de aplicación</label>
+                    <select class="form-select form-select-sm" name="garantia_modo_aplicacion" id="selectModoGarantia">
+                      <option value="TOTAL_MATERIALES">Sobre el total de materiales</option>
+                      <option value="MATERIAL_ESPECIFICO">Sobre un material específico</option>
+                    </select>
+                  </div>
+                </div>
+                <div id="materialGarantiaField" style="display: none;">
+                  <label for="selectMaterialGarantia" class="form-label fs-sm">Material específico</label>
+                  <select class="form-select form-select-sm" name="garantia_material_despiece_id" id="selectMaterialGarantia">
+                    <option value="">-- Selecciona un material --</option>
+                    {% for lf in armar_apu_validacion.lineas_finales %}
+                      {% if lf.producto_id %}
+                        <option value="{{ lf.id }}" data-nombre="{{ lf.producto_nombre }}">{{ lf.producto_nombre }}</option>
+                      {% endif %}
+                    {% endfor %}
+                  </select>
+                  <input type="hidden" name="garantia_material_nombre_snapshot" id="garantiaMaterialNombreSnapshot">
+                </div>
+              </div>
+            </div>
+
+          {% else %}
+            <div class="alert alert-danger">
+              <h6 class="alert-heading">
+                <i class="bi bi-x-circle-fill me-2"></i>No se puede armar el APU
+              </h6>
+              <p>El despiece no cumple los requisitos para generar un APU. Corrige los siguientes puntos:</p>
+              <ul>
+                {% for error in armar_apu_validacion.errores %}
+                  <li>{{ error }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnArmarApu" {% if not armar_apu_validacion.ok %}disabled{% endif %}>
+            <i class="bi bi-check2-circle me-2"></i>Armar APU
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const selectProducto = document.getElementById('selectProductoPrincipal');
+    const productoIdInput = document.getElementById('armarApuProductoId');
+    const cantidadBaseInput = document.getElementById('armarApuCantidadBase');
+    const unidadBaseInput = document.getElementById('armarApuUnidadBase');
+
+    if (selectProducto) {
+      selectProducto.addEventListener('change', function () {
+        const selectedOption = this.options[this.selectedIndex];
+        productoIdInput.value = selectedOption.value;
+        cantidadBaseInput.value = selectedOption.dataset.cantidad || '';
+        unidadBaseInput.value = selectedOption.dataset.unidad || '';
+      });
+    }
+  });
+</script>

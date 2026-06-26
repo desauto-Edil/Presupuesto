@@ -49,17 +49,99 @@
             action="{% url 'presupuestos:apu_armar_desde_despiece' despiece.pk %}"
             id="formArmarApu">
         {% csrf_token %}
-        <input type="hidden" name="producto_principal_id" id="armarApuProductoId" value="">
-        <input type="hidden" name="cantidad_base"          id="armarApuCantidadBase" value="">
-        <input type="hidden" name="unidad_base"            id="armarApuUnidadBase"   value="">
-        {# Fase 9D — Garantía. aplica_garantia=on/off; tipo_garantia_id solo si aplica. #}
+        <input type="hidden" name="modo_rendimiento"
+              id="armarApuModoRendimiento"
+              value="{% if base_apu_valida %}BASE_APU{% else %}PRODUCTO_PRINCIPAL{% endif %}">
+
+        <input type="hidden" name="producto_principal_id"
+              id="armarApuProductoId"
+              value="">
+
+        <input type="hidden" name="cantidad_base"
+              id="armarApuCantidadBase"
+              value="{% if base_apu_valida %}{{ base_apu_total }}{% endif %}">
+
+        <input type="hidden" name="unidad_base"
+              id="armarApuUnidadBase"
+              value="{% if base_apu_valida and base_apu_resumen.0.unidad %}{{ base_apu_resumen.0.unidad }}{% endif %}">
+
 
         <div class="modal-body">
 
           <p class="text-muted small mb-3">
             El rendimiento de cada material se calculará dividiendo su cantidad
-            total entre la cantidad total del producto principal seleccionado.
+            total entre la <strong>Base APU</strong> del subsistema, o entre la
+            cantidad del producto principal si no hay Base APU configurada.
           </p>
+
+          {# Caso 1 — Base APU configurada Y válida (total > 0): panel principal #}
+          {% if base_apu_valida %}
+          <div class="alert alert-success small mb-3" role="alert" style="border-left:4px solid #166534;">
+            <div class="d-flex align-items-start gap-2 mb-2">
+              <i class="bi bi-check-circle-fill" style="margin-top:2px;color:#166534;"></i>
+              <div>
+                <strong>Base APU calculada</strong> — se usará como denominador
+                del rendimiento.
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm mb-0" style="font-size:12px;background:transparent;">
+                <thead style="font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#166534;">
+                  <tr>
+                    <th>Variable</th>
+                    <th style="text-align:right;">Valor</th>
+                    <th>Unidad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for v in base_apu_resumen %}
+                  <tr>
+                    <td>{{ v.label }}</td>
+                    <td style="text-align:right;font-variant-numeric:tabular-nums;">{{ v.valor|floatformat:"-2" }}</td>
+                    <td>{{ v.unidad|default:"—" }}</td>
+                  </tr>
+                  {% endfor %}
+                  <tr style="border-top:2px solid rgba(22,101,52,.25);font-weight:700;">
+                    <td>Total Base APU</td>
+                    <td style="text-align:right;font-variant-numeric:tabular-nums;">{{ base_apu_total|floatformat:"-2" }}</td>
+                    <td>{% if base_apu_resumen.0.unidad %}{{ base_apu_resumen.0.unidad }}{% else %}—{% endif %}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-2" style="font-size:11px;color:rgba(22,101,52,.85);">
+              El rendimiento del APU se calculará usando esta Base APU como denominador.
+              Si necesitas ajustarla, modifica las variables de entrada del despiece.
+            </div>
+          </div>
+          {% endif %}
+
+          {# Caso 3 — Base APU configurada pero total = 0 → advertencia #}
+          {% if base_apu_configurada and not base_apu_valida %}
+          <div class="alert alert-warning small d-flex align-items-start gap-2" role="alert"
+               style="border-left:4px solid #b07a00;">
+            <i class="bi bi-exclamation-triangle-fill" style="margin-top:2px;"></i>
+            <div>
+              <strong>Las variables marcadas como Base APU no tienen valores válidos.</strong>
+              Revise las variables de entrada antes de armar el APU. Si continúa,
+              se usará el comportamiento anterior basado en producto principal.
+            </div>
+          </div>
+          {% endif %}
+
+          {# Caso 2 — No hay Base APU configurada → fallback completo a producto principal #}
+          {% if not base_apu_configurada %}
+          <div class="alert alert-warning small d-flex align-items-start gap-2" role="alert"
+               style="border-left:4px solid #b07a00;">
+            <i class="bi bi-info-circle-fill" style="margin-top:2px;"></i>
+            <div>
+              <strong>No se ha configurado una Base APU para este subsistema.</strong>
+              Se usará el comportamiento anterior basado en producto principal.
+              Para usar el cálculo por área, marca al menos una variable como
+              <em>Base APU</em> en <strong>Editar Subsistema → Variables de entrada</strong>.
+            </div>
+          </div>
+          {% endif %}
 
           {% if not armar_apu_validacion.ok %}
           {# ── Bloque de errores: el despiece no está listo ─────────────── #}
@@ -106,10 +188,15 @@
           {% endif %}
 
           {% else %}
-          {# ── Selector de producto principal ───────────────────────────── #}
-          <div class="mb-3">
+          
+          <div class="mb-3" {% if base_apu_valida %}style="display:none;"{% endif %}>
             <label for="armarApuSelectProducto" class="form-label small fw-semibold">
               Producto principal
+              {% if base_apu_valida %}
+              <span class="text-muted" style="font-weight:400;">
+                · No requerido (usando Base APU)
+              </span>
+              {% endif %}
             </label>
             <select id="armarApuSelectProducto" class="form-select form-select-sm"
                     onchange="armarApuOnSelectProducto(this)">
@@ -374,6 +461,12 @@ function armarApuOnMaterialGarantia(sel) {
   if (snap) snap.value = nombre;
 }
 function armarApuOnSelectProducto(sel) {
+  const modo = document.getElementById("armarApuModoRendimiento");
+
+  if (modo && modo.value === "BASE_APU") {
+    return;
+  }
+
   const opt = sel.options[sel.selectedIndex];
   const pid = sel.value || "";
   const cantidad = opt ? (opt.getAttribute("data-cantidad") || "") : "";

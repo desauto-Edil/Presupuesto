@@ -170,9 +170,7 @@
 </head>
 
 {% with unidad_slug=request.session.unidad_negocio|lower|default:"imperandina" %}
-{# Fase 12.3 ext — ADMINISTRADOR es global: usa exclusivamente theme-admin-global.
-   Los demás roles (GERENTE, PRESUPUESTOS, ASESOR_COMERCIAL, COMPRAS, SOLO_LECTURA)
-   conservan los colores de su unidad de negocio. #}
+{% comment %}Fase 12.3 ext — ADMINISTRADOR es global: usa exclusivamente theme-admin-global. Los demás roles (GERENTE, PRESUPUESTOS, ASESOR_COMERCIAL, COMPRAS, SOLO_LECTURA) conservan los colores de su unidad de negocio.{% endcomment %}
 <body class="{% if request.session.rol == 'ADMINISTRADOR' %}theme-admin-global{% else %}theme-{{ unidad_slug }}{% endif %}" data-page="{{ request.resolver_match.view_name }}">
 
 <div class="sidebar-backdrop" id="sidebarBackdrop"></div>

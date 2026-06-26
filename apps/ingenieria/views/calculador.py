@@ -13,6 +13,7 @@ Flujo completo (independiente de proyectos):
 """
 
 import json
+import logging
 
 from django.contrib import messages
 from django.db import transaction
@@ -21,6 +22,8 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
+
+logger = logging.getLogger(__name__)
 
 from apps.ingenieria.models import (
     Sistema,
@@ -204,6 +207,54 @@ class DespieceMaestroView(DetailView):
         ctx["variables_extra"]      = variables_extra
         ctx["variables_filtradas"]  = bool(variables_extra)
 
+        # Sub-fase D — Resumen Base APU para el modal "Armar mi APU".
+        # Construye la lista de variables marcadas con `participa_en_base_apu=True`
+        # con sus valores ingresados por el usuario y la suma total.
+        # - base_apu_configurada: subsistema tiene al menos una variable marcada.
+        # - base_apu_resumen: list[{variable, label, unidad, valor}] con valores
+        #   parseables a número.
+        # - base_apu_total: suma numérica de los valores.
+        # - base_apu_valida: configurada Y total > 0 → muestra panel principal.
+        # - subsistema_tiene_base_apu: alias retro-compatible.
+        ctx["base_apu_configurada"] = False
+        ctx["base_apu_resumen"] = []
+        ctx["base_apu_total"] = 0
+        ctx["base_apu_valida"] = False
+        try:
+            from apps.ingenieria.models import VariableSubsistema
+            vars_base_qs = VariableSubsistema.objects.filter(
+                subsistema=dm.subsistema, participa_en_base_apu=True,
+            ).order_by("orden")
+            vars_base = list(vars_base_qs)
+            ctx["base_apu_configurada"] = bool(vars_base)
+            valores_usuario = dm.variables_entrada or {}
+            resumen = []
+            total = 0.0
+            for v in vars_base:
+                raw = valores_usuario.get(v.variable)
+                if raw in (None, ""):
+                    raw = v.valor_default
+                try:
+                    valor_num = float(raw)
+                except (TypeError, ValueError):
+                    valor_num = 0.0
+                resumen.append({
+                    "variable": v.variable,
+                    "label": v.label or v.variable,
+                    "unidad": v.unidad or "",
+                    "valor": valor_num,
+                })
+                total += valor_num
+            ctx["base_apu_resumen"] = resumen
+            ctx["base_apu_total"] = total
+            ctx["base_apu_valida"] = bool(vars_base) and total > 0
+        except Exception:
+            logger.exception(
+                "[DespieceMaestroView] Error construyendo resumen Base APU."
+            )
+        # Retro-compatibilidad para el modal ya escrito.
+        ctx["subsistema_tiene_base_apu"] = ctx["base_apu_configurada"]
+
         # Mapa {variable_tecnica: label_visible} para mostrar etiqueta
         # legible en el modal de Detalle del cálculo. Incluye todas las
         # variables del subsistema (las filtradas y las extra).
@@ -211,6 +262,27 @@ class DespieceMaestroView(DetailView):
             {v["variable"]: v["label"] for v in todas_variables},
             ensure_ascii=False,
         )
+
+        # ── Fase 2C — Dependencias entre variables del subsistema ───────────
+        # Reglas configuradas en Editar Subsistema. El JS del template las usa
+        # para aplicar cascada cuando el usuario selecciona una opción de una
+        # variable origen (ej. areaMem 87.96 → traslapoMem 0.3).
+        from apps.ingenieria.models import VariableDependenciaSubsistema
+        deps_qs = (
+            VariableDependenciaSubsistema.objects
+            .filter(subsistema=dm.subsistema, activa=True)
+            .select_related("variable_origen", "variable_destino")
+            .order_by("orden", "id")
+        )
+        ctx["dependencias_variables_json"] = json.dumps([
+            {
+                "var_origen":  d.variable_origen.variable,
+                "val_origen":  d.valor_origen,
+                "var_destino": d.variable_destino.variable,
+                "val_destino": d.valor_destino,
+            }
+            for d in deps_qs
+        ], ensure_ascii=False)
 
         # Líneas agrupadas por subconjunto (si ya fue guardado)
         ctx["lineas_por_subconjunto"] = _agrupar_lineas(dm.lineas.all())
@@ -617,9 +689,20 @@ class EliminarDespieceMaestroView(View):
 
     def post(self, request, pk):
         from django.db.models import ProtectedError
+        from apps.common.auth import es_admin, get_usuario_actual
+        from apps.common.eliminacion_errors import EliminacionBloqueadaError
         dm = get_object_or_404(DespieceMaestro, pk=pk)
         try:
-            dm.delete()
+            if es_admin(request):
+                from apps.ingenieria.services.admin_eliminacion import (
+                    eliminar_despiece_admin,
+                )
+                eliminar_despiece_admin(dm, usuario=get_usuario_actual(request))
+            else:
+                dm.delete()
+        except EliminacionBloqueadaError as exc:
+            messages.error(request, exc.detalle)
+            return redirect("ingenieria:despiece_maestro", pk=pk)
         except ProtectedError:
             messages.error(
                 request,

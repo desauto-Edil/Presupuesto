@@ -1,4 +1,5 @@
 {% load auth_tags %}
+{% es_admin_actual as es_admin_flag %}
 {% comment %}
 _solicitud_panel_detail.html — Detalle reutilizable de una Solicitud.
 Se usa desde solicitud_list.html (panel master-detail con ?sel=<pk>).
@@ -378,8 +379,18 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
                         <a href="{% url 'presupuestos:apu_revisar' apu.pk %}"
                            class="btn btn-xs" style="background:#1f2937;color:#fff;font-size:10px;">Ir a la revisión</a>
                         {% endif %}
+                        {% comment %}Sub-fase D — Cuando el usuario actual es revisor del APU (puede_aprobar_flag), el botón "Ver APU" pasa a "Ver autorización" y abre un modal contextual.{% endcomment %}
+                        {% if puede_aprobar_flag %}
+                        {% puede_editar_apu apu as puede_editar_flag %}
+                        <button type="button" data-bs-toggle="modal" data-bs-target="#modalAutorizacion_{{ apu.pk }}"
+                                class="btn btn-xs" style="background:var(--theme-accent);color:#fff;font-size:10px;border:none;">
+                            <i class="bi bi-shield-check" style="margin-right:3px;"></i>Ver autorización
+                        </button>
+                        {% include "presupuestos/partials/_modal_autorizacion_apu.html" with apu=apu puede_editar=puede_editar_flag %}
+                        {% else %}
                         <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
                            class="btn btn-xs" style="background:var(--theme-accent);color:#fff;font-size:10px;">Ver APU</a>
+                        {% endif %}
                         <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
                            class="btn btn-ghost btn-xs" style="font-size:10px;" target="_blank">PDF Int. (vivo)</a>
                         <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
@@ -436,6 +447,23 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
                     {% endfor %}
                 </div>
                 {% endif %}
+            </div>
+            {% endif %}
+
+            {% comment %}Barra "Consolidar despieces" — visible cuando el proyecto tiene 2+ despieces guardados o 2+ APUs.{% endcomment %}
+            {% if item.puede_consolidar %}
+            <div style="padding:10px 18px;background:rgba(79,70,229,.05);
+                        border-top:1px solid var(--border);
+                        display:flex;justify-content:space-between;align-items:center;
+                        gap:10px;flex-wrap:wrap;">
+                <div style="font-size:11.5px;color:var(--ink-soft);line-height:1.4;">
+                    Puedes unir varios despieces de este proyecto para consolidar materiales y costos.
+                </div>
+                <a href="{% url 'presupuestos:apu_consolidar_seleccionar' proy.pk %}"
+                   class="btn btn-xs"
+                   style="background:#4f46e5;color:#fff;font-size:10.5px;white-space:nowrap;">
+                    <i class="bi bi-layers" style="margin-right:3px;"></i>Consolidar despieces
+                </a>
             </div>
             {% endif %}
 
@@ -635,22 +663,28 @@ confirm() defensivo. No hay data-bs-toggle saltando entre modales.
             <div class="modal-body" style="font-size:13px;">
                 La solicitud pasa a estado <strong>CERRADA</strong> y se conserva su trazabilidad
                 (proyectos, APUs, archivos e historial).
-                {% if not proyectos %}
+                {% if not proyectos or es_admin_flag %}
                 <div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--ink-soft);">
+                    {% if es_admin_flag and proyectos %}
+                    Como administrador global puedes eliminar físicamente esta solicitud. Se eliminarán los
+                    proyectos, APUs, cotizaciones/snapshots, despieces y relaciones asociadas a esta solicitud.
+                    Esta acción no se puede deshacer.
+                    {% else %}
                     Esta solicitud no tiene proyectos asociados. Si necesitas borrarla físicamente,
                     puedes hacerlo desde abajo.
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>
             <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-                {% if not proyectos %}
+                {% if not proyectos or es_admin_flag %}
                 <form method="post" action="{% url 'comercial:solicitud_delete' solicitud.pk %}"
                       onsubmit="return confirm('¿Eliminar definitivamente {{ solicitud.consecutivo }}? Esta acción no se puede deshacer.');"
                       style="margin:0;">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-ghost btn-sm"
                             style="color:var(--danger);font-size:11.5px;"
-                            title="Sin proyectos asociados: se permite eliminación física.">
+                            title="{% if es_admin_flag %}Admin global: borrado en cascada incluso con trazabilidad.{% else %}Sin proyectos asociados: se permite eliminación física.{% endif %}">
                         Eliminar definitivamente
                     </button>
                 </form>

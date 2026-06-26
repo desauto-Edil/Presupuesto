@@ -481,7 +481,9 @@ def build_solicitud_detail_context(request, solicitud):
     Devuelve un dict listo para mezclar en el contexto del template.
     """
     from apps.ingenieria.models import DespieceMaestro
-    from apps.presupuestos.models import ProyectoSistema, APUProyecto
+    from apps.presupuestos.models import (
+        ProyectoSistema, APUProyecto, APUDespieceIncluido,
+    )
     from apps.presupuestos.models import APUProyecto as _APU
     from django.db.models import Q as _Q
     from apps.common.auth import puede_devolver_solicitud
@@ -504,18 +506,37 @@ def build_solicitud_detail_context(request, solicitud):
         for dm in despieces_raw:
             apu = None
             try:
-                ps = ProyectoSistema.objects.filter(
-                    proyecto=p,
-                    sistema=dm.subsistema.sistema,
-                    subsistema=dm.subsistema,
-                ).first()
-                if ps:
-                    apu = (
-                        APUProyecto.objects
-                        .filter(proyecto_sistema=ps)
-                        .select_related("tipo_garantia", "aprobado_por")
-                        .first()
-                    )
+                # Match preciso: la relación APUDespieceIncluido es la fuente
+                # de verdad de "qué despiece está en qué APU". Antes se usaba
+                # matching por (proyecto, sistema, subsistema), lo que agrupaba
+                # erróneamente a TODOS los despieces de un mismo subsistema en
+                # el primer APU del subsistema — bloqueando la generación de
+                # APUs adicionales desde otros despieces.
+                inc = (
+                    APUDespieceIncluido.objects
+                    .filter(despiece_maestro=dm, activo=True)
+                    .select_related("apu", "apu__tipo_garantia", "apu__aprobado_por")
+                    .first()
+                )
+                if inc and inc.apu:
+                    apu = inc.apu
+                else:
+                    # Fallback legacy: datos antiguos sin APUDespieceIncluido.
+                    # Solo asigna si hay UN APU para ese subsistema; si hay 0,
+                    # va a "sin APU"; si hay 1, lo asocia (compatibilidad).
+                    ps = ProyectoSistema.objects.filter(
+                        proyecto=p,
+                        sistema=dm.subsistema.sistema,
+                        subsistema=dm.subsistema,
+                    ).first()
+                    if ps:
+                        existing_apus = list(
+                            APUProyecto.objects
+                            .filter(proyecto_sistema=ps)
+                            .select_related("tipo_garantia", "aprobado_por")
+                        )
+                        if len(existing_apus) == 1 and not APUDespieceIncluido.objects.filter(apu=existing_apus[0]).exists():
+                            apu = existing_apus[0]
             except Exception:
                 apu = None
             if apu:
@@ -524,10 +545,20 @@ def build_solicitud_detail_context(request, solicitud):
             else:
                 despieces_sin_apu.append(dm)
         apus_data = list(apus_map.values())
+        # Consolidación disponible si el proyecto tiene 2+ despieces guardados
+        # o 2+ APUs ya generados. Cubre los dos escenarios típicos: usuario que
+        # todavía no genera APUs pero quiere ver el flujo, y usuario con APUs
+        # listos para unir.
+        despieces_guardados_count = sum(
+            1 for dm in despieces_raw if dm.esta_guardado
+        )
         proyectos_data.append({
             "proy": p,
             "apus_data": apus_data,
             "despieces_sin_apu": despieces_sin_apu,
+            "puede_consolidar": (
+                despieces_guardados_count >= 2 or len(apus_data) >= 2
+            ),
         })
     ctx["proyectos"] = proyectos_qs
     ctx["proyectos_data"] = proyectos_data
@@ -679,16 +710,32 @@ class SolicitudUpdateView(UpdateView):
 
 class SolicitudDeleteView(View):
     def post(self, request, pk, *args, **kwargs):
+        from apps.common.auth import es_admin, get_usuario_actual
         solicitud = get_object_or_404(Solicitud, pk=pk)
         consecutivo = solicitud.consecutivo
         try:
-            solicitud.delete()
+            if es_admin(request):
+                # Servicio explícito: elimina proyectos → APUs → cotizaciones
+                # → consolidados en orden controlado. Sin introspección.
+                from apps.comercial.services.admin_eliminacion import (
+                    eliminar_solicitud_admin,
+                )
+                eliminar_solicitud_admin(solicitud, usuario=get_usuario_actual(request))
+            else:
+                solicitud.delete()
         except ProtectedError:
             messages.error(
                 request,
                 f"La solicitud {consecutivo} no puede eliminarse porque tiene "
                 "proyectos, APUs o cotizaciones asociadas. Para conservar la "
                 "trazabilidad, puede archivarla.",
+            )
+            return redirect("comercial:solicitud_detail", pk=pk)
+        except Exception as exc:
+            logger.exception("[SolicitudDeleteView] Error eliminando %s", consecutivo)
+            messages.error(
+                request,
+                f"No se pudo eliminar la solicitud {consecutivo}: {exc}",
             )
             return redirect("comercial:solicitud_detail", pk=pk)
         registrar_log(
@@ -890,30 +937,47 @@ class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
         # ── Despieces Maestro asociados al proyecto ────────────────────────────
         try:
             from apps.ingenieria.models import DespieceMaestro
-            from apps.presupuestos.models import ProyectoSistema, APUProyecto
+            from apps.presupuestos.models import (
+                ProyectoSistema, APUProyecto, APUDespieceIncluido,
+            )
             despieces_raw = list(
                 proyecto.despieces_maestro
                 .select_related("subsistema", "subsistema__sistema")
                 .order_by("-updated_at")
             )
-            # Agrupar por APU (Fase 11.3F).
+            # Agrupar por APU usando APUDespieceIncluido (fuente de verdad).
+            # Antes se usaba matching (proyecto, sistema, subsistema), que
+            # asignaba erróneamente todos los despieces de un subsistema al
+            # primer APU del subsistema, bloqueando el botón "Gen. APU" del
+            # segundo despiece.
             apus_map = {}        # apu.pk -> {"apu": apu, "despieces": [dm,...]}
             despieces_sin_apu = []
             for dm in despieces_raw:
                 apu = None
                 try:
-                    ps = ProyectoSistema.objects.filter(
-                        proyecto=proyecto,
-                        sistema=dm.subsistema.sistema,
-                        subsistema=dm.subsistema,
-                    ).first()
-                    if ps:
-                        apu = (
-                            APUProyecto.objects
-                            .filter(proyecto_sistema=ps)
-                            .select_related("tipo_garantia", "aprobado_por")
-                            .first()
-                        )
+                    inc = (
+                        APUDespieceIncluido.objects
+                        .filter(despiece_maestro=dm, activo=True)
+                        .select_related("apu", "apu__tipo_garantia", "apu__aprobado_por")
+                        .first()
+                    )
+                    if inc and inc.apu:
+                        apu = inc.apu
+                    else:
+                        # Fallback legacy: dato antiguo sin APUDespieceIncluido.
+                        ps_legacy = ProyectoSistema.objects.filter(
+                            proyecto=proyecto,
+                            sistema=dm.subsistema.sistema,
+                            subsistema=dm.subsistema,
+                        ).first()
+                        if ps_legacy:
+                            existing_apus = list(
+                                APUProyecto.objects
+                                .filter(proyecto_sistema=ps_legacy)
+                                .select_related("tipo_garantia", "aprobado_por")
+                            )
+                            if len(existing_apus) == 1 and not APUDespieceIncluido.objects.filter(apu=existing_apus[0]).exists():
+                                apu = existing_apus[0]
                 except Exception:
                     apu = None
                 if apu:
@@ -932,7 +996,12 @@ class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
                 .prefetch_related("origenes_consolidado__apu_origen")
                 .order_by("-created_at")
             )
-            ctx["puede_consolidar"] = len(apus_map) >= 2
+            despieces_guardados_count = sum(
+                1 for dm in despieces_raw if dm.esta_guardado
+            )
+            ctx["puede_consolidar"] = (
+                despieces_guardados_count >= 2 or len(apus_map) >= 2
+            )
         except Exception:
             ctx["apus_data"] = []
             ctx["despieces_sin_apu"] = []
@@ -1044,18 +1113,34 @@ class ProyectoDeleteView(DeleteView):
     success_url = reverse_lazy("comercial:solicitud_list")
 
     def post(self, request, *args, **kwargs):
+        from apps.common.auth import es_admin, get_usuario_actual
         self.object = self.get_object()
+        consecutivo = self.object.consecutivo
+        pk = self.object.pk
         try:
-            self.object.delete()
+            if es_admin(request):
+                from apps.comercial.services.admin_eliminacion import (
+                    eliminar_proyecto_admin,
+                )
+                eliminar_proyecto_admin(self.object, usuario=get_usuario_actual(request))
+            else:
+                self.object.delete()
         except ProtectedError:
             messages.error(
                 request,
-                f"El proyecto {self.object.consecutivo} no puede eliminarse "
+                f"El proyecto {consecutivo} no puede eliminarse "
                 "porque tiene despieces, APUs o cotizaciones asociadas. "
                 "Puede anularlo para conservar la trazabilidad.",
             )
-            return redirect("comercial:proyecto_detail", pk=self.object.pk)
-        messages.success(request, f"Proyecto {self.object.consecutivo} eliminado.")
+            return redirect("comercial:proyecto_detail", pk=pk)
+        except Exception as exc:
+            logger.exception("[ProyectoDeleteView] Error eliminando %s", consecutivo)
+            messages.error(
+                request,
+                f"No se pudo eliminar el proyecto {consecutivo}: {exc}",
+            )
+            return redirect("comercial:proyecto_detail", pk=pk)
+        messages.success(request, f"Proyecto {consecutivo} eliminado.")
         return redirect(self.success_url)
 
 
