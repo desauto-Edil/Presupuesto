@@ -31,6 +31,11 @@ from apps.common.auth import (
     puede_enviar_a_revision,
     puede_gestionar_unidad,
 )
+from apps.common.apu_lock import (
+    objeto_bloqueado_por_apu,
+    redirect_si_bloqueado,
+    MENSAJE_BLOQUEO,
+)
 from apps.ingenieria.models import Sistema, Subsistema
 from apps.common.choices import TipoAPU
 from apps.presupuestos.forms import (
@@ -80,6 +85,15 @@ class ProyectoSistemaUpdateView(UpdateView):
     template_name = "presupuestos/proyectosistema_form.html"
     success_url = reverse_lazy("presupuestos:proyectosistema_list")
 
+    def dispatch(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if objeto_bloqueado_por_apu(self.object):
+            messages.error(request, MENSAJE_BLOQUEO)
+            return redirect(
+                reverse("ingenieria:despiece_list") + f"?proyecto_pk={self.object.proyecto_id}"
+            )
+        return super().dispatch(request, *args, **kwargs)
+
 
 class ProyectoSistemaDeleteView(DeleteView):
     model = ProyectoSistema
@@ -87,6 +101,15 @@ class ProyectoSistemaDeleteView(DeleteView):
 
     def get_success_url(self):
         return reverse("ingenieria:despiece_list") + f"?proyecto_pk={self.object.proyecto_id}"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if objeto_bloqueado_por_apu(self.object):
+            messages.error(request, MENSAJE_BLOQUEO)
+            return redirect(
+                reverse("ingenieria:despiece_list") + f"?proyecto_pk={self.object.proyecto_id}"
+            )
+        return super().dispatch(request, *args, **kwargs)
 
 
 # ── Despiece — Módulo lista ───────────────────────────────────────────────────
@@ -224,6 +247,12 @@ class CalcularDespiecePSView(View):
     """
     def post(self, request, pk):
         proyecto = get_object_or_404(Proyecto, pk=pk)
+        blk = redirect_si_bloqueado(
+            request, proyecto,
+            reverse("ingenieria:despiece_list") + f"?proyecto_pk={proyecto.pk}",
+        )
+        if blk:
+            return blk
 
         # Soporta tanto JSON body como form POST con campos parametros[variable]
         try:
@@ -298,6 +327,12 @@ class DespieceEjecutarView(View):
     """Ejecuta el cálculo del despiece para un ProyectoSistema existente."""
     def post(self, request, pk):
         ps = get_object_or_404(ProyectoSistema, pk=pk)
+        blk = redirect_si_bloqueado(
+            request, ps,
+            reverse("ingenieria:despiece_list") + f"?proyecto_pk={ps.proyecto_id}",
+        )
+        if blk:
+            return blk
         try:
             from apps.presupuestos.services.despiece_service import DespieceService
 
@@ -330,6 +365,8 @@ class DespieceLineaAjusteAPIView(View):
     """
     def post(self, request, pk):
         linea = get_object_or_404(DespieceLinea, pk=pk)
+        if objeto_bloqueado_por_apu(linea):
+            return JsonResponse({"error": MENSAJE_BLOQUEO}, status=403)
         try:
             body = json.loads(request.body)
             valor = body.get("cantidad_ajustada")
@@ -368,6 +405,13 @@ class DespieceLineaAjusteView(UpdateView):
     def get_success_url(self):
         return reverse("ingenieria:despiece_list") + f"?proyecto_pk={self.object.proyecto_id}"
 
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        blk = redirect_si_bloqueado(request, self.object, self.get_success_url())
+        if blk:
+            return blk
+        return super().post(request, *args, **kwargs)
+
 
 class AsignarProductoLineaAPIView(View):
     """
@@ -377,6 +421,8 @@ class AsignarProductoLineaAPIView(View):
     """
     def post(self, request, pk):
         linea = get_object_or_404(DespieceLinea, pk=pk)
+        if objeto_bloqueado_por_apu(linea):
+            return JsonResponse({"error": MENSAJE_BLOQUEO}, status=403)
         try:
             data = json.loads(request.body)
             producto_id = int(data.get("producto_id", 0))
@@ -1166,6 +1212,14 @@ class APUProyectoUpdateView(UpdateView):
     def get_success_url(self):
         return reverse("presupuestos:apu_detail", args=[self.object.pk])
 
+    def dispatch(self, request, *args, **kwargs):
+        # Bloqueo de solo lectura si el APU ya fue aprobado.
+        self.object = self.get_object()
+        if objeto_bloqueado_por_apu(self.object):
+            messages.error(request, MENSAJE_BLOQUEO)
+            return redirect("presupuestos:apu_detail", pk=self.object.pk)
+        return super().dispatch(request, *args, **kwargs)
+
     def form_valid(self, form):
         # Snapshot config fields before save to detect changes
         old = APUProyecto.objects.get(pk=self.object.pk)
@@ -1263,6 +1317,12 @@ class APUGenerarView(View):
     """Genera el APU para un ProyectoSistema dado."""
     def post(self, request, pk):
         ps = get_object_or_404(ProyectoSistema, pk=pk)
+        blk = redirect_si_bloqueado(
+            request, ps,
+            reverse("ingenieria:despiece_list") + f"?proyecto_pk={ps.proyecto_id}",
+        )
+        if blk:
+            return blk
         try:
             from apps.presupuestos.services.apu_service import APUService
             apu = APUService.generar(ps)
@@ -1583,6 +1643,13 @@ class APUArmarDesdeDespieceView(View):
         from decimal import Decimal
 
         dm = get_object_or_404(DespieceMaestro, pk=pk)
+
+        blk = redirect_si_bloqueado(
+            request, getattr(dm, "proyecto", None),
+            reverse("ingenieria:despiece_maestro", args=[dm.pk]),
+        )
+        if blk:
+            return blk
 
         # ── 1. Revalidación backend obligatoria ──────────────────────────────
         validacion = validar_despiece_listo_para_apu(dm)
@@ -1978,6 +2045,9 @@ class APUManoObraView(View):
     """
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
+        blk = redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
+        if blk:
+            return blk
         try:
             from apps.presupuestos.services.apu_service import APUService
 
@@ -2030,6 +2100,9 @@ class APUHerramientasView(View):
     """
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
+        blk = redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
+        if blk:
+            return blk
         try:
             from apps.presupuestos.services.apu_service import APUService
 
@@ -2067,6 +2140,9 @@ class APUTransporteView(View):
     """
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
+        blk = redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
+        if blk:
+            return blk
         try:
             descripciones   = request.POST.getlist("descripcion[]")
             precios_totales = request.POST.getlist("precio_total[]")
@@ -2116,6 +2192,10 @@ class APULineaUpdateView(View):
 
         linea = get_object_or_404(APULinea, pk=pk, editable=True)
         apu_pk = linea.apu_id
+
+        blk = redirect_si_bloqueado(request, linea, reverse("presupuestos:apu_detail", args=[apu_pk]))
+        if blk:
+            return blk
 
         try:
             if linea.tipo == TipoAPU.ADMINISTRACION:
@@ -2237,6 +2317,9 @@ class APULineaDeleteView(View):
     def post(self, request, pk):
         from apps.presupuestos.models import APULinea
         linea = get_object_or_404(APULinea, pk=pk)
+        blk = redirect_si_bloqueado(request, linea, reverse("presupuestos:apu_detail", args=[linea.apu_id]))
+        if blk:
+            return blk
         if linea.tipo == "MATERIALES":
             messages.error(request, "Las líneas de materiales se regeneran desde el despiece.")
             return redirect(reverse("presupuestos:apu_detail", args=[linea.apu_id]))
@@ -2262,6 +2345,9 @@ class APUAdminView(View):
     """
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
+        blk = redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
+        if blk:
+            return blk
         try:
             from apps.presupuestos.services.apu_service import APUService
 
@@ -3408,6 +3494,9 @@ class APUEditarGarantiaView(View):
 
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
+        blk = redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
+        if blk:
+            return blk
         try:
             _aplicar_garantia_desde_post(apu, request.POST, durante_armado=False)
         except ValueError as exc:

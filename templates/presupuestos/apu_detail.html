@@ -467,6 +467,11 @@
 
 
 {% block topbar_actions %}
+  {% if apu.esta_aprobado %}
+  <span class="btn btn-sm" style="background:#d1fae5;color:#065f46;cursor:default;font-weight:700;">
+    <i class="bi bi-lock-fill" style="margin-right:4px;"></i>APU aprobado — solo lectura
+  </span>
+  {% else %}
   <a href="{% url 'presupuestos:apu_update' apu.pk %}"
      class="btn btn-ghost btn-sm">
     <i class="bi bi-sliders" style="margin-right:4px;"></i>Parámetros
@@ -480,6 +485,7 @@
       <i class="bi bi-arrow-clockwise" style="margin-right:4px;"></i>Actualizar
     </button>
   </form>
+  {% endif %}
   {% endif %}
   {# Fase 11.5.3 — Archivar APU #}
   {% if apu.archivado %}
@@ -600,8 +606,10 @@
   <div class="apu-kpi apu-kpi--params">
     <div class="apu-kpi__label" style="margin-bottom:8px;">
       Parámetros
+      {% if not apu.esta_aprobado %}
       <a href="{% url 'presupuestos:apu_update' apu.pk %}"
          style="font-size:10px;font-weight:600;color:var(--theme-accent);margin-left:6px;">Editar</a>
+      {% endif %}
     </div>
     <div class="apu-param-row"><span>Factor venta</span><strong>{{ apu.factor_venta_pct }}%</strong></div>
     <div class="apu-param-row"><span>IVA</span><strong>{% if apu.aplica_iva %}{{ apu.iva_pct }}%{% else %}—{% endif %}</strong></div>
@@ -619,10 +627,12 @@
       <i class="bi bi-shield-check" style="color:var(--theme-accent);margin-right:6px;"></i>
       Garantía
     </span>
+    {% if not apu.esta_aprobado %}
     <button type="button" class="btn btn-ghost btn-xs"
             data-bs-toggle="modal" data-bs-target="#modalEditarGarantia">
       Editar
     </button>
+    {% endif %}
   </div>
   <div class="panel-body" style="padding:14px 18px;">
     {% if apu.aplica_garantia and apu.tipo_garantia %}
@@ -1177,7 +1187,7 @@
             <td class="text-end font-monospace">${{ linea.valor_unitario|floatformat:2 }}</td>
             <td class="apu-valor-total text-end">${{ linea.valor_total|floatformat:2 }}</td>
             <td>
-              {% if linea.editable %}
+              {% if linea.editable and not apu.esta_aprobado %}
               <button class="btn btn-ghost btn-xs"
                       data-bs-toggle="modal" data-bs-target="#modalEditarLinea"
                       data-linea-pk="{{ linea.pk }}"
@@ -1305,7 +1315,7 @@
             <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">${{ grupo.linea_resumen.valor_unitario|floatformat:2 }}</td>
             <td class="apu-cat-valor" style="background:var(--surface);">${{ grupo.linea_resumen.valor_total|floatformat:2 }}</td>
             <td style="background:var(--surface);white-space:nowrap;">
-              {% if grupo.linea_resumen.editable %}
+              {% if grupo.linea_resumen.editable and not apu.esta_aprobado %}
               <button class="btn btn-ghost btn-xs"
                       data-bs-toggle="modal" data-bs-target="#modalEditarLinea"
                       data-linea-pk="{{ grupo.linea_resumen.pk }}"
@@ -1348,7 +1358,7 @@
             <td>${{ linea.valor_unitario|floatformat:2 }}</td>
             <td class="apu-valor-total">${{ linea.valor_total|floatformat:2 }}</td>
             <td>
-              {% if linea.editable %}
+              {% if linea.editable and not apu.esta_aprobado %}
               <button class="btn btn-ghost btn-xs"
                       data-bs-toggle="modal" data-bs-target="#modalEditarLinea"
                       data-linea-pk="{{ linea.pk }}"
@@ -1407,6 +1417,7 @@
               onclick="toggleconfirmado(this)">
         <i class="bi bi-check2-circle" style="margin-right:4px;"></i>Confirmado
       </button>
+      {% if not apu.esta_aprobado %}
       {% if cat.tipo == "HERRAMIENTAS_EQUIPOS" %}
       <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalHerramientas"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar herramientas</button>
       {% elif cat.tipo == "TRANSPORTE" %}
@@ -1415,6 +1426,7 @@
       <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalManoObra"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar mano de obra</button>
       {% elif cat.tipo == "ADMINISTRACION" %}
       <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalAdmin"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar administración</button>
+      {% endif %}
       {% endif %}
     </div>
   </div>{# /.apu-tab-pane #}
@@ -1668,8 +1680,10 @@
         A={{ m.porcentajes.admin|floatformat:2 }}% · I={{ m.porcentajes.imprevistos|floatformat:2 }}% · U={{ m.porcentajes.utilidad|floatformat:2 }}%
         {% if m.porcentajes.es_final %}<span class="badge bg-primary" style="font-size:9.5px;font-weight:600;margin-left:4px;">snapshot revisor</span>{% endif %}
         {% if m.garantia_recargo %} · Garantía Red Shield {{ m.garantia_recargo|currency:"COP" }} (fuera de base AIU){% endif %}
+        {% if not apu.esta_aprobado %}
         &nbsp;—&nbsp;
         <a href="{% url 'presupuestos:apu_update' apu.pk %}" style="color:var(--theme-accent);font-size:11px;">Editar porcentajes base</a>
+        {% endif %}
       </div>
     </div>
   </div>

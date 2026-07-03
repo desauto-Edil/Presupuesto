@@ -134,6 +134,14 @@ class Solicitud(models.Model):
             self.contacto = self.cliente.contacto_principal
         super().save(*args, **kwargs)
 
+    @property
+    def tiene_apu_aprobado(self) -> bool:
+        """
+        True si cualquiera de los proyectos de la solicitud tiene un APU
+        aprobado. Cuando es True, la solicitud queda en solo lectura.
+        """
+        return any(p.tiene_apu_aprobado for p in self.proyectos.all())
+
 
 # ---------------------------------------------------------------------------
 # ARCHIVOS DE SOLICITUD
@@ -299,6 +307,23 @@ class Proyecto(models.Model):
         from apps.common.choices import EstadoProyecto
         self.estado = EstadoProyecto.APU
         self.save(update_fields=["estado", "updated_at"])
+
+    # ── Bloqueo por APU aprobado ───────────────────────────────────────────────
+
+    @property
+    def tiene_apu_aprobado(self) -> bool:
+        """
+        True si el proyecto tiene algún APU aprobado (individual, vía
+        proyecto_sistema, o consolidado). Fuente del bloqueo de solo lectura
+        del proyecto y su despiece cuando ya existe una aprobación.
+        """
+        from apps.presupuestos.models import APUProyecto
+        if self.apus_consolidados.filter(fecha_aprobacion__isnull=False).exists():
+            return True
+        return APUProyecto.objects.filter(
+            proyecto_sistema__proyecto=self,
+            fecha_aprobacion__isnull=False,
+        ).exists()
 
 
 # ---------------------------------------------------------------------------

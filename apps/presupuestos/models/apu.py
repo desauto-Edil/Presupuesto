@@ -618,6 +618,15 @@ class APUProyecto(models.Model):
         """Fase 12 — Último snapshot APROBADA de cotización, o None."""
         return self.cotizaciones.filter(estado="APROBADA").order_by("-version").first()
 
+    @property
+    def esta_aprobado(self) -> bool:
+        """
+        True si el APU ya fue aprobado por el revisor (modalidad AIU oficial fijada).
+        Fuente única de verdad del bloqueo de solo-lectura: una vez aprobado, ni el
+        APU ni el proyecto/solicitud/despiece asociados deben poder modificarse.
+        """
+        return self.fecha_aprobacion is not None
+
     def get_proyecto(self):
         """Devuelve el Proyecto contenedor (sea individual o consolidado)."""
         if self.proyecto_id:

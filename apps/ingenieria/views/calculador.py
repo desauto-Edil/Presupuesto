@@ -22,6 +22,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
+from apps.common.apu_lock import objeto_bloqueado_por_apu, MENSAJE_BLOQUEO
 
 logger = logging.getLogger(__name__)
 
@@ -477,6 +478,8 @@ class CalcularDespieceMaestroView(View):
 
     def post(self, request, pk):
         dm = get_object_or_404(DespieceMaestro, pk=pk)
+        if objeto_bloqueado_por_apu(getattr(dm, "proyecto", None)):
+            return JsonResponse({"ok": False, "error": MENSAJE_BLOQUEO}, status=403)
 
         try:
             body = json.loads(request.body)
@@ -542,6 +545,8 @@ class GuardarDespieceMaestroView(View):
 
     def post(self, request, pk):
         dm = get_object_or_404(DespieceMaestro, pk=pk)
+        if objeto_bloqueado_por_apu(getattr(dm, "proyecto", None)):
+            return JsonResponse({"ok": False, "error": MENSAJE_BLOQUEO}, status=403)
 
         try:
             body = json.loads(request.body)

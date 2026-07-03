@@ -6,8 +6,9 @@ from django.db.models import Count, Prefetch, Q
 from django.db.models import ProtectedError
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.views import View
+from apps.common.apu_lock import objeto_bloqueado_por_apu, MENSAJE_BLOQUEO
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView,
 )
@@ -624,10 +625,8 @@ class SolicitudCreateView(CreateView):
         return kwargs
 
     def form_valid(self, form):
+        # El archivo adjunto es OPCIONAL: la solicitud se crea con o sin archivos.
         archivos = self.request.FILES.getlist("archivos")
-        if not archivos:
-            form.add_error(None, "Debe adjuntar al menos un archivo para crear la solicitud.")
-            return self.form_invalid(form)
         self.object = form.save(commit=False)
         self.object.creado_por = _usuario_sistema(self.request)
         self.object.save()
@@ -650,10 +649,11 @@ class SolicitudCreateView(CreateView):
             modelo_afectado="Solicitud",
             objeto_id=self.object.pk,
         )
-        messages.success(
-            self.request,
-            f"Solicitud {self.object.consecutivo} creada con {len(archivos)} archivo(s).",
-        )
+        if archivos:
+            msg = f"Solicitud {self.object.consecutivo} creada con {len(archivos)} archivo(s)."
+        else:
+            msg = f"Solicitud {self.object.consecutivo} creada (sin archivos adjuntos)."
+        messages.success(self.request, msg)
         return redirect("comercial:solicitud_detail", pk=self.object.pk)
 
 
@@ -661,6 +661,14 @@ class SolicitudUpdateView(UpdateView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_form.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        # Solo lectura si algún APU de la solicitud ya fue aprobado.
+        self.object = self.get_object()
+        if objeto_bloqueado_por_apu(self.object):
+            messages.error(request, MENSAJE_BLOQUEO)
+            return redirect("comercial:solicitud_detail", pk=self.object.pk)
+        return super().dispatch(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -713,6 +721,11 @@ class SolicitudDeleteView(View):
         from apps.common.auth import es_admin, get_usuario_actual
         solicitud = get_object_or_404(Solicitud, pk=pk)
         consecutivo = solicitud.consecutivo
+        # Bloqueo de solo lectura: si hay un APU aprobado, solo el admin global
+        # puede eliminar (escape hatch). El resto queda bloqueado.
+        if objeto_bloqueado_por_apu(solicitud) and not es_admin(request):
+            messages.error(request, MENSAJE_BLOQUEO)
+            return redirect("comercial:solicitud_detail", pk=solicitud.pk)
         try:
             if es_admin(request):
                 # Servicio explícito: elimina proyectos → APUs → cotizaciones
@@ -1056,6 +1069,14 @@ class ProyectoUpdateView(UpdateView):
             return reverse_lazy("comercial:solicitud_detail", kwargs={"pk": self.object.solicitud_id})
         return reverse_lazy("comercial:proyecto_detail", kwargs={"pk": self.object.pk})
 
+    def dispatch(self, request, *args, **kwargs):
+        # Solo lectura si el proyecto tiene un APU aprobado.
+        self.object = self.get_object()
+        if objeto_bloqueado_por_apu(self.object):
+            messages.error(request, MENSAJE_BLOQUEO)
+            return redirect("comercial:proyecto_detail", pk=self.object.pk)
+        return super().dispatch(request, *args, **kwargs)
+
     def form_valid(self, form):
         self.object = form.save(commit=False)
         original = Proyecto.objects.get(pk=self.object.pk)
@@ -1117,6 +1138,10 @@ class ProyectoDeleteView(DeleteView):
         self.object = self.get_object()
         consecutivo = self.object.consecutivo
         pk = self.object.pk
+        # Bloqueo de solo lectura: con APU aprobado, solo el admin global elimina.
+        if objeto_bloqueado_por_apu(self.object) and not es_admin(request):
+            messages.error(request, MENSAJE_BLOQUEO)
+            return redirect("comercial:proyecto_detail", pk=pk)
         try:
             if es_admin(request):
                 from apps.comercial.services.admin_eliminacion import (

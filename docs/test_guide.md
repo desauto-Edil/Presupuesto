@@ -1,7 +1,7 @@
 # Guía de pruebas — Sprint Mayo 2026
 
 ## Requisitos previos
-- Servidor corriendo: `python manage.py runserver 8000`
+- Servidor corriendo: `python manage.py runserver 8080`
 - Al menos 1 solicitud, 1 cliente, 1 sistema/subsistema con líneas, 1 proyecto guardado con despiece
 
 ---

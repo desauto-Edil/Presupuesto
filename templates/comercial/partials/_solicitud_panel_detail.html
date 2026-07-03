@@ -118,27 +118,41 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
     </div>
 </div>
 
+{% if solicitud.tiene_apu_aprobado %}
+<div class="fade-up" style="background:#d1fae5;border:1px solid #86efac;border-radius:8px;padding:9px 13px;margin-bottom:10px;font-size:12.5px;color:#065f46;font-weight:600;">
+    <i class="bi bi-lock-fill" style="margin-right:6px;"></i>
+    Esta solicitud tiene un APU aprobado: la información quedó en solo lectura.
+</div>
+{% endif %}
+
 {# ════════════════════════ ACCIONES PRINCIPALES (únicas) ════════════════════════ #}
 <div class="solpanel-actions fade-up">
     {% if proyecto_actual_obj %}
         {# Solicitud con proyecto: Ver / Editar / Clonar proyecto + Archivar solicitud #}
         <a href="{% url 'comercial:proyecto_detail' proyecto_actual_obj.pk %}"
            class="btn btn-primary btn-sm">Ver proyecto</a>
+        {% if not proyecto_actual_obj.tiene_apu_aprobado %}
         <a href="{% url 'comercial:proyecto_update' proyecto_actual_obj.pk %}"
            class="btn btn-ghost btn-sm">Editar proyecto</a>
-        <a href="{% url 'comercial:proyecto_clonar' proyecto_actual_obj.pk %}"
-           class="btn btn-ghost btn-sm"
-           title="Crear una nueva versión a partir del proyecto actual">
-            Clonar proyecto existente
-        </a>
+        {% endif %}
+        <form method="post" action="{% url 'comercial:proyecto_clonar' proyecto_actual_obj.pk %}"
+              style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-ghost btn-sm"
+                    title="Crear una nueva versión a partir del proyecto actual">
+                Clonar proyecto existente
+            </button>
+        </form>
     {% else %}
         {# Solicitud sin proyecto: Agregar proyecto + Editar solicitud #}
         <button type="button" class="btn btn-primary btn-sm"
                 data-bs-toggle="modal" data-bs-target="#modalCrearProyecto">
             Agregar proyecto
         </button>
+        {% if not solicitud.tiene_apu_aprobado %}
         <a href="{% url 'comercial:solicitud_update' solicitud.pk %}"
            class="btn btn-ghost btn-sm">Editar solicitud</a>
+        {% endif %}
     {% endif %}
 
     {% if solicitud.estado == 'EN_REVISION' and puede_devolver %}
@@ -318,9 +332,14 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
                     <a href="{% url 'comercial:proyecto_detail' proy.pk %}" class="btn btn-ghost btn-xs">Ver proyecto</a>
+                    {% if not proy.tiene_apu_aprobado %}
                     <a href="{% url 'comercial:proyecto_update' proy.pk %}" class="btn btn-ghost btn-xs">Editar proyecto</a>
-                    <a href="{% url 'comercial:proyecto_clonar' proy.pk %}" class="btn btn-ghost btn-xs"
-                       title="Crear una nueva versión a partir de este proyecto">Clonar proyecto existente</a>
+                    {% endif %}
+                    <form method="post" action="{% url 'comercial:proyecto_clonar' proy.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-ghost btn-xs"
+                                title="Crear una nueva versión a partir de este proyecto">Clonar proyecto existente</button>
+                    </form>
                 </div>
             </div>
 
@@ -491,8 +510,10 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
                 {{ archivos|length }} archivo{{ archivos|length|pluralize }}
             </span>
             {% endif %}
+            {% if not solicitud.tiene_apu_aprobado %}
             <a href="{% url 'comercial:solicitud_update' solicitud.pk %}"
                class="btn btn-ghost btn-xs">+ Adjuntar</a>
+            {% endif %}
         </div>
     </div>
 

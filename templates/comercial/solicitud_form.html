@@ -249,15 +249,15 @@
             </div>
 
             {% if not object %}
-            <!-- ─── ARCHIVOS — solo en creación (obligatorio) ─── -->
+            <!-- ─── ARCHIVOS — solo en creación (opcional) ─── -->
             <div style="margin-top:22px;">
-                <div class="section-heading">Archivos adjuntos <span class="req">*</span></div>
+                <div class="section-heading">Archivos adjuntos</div>
                 <div style="margin-bottom:6px;">
                     <input type="file" name="archivos" id="archivosInput"
-                           class="form-control form-control-sm" multiple required
+                           class="form-control form-control-sm" multiple
                            style="margin-bottom:6px;">
                     <div class="field-help">
-                        Obligatorio. Puede seleccionar varios archivos. Formatos: PDF, Word, Excel, imágenes, etc.
+                        Opcional. Puede seleccionar varios archivos. Formatos: PDF, Word, Excel, imágenes, etc.
                     </div>
                 </div>
             </div>

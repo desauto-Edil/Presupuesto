@@ -18,10 +18,21 @@ despiece" es la única para crear despieces y no se repite dentro del
 panel "APUs y despieces".
 {% endcomment %}
 {% block topbar_actions %}
+  {% if proyecto.tiene_apu_aprobado %}
+  {# Bloqueado: no se crean despieces nuevos cuando el proyecto ya tiene un APU #}
+  {# aprobado. Mismo criterio de solo-lectura que el resto de la cadena. El     #}
+  {# botón se deja visible pero deshabilitado, con el motivo en el tooltip.     #}
+  <span class="btn btn-primary btn-sm disabled" aria-disabled="true"
+        style="opacity:.55;cursor:not-allowed;"
+        title="No se puede crear un nuevo despiece porque el proyecto ya tiene un APU aprobado.">
+    <i class="bi bi-plus-lg"></i> Nuevo despiece
+  </span>
+  {% else %}
   <a href="{% url 'ingenieria:calculador_sistemas' %}?proyecto_pk={{ proyecto.pk }}"
      class="btn btn-primary btn-sm">
     <i class="bi bi-plus-lg"></i> Nuevo despiece
   </a>
+  {% endif %}
   {% if proyecto.solicitud %}
   <form method="post" action="{% url 'comercial:proyecto_clonar' proyecto.pk %}" style="display:inline;">
     {% csrf_token %}
@@ -382,12 +393,13 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
             {% comment %}Sub-fase D — "Ver APU" se vuelve "Ver autorización" cuando el usuario actual es el revisor del APU. El modal contextual se carga del parcial.{% endcomment %}
             {% puede_aprobar_apu apu as puede_aprobar_flag_apu %}
             {% if puede_aprobar_flag_apu %}
-            {% puede_editar_apu apu as puede_editar_flag_apu %}
+            {# El modal #modalAutorizacion_<pk> se renderiza al final del bloque content, #}
+            {# fuera de .panel (overflow:hidden) y del <form>, para que Bootstrap no lo   #}
+            {# deje atrapado detrás del backdrop. Aquí solo queda el disparador.          #}
             <button type="button" data-bs-toggle="modal" data-bs-target="#modalAutorizacion_{{ apu.pk }}"
                     class="btn btn-xs" style="background:var(--theme-accent);color:#fff;border:none;">
               <i class="bi bi-shield-check" style="margin-right:3px;"></i>Ver autorización
             </button>
-            {% include "presupuestos/partials/_modal_autorizacion_apu.html" with apu=apu puede_editar=puede_editar_flag_apu %}
             {% else %}
             <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
                class="btn btn-xs" style="background:var(--theme-accent);color:#fff;">Ver APU</a>
@@ -646,5 +658,19 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
   </div>
 </div>
 {% endif %}
+
+{# ════════════════ Modales: Autorización de revisión APU ════════════════ #}
+{# Renderizados a nivel de página (fuera de .panel con overflow:hidden y del  #}
+{# <form> de consolidación) para que abran limpios, sin quedar detrás del     #}
+{# backdrop ni recortados por la card. Un modal por APU; ID único por apu.pk. #}
+{% for bucket in apus_data %}
+  {% with apu=bucket.apu %}
+    {% puede_aprobar_apu apu as puede_aprobar_flag_modal %}
+    {% if puede_aprobar_flag_modal %}
+      {% puede_editar_apu apu as puede_editar_flag_modal %}
+      {% include "presupuestos/partials/_modal_autorizacion_apu.html" with apu=apu puede_editar=puede_editar_flag_modal %}
+    {% endif %}
+  {% endwith %}
+{% endfor %}
 
 {% endblock %}

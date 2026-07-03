@@ -10,4 +10,4 @@ import site
 site.addsitedir("/Users/u18810/Documents/Automatizacion/Presupuestos/venv/lib/python3.9/site-packages")
 
 from django.core.management import execute_from_command_line
-execute_from_command_line(["manage.py", "runserver", "0.0.0.0:8000"])
+execute_from_command_line(["manage.py", "runserver", "0.0.0.0:8080"])
