@@ -5,23 +5,104 @@ from django.shortcuts import redirect
 
 
 # ---------------------------------------------------------------------------
-# Mixin: acceso exclusivo para rol ADMINISTRADOR
+# Conjuntos de roles (fuente de verdad centralizada)
+# Modificar AQUÍ cuando cambien las reglas de acceso — no dispersar en vistas.
 # ---------------------------------------------------------------------------
 
-class AdminRequiredMixin:
+ROLES_ADMIN               = {"ADMINISTRADOR"}
+ROLES_ADMIN_GERENTE       = {"ADMINISTRADOR", "GERENTE"}
+ROLES_GESTION_COMERCIAL   = {"ADMINISTRADOR", "GERENTE", "PRESUPUESTOS", "ASESOR_COMERCIAL"}
+ROLES_PRESUPUESTOS        = {"ADMINISTRADOR", "GERENTE", "PRESUPUESTOS"}
+ROLES_CATALOGO_PRODUCTOS  = {"ADMINISTRADOR", "PRESUPUESTOS", "COMPRAS"}
+ROLES_CATALOGO_CATEGORIAS = {"ADMINISTRADOR", "PRESUPUESTOS"}
+ROLES_CATALOGO_PROVEEDORES= {"ADMINISTRADOR", "PRESUPUESTOS", "ASESOR_COMERCIAL"}
+ROLES_INGENIERIA          = {"ADMINISTRADOR", "PRESUPUESTOS"}
+ROLES_DESCARGA_PDF        = {"ADMINISTRADOR", "GERENTE", "PRESUPUESTOS", "ASESOR_COMERCIAL"}
+
+
+# ---------------------------------------------------------------------------
+# Mixin base: control por rol
+# ---------------------------------------------------------------------------
+
+class RolRequeridoMixin:
     """
-    Requiere que el usuario en sesión tenga rol ADMINISTRADOR.
-    Redirige al dashboard con mensaje de error si no cumple.
+    Mixin base para proteger vistas por rol de sesión.
+
+    Declara `roles_permitidos` (set de strings) en la subclase.
+    Bloquea en dispatch() antes de cualquier lógica de negocio.
+
+    Uso:
+        class MiView(RolRequeridoMixin, CreateView):
+            roles_permitidos = ROLES_GESTION_COMERCIAL
     """
+    roles_permitidos: set = set()
+    redirect_url_name: str = "comercial:dashboard"
+    mensaje_denegacion: str = "No tiene permisos para realizar esta acción."
+
     def dispatch(self, request, *args, **kwargs):
         rol = request.session.get("rol", "")
-        if rol != "ADMINISTRADOR":
-            messages.error(
-                request,
-                "Solo el rol Administrador puede acceder a esta sección."
-            )
-            return redirect("comercial:dashboard")
+        if not rol or rol not in self.roles_permitidos:
+            messages.error(request, self.mensaje_denegacion)
+            return redirect(self.redirect_url_name)
         return super().dispatch(request, *args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Mixins concretos listos para usar en vistas
+# ---------------------------------------------------------------------------
+
+class AdminRequiredMixin(RolRequeridoMixin):
+    """Solo ADMINISTRADOR global."""
+    roles_permitidos = ROLES_ADMIN
+    mensaje_denegacion = "Solo el Administrador global puede acceder a esta sección."
+
+
+class AdminGerenteRequiredMixin(RolRequeridoMixin):
+    """ADMINISTRADOR o GERENTE."""
+    roles_permitidos = ROLES_ADMIN_GERENTE
+    mensaje_denegacion = "Esta acción requiere rol de Administrador o Gerente."
+
+
+class GestionComercialMixin(RolRequeridoMixin):
+    """ADMINISTRADOR, GERENTE, PRESUPUESTOS o ASESOR_COMERCIAL."""
+    roles_permitidos = ROLES_GESTION_COMERCIAL
+    mensaje_denegacion = "Su perfil no permite crear o editar registros comerciales."
+
+
+class GestionPresupuestosMixin(RolRequeridoMixin):
+    """ADMINISTRADOR, GERENTE o PRESUPUESTOS."""
+    roles_permitidos = ROLES_PRESUPUESTOS
+    mensaje_denegacion = "Su perfil no permite acceder al módulo de presupuestos."
+
+
+class GestionCatalogosProductosMixin(RolRequeridoMixin):
+    """ADMINISTRADOR, PRESUPUESTOS o COMPRAS."""
+    roles_permitidos = ROLES_CATALOGO_PRODUCTOS
+    mensaje_denegacion = "Su perfil no permite modificar el catálogo de productos."
+
+
+class GestionCatalogoCategoriasMixin(RolRequeridoMixin):
+    """ADMINISTRADOR o PRESUPUESTOS."""
+    roles_permitidos = ROLES_CATALOGO_CATEGORIAS
+    mensaje_denegacion = "Su perfil no permite modificar categorías o unidades de medida."
+
+
+class GestionCatalogoProveedoresMixin(RolRequeridoMixin):
+    """ADMINISTRADOR, PRESUPUESTOS o ASESOR_COMERCIAL."""
+    roles_permitidos = ROLES_CATALOGO_PROVEEDORES
+    mensaje_denegacion = "Su perfil no permite modificar proveedores."
+
+
+class GestionIngenieriaMixin(RolRequeridoMixin):
+    """ADMINISTRADOR o PRESUPUESTOS — sistemas, subsistemas, calculador."""
+    roles_permitidos = ROLES_INGENIERIA
+    mensaje_denegacion = "Su perfil no permite modificar la configuración de ingeniería."
+
+
+class DescargaPDFMixin(RolRequeridoMixin):
+    """ADMINISTRADOR, GERENTE, PRESUPUESTOS o ASESOR_COMERCIAL."""
+    roles_permitidos = ROLES_DESCARGA_PDF
+    mensaje_denegacion = "Su perfil no tiene acceso a los documentos PDF."
 
 
 # ---------------------------------------------------------------------------

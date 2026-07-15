@@ -21,7 +21,7 @@ from apps.ingenieria.models import (
     ProductoTecnicoAsociado,
 )
 from apps.ingenieria.forms import SistemaForm, SubsistemaForm
-from apps.common.mixins import WithCreateFormMixin
+from apps.common.mixins import WithCreateFormMixin, GestionIngenieriaMixin
 from apps.ingenieria.services.subsistema_service import (
     guardar_variables,
     guardar_subconjuntos_componentes,
@@ -72,7 +72,7 @@ class SistemaDetailView(DetailView):
         return ctx
 
 
-class SistemaCreateView(CreateView):
+class SistemaCreateView(GestionIngenieriaMixin, CreateView):
     model = Sistema
     form_class = SistemaForm
     template_name = "ingenieria/sistema_form.html"
@@ -96,14 +96,14 @@ class SistemaCreateView(CreateView):
         return response
 
 
-class SistemaUpdateView(UpdateView):
+class SistemaUpdateView(GestionIngenieriaMixin, UpdateView):
     model = Sistema
     form_class = SistemaForm
     template_name = "ingenieria/sistema_form.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
-class SistemaDeleteView(DeleteView):
+class SistemaDeleteView(GestionIngenieriaMixin, DeleteView):
     model = Sistema
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -361,7 +361,7 @@ def _subconjuntos_context(subsistema):
     return subconjuntos, componentes_legacy
 
 
-class SubsistemaCreateView(CreateView):
+class SubsistemaCreateView(GestionIngenieriaMixin, CreateView):
     model = Subsistema
     form_class = SubsistemaForm
     template_name = "ingenieria/subsistema_form.html"
@@ -444,7 +444,7 @@ class SubsistemaCreateView(CreateView):
         )
 
 
-class SubsistemaUpdateView(UpdateView):
+class SubsistemaUpdateView(GestionIngenieriaMixin, UpdateView):
     model = Subsistema
     form_class = SubsistemaForm
     template_name = "ingenieria/subsistema_form.html"
@@ -548,7 +548,7 @@ class SubsistemaUpdateView(UpdateView):
         )
 
 
-class SubsistemaConfigApuGuardarView(View):
+class SubsistemaConfigApuGuardarView(GestionIngenieriaMixin, View):
     """
     Fase 6L-4: vista POST-only que recibe la configuración APU del subsistema
     enviada desde el modal `#modalConfigApu`. Reutiliza el servicio
@@ -568,7 +568,7 @@ class SubsistemaConfigApuGuardarView(View):
         return redirect("ingenieria:sistema_list")
 
 
-class SubsistemaDeleteView(DeleteView):
+class SubsistemaDeleteView(GestionIngenieriaMixin, DeleteView):
     model = Subsistema
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -576,7 +576,7 @@ class SubsistemaDeleteView(DeleteView):
 
 # ── Catálogos de consumo (FuncionConsumo, ProblemaResuelto, SuperficieCompatible) ─
 
-class FuncionConsumoCreateView(CreateView):
+class FuncionConsumoCreateView(GestionIngenieriaMixin, CreateView):
     model = FuncionConsumo
     fields = ["nombre", "descripcion", "activo"]
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -586,13 +586,13 @@ class FuncionConsumoCreateView(CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class FuncionConsumoDeleteView(DeleteView):
+class FuncionConsumoDeleteView(GestionIngenieriaMixin, DeleteView):
     model = FuncionConsumo
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
-class ProblemaResueltoCreateView(CreateView):
+class ProblemaResueltoCreateView(GestionIngenieriaMixin, CreateView):
     model = ProblemaResuelto
     fields = ["nombre", "descripcion", "activo"]
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -602,13 +602,13 @@ class ProblemaResueltoCreateView(CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class ProblemaResueltoDeleteView(DeleteView):
+class ProblemaResueltoDeleteView(GestionIngenieriaMixin, DeleteView):
     model = ProblemaResuelto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
-class SuperficieCompatibleCreateView(CreateView):
+class SuperficieCompatibleCreateView(GestionIngenieriaMixin, CreateView):
     model = SuperficieCompatible
     fields = ["nombre", "descripcion", "activo"]
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -618,7 +618,7 @@ class SuperficieCompatibleCreateView(CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class SuperficieCompatibleDeleteView(DeleteView):
+class SuperficieCompatibleDeleteView(GestionIngenieriaMixin, DeleteView):
     model = SuperficieCompatible
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")

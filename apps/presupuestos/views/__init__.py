@@ -45,7 +45,11 @@ from apps.presupuestos.forms import (
     CuadrillaPresetForm, CuadrillaPresetItemFormSet,
 )
 from apps.comercial.forms import SolicitudForm
-from apps.common.mixins import UnidadFilterMixin, WithCreateFormMixin
+from apps.common.mixins import (
+    UnidadFilterMixin, WithCreateFormMixin,
+    AdminRequiredMixin, AdminGerenteRequiredMixin,
+    GestionPresupuestosMixin, DescargaPDFMixin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +76,14 @@ class ProyectoSistemaDetailView(DetailView):
         return ctx
 
 
-class ProyectoSistemaCreateView(CreateView):
+class ProyectoSistemaCreateView(GestionPresupuestosMixin, CreateView):
     model = ProyectoSistema
     form_class = ProyectoSistemaForm
     template_name = "presupuestos/proyectosistema_form.html"
     success_url = reverse_lazy("presupuestos:proyectosistema_list")
 
 
-class ProyectoSistemaUpdateView(UpdateView):
+class ProyectoSistemaUpdateView(GestionPresupuestosMixin, UpdateView):
     model = ProyectoSistema
     form_class = ProyectoSistemaForm
     template_name = "presupuestos/proyectosistema_form.html"
@@ -95,7 +99,7 @@ class ProyectoSistemaUpdateView(UpdateView):
         return super().dispatch(request, *args, **kwargs)
 
 
-class ProyectoSistemaDeleteView(DeleteView):
+class ProyectoSistemaDeleteView(AdminRequiredMixin, DeleteView):
     model = ProyectoSistema
     template_name = "confirm_delete.html"
 
@@ -138,14 +142,14 @@ class DespieceListView(UnidadFilterMixin, ListView):
         return super().get_context_data(**kwargs)
 
 
-class NuevoDespieceView(View):
+class NuevoDespieceView(GestionPresupuestosMixin, View):
     """POST — redirige al nuevo calculador de sistemas."""
 
     def post(self, request):
         return redirect("ingenieria:calculador_sistemas")
 
 
-class DespieceCSVDownloadView(View):
+class DespieceCSVDownloadView(DescargaPDFMixin, View):
     """GET /presupuestos/despiece/<pk>/csv/ — descarga CSV de DespieceLineas del proyecto."""
 
     def get(self, request, pk):
@@ -236,7 +240,7 @@ class SubsistemaVariablesView(View):
 
 # ── Despiece — POST: calcular (crea/actualiza PS + ejecuta despiece) ──────────
 
-class CalcularDespiecePSView(View):
+class CalcularDespiecePSView(GestionPresupuestosMixin, View):
     """
     POST /despiece/calcular/<proyecto_pk>/
     Body JSON: {sistema_id, subsistema_id (opt), parametros: {k: v, ...}}
@@ -323,7 +327,7 @@ class CalcularDespiecePSView(View):
 
 # ── Despiece — POST clásico: re-ejecutar cálculo de un PS existente ───────────
 
-class DespieceEjecutarView(View):
+class DespieceEjecutarView(GestionPresupuestosMixin, View):
     """Ejecuta el cálculo del despiece para un ProyectoSistema existente."""
     def post(self, request, pk):
         ps = get_object_or_404(ProyectoSistema, pk=pk)
@@ -357,7 +361,7 @@ class DespieceEjecutarView(View):
 
 # ── Despiece — AJAX: ajuste de cantidad ───────────────────────────────────────
 
-class DespieceLineaAjusteAPIView(View):
+class DespieceLineaAjusteAPIView(GestionPresupuestosMixin, View):
     """
     POST /despiece/api/ajuste/<linea_pk>/
     Body JSON: {cantidad_ajustada, motivo_ajuste (opt)}
@@ -396,7 +400,7 @@ class DespieceLineaAjusteAPIView(View):
             return JsonResponse({"error": str(exc)}, status=500)
 
 
-class DespieceLineaAjusteView(UpdateView):
+class DespieceLineaAjusteView(GestionPresupuestosMixin, UpdateView):
     """Ajuste manual de cantidad en una línea de despiece (formulario clásico)."""
     model = DespieceLinea
     form_class = DespieceLineaAjusteForm
@@ -413,7 +417,7 @@ class DespieceLineaAjusteView(UpdateView):
         return super().post(request, *args, **kwargs)
 
 
-class AsignarProductoLineaAPIView(View):
+class AsignarProductoLineaAPIView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/despiece/api/asignar-producto/<linea_pk>/
     Body JSON: {"producto_id": int}
@@ -484,14 +488,14 @@ class ConfiguracionAPUListView(ListView):
     ordering = ["-activa", "nombre"]
 
 
-class ConfiguracionAPUCreateView(CreateView):
+class ConfiguracionAPUCreateView(AdminRequiredMixin, CreateView):
     model = ConfiguracionAPU
     form_class = ConfiguracionAPUForm
     template_name = "presupuestos/configapu_form.html"
     success_url = reverse_lazy("presupuestos:configapu_list")
 
 
-class ConfiguracionAPUUpdateView(UpdateView):
+class ConfiguracionAPUUpdateView(AdminRequiredMixin, UpdateView):
     model = ConfiguracionAPU
     form_class = ConfiguracionAPUForm
     template_name = "presupuestos/configapu_form.html"
@@ -1204,7 +1208,7 @@ class APUProyectoDetailView(DetailView):
         return ctx
 
 
-class APUProyectoUpdateView(UpdateView):
+class APUProyectoUpdateView(GestionPresupuestosMixin, UpdateView):
     model = APUProyecto
     form_class = APUProyectoForm
     template_name = "presupuestos/apu_form.html"
@@ -1313,7 +1317,7 @@ class APUProyectoUpdateView(UpdateView):
         return response
 
 
-class APUGenerarView(View):
+class APUGenerarView(GestionPresupuestosMixin, View):
     """Genera el APU para un ProyectoSistema dado."""
     def post(self, request, pk):
         ps = get_object_or_404(ProyectoSistema, pk=pk)
@@ -1344,7 +1348,7 @@ class APUGenerarView(View):
             return redirect(reverse("ingenieria:despiece_list") + f"?proyecto_pk={ps.proyecto_id}")
 
 
-class APUSeleccionarDespiecesView(View):
+class APUSeleccionarDespiecesView(GestionPresupuestosMixin, View):
     """
     Fase 11.4 — Vista intermedia de selección manual de despieces.
 
@@ -1450,7 +1454,7 @@ class APUSeleccionarDespiecesView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
 
-class APUGenerarDesdeDespiece(View):
+class APUGenerarDesdeDespiece(GestionPresupuestosMixin, View):
     """
     Compatibilidad Fase 11.3 → 11.4. El botón antiguo POSTea aquí; ahora
     redirigimos siempre a la vista de selección manual, que internamente
@@ -1614,7 +1618,7 @@ class _APUGenerarDesdeDespiece_LEGACY(View):
 # ── Fase 6E: armar APU con producto principal ────────────────────────────────
 
 
-class APUArmarDesdeDespieceView(View):
+class APUArmarDesdeDespieceView(GestionPresupuestosMixin, View):
     """
     POST: arma el APU desde DespieceMaestro con un producto principal seleccionado.
 
@@ -2033,7 +2037,7 @@ def _filtrar_items_por_sia(apu, tipo_apu, items_data):
     return filtrados, descartados
 
 
-class APUManoObraView(View):
+class APUManoObraView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/<pk>/mano-obra/
 
@@ -2090,7 +2094,7 @@ class APUManoObraView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
 
-class APUHerramientasView(View):
+class APUHerramientasView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/<pk>/herramientas/
 
@@ -2130,7 +2134,7 @@ class APUHerramientasView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
 
-class APUTransporteView(View):
+class APUTransporteView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/<pk>/transporte/
 
@@ -2178,7 +2182,7 @@ class APUTransporteView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
 
-class APULineaUpdateView(View):
+class APULineaUpdateView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/linea/<pk>/editar/
 
@@ -2230,7 +2234,7 @@ class APULineaUpdateView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu_pk]))
 
 
-class APUArchivarView(View):
+class APUArchivarView(AdminGerenteRequiredMixin, View):
     """
     POST /presupuestos/apu/<pk>/archivar/
 
@@ -2307,7 +2311,7 @@ class APUProyectoEliminarView(View):
         return redirect("presupuestos:apu_list")
 
 
-class APULineaDeleteView(View):
+class APULineaDeleteView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/linea/<pk>/eliminar/
 
@@ -2330,7 +2334,7 @@ class APULineaDeleteView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu_pk]))
 
 
-class APUAdminView(View):
+class APUAdminView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/<pk>/administrativo/
 
@@ -2441,21 +2445,21 @@ class CatalogoAPUView(ListView):
 
 # ── CategoriaItemAPU CRUD ─────────────────────────────────────────────────────
 
-class CategoriaItemAPUCreateView(CreateView):
+class CategoriaItemAPUCreateView(AdminRequiredMixin, CreateView):
     model = CategoriaItemAPU
     form_class = CategoriaItemAPUForm
     template_name = "presupuestos/catalogo_apu_categoria_form.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 
-class CategoriaItemAPUUpdateView(UpdateView):
+class CategoriaItemAPUUpdateView(AdminRequiredMixin, UpdateView):
     model = CategoriaItemAPU
     form_class = CategoriaItemAPUForm
     template_name = "presupuestos/catalogo_apu_categoria_form.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 
-class CategoriaItemAPUDeleteView(DeleteView):
+class CategoriaItemAPUDeleteView(AdminRequiredMixin, DeleteView):
     model = CategoriaItemAPU
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
@@ -2463,7 +2467,7 @@ class CategoriaItemAPUDeleteView(DeleteView):
 
 # ── ItemCatalogoAPU CRUD ──────────────────────────────────────────────────────
 
-class ItemCatalogoAPUCreateView(CreateView):
+class ItemCatalogoAPUCreateView(AdminRequiredMixin, CreateView):
     model = ItemCatalogoAPU
     form_class = ItemCatalogoAPUForm
     template_name = "presupuestos/catalogo_apu_item_form.html"
@@ -2477,14 +2481,14 @@ class ItemCatalogoAPUCreateView(CreateView):
         return initial
 
 
-class ItemCatalogoAPUUpdateView(UpdateView):
+class ItemCatalogoAPUUpdateView(AdminRequiredMixin, UpdateView):
     model = ItemCatalogoAPU
     form_class = ItemCatalogoAPUForm
     template_name = "presupuestos/catalogo_apu_item_form.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 
-class ItemCatalogoAPUDeleteView(DeleteView):
+class ItemCatalogoAPUDeleteView(AdminRequiredMixin, DeleteView):
     model = ItemCatalogoAPU
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
@@ -2492,7 +2496,7 @@ class ItemCatalogoAPUDeleteView(DeleteView):
 
 # ── CuadrillaPreset CRUD ──────────────────────────────────────────────────────
 
-class CuadrillaPresetCreateView(CreateView):
+class CuadrillaPresetCreateView(AdminRequiredMixin, CreateView):
     model = CuadrillaPreset
     form_class = CuadrillaPresetForm
     template_name = "presupuestos/cuadrilla_preset_form.html"
@@ -2518,7 +2522,7 @@ class CuadrillaPresetCreateView(CreateView):
         return self.form_invalid(form)
 
 
-class CuadrillaPresetUpdateView(UpdateView):
+class CuadrillaPresetUpdateView(AdminRequiredMixin, UpdateView):
     model = CuadrillaPreset
     form_class = CuadrillaPresetForm
     template_name = "presupuestos/cuadrilla_preset_form.html"
@@ -2544,7 +2548,7 @@ class CuadrillaPresetUpdateView(UpdateView):
         return self.form_invalid(form)
 
 
-class CuadrillaPresetDeleteView(DeleteView):
+class CuadrillaPresetDeleteView(AdminRequiredMixin, DeleteView):
     model = CuadrillaPreset
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
@@ -2587,7 +2591,7 @@ def _render_apu_pdf(apu, template_name: str) -> bytes:
     return HTML(string=html_str, base_url="/").write_pdf()
 
 
-class APUPDFInternoView(View):
+class APUPDFInternoView(DescargaPDFMixin, View):
     """
     GET /presupuestos/apu/<pk>/pdf-interno/
 
@@ -2625,7 +2629,7 @@ class APUPDFInternoView(View):
         return response
 
 
-class APUPDFClienteView(View):
+class APUPDFClienteView(DescargaPDFMixin, View):
     """
     GET /presupuestos/apu/<pk>/pdf-cliente/
 
@@ -2719,7 +2723,7 @@ class APUPDFClienteView(View):
 # Fase 12 — PDFs desde snapshot inmutable (CotizacionAPU)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class CotizacionPDFInternoView(View):
+class CotizacionPDFInternoView(DescargaPDFMixin, View):
     """
     GET /presupuestos/cotizacion/<pk>/pdf-interno/
 
@@ -2753,7 +2757,7 @@ class CotizacionPDFInternoView(View):
         return response
 
 
-class CotizacionPDFClienteView(View):
+class CotizacionPDFClienteView(DescargaPDFMixin, View):
     """
     GET /presupuestos/cotizacion/<pk>/pdf-cliente/
 
@@ -2864,7 +2868,7 @@ class CotizacionPDFClienteView(View):
         return response
 
 
-class APUEnviarRevisionView(View):
+class APUEnviarRevisionView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/<pk>/enviar-revision/
     Asigna revisor, marca el APU como enviado a revisión y avanza el estado del proyecto.
@@ -2946,7 +2950,7 @@ class APUEnviarRevisionView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[pk]))
 
 
-class APURevisarView(View):
+class APURevisarView(GestionPresupuestosMixin, View):
     """
     GET /presupuestos/apu/<pk>/revisar/
     Vista del revisor asignado: muestra el APU y permite seleccionar la modalidad AIU oficial.
@@ -3031,7 +3035,7 @@ class APURevisarView(View):
         return render(request, self.template_name, ctx)
 
 
-class APUAprobarModalidadView(View):
+class APUAprobarModalidadView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/<pk>/aprobar-modalidad/
     Guarda la modalidad AIU seleccionada por el revisor, junto con los
@@ -3147,7 +3151,7 @@ class APUAprobarModalidadView(View):
         return redirect(reverse("presupuestos:apu_revisar", args=[pk]))
 
 
-class APUResetModalidadView(View):
+class APUResetModalidadView(AdminGerenteRequiredMixin, View):
     """
     POST /presupuestos/apu/<pk>/reset-modalidad/
     Limpia la aprobación de modalidad (Fase 10A-8) conservando los porcentajes
@@ -3280,7 +3284,7 @@ class CalculoConsumoView(View):
         return render(request, self.template_name, ctx)
 
 
-class EjecutarCalculoConsumoView(View):
+class EjecutarCalculoConsumoView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/consumo/<pk>/ejecutar/ — Ejecuta ConsumoService.
     """
@@ -3311,7 +3315,7 @@ class EjecutarCalculoConsumoView(View):
         return redirect("presupuestos:consumo_maestro", pk=pk)
 
 
-class AsignarProductoConsumoAPIView(View):
+class AsignarProductoConsumoAPIView(GestionPresupuestosMixin, View):
     """
     POST JSON /presupuestos/consumo/api/asignar-producto/<pk>/
     Body: { "producto_pk": 123 }
@@ -3489,7 +3493,7 @@ def _aplicar_garantia_desde_post(apu, POST, *, ps=None, durante_armado=False):
     apu.recalcular()
 
 
-class APUEditarGarantiaView(View):
+class APUEditarGarantiaView(GestionPresupuestosMixin, View):
     """POST: actualiza garantía del APU. Recalcula recargo y total comercial."""
 
     def post(self, request, pk):
@@ -3506,7 +3510,7 @@ class APUEditarGarantiaView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
 
-class APUCotizacionFinalView(View):
+class APUCotizacionFinalView(GestionPresupuestosMixin, View):
     """
     Fase 11 — Cotización final en pantalla a partir del APU.
 
@@ -3544,7 +3548,7 @@ class APUCotizacionFinalView(View):
 # Fase 11.5 — Consolidación opcional de APUs
 # ─────────────────────────────────────────────────────────────────────────────
 
-class APUConsolidarSeleccionarView(View):
+class APUConsolidarSeleccionarView(GestionPresupuestosMixin, View):
     """
     GET — Pinta la página de selección de APUs del proyecto.
     POST → preview.
@@ -3580,7 +3584,7 @@ class APUConsolidarSeleccionarView(View):
         )
 
 
-class APUConsolidarPreviewView(View):
+class APUConsolidarPreviewView(GestionPresupuestosMixin, View):
     """
     POST — recibe ids de APUs y muestra el resumen previo. No persiste.
     Botón "Confirmar" envía a APUConsolidarConfirmarView.
@@ -3608,7 +3612,7 @@ class APUConsolidarPreviewView(View):
         })
 
 
-class APUConsolidarConfirmarView(View):
+class APUConsolidarConfirmarView(GestionPresupuestosMixin, View):
     """
     POST — confirma y persiste el APU consolidado. Redirige a apu_detail.
     """

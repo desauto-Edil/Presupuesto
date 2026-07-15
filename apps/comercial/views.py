@@ -19,7 +19,10 @@ from .forms import (
     ProyectoForm, ProyectoFromSolicitudForm,
     TipoGarantiaForm,
 )
-from apps.common.mixins import WithCreateFormMixin, UnidadFilterMixin, UnidadObjectAccessMixin
+from apps.common.mixins import (
+    WithCreateFormMixin, UnidadFilterMixin, UnidadObjectAccessMixin,
+    AdminRequiredMixin, AdminGerenteRequiredMixin, GestionComercialMixin,
+)
 from apps.common.choices import EstadoSolicitud
 from apps.common.auth import puede_gestionar_unidad as _puede_gestionar_unidad
 
@@ -250,7 +253,7 @@ class ClienteDetailView(UnidadObjectAccessMixin, DetailView):
     context_object_name = "cliente"
 
 
-class ClienteCreateView(CreateView):
+class ClienteCreateView(GestionComercialMixin, CreateView):
     """Crea un Cliente y su Contacto principal en una sola operación."""
     model = Cliente
     form_class = ClienteConContactoForm
@@ -295,7 +298,7 @@ class ClienteCreateView(CreateView):
         return redirect("comercial:cliente_list")
 
 
-class ClienteUpdateView(UpdateView):
+class ClienteUpdateView(GestionComercialMixin, UpdateView):
     """Actualiza el Cliente y su contacto principal en una sola operación."""
     model = Cliente
     form_class = ClienteConContactoForm
@@ -343,7 +346,7 @@ class ClienteUpdateView(UpdateView):
         return redirect("comercial:cliente_list")
 
 
-class ClienteDeleteView(DeleteView):
+class ClienteDeleteView(AdminGerenteRequiredMixin, DeleteView):
     model = Cliente
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:cliente_list")
@@ -370,21 +373,21 @@ class ContactoListView(ListView):
     ordering = ["cliente__razon_social", "nombre"]
 
 
-class ContactoCreateView(CreateView):
+class ContactoCreateView(GestionComercialMixin, CreateView):
     model = ContactoCliente
     form_class = ContactoClienteForm
     template_name = "comercial/contacto_form.html"
     success_url = reverse_lazy("comercial:contacto_list")
 
 
-class ContactoUpdateView(UpdateView):
+class ContactoUpdateView(GestionComercialMixin, UpdateView):
     model = ContactoCliente
     form_class = ContactoClienteForm
     template_name = "comercial/contacto_form.html"
     success_url = reverse_lazy("comercial:contacto_list")
 
 
-class ContactoDeleteView(DeleteView):
+class ContactoDeleteView(AdminGerenteRequiredMixin, DeleteView):
     model = ContactoCliente
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:contacto_list")
@@ -614,7 +617,7 @@ class SolicitudDetailView(View):
         return redirect(url)
 
 
-class SolicitudCreateView(CreateView):
+class SolicitudCreateView(GestionComercialMixin, CreateView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_form.html"
@@ -657,7 +660,7 @@ class SolicitudCreateView(CreateView):
         return redirect("comercial:solicitud_detail", pk=self.object.pk)
 
 
-class SolicitudUpdateView(UpdateView):
+class SolicitudUpdateView(GestionComercialMixin, UpdateView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_form.html"
@@ -716,7 +719,7 @@ class SolicitudUpdateView(UpdateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class SolicitudDeleteView(View):
+class SolicitudDeleteView(AdminRequiredMixin, View):
     def post(self, request, pk, *args, **kwargs):
         from apps.common.auth import es_admin, get_usuario_actual
         solicitud = get_object_or_404(Solicitud, pk=pk)
@@ -813,7 +816,7 @@ class SolicitudDevolverView(View):
         return redirect("comercial:solicitud_detail", pk=pk)
 
 
-class SolicitudArchivarView(View):
+class SolicitudArchivarView(AdminGerenteRequiredMixin, View):
     """POST: archiva (estado=CERRADA) una solicitud preservando trazabilidad."""
 
     def post(self, request, pk, *args, **kwargs):
@@ -838,7 +841,7 @@ class SolicitudArchivarView(View):
 # Archivos de Solicitud
 # ---------------------------------------------------------------------------
 
-class SolicitudArchivoCreateView(CreateView):
+class SolicitudArchivoCreateView(GestionComercialMixin, CreateView):
     """Sube un archivo adjunto a una Solicitud."""
     model = SolicitudArchivo
     form_class = SolicitudArchivoForm
@@ -869,7 +872,7 @@ class SolicitudArchivoCreateView(CreateView):
         return redirect("comercial:solicitud_detail", pk=solicitud.pk)
 
 
-class SolicitudArchivoDeleteView(View):
+class SolicitudArchivoDeleteView(GestionComercialMixin, View):
     """Elimina un archivo de solicitud."""
 
     def post(self, request, pk, *args, **kwargs):
@@ -901,21 +904,21 @@ class TipoProyectoListView(ListView):
     ordering = ["nombre"]
 
 
-class TipoProyectoCreateView(CreateView):
+class TipoProyectoCreateView(AdminRequiredMixin, CreateView):
     model = TipoProyecto
     form_class = TipoProyectoForm
     template_name = "comercial/tipoproyecto_form.html"
     success_url = reverse_lazy("comercial:tipoproyecto_list")
 
 
-class TipoProyectoUpdateView(UpdateView):
+class TipoProyectoUpdateView(AdminRequiredMixin, UpdateView):
     model = TipoProyecto
     form_class = TipoProyectoForm
     template_name = "comercial/tipoproyecto_form.html"
     success_url = reverse_lazy("comercial:tipoproyecto_list")
 
 
-class TipoProyectoDeleteView(DeleteView):
+class TipoProyectoDeleteView(AdminRequiredMixin, DeleteView):
     model = TipoProyecto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:tipoproyecto_list")
@@ -1034,7 +1037,7 @@ class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
         return ctx
 
 
-class ProyectoCreateView(CreateView):
+class ProyectoCreateView(GestionComercialMixin, CreateView):
     model = Proyecto
     form_class = ProyectoForm
     template_name = "comercial/proyecto_form.html"
@@ -1059,7 +1062,7 @@ class ProyectoCreateView(CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class ProyectoUpdateView(UpdateView):
+class ProyectoUpdateView(GestionComercialMixin, UpdateView):
     model = Proyecto
     form_class = ProyectoForm
     template_name = "comercial/proyecto_form.html"
@@ -1128,7 +1131,7 @@ class ProyectoUpdateView(UpdateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class ProyectoDeleteView(DeleteView):
+class ProyectoDeleteView(AdminRequiredMixin, DeleteView):
     model = Proyecto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:solicitud_list")
@@ -1169,7 +1172,7 @@ class ProyectoDeleteView(DeleteView):
         return redirect(self.success_url)
 
 
-class ProyectoAnularView(View):
+class ProyectoAnularView(AdminGerenteRequiredMixin, View):
     """POST: anula (estado=ANULADO) un proyecto preservando trazabilidad."""
 
     def post(self, request, pk, *args, **kwargs):
@@ -1191,7 +1194,7 @@ class ProyectoAnularView(View):
         return redirect("comercial:proyecto_detail", pk=pk)
 
 
-class CrearProyectoDesdeSolicitudView(CreateView):
+class CrearProyectoDesdeSolicitudView(GestionComercialMixin, CreateView):
     """
     Crea una nueva versión de Proyecto para una Solicitud.
     Permite múltiples versiones; el modelo auto-gestiona el número y la versión actual.
@@ -1248,7 +1251,7 @@ class CrearProyectoDesdeSolicitudView(CreateView):
 # Clonar proyecto como nueva versión
 # ---------------------------------------------------------------------------
 
-class ClonarProyectoComoVersionView(View):
+class ClonarProyectoComoVersionView(GestionComercialMixin, View):
     """
     POST /comercial/proyectos/<pk>/clonar/
     Clona el proyecto indicado como nueva versión dentro de la misma solicitud.
@@ -1334,7 +1337,7 @@ class TipoGarantiaListView(ListView):
         return ctx
 
 
-class TipoGarantiaCreateView(CreateView):
+class TipoGarantiaCreateView(AdminRequiredMixin, CreateView):
     model = TipoGarantia
     form_class = TipoGarantiaForm
     template_name = "comercial/garantia_form.html"
@@ -1345,7 +1348,7 @@ class TipoGarantiaCreateView(CreateView):
         return super().form_valid(form)
 
 
-class TipoGarantiaUpdateView(UpdateView):
+class TipoGarantiaUpdateView(AdminRequiredMixin, UpdateView):
     model = TipoGarantia
     form_class = TipoGarantiaForm
     template_name = "comercial/garantia_form.html"
@@ -1356,7 +1359,7 @@ class TipoGarantiaUpdateView(UpdateView):
         return super().form_valid(form)
 
 
-class TipoGarantiaDeleteView(DeleteView):
+class TipoGarantiaDeleteView(AdminRequiredMixin, DeleteView):
     model = TipoGarantia
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:garantia_list")

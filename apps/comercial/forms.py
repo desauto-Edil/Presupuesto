@@ -1,6 +1,9 @@
 """apps/comercial/forms.py — Formularios del módulo comercial."""
 
+import mimetypes
+
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto, TipoGarantia
 
@@ -194,6 +197,21 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
         widgets = _PROYECTO_WIDGETS
 
 
+_EXTENSIONES_PERMITIDAS = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png",
+}
+
+_MIME_PERMITIDOS = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "image/jpeg",
+    "image/png",
+}
+
+
 class SolicitudArchivoForm(forms.ModelForm):
     """Formulario para subir archivos adjuntos a una Solicitud."""
 
@@ -207,6 +225,36 @@ class SolicitudArchivoForm(forms.ModelForm):
                 "placeholder": "Nombre descriptivo del archivo",
             }),
         }
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data.get("archivo")
+        if not archivo:
+            return archivo
+
+        max_mb = getattr(settings, "MAX_UPLOAD_SIZE_MB", 10)
+        max_bytes = max_mb * 1024 * 1024
+        if archivo.size > max_bytes:
+            raise ValidationError(
+                f"El archivo supera el tamaño máximo permitido ({max_mb} MB). "
+                f"El archivo pesa {archivo.size / 1024 / 1024:.1f} MB."
+            )
+
+        nombre = archivo.name.lower()
+        ext = "." + nombre.rsplit(".", 1)[-1] if "." in nombre else ""
+        if ext not in _EXTENSIONES_PERMITIDAS:
+            raise ValidationError(
+                f"Tipo de archivo no permitido («{ext or 'sin extensión'}»). "
+                f"Formatos aceptados: {', '.join(sorted(_EXTENSIONES_PERMITIDAS))}."
+            )
+
+        mime, _ = mimetypes.guess_type(archivo.name)
+        if mime and mime not in _MIME_PERMITIDOS:
+            raise ValidationError(
+                "El tipo de contenido del archivo no está permitido. "
+                "Use PDF, Word, Excel o imágenes JPG/PNG."
+            )
+
+        return archivo
 
 
 class TipoGarantiaForm(forms.ModelForm):

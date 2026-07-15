@@ -10,6 +10,11 @@ from django.db.models import Count, Prefetch
 
 from .models import CategoriaProducto, Producto, UnidadMedida, ProductoProveedor, Proveedor
 from .forms  import CategoriaForm, ProductoForm, UnidadMedidaForm, ProveedorForm
+from apps.common.mixins import (
+    GestionCatalogoCategoriasMixin,
+    GestionCatalogosProductosMixin,
+    GestionCatalogoProveedoresMixin,
+)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -73,7 +78,7 @@ class MaestrosView(RedirectView):
 # ─────────────────────────────────────────────────────────────────
 # CATEGORÍAS
 # ─────────────────────────────────────────────────────────────────
-class CategoriaCreateView(CreateView):
+class CategoriaCreateView(GestionCatalogoCategoriasMixin, CreateView):
     model = CategoriaProducto
     form_class = CategoriaForm
     template_name = "catalogos/categoria_form.html"
@@ -88,7 +93,7 @@ class CategoriaCreateView(CreateView):
         return super().form_invalid(form)
 
 
-class CategoriaUpdateView(UpdateView):
+class CategoriaUpdateView(GestionCatalogoCategoriasMixin, UpdateView):
     model = CategoriaProducto
     form_class = CategoriaForm
     template_name = "catalogos/categoria_form.html"
@@ -99,7 +104,7 @@ class CategoriaUpdateView(UpdateView):
         return super().form_valid(form)
 
 
-class CategoriaDeleteView(DeleteView):
+class CategoriaDeleteView(GestionCatalogoCategoriasMixin, DeleteView):
     model = CategoriaProducto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
@@ -131,7 +136,7 @@ class ProductoListView(ListView):
         return ctx
 
 
-class ProductoCreateView(CreateView):
+class ProductoCreateView(GestionCatalogosProductosMixin, CreateView):
     model = Producto
     form_class = ProductoForm
     template_name = "catalogos/producto_form.html"
@@ -164,7 +169,7 @@ class ProductoCreateView(CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
-class ProductoUpdateView(UpdateView):
+class ProductoUpdateView(GestionCatalogosProductosMixin, UpdateView):
     model = Producto
     form_class = ProductoForm
     template_name = "catalogos/producto_form.html"
@@ -186,7 +191,7 @@ class ProductoUpdateView(UpdateView):
         return response
 
 
-class ProductoDeleteView(DeleteView):
+class ProductoDeleteView(GestionCatalogosProductosMixin, DeleteView):
     model = Producto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
@@ -201,21 +206,21 @@ class ProductoDetailView(DetailView):
 # ─────────────────────────────────────────────────────────────────
 # UNIDADES DE MEDIDA
 # ─────────────────────────────────────────────────────────────────
-class UnidadCreateView(CreateView):
+class UnidadCreateView(GestionCatalogoCategoriasMixin, CreateView):
     model = UnidadMedida
     form_class = UnidadMedidaForm
     template_name = "catalogos/unidad_form.html"
     success_url = reverse_lazy("catalogos:catalogo")
 
 
-class UnidadUpdateView(UpdateView):
+class UnidadUpdateView(GestionCatalogoCategoriasMixin, UpdateView):
     model = UnidadMedida
     form_class = UnidadMedidaForm
     template_name = "catalogos/unidad_form.html"
     success_url = reverse_lazy("catalogos:catalogo")
 
 
-class UnidadDeleteView(DeleteView):
+class UnidadDeleteView(GestionCatalogoCategoriasMixin, DeleteView):
     model = UnidadMedida
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
@@ -231,19 +236,19 @@ class ProveedorListView(ListView):
     ordering = ["nombre"]
 
 
-class ProveedorCreateView(CreateView):
+class ProveedorCreateView(GestionCatalogoProveedoresMixin, CreateView):
     model = Proveedor
     form_class = ProveedorForm
     success_url = reverse_lazy("catalogos:catalogo")
 
 
-class ProveedorUpdateView(UpdateView):
+class ProveedorUpdateView(GestionCatalogoProveedoresMixin, UpdateView):
     model = Proveedor
     form_class = ProveedorForm
     success_url = reverse_lazy("catalogos:catalogo")
 
 
-class ProveedorDeleteView(DeleteView):
+class ProveedorDeleteView(GestionCatalogoProveedoresMixin, DeleteView):
     model = Proveedor
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
@@ -264,21 +269,21 @@ class ProductoProveedorListView(ListView):
     ordering = ["producto__nombre"]
 
 
-class ProductoProveedorCreateView(CreateView):
+class ProductoProveedorCreateView(GestionCatalogosProductosMixin, CreateView):
     model = ProductoProveedor
     template_name = "catalogos/productoproveedor_form.html"
     fields = "__all__"
     success_url = reverse_lazy("catalogos:productoproveedor_list")
 
 
-class ProductoProveedorUpdateView(UpdateView):
+class ProductoProveedorUpdateView(GestionCatalogosProductosMixin, UpdateView):
     model = ProductoProveedor
     template_name = "catalogos/productoproveedor_form.html"
     fields = "__all__"
     success_url = reverse_lazy("catalogos:productoproveedor_list")
 
 
-class ProductoProveedorDeleteView(DeleteView):
+class ProductoProveedorDeleteView(GestionCatalogosProductosMixin, DeleteView):
     model = ProductoProveedor
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:productoproveedor_list")

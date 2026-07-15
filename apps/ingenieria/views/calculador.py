@@ -23,6 +23,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 from apps.common.apu_lock import objeto_bloqueado_por_apu, MENSAJE_BLOQUEO
+from apps.common.mixins import GestionIngenieriaMixin
 
 logger = logging.getLogger(__name__)
 
@@ -448,7 +449,7 @@ def _agrupar_lineas(lineas_qs):
 
 # ── 4. Calcular (AJAX, sin guardar) ──────────────────────────────────────────
 
-class CalcularDespieceMaestroView(View):
+class CalcularDespieceMaestroView(GestionIngenieriaMixin, View):
     """
     POST endpoint AJAX.
 
@@ -530,7 +531,7 @@ def _agrupar_resultados(resultados: list[dict]) -> list[dict]:
 
 # ── 5. Guardar despiece ───────────────────────────────────────────────────────
 
-class GuardarDespieceMaestroView(View):
+class GuardarDespieceMaestroView(GestionIngenieriaMixin, View):
     """
     POST: Recalcula y guarda el despiece en estado GUARDADO.
 
@@ -689,7 +690,7 @@ class DespiecesGuardadosView(ListView):
 
 # ── 7. Eliminar despiece ──────────────────────────────────────────────────────
 
-class EliminarDespieceMaestroView(View):
+class EliminarDespieceMaestroView(GestionIngenieriaMixin, View):
     """POST: elimina un DespieceMaestro."""
 
     def post(self, request, pk):
@@ -721,7 +722,7 @@ class EliminarDespieceMaestroView(View):
 
 # ── 8. APU desde despiece guardado — redirige a presupuestos:apu_list ────────
 
-class APUDespieceMaestroView(View):
+class APUDespieceMaestroView(GestionIngenieriaMixin, View):
     """
     Redirige al módulo APU de presupuestos validando que el despiece sea apto.
 
