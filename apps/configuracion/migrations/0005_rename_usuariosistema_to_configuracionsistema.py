@@ -13,6 +13,21 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('configuracion', '0004_add_unidad_negocio_info'),
+        # Debe correr DESPUÉS de todas las migraciones que crean estado con FK a
+        # configuracion.UsuarioSistema. De lo contrario, en una BD vacía Django puede
+        # aplicar esta migración (que elimina UsuarioSistema del estado) antes de que
+        # otras apps lo hayan consumido, causando:
+        #   ValueError: Related model 'configuracion.usuariosistema' cannot be resolved
+        #
+        # comercial: 0005 es la última que crea estado con FK a usuariosistema.
+        ('comercial', '0005_restaurar_tipoproyecto_proyecto'),
+        # presupuestos: 0001-0014 tienen modelos (ConfiguracionAPU.modificado_por)
+        # que referencian usuariosistema. Cualquier migración de presupuestos con
+        # operaciones que accedan from_state.apps (RenameModel, AlterField, AddField)
+        # fallará si UsuarioSistema ya fue removido del estado. 0015 es la que
+        # actualiza ese FK a ConfiguracionSistema, así que 0005 debe venir ANTES de
+        # 0015 pero DESPUÉS de 0014.
+        ('presupuestos', '0014_alter_apuproyecto_factor_venta_pct_and_more'),
     ]
 
     operations = [

@@ -92,38 +92,44 @@ class Migration(migrations.Migration):
             name='vida_util_dias',
             field=models.PositiveIntegerField(blank=True, help_text='Vida útil en días. Permite calcular costo por jornada.', null=True),
         ),
-        migrations.CreateModel(
-            name='APUProyecto',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('nombre', models.CharField(help_text="Nombre del APU, p. ej. 'APU Cubierta TPO — Edificio Central'.", max_length=200)),
-                ('descripcion', models.TextField(blank=True, help_text='Descripción detallada del alcance y condiciones del APU.')),
-                ('factor_venta_pct', models.DecimalField(decimal_places=4, default=Decimal('20'), help_text='% margen sobre costo unitario → valor unitario.', max_digits=8)),
-                ('iva_pct', models.DecimalField(decimal_places=4, default=Decimal('19'), max_digits=8)),
-                ('aplica_iva', models.BooleanField(default=True)),
-                ('subtotal_materiales', models.DecimalField(decimal_places=4, default=Decimal('0'), help_text='Suma de costo_total de todas las líneas de MATERIALES.', max_digits=18)),
-                ('subtotal_herramientas', models.DecimalField(decimal_places=4, default=Decimal('0'), help_text='Suma de costo_total de todas las líneas de HERRAMIENTAS_EQUIPOS.', max_digits=18)),
-                ('subtotal_transporte', models.DecimalField(decimal_places=4, default=Decimal('0'), max_digits=18)),
-                ('subtotal_mano_obra', models.DecimalField(decimal_places=4, default=Decimal('0'), max_digits=18)),
-                ('subtotal_administracion', models.DecimalField(decimal_places=4, default=Decimal('0'), max_digits=18)),
-                ('total_costo', models.DecimalField(decimal_places=4, default=Decimal('0'), help_text='Suma de todos los costo_total (sin margen de venta).', max_digits=18)),
-                ('total_valor_venta', models.DecimalField(decimal_places=4, default=Decimal('0'), help_text='Suma de todos los valor_total (con margen de venta).', max_digits=18)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('proyecto_sistema', models.OneToOneField(blank=True, help_text='ProyectoSistema al que pertenece este APU (si aplica).', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='apu', to='presupuestos.proyectosistema')),
+        # 0003 ya renombró la tabla apu_proyectos → apus en BD (via RenameModel +
+        # AlterModelTable). En BD nueva esa tabla existe; solo necesitamos actualizar
+        # el estado Django para que el modelo se llame APUProyecto (no APU).
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.CreateModel(
+                    name='APUProyecto',
+                    fields=[
+                        ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                        ('nombre', models.CharField(help_text="Nombre del APU, p. ej. 'APU Cubierta TPO — Edificio Central'.", max_length=200)),
+                        ('descripcion', models.TextField(blank=True, help_text='Descripción detallada del alcance y condiciones del APU.')),
+                        ('factor_venta_pct', models.DecimalField(decimal_places=4, default=Decimal('20'), help_text='% margen sobre costo unitario → valor unitario.', max_digits=8)),
+                        ('iva_pct', models.DecimalField(decimal_places=4, default=Decimal('19'), max_digits=8)),
+                        ('aplica_iva', models.BooleanField(default=True)),
+                        ('subtotal_materiales', models.DecimalField(decimal_places=4, default=Decimal('0'), help_text='Suma de costo_total de todas las líneas de MATERIALES.', max_digits=18)),
+                        ('subtotal_herramientas', models.DecimalField(decimal_places=4, default=Decimal('0'), help_text='Suma de costo_total de todas las líneas de HERRAMIENTAS_EQUIPOS.', max_digits=18)),
+                        ('subtotal_transporte', models.DecimalField(decimal_places=4, default=Decimal('0'), max_digits=18)),
+                        ('subtotal_mano_obra', models.DecimalField(decimal_places=4, default=Decimal('0'), max_digits=18)),
+                        ('subtotal_administracion', models.DecimalField(decimal_places=4, default=Decimal('0'), max_digits=18)),
+                        ('total_costo', models.DecimalField(decimal_places=4, default=Decimal('0'), help_text='Suma de todos los costo_total (sin margen de venta).', max_digits=18)),
+                        ('total_valor_venta', models.DecimalField(decimal_places=4, default=Decimal('0'), help_text='Suma de todos los valor_total (con margen de venta).', max_digits=18)),
+                        ('created_at', models.DateTimeField(auto_now_add=True)),
+                        ('updated_at', models.DateTimeField(auto_now=True)),
+                        ('proyecto_sistema', models.OneToOneField(blank=True, help_text='ProyectoSistema al que pertenece este APU (si aplica).', null=True, on_delete=django.db.models.deletion.CASCADE, related_name='apu', to='presupuestos.proyectosistema')),
+                    ],
+                    options={
+                        'verbose_name': 'APU',
+                        'verbose_name_plural': 'APUs',
+                        'db_table': 'apus',
+                    },
+                ),
+                migrations.DeleteModel(name='APU'),
             ],
-            options={
-                'verbose_name': 'APU',
-                'verbose_name_plural': 'APUs',
-                'db_table': 'apus',
-            },
         ),
         migrations.AlterField(
             model_name='apulinea',
             name='apu',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='lineas', to='presupuestos.apuproyecto'),
-        ),
-        migrations.DeleteModel(
-            name='APU',
         ),
     ]
