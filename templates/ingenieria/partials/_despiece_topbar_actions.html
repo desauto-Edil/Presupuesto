@@ -1,0 +1,47 @@
+{% comment %}
+   ============================================================
+   Partial: Acciones del topbar del Despiece Maestro.
+
+   Uso (dentro del {% block topbar_actions %} de despiece_maestro.html):
+       {% block topbar_actions %}
+         {% include "ingenieria/partials/_despiece_topbar_actions.html" %}
+       {% endblock %}
+
+   Contrato (variables que espera del contexto de la vista):
+     proyecto                    Proyecto comercial opcional.
+                                 Si está, muestra link a comercial:proyecto_detail.
+                                 Si no, muestra link a ingenieria:despiece_list.
+     proyecto.pk                 Para reverse comercial:proyecto_detail.
+     proyecto.consecutivo        Texto del botón "← {consecutivo}".
+     despiece                    DespieceMaestro actual.
+     despiece.esta_guardado      Boolean → controla color del badge de estado.
+     despiece.estado             Texto del badge.
+     apu_pk                      Opcional. Si está, muestra botón "Ver APU".
+
+   URLs usadas:
+     - comercial:proyecto_detail   (cuando hay proyecto)
+     - ingenieria:despiece_list    (cuando no hay proyecto)
+     - presupuestos:apu_detail     (cuando hay apu_pk)
+
+   JS:
+     Cero JavaScript. Solo links y un badge.
+   ============================================================
+{% endcomment %}
+{% if proyecto %}
+<a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+  <i class="bi bi-arrow-left"></i> {{ proyecto.consecutivo }}
+</a>
+{% else %}
+<a href="{% url 'ingenieria:despiece_list' %}" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
+  <i class="bi bi-arrow-left"></i> Despieces
+</a>
+{% endif %}
+<span class="badge {% if despiece.esta_guardado %}bg-success{% else %}bg-warning text-dark{% endif %} ms-1">
+  {{ despiece.estado }}
+</span>
+{% if apu_pk %}
+<a href="{% url 'presupuestos:apu_detail' apu_pk %}"
+   class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 ms-1">
+  <i class="bi bi-file-earmark-bar-graph"></i> Ver APU
+</a>
+{% endif %}

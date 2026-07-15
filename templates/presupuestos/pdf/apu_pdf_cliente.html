@@ -1,0 +1,442 @@
+{% load static %}{% load catalogo_tags %}<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Cotización — {{ apu.nombre }}</title>
+<style>
+  :root {
+    --yellow:     #F4D000;
+    --black:      #111111;
+    --gray-dark:  #333333;
+    --gray-mid:   #B8B8B8;
+    --gray-light: #EDEDED;
+    --white:      #FFFFFF;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 14mm 18mm;
+    @bottom-center {
+      content: "Pág. " counter(page) " / " counter(pages);
+      font-size: 7pt;
+      color: #888;
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 9pt;
+    color: var(--black);
+    line-height: 1.4;
+    background: var(--white);
+  }
+
+  /* ── Barra de acciones (pantalla, no imprime) ── */
+  .print-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: var(--black); color: var(--white);
+    padding: 10px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+  }
+  .print-bar a { color: var(--gray-mid); text-decoration: none; }
+  .print-bar a:hover { color: var(--white); }
+  .btn-print {
+    background: var(--yellow); color: var(--black);
+    border: none; padding: 7px 18px; border-radius: 4px;
+    cursor: pointer; font-size: 12px; font-weight: 700;
+  }
+  @media print {
+    .print-bar { display: none; }
+    body { background: var(--white); }
+    .page { padding: 0; margin-top: 0; }
+  }
+
+  .page { max-width: 1050px; margin: 0 auto; padding: 28px 36px; margin-top: 50px; }
+
+  /* ── Cabecera ── */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    border-bottom: 3px solid var(--yellow);
+    padding-bottom: 10px; margin-bottom: 12px;
+  }
+  .header__logo { max-height: 52px; width: auto; }
+  .header__right { text-align: right; }
+  .header__right .titulo-doc {
+    font-size: 10pt; font-weight: 800; color: var(--black);
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .header__right .subtitulo-doc {
+    font-size: 7.5pt; color: var(--gray-dark); margin-top: 4px;
+  }
+
+  /* ── Bloque de datos ── */
+  .datos-block {
+    border: 1px solid var(--gray-mid);
+    margin-bottom: 10px;
+    font-size: 8.5pt;
+  }
+  .datos-row {
+    display: flex;
+    border-bottom: 1px solid var(--gray-light);
+  }
+  .datos-row:last-child { border-bottom: none; }
+  .datos-lbl {
+    background: var(--gray-light);
+    padding: 3px 10px;
+    font-weight: 700;
+    color: var(--gray-dark);
+    width: 130px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    font-size: 7.5pt;
+    letter-spacing: .03em;
+    display: flex; align-items: center;
+  }
+  .datos-val {
+    padding: 3px 10px;
+    display: flex; align-items: center;
+  }
+
+  /* ── Banda proyecto ── */
+  .banda-proyecto {
+    background: var(--yellow);
+    padding: 6px 12px;
+    font-weight: 800; font-size: 10.5pt;
+    color: var(--black);
+    text-transform: uppercase; letter-spacing: .04em;
+    margin-bottom: 2px;
+  }
+  .banda-sistema {
+    background: var(--gray-light);
+    padding: 4px 12px;
+    font-size: 8pt; font-weight: 600;
+    color: var(--gray-dark);
+    margin-bottom: 12px;
+    border-left: 3px solid var(--yellow);
+  }
+
+  /* ── Nota preliminar ── */
+  .nota-preliminar {
+    border: 1px solid var(--gray-mid);
+    background: var(--gray-light);
+    padding: 5px 12px;
+    font-size: 8pt; color: var(--gray-dark);
+    margin-bottom: 10px;
+    font-style: italic;
+  }
+
+  /* ── Tabla principal ── */
+  table.main-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 14px;
+    page-break-inside: auto;
+  }
+  table.main-table thead { display: table-header-group; }
+  table.main-table thead tr { background: var(--yellow); }
+  table.main-table th {
+    padding: 6px 8px;
+    font-size: 7.5pt; font-weight: 700;
+    color: var(--black);
+    text-transform: uppercase; letter-spacing: .04em;
+    border: 1px solid var(--gray-mid);
+    text-align: center;
+    white-space: nowrap;
+  }
+  table.main-table th.td-desc { text-align: left; }
+  table.main-table td {
+    padding: 7px 8px;
+    border: 1px solid var(--gray-light);
+    font-size: 8.5pt;
+    text-align: center;
+    vertical-align: top;
+  }
+  table.main-table td.td-desc { text-align: left; }
+  table.main-table td.td-num  { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+  table.main-table tbody tr:nth-child(even) { background: #FAFAFA; }
+  table.main-table tbody tr:nth-child(odd)  { background: var(--white); }
+  table.main-table tbody tr td { page-break-inside: avoid; }
+
+  /* ── Resumen AIU ── */
+  .resumen-wrap { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+  table.resumen-table {
+    width: 400px;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+  }
+  table.resumen-table thead tr th {
+    background: var(--gray-dark); color: var(--white);
+    padding: 5px 10px; text-align: left;
+    font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em;
+    border: 1px solid var(--gray-mid);
+  }
+  table.resumen-table thead tr th:last-child { text-align: right; }
+  table.resumen-table td {
+    padding: 4px 10px;
+    border: 1px solid var(--gray-light);
+    color: var(--black);
+  }
+  table.resumen-table td:last-child {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  table.resumen-table tr.row-sub td {
+    background: var(--gray-light);
+    font-weight: 700;
+  }
+  table.resumen-table tr.row-total td {
+    background: var(--yellow);
+    font-weight: 800;
+    font-size: 9.5pt;
+    color: var(--black);
+    border-top: 2px solid var(--black);
+    border-color: var(--gray-dark);
+  }
+  table.resumen-table tr.row-iva td {
+    font-style: italic;
+    color: var(--gray-dark);
+  }
+
+  /* ── Nota ── */
+  .nota {
+    border: 1px solid var(--gray-mid);
+    background: var(--gray-light);
+    padding: 8px 12px;
+    font-size: 7.5pt; color: var(--gray-dark);
+    margin-bottom: 14px; line-height: 1.6;
+  }
+  .nota strong { color: var(--black); }
+
+  /* ── Firmas ── */
+  .firma-row {
+    display: flex; gap: 48px; margin: 20px 0 10px;
+  }
+  .firma-box {
+    flex: 1;
+    border-top: 1.5px solid var(--black);
+    padding-top: 5px;
+    font-size: 7.5pt; color: var(--gray-dark);
+    text-align: center;
+  }
+
+  /* ── Pie de página ── */
+  .footer {
+    border-top: 1px solid var(--gray-mid);
+    padding-top: 6px;
+    display: flex; justify-content: space-between;
+    font-size: 7pt; color: var(--gray-mid);
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Barra de impresión (solo pantalla) -->
+<div class="print-bar">
+  <div>
+    <strong>Cotización Cliente</strong>
+    <span style="margin-left:12px;color:#aaa;">{{ apu.nombre }}</span>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;">
+    <a href="/presupuestos/apu/{{ apu.pk }}/">← Volver al APU</a>
+    <button class="btn-print" onclick="window.print()">⎙ Imprimir / Guardar PDF</button>
+  </div>
+</div>
+
+<div class="page">
+
+<!-- Cabecera -->
+<div class="header">
+  <div>
+    <img src="{% static 'img/logoImperandina.png' %}" alt="Imperandina" class="header__logo">
+  </div>
+  <div class="header__right">
+    <div class="titulo-doc">Formulario de Ítems, Cantidades y Precios</div>
+    <div class="subtitulo-doc">
+      EDIL ANDINA SAS &nbsp;·&nbsp; NIT 805.015.703-5<br>
+      Cubiertas · Fachadas · Soluciones Constructivas
+    </div>
+  </div>
+</div>
+
+<!-- Bloque de datos -->
+<div class="datos-block">
+  <div class="datos-row">
+    <div class="datos-lbl">Obra / Proyecto</div>
+    <div class="datos-val">
+      {% if proyecto %}{{ proyecto.nombre }}{% elif ps %}{{ ps.sistema.nombre }}{% else %}{{ apu.nombre }}{% endif %}
+    </div>
+  </div>
+  <div class="datos-row">
+    <div class="datos-lbl">Proponente</div>
+    <div class="datos-val">EDIL ANDINA SAS</div>
+  </div>
+  <div class="datos-row">
+    <div class="datos-lbl">NIT</div>
+    <div class="datos-val">805.015.703-5</div>
+  </div>
+  {% if resumen.cliente %}
+  <div class="datos-row">
+    <div class="datos-lbl">Cliente</div>
+    <div class="datos-val">{{ resumen.cliente.razon_social }}</div>
+  </div>
+  {% elif proyecto and proyecto.cliente %}
+  <div class="datos-row">
+    <div class="datos-lbl">Cliente</div>
+    <div class="datos-val">{{ proyecto.cliente.razon_social }}</div>
+  </div>
+  {% endif %}
+  <div class="datos-row">
+    <div class="datos-lbl">Fecha</div>
+    <div class="datos-val">{{ fecha_generacion }}</div>
+  </div>
+  {% if proyecto and proyecto.consecutivo %}
+  <div class="datos-row">
+    <div class="datos-lbl">Referencia</div>
+    <div class="datos-val">{{ proyecto.consecutivo }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if resumen.es_preliminar %}
+<div class="nota-preliminar">
+  Oferta preliminar sujeta a revisión y aprobación comercial.
+</div>
+{% endif %}
+
+<!-- Banda nombre proyecto -->
+<div class="banda-proyecto">
+  {% if proyecto %}{{ proyecto.nombre|upper }}{% else %}{{ apu.nombre|upper }}{% endif %}
+</div>
+<div class="banda-sistema">
+  {% if ps %}
+    {{ ps.sistema.nombre }}{% if ps.subsistema %} &nbsp;/&nbsp; {{ ps.subsistema.nombre }}{% endif %}
+  {% elif apu.es_consolidado %}
+    Alcance consolidado — {{ apu.nombre }}
+  {% endif %}
+</div>
+
+<!-- Tabla de ítems comerciales -->
+<table class="main-table">
+  <thead>
+    <tr>
+      <th style="width:48px;">Ítem</th>
+      <th class="td-desc">Descripción</th>
+      <th style="width:64px;">Unidad</th>
+      <th style="width:90px;">Cantidad</th>
+      <th style="width:130px;">Vr. Unitario</th>
+      <th style="width:140px;">Subtotal</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for item in items_cliente %}
+  <tr>
+    <td>{{ item.item }}</td>
+    <td class="td-desc">
+      <strong>{{ item.descripcion }}</strong>
+      <br><span style="font-size:7.5pt;color:#555;">
+        Suministro, instalación y puesta en marcha del sistema conforme a especificaciones técnicas.
+      </span>
+    </td>
+    <td>{{ item.unidad }}</td>
+    <td class="td-num">{{ item.cantidad|floatformat:2 }}</td>
+    <td class="td-num">{{ item.valor_unitario|currency_nodec }}</td>
+    <td class="td-num"><strong>{{ item.subtotal|currency_nodec }}</strong></td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="6" style="text-align:center;padding:20px;color:#888;">Sin ítems calculados.</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<!-- Resumen AIU -->
+<div class="resumen-wrap">
+  <table class="resumen-table">
+    <thead>
+      <tr>
+        <th>Concepto</th>
+        <th>Valor (COP)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Costos directos</td>
+        <td>{{ resumen.subtotal_directos_tecnico|currency_nodec }}</td>
+      </tr>
+      <tr>
+        <td>A — Administración ({{ resumen.porcentaje_admin|floatformat:2 }}%)</td>
+        <td>{{ resumen.valor_admin|currency_nodec }}</td>
+      </tr>
+      <tr>
+        <td>I — Imprevistos ({{ resumen.porcentaje_imprevistos|floatformat:2 }}%)</td>
+        <td>{{ resumen.valor_imprevistos|currency_nodec }}</td>
+      </tr>
+      <tr>
+        <td>U — Utilidad ({{ resumen.porcentaje_utilidad|floatformat:2 }}%)</td>
+        <td>{{ resumen.valor_utilidad|currency_nodec }}</td>
+      </tr>
+      <tr class="row-sub">
+        <td>Subtotal con AIU</td>
+        <td>{{ resumen.subtotal_con_aiu|currency_nodec }}</td>
+      </tr>
+      {% if resumen.garantia.aplica %}
+      <tr>
+        <td>{{ resumen.garantia.tipo_nombre|default:"Garantía" }}</td>
+        <td>{{ resumen.garantia_valor_recargo|currency_nodec }}</td>
+      </tr>
+      {% endif %}
+      <tr class="row-iva">
+        <td>{{ resumen.iva_label }}</td>
+        <td>{% if resumen.aplica_iva %}{{ resumen.iva_valor|currency_nodec }}{% else %}$ 0{% endif %}</td>
+      </tr>
+      <tr class="row-total">
+        <td>Total con IVA</td>
+        <td>{{ resumen.total_final|currency_nodec }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Nota comercial -->
+<div class="nota">
+  <strong>Condiciones generales:</strong>
+  {% if proyecto and proyecto.observaciones %}
+    {{ proyecto.observaciones }}
+  {% else %}
+    Vigencia de la oferta: 30 días calendario desde la fecha de generación.
+    Precios sujetos a disponibilidad de materiales y condiciones del contrato.
+    No incluye trabajos civiles ni obras complementarias no especificadas.
+    Forma de pago según condiciones acordadas con el cliente.
+  {% endif %}
+</div>
+
+<!-- Firmas -->
+<div class="firma-row">
+  <div class="firma-box">
+    <div style="margin-top:40px;"></div>
+    Elaborado por: _________________________
+  </div>
+  <div class="firma-box">
+    <div style="margin-top:40px;"></div>
+    Revisado por: _________________________
+  </div>
+  <div class="firma-box">
+    <div style="margin-top:40px;"></div>
+    Aceptación del cliente: _________________________
+  </div>
+</div>
+
+<!-- Pie de página -->
+<div class="footer">
+  <span>EDIL ANDINA SAS — Cubiertas y Fachadas Industriales &nbsp;·&nbsp; NIT 805.015.703-5</span>
+  <span>Generado: {{ fecha_generacion }}</span>
+</div>
+
+</div>{# /page #}
+</body>
+</html>

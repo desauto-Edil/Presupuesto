@@ -1,0 +1,44 @@
+{% comment %}
+   ============================================================
+   Partial: Modal "Ver origen de consolidación" del Despiece Maestro.
+
+   Uso (al final de despiece_maestro.html, antes del bloque <script>):
+       {% include "ingenieria/partials/_modal_origen.html" %}
+
+   Contrato:
+     Render puro. No recibe variables.
+
+   IDs preservados (críticos para el JS de despiece_maestro.html):
+     - #modalOrigen      → contenedor abierto por:
+                             verOrigen(cid)   ← botón "Ver origen" en
+                                                consolidaciones (_rowConsolidada)
+                           con: new bootstrap.Modal(...).show()
+     - #modalOrigenBody  → slot poblado vía innerHTML por verOrigen(cid).
+
+   Clases preservadas (Bootstrap 5 + estilo propio):
+     modal fade, modal-dialog modal-lg, modal-content,
+     modal-header, modal-title, modal-body, modal-footer,
+     btn-close, data-bs-dismiss="modal".
+
+   Nota: el ancho del diálogo es modal-lg (no el default). Se preserva.
+
+   JS:
+     Cero JavaScript aquí. La lógica vive en el bloque <script> de
+     despiece_maestro.html (función verOrigen).
+   ============================================================
+{% endcomment %}
+<!-- Modal: Ver origen de consolidación -->
+<div class="modal fade" id="modalOrigen" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-diagram-3 me-2"></i>Líneas de origen</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalOrigenBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>

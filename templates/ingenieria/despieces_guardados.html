@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Despieces Guardados{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Calculador{% endblock %}
+{% block breadcrumb %}Despieces Guardados{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-sm btn-primary d-flex align-items-center gap-1">
+  <i class="bi bi-plus-lg"></i> Nuevo despiece
+</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.dg-filters {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.08);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dg-filters input[type=text] {
+  border-radius: 8px;
+  border: 1.5px solid rgba(0,0,0,.12);
+  font-size: 13px;
+  height: 34px;
+  min-width: 220px;
+}
+.dg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1.5px solid transparent;
+  transition: all .15s;
+}
+.dg-chip--all { background: rgba(0,0,0,.06); color: #555; }
+.dg-chip--all.active { background: var(--theme-accent); color: #fff; }
+.dg-chip--borrador { background: rgba(255,193,7,.12); color: #856404; border-color: rgba(255,193,7,.3); }
+.dg-chip--borrador.active { background: #ffc107; color: #000; border-color: #ffc107; }
+.dg-chip--guardado { background: rgba(25,135,84,.10); color: #0a5239; border-color: rgba(25,135,84,.2); }
+.dg-chip--guardado.active { background: #198754; color: #fff; border-color: #198754; }
+
+.dg-table-wrap {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden;
+}
+.dg-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+.dg-table th {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #999;
+  background: rgba(0,0,0,.02);
+  border-bottom: 1px solid rgba(0,0,0,.07);
+  white-space: nowrap;
+}
+.dg-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(0,0,0,.05);
+  vertical-align: middle;
+}
+.dg-table tr:last-child td { border-bottom: none; }
+.dg-table tr:hover td { background: rgba(0,0,0,.02); }
+
+.td-nombre { font-weight: 600; color: #222; }
+.td-sub { font-size: 12px; color: #888; margin-top: 2px; }
+.td-codigo { font-family: monospace; font-size: 12px; color: #666; }
+.badge-borrador { background: #fff3cd; color: #856404; border: 1px solid #ffc107; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-guardado { background: #d1e7dd; color: #0a5239; border: 1px solid #198754; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+
+.dg-actions { display: flex; align-items: center; gap: 6px; }
+.btn-dg { padding: 4px 10px; border-radius: 7px; font-size: 12px; font-weight: 600; text-decoration: none; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.btn-dg--view { background: rgba(0,0,0,.06); color: #333; }
+.btn-dg--view:hover { background: rgba(0,0,0,.12); }
+.btn-dg--apu { background: rgba(var(--theme-accent-rgb,59,130,246),.10); color: var(--theme-accent); }
+.btn-dg--apu:hover { background: rgba(var(--theme-accent-rgb,59,130,246),.18); }
+.btn-dg--del { background: rgba(220,53,69,.08); color: #dc3545; }
+.btn-dg--del:hover { background: rgba(220,53,69,.16); }
+
+.dg-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: #aaa;
+}
+.dg-empty i { font-size: 40px; margin-bottom: 12px; opacity: .4; }
+
+.dg-pagination { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 14px; border-top: 1px solid rgba(0,0,0,.06); }
+.dg-page-btn { padding: 5px 11px; border-radius: 7px; font-size: 13px; font-weight: 600; text-decoration: none; color: #444; background: rgba(0,0,0,.05); }
+.dg-page-btn.active { background: var(--theme-accent); color: #fff; }
+.dg-page-btn:hover:not(.active) { background: rgba(0,0,0,.10); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if proyecto_filtro %}
+<div class="d-flex align-items-center gap-2 mb-3 p-3" style="background:#fff;border-radius:10px;border:1px solid rgba(0,0,0,.08)">
+  <a href="{% url 'comercial:proyecto_detail' proyecto_filtro.pk %}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Volver a {{ proyecto_filtro.consecutivo }}
+  </a>
+  <span class="fw-semibold">Despieces del proyecto <strong>{{ proyecto_filtro.consecutivo }}</strong> — {{ proyecto_filtro.nombre|default:"Sin nombre" }}</span>
+</div>
+{% endif %}
+
+<!-- Filtros -->
+<form method="get" action="" class="dg-filters">
+  <input type="text" name="q" value="{{ q }}" placeholder="Buscar por nombre o subsistema…" class="form-control">
+  {% if proyecto_pk %}<input type="hidden" name="proyecto_pk" value="{{ proyecto_pk }}">{% endif %}
+  <a href="?{% if proyecto_pk %}proyecto_pk={{ proyecto_pk }}&{% endif %}" class="dg-chip dg-chip--all {% if not estado_filtro %}active{% endif %}">Todos</a>
+  <a href="?estado={{ BORRADOR }}{% if q %}&q={{ q }}{% endif %}{% if proyecto_pk %}&proyecto_pk={{ proyecto_pk }}{% endif %}"
+     class="dg-chip dg-chip--borrador {% if estado_filtro == BORRADOR %}active{% endif %}">
+     Borrador
+  </a>
+  <a href="?estado={{ GUARDADO }}{% if q %}&q={{ q }}{% endif %}{% if proyecto_pk %}&proyecto_pk={{ proyecto_pk }}{% endif %}"
+     class="dg-chip dg-chip--guardado {% if estado_filtro == GUARDADO %}active{% endif %}">
+     Guardado
+  </a>
+  <button type="submit" class="btn btn-sm btn-outline-secondary ms-auto">
+    <i class="bi bi-search"></i> Buscar
+  </button>
+</form>
+
+<!-- Tabla -->
+<div class="dg-table-wrap">
+  {% if despieces %}
+  <table class="dg-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Nombre</th>
+        <th>Subsistema</th>
+        <th>Proyecto</th>
+        <th>Estado</th>
+        <th>Fecha</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in despieces %}
+      <tr>
+        <td class="td-codigo">{{ d.pk }}</td>
+        <td>
+          <div class="td-nombre">{{ d.nombre|default:"Sin nombre" }}</div>
+        </td>
+        <td>
+          <div class="td-codigo">{{ d.subsistema.codigo }}</div>
+          <div class="td-sub">{{ d.subsistema.nombre }}</div>
+        </td>
+        <td>
+          {% if d.proyecto %}
+            <a href="{% url 'comercial:proyecto_detail' d.proyecto.pk %}"
+               class="td-codigo text-decoration-none">{{ d.proyecto.consecutivo }}</a>
+          {% else %}
+            <span class="td-sub">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if d.estado == GUARDADO %}
+          <span class="badge-guardado">Guardado</span>
+          {% else %}
+          <span class="badge-borrador">Borrador</span>
+          {% endif %}
+        </td>
+        <td class="td-sub" style="white-space:nowrap">{{ d.updated_at|date:"d/m/Y H:i" }}</td>
+        <td>
+          <div class="dg-actions">
+            <a href="{% url 'ingenieria:despiece_maestro' d.pk %}" class="btn-dg btn-dg--view">
+              <i class="bi bi-pencil-square"></i> Abrir
+            </a>
+            {% if d.estado == GUARDADO %}
+            <a href="{% url 'ingenieria:apu_despiece_maestro' d.pk %}" class="btn-dg btn-dg--apu">
+              <i class="bi bi-file-earmark-bar-graph"></i> APU
+            </a>
+            {% endif %}
+            <button type="button" class="btn-dg btn-dg--del"
+                    onclick="confirmarEliminar({{ d.pk }}, '{{ d.nombre|default:'Despiece #'|add:d.pk|escapejs }}')">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if is_paginated %}
+  <div class="dg-pagination">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}" class="dg-page-btn">
+      <i class="bi bi-chevron-left"></i>
+    </a>
+    {% endif %}
+    {% for num in page_obj.paginator.page_range %}
+      {% if num == page_obj.number %}
+      <span class="dg-page-btn active">{{ num }}</span>
+      {% elif num|add:"-2" <= page_obj.number and page_obj.number <= num|add:"2" %}
+      <a href="?page={{ num }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}" class="dg-page-btn">{{ num }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}{% if estado_filtro %}&estado={{ estado_filtro }}{% endif %}{% if q %}&q={{ q }}{% endif %}" class="dg-page-btn">
+      <i class="bi bi-chevron-right"></i>
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="dg-empty">
+    <div><i class="bi bi-archive"></i></div>
+    <div class="fw-semibold mb-1">No hay despieces{% if estado_filtro %} con estado "{{ estado_filtro }}"{% endif %}</div>
+    <div class="small">
+      <a href="{% url 'ingenieria:calculador_sistemas' %}">Crear nuevo despiece</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Modal eliminar -->
+<div class="modal fade" id="delModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title fw-bold">Eliminar despiece</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-1">
+        <p class="text-muted small mb-0">¿Eliminar <strong id="delNombre"></strong>? Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form id="delForm" method="post">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-danger">Eliminar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function confirmarEliminar(pk, nombre) {
+  document.getElementById('delNombre').textContent = nombre;
+  document.getElementById('delForm').action = `/ingenieria/calculador/despiece/${pk}/eliminar/`;
+  new bootstrap.Modal(document.getElementById('delModal')).show();
+}
+</script>
+{% endblock %}

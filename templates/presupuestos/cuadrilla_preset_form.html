@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block nav_apu %}active{% endblock %}
-{% block title %}{% if form.instance.pk %}Editar cuadrilla{% else %}Nueva cuadrilla{% endif %}{% endblock %}
+{% block title %}{% if form.instance.pk %}Editar grupo de personal{% else %}Nuevo grupo de personal{% endif %}{% endblock %}
 
 {% block content %}
 <div class="page-header mb-4">
@@ -8,13 +8,13 @@
     <ol class="breadcrumb">
       <li class="breadcrumb-item"><a href="{% url 'presupuestos:catalogo_apu' %}">Catálogo APU</a></li>
       <li class="breadcrumb-item active">
-        {% if form.instance.pk %}Editar «{{ form.instance.nombre }}»{% else %}Nueva cuadrilla preset{% endif %}
+        {% if form.instance.pk %}Editar «{{ form.instance.nombre }}»{% else %}Nuevo grupo de personal{% endif %}
       </li>
     </ol>
   </nav>
   <h1 class="page-title">
     <i class="bi bi-people me-2"></i>
-    {% if form.instance.pk %}Editar cuadrilla{% else %}Nueva cuadrilla preset{% endif %}
+    {% if form.instance.pk %}Editar grupo de personal{% else %}Nuevo grupo de personal{% endif %}
   </h1>
 </div>
 
@@ -26,7 +26,7 @@
       <!-- Datos del preset -->
       <div class="card shadow-sm border-0 mb-3">
         <div class="card-header fw-semibold bg-success bg-opacity-10">
-          <i class="bi bi-diagram-3 me-1"></i>Datos de la cuadrilla
+          <i class="bi bi-diagram-3 me-1"></i>Datos del grupo de personal
         </div>
         <div class="card-body p-4">
           <div class="row g-3">
@@ -53,7 +53,7 @@
       <!-- Composición (formset) -->
       <div class="card shadow-sm border-0 mb-4">
         <div class="card-header fw-semibold bg-primary bg-opacity-10 d-flex justify-content-between align-items-center">
-          <span><i class="bi bi-people-fill me-1"></i>Composición de la cuadrilla</span>
+          <span><i class="bi bi-people-fill me-1"></i>Composición del personal</span>
           <button type="button" class="btn btn-xs btn-outline-primary" id="btn-add-item">
             <i class="bi bi-plus"></i> Agregar cargo
           </button>
@@ -99,7 +99,7 @@
       <div class="d-flex gap-2 justify-content-end">
         <a href="{% url 'presupuestos:catalogo_apu' %}" class="btn btn-outline-secondary">Cancelar</a>
         <button type="submit" class="btn btn-primary">
-          <i class="bi bi-check-lg me-1"></i>Guardar cuadrilla
+          <i class="bi bi-check-lg me-1"></i>Guardar grupo
         </button>
       </div>
     </form>

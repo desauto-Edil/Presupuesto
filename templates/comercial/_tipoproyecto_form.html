@@ -1,0 +1,38 @@
+{% comment %}
+   ============================================================
+   Partial reutilizable: form de Tipo de Proyecto.
+
+   Uso:
+     {% include "comercial/_tipoproyecto_form.html" %}
+
+   Parámetros (opcionales):
+     form, action_url, cancel_url, submit_label.
+   ============================================================
+{% endcomment %}
+
+<form method="post" action="{{ action_url|default:'' }}">
+  {% csrf_token %}
+  <div class="form-page-body">
+    <div class="form-group">
+      <label>Código <span style="color:var(--brand-red)">*</span></label>
+      {{ form.codigo }}
+      {% if form.codigo.errors %}<div class="invalid-feedback d-block">{{ form.codigo.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+      <label>Nombre <span style="color:var(--brand-red)">*</span></label>
+      {{ form.nombre }}
+      {% if form.nombre.errors %}<div class="invalid-feedback d-block">{{ form.nombre.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-check" style="margin-top:8px;">
+      {{ form.activo }}
+      <label class="form-check-label" style="font-size:13px;">Activo</label>
+    </div>
+  </div>
+  <div class="form-page-footer">
+    <a href="{% if cancel_url %}{{ cancel_url }}{% else %}{% url 'comercial:tipoproyecto_list' %}{% endif %}"
+       class="btn btn-ghost btn-sm">Cancelar</a>
+    <button type="submit" class="btn btn-primary btn-sm">
+      {% if submit_label %}{{ submit_label }}{% elif object %}Guardar cambios{% else %}Crear tipo{% endif %}
+    </button>
+  </div>
+</form>

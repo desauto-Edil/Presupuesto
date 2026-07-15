@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load static %}
+{% load catalogo_tags %}
+
+{% block title %}APU — Lista{% endblock %}
+{% block nav_apu %}active{% endblock %}
+{% block page_title %}APU{% endblock %}
+{% block breadcrumb %}APU{% endblock %}
+
+{% block extra_head %}
+<style>
+.apu-table-wrap {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden;
+}
+.apu-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+.apu-table th {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #999;
+  background: rgba(0,0,0,.02);
+  border-bottom: 1px solid rgba(0,0,0,.07);
+  white-space: nowrap;
+}
+.apu-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(0,0,0,.05);
+  vertical-align: middle;
+}
+.apu-table tr:last-child td { border-bottom: none; }
+.apu-table tr:hover td { background: rgba(0,0,0,.02); }
+.td-nombre { font-weight: 600; color: #222; }
+.td-sub { font-size: 12px; color: #888; margin-top: 2px; }
+.td-code { font-family: monospace; font-size: 12px; color: var(--theme-accent); }
+.apu-empty { padding: 60px 20px; text-align: center; color: #aaa; }
+.apu-empty i { font-size: 40px; margin-bottom: 12px; opacity: .4; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# Fase 11.5.3 — toggle de archivados #}
+<div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;font-size:12px;">
+  {% if mostrar_archivados %}
+    <a href="?" class="btn btn-ghost btn-xs">← Ocultar archivados</a>
+  {% else %}
+    <a href="?archivados=1" class="btn btn-ghost btn-xs">Ver archivados</a>
+  {% endif %}
+</div>
+
+<div class="apu-table-wrap">
+  {% if apus %}
+  <table class="apu-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Nombre</th>
+        <th>Proyecto</th>
+        <th>Sistema</th>
+        <th>Líneas</th>
+        <th>Actualizado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for apu in apus %}
+      <tr>
+        <td class="td-code">{{ apu.pk }}</td>
+        <td>
+          <div class="td-nombre">
+            {{ apu.nombre|default:"APU sin nombre" }}
+            {% if apu.archivado %}<span style="background:#f3f0e8;color:#7a5b00;border-radius:4px;padding:1px 6px;font-size:10.5px;margin-left:6px;">Archivado</span>{% endif %}
+          </div>
+        </td>
+        <td>
+          {% if apu.proyecto_sistema.proyecto %}
+          <a href="{% url 'comercial:proyecto_detail' apu.proyecto_sistema.proyecto.pk %}"
+             class="td-code text-decoration-none">
+            {{ apu.proyecto_sistema.proyecto.consecutivo }}
+          </a>
+          <div class="td-sub">{{ apu.proyecto_sistema.proyecto.nombre|truncatechars:40 }}</div>
+          {% else %}
+          <span class="td-sub">—</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="td-sub">{{ apu.proyecto_sistema.sistema.nombre }}</div>
+          {% if apu.proyecto_sistema.subsistema %}
+          <div class="td-sub">{{ apu.proyecto_sistema.subsistema.nombre }}</div>
+          {% endif %}
+        </td>
+        <td style="text-align:center;">{{ apu.total_lineas }}</td>
+        <td class="td-sub" style="white-space:nowrap;">{{ apu.updated_at|date:"d/m/Y H:i" }}</td>
+        <td>
+          <a href="{% url 'presupuestos:apu_revisar' apu.pk %}"
+             class="btn btn-sm btn-outline-primary" style="font-size:12px;">
+            <i class="bi bi-search"></i> Ir a la revisión
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="apu-empty">
+    <div><i class="bi bi-file-earmark-bar-graph"></i></div>
+    <div class="fw-semibold mb-1">No hay APUs generados aún</div>
+    <div class="small text-muted">Los APUs se generan desde el módulo de Despiece de cada proyecto.</div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

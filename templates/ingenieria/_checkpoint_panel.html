@@ -1,0 +1,387 @@
+{% comment %}
+  _checkpoint_panel.html — Panel reutilizable de progreso (Checkpoints).
+
+  La página DEBE definir las siguientes variables globales ANTES de incluir este partial:
+
+    window.CP_SECCIONES  = [                         (obligatorio)
+      { label: 'Sección', anchor: 'anchorId', fn: function() {
+          // Debe devolver: { puntaje, maximo, estado, errores, advertencias }
+          // estado: 'ok' | 'advertencia' | 'error'
+        }
+      },
+      ...
+    ];
+
+  Variables opcionales:
+    window.CP_TITULO    = "Texto del encabezado"     (default: "Checkpoints")
+    window.CP_FORM_ID   = "idFormulario"             (habilita recálculo al input/change)
+    window.CP_WATCH_IDS = ["id1", "id2", ...]        (MutationObserver en estos contenedores)
+
+  Funciones globales expuestas:
+    window.calcularProgreso()   — recalcula y actualiza la pill
+    window.abrirCheckpoints()   — abre el offcanvas
+    window.navegarAnchor(id)    — navega a una sección del formulario
+{% endcomment %}
+
+<style>
+/* ══ Panel de progreso — pestaña fija al borde derecho, encima de Ayuda ════ */
+.cp-pill {
+  position: fixed;
+  right: 0;
+  top: 28%;                 /* encima de la pestaña Ayuda (que está a 44%) */
+  transform: translateY(-50%);
+  z-index: 1070;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: 12px 0 0 12px;
+  padding: 9px 13px;
+  cursor: pointer;
+  box-shadow: -3px 3px 14px rgba(14,17,23,.18);
+  display: flex;
+  flex-direction: row;       /* pestaña HORIZONTAL */
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  text-align: left;
+  transition: box-shadow .15s, padding-left .15s;
+  outline: none;
+}
+.cp-pill:hover { box-shadow: -4px 4px 20px rgba(14,17,23,.26); padding-left: 15px; }
+
+/* ── Variante integrada (no flotante): se monta en el encabezado del Despiece ── */
+.cp-pill--inline {
+  position: relative;
+  right: auto; top: auto;
+  transform: none;
+  z-index: auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: none;
+  padding: 5px 12px;
+  gap: 8px;
+}
+.cp-pill--inline.cp-pill--hidden { visibility: hidden; }
+.cp-pill--inline:hover { box-shadow: 0 1px 6px rgba(14,17,23,.12); padding-left: 12px; }
+.cp-pill--inline .cp-pill-label { font-size: 10px; }
+.cp-pill--inline #cpPillScore { font-size: 13px; }
+.cp-pill-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--ink-soft);
+  font-weight: 800;
+  white-space: nowrap;
+}
+#cpPillScore {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.cp-pill-bar {
+  width: 46px;
+  height: 5px;
+  flex: 0 0 auto;
+  background: rgba(14,17,23,.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cp-pill-fill { height: 100%; width: 0; border-radius: 4px; transition: width .5s ease, background .3s; }
+.cp-ok   { background: #108250; }
+.cp-warn { background: #c49010; }
+.cp-err  { background: #c0392b; }
+.cp-pend { background: rgba(14,17,23,.18); }
+
+/* ══ Offcanvas checkpoints ═══════════════════════════════════════════════ */
+#cpOffcanvas { min-width: 340px; max-width: 400px; }
+.cp-total-bar {
+  padding: 14px 16px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cp-total-score {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+  white-space: nowrap;
+  line-height: 1;
+}
+.cp-total-barwrap { flex: 1; height: 6px; background: rgba(14,17,23,.08); border-radius: 6px; overflow: hidden; }
+.cp-total-fill    { height: 100%; border-radius: 6px; transition: width .5s ease, background .3s; }
+.cp-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .12s;
+}
+.cp-section:hover { background: var(--surface); }
+.cp-section:last-child { border-bottom: none; }
+.cp-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.cp-estado-icon {
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800;
+  flex-shrink: 0;
+}
+.cp-icon-ok   { background: rgba(16,130,80,.12);  color: #108250; }
+.cp-icon-warn { background: rgba(196,144,16,.12); color: #b7860b; }
+.cp-icon-err  { background: rgba(192,57,43,.12);  color: #c0392b; }
+.cp-icon-pend { background: rgba(14,17,23,.07);   color: var(--ink-soft); }
+.cp-section-name  { flex: 1; font-size: 13px; font-weight: 600; color: var(--ink); }
+.cp-section-score { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); white-space: nowrap; }
+.cp-mini-bar  { height: 3px; background: rgba(14,17,23,.07); border-radius: 3px; margin-bottom: 6px; overflow: hidden; }
+.cp-mini-fill { height: 100%; border-radius: 3px; transition: width .4s ease; }
+.cp-estado-lbl { font-size: 10.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 3px; }
+.cp-list { margin: 4px 0 0; padding-left: 15px; }
+.cp-list li { font-size: 11.5px; line-height: 1.55; }
+.cp-list--err  li { color: #c0392b; }
+.cp-list--warn li { color: #b7860b; }
+.cp-info-note {
+  font-size: 11px; line-height: 1.5; color: var(--ink-soft);
+  margin-top: 4px; padding: 5px 8px;
+  background: rgba(14,17,23,.04); border-radius: 6px;
+  display: flex; gap: 6px; align-items: flex-start;
+}
+.cp-info-note i { margin-top: 1px; flex-shrink: 0; opacity: .7; }
+</style>
+
+<!-- ══ Pill flotante de progreso ════════════════════════════════════════ -->
+<button id="cpPill" class="cp-pill" type="button" onclick="abrirCheckpoints()"
+        title="Ver progreso">
+  <span id="cpPillWarnDot"
+        style="display:none;position:absolute;top:-5px;right:-5px;
+               width:11px;height:11px;background:#f59e0b;border-radius:50%;
+               border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3);"
+        title="Hay advertencias pendientes"></span>
+  <div class="cp-pill-label">Progreso</div>
+  <div id="cpPillScore">– / –</div>
+  <div class="cp-pill-bar"><div class="cp-pill-fill cp-pend" id="cpPillFill" style="width:0%"></div></div>
+</button>
+
+<!-- ══ Offcanvas checkpoints ════════════════════════════════════════════ -->
+<div class="offcanvas offcanvas-end" id="cpOffcanvas" tabindex="-1"
+     aria-labelledby="cpOffcanvasLabel">
+  <div class="offcanvas-header" style="border-bottom:1px solid var(--border);padding:14px 16px;">
+    <div>
+      <h6 class="offcanvas-title mb-0" id="cpOffcanvasLabel"
+          style="font-size:14px;font-weight:700;">Checkpoints</h6>
+      <p style="font-size:11px;color:var(--ink-soft);margin:3px 0 0;">
+        Haz clic en una sección para ir a ella
+      </p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+            aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body p-0" id="cpOffcanvasBody">
+    <!-- llenado por JS -->
+  </div>
+</div>
+
+<script>
+(function () {
+  /* ── Configuración de la página ──────────────────────────────────────── */
+  const _CP_SECS   = window.CP_SECCIONES || [];
+  const _CP_TITULO = window.CP_TITULO || "Checkpoints";
+
+  /* Aplicar título al offcanvas */
+  const _titEl = document.getElementById('cpOffcanvasLabel');
+  if (_titEl) _titEl.textContent = _CP_TITULO;
+
+  let _cpResultados = [];
+
+  /* ── Escaping ─────────────────────────────────────────────────────────── */
+  function _esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── calcularProgreso ─────────────────────────────────────────────────── */
+  window.calcularProgreso = function () {
+    _cpResultados = _CP_SECS.map(s => ({ ...s, res: s.fn() }));
+    const total = _cpResultados.reduce((a, r) => a + r.res.puntaje, 0);
+    const max   = _cpResultados.reduce((a, r) => a + r.res.maximo,  0);
+    const pct   = max > 0 ? Math.round(total / max * 100) : 0;
+    const tieneErr = _cpResultados.some(r => r.res.estado === 'error');
+    const tieneAdv = _cpResultados.some(r => r.res.estado === 'advertencia');
+    const cls = tieneErr ? 'cp-err' : tieneAdv ? 'cp-warn' : 'cp-ok';
+    const fillEl  = document.getElementById('cpPillFill');
+    const scoreEl = document.getElementById('cpPillScore');
+    const dotEl   = document.getElementById('cpPillWarnDot');
+    if (fillEl)  { fillEl.style.width = pct + '%'; fillEl.className = 'cp-pill-fill ' + cls; }
+    if (scoreEl) scoreEl.textContent = `${total} / ${max}`;
+    /* Dot ámbar: solo cuando 100/100 pero quedan advertencias */
+    if (dotEl) dotEl.style.display = (total === max && tieneAdv) ? '' : 'none';
+    return { total, max, pct };
+  };
+
+  /* ── _renderCpOffcanvas ───────────────────────────────────────────────── */
+  function _renderCpOffcanvas() {
+    const { total, max, pct } = window.calcularProgreso();
+    const body = document.getElementById('cpOffcanvasBody');
+    if (!body) return;
+    const tieneErr = _cpResultados.some(r => r.res.estado === 'error');
+    const tieneAdv = _cpResultados.some(r => r.res.estado === 'advertencia');
+    const totalCls = tieneErr ? 'cp-err' : tieneAdv ? 'cp-warn' : 'cp-ok';
+    const numAdv   = _cpResultados.reduce((a, r) => a + (r.res.advertencias || []).length, 0);
+    const esCompleto = (total === max);
+    let html = `
+      <div class="cp-total-bar">
+        <span class="cp-total-score">${total}
+          <span style="font-size:14px;font-weight:500;color:var(--ink-soft);">/ ${max}</span>
+        </span>
+        <div class="cp-total-barwrap">
+          <div class="cp-total-fill ${totalCls}" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+    if (esCompleto && tieneAdv) {
+      html += `<div style="margin:10px 14px 0;padding:9px 12px;background:#fef3c7;
+                           border-left:3px solid #f59e0b;border-radius:0 8px 8px 0;
+                           font-size:12px;color:#92400e;line-height:1.5;">
+        <strong>Progreso completo, pero hay ${numAdv} advertencia${numAdv !== 1 ? 's' : ''}</strong>
+        — Revisa los detalles de cada sección.
+      </div>`;
+    }
+    const ICON = { ok:'✓', advertencia:'⚠', error:'✗' };
+    const LBL  = { ok:'Completo', advertencia:'Advertencia', error:'Con errores' };
+    const ICLS = { ok:'cp-icon-ok', advertencia:'cp-icon-warn', error:'cp-icon-err' };
+    const FCLS = { ok:'cp-ok', advertencia:'cp-warn', error:'cp-err' };
+    _cpResultados.forEach(r => {
+      const { estado, puntaje, maximo, errores, advertencias } = r.res;
+      const icon = ICON[estado] || '○';
+      const lbl  = LBL[estado]  || 'Pendiente';
+      const icls = ICLS[estado] || 'cp-icon-pend';
+      const fcls = FCLS[estado] || 'cp-pend';
+      const spct = maximo > 0 ? Math.round(puntaje / maximo * 100) : 0;
+      const errLi  = (errores      || []).map(e => `<li>${_esc(e)}</li>`).join('');
+      const warnLi = (advertencias || []).map(w => `<li>${_esc(w)}</li>`).join('');
+      const infoNote = r.res.info
+        ? `<div class="cp-info-note"><i class="bi bi-info-circle"></i><span>${_esc(r.res.info)}</span></div>`
+        : '';
+      html += `
+        <div class="cp-section" onclick="navegarAnchor('${r.anchor || ''}')">
+          <div class="cp-section-head">
+            <span class="cp-estado-icon ${icls}">${icon}</span>
+            <span class="cp-section-name">${_esc(r.label)}</span>
+            <span class="cp-section-score">${puntaje} / ${maximo}</span>
+          </div>
+          <div class="cp-mini-bar"><div class="cp-mini-fill ${fcls}" style="width:${spct}%"></div></div>
+          <div class="cp-estado-lbl">${lbl}</div>
+          ${errLi  ? `<ul class="cp-list cp-list--err">${errLi}</ul>`   : ''}
+          ${warnLi ? `<ul class="cp-list cp-list--warn">${warnLi}</ul>` : ''}
+          ${infoNote}
+        </div>`;
+    });
+    body.innerHTML = html;
+  }
+
+  /* ── abrirCheckpoints ─────────────────────────────────────────────────── */
+  window.abrirCheckpoints = function () {
+    /* Toggle excluyente: si ya está abierto se cierra; si no, cierra los otros. */
+    if (window.toggleFloatingPanel && window.toggleFloatingPanel('cpOffcanvas')) return;
+    _renderCpOffcanvas();
+    if (window.bootstrap) {
+      bootstrap.Offcanvas.getOrCreateInstance(
+        document.getElementById('cpOffcanvas')
+      ).show();
+    }
+  };
+
+  /* ── navegarAnchor ────────────────────────────────────────────────────── */
+  window.navegarAnchor = function (anchorId) {
+    if (!anchorId) return;
+    if (window.bootstrap) {
+      const inst = bootstrap.Offcanvas.getInstance(document.getElementById('cpOffcanvas'));
+      if (inst) inst.hide();
+    }
+    const el = document.getElementById(anchorId);
+    if (!el) return;
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.style.outline = '2px solid var(--primary, #4f46e5)';
+      el.style.outlineOffset = '3px';
+      setTimeout(() => { el.style.outline = ''; el.style.outlineOffset = ''; }, 2000);
+    }, 280);
+  };
+
+  /* ── Auto-recalcular en cambios del formulario ────────────────────────── */
+  let _timer = null;
+  function _debRecalc() { clearTimeout(_timer); _timer = setTimeout(window.calcularProgreso, 350); }
+
+  const _formId = window.CP_FORM_ID;
+  if (_formId) {
+    const _form = document.getElementById(_formId);
+    if (_form) {
+      _form.addEventListener('input',  _debRecalc);
+      _form.addEventListener('change', _debRecalc);
+    }
+  }
+
+  const _watchIds = window.CP_WATCH_IDS || [];
+  if (_watchIds.length) {
+    const _obs = new MutationObserver(_debRecalc);
+    _watchIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) _obs.observe(el, { childList: true, subtree: true });
+    });
+  }
+
+  /* ── Pill = pestaña fija al borde derecho, encima de Ayuda ─────────────── */
+  const _pill = document.getElementById('cpPill');
+
+  /* Montaje del pill de progreso:
+     - Si la página define window.CP_MOUNT_ID y ese contenedor existe (Despiece
+       Maestro: encabezado de la tarjeta de resultados), el progreso se integra
+       ahí, compacto y NO flotante.
+     - En cualquier otra página conserva su comportamiento de pastilla flotante,
+       reparentada a <body> para no quedar atrapada por el scroll-container
+       #appMain ni ningún wrapper. */
+  var _mountId = window.CP_MOUNT_ID;
+  var _mount   = _mountId ? document.getElementById(_mountId) : null;
+  if (_pill) {
+    if (_mount) {
+      _mount.appendChild(_pill);
+      _pill.classList.add('cp-pill--inline');
+    } else if (_pill.parentElement !== document.body) {
+      document.body.appendChild(_pill);
+    }
+    _pill.style.cursor = 'pointer';
+    _pill.title = 'Ver progreso';
+  }
+
+  /* Ocultar el pill inline cuando Ayuda o Resumen estén abiertos.
+     Solo aplica si está en modo inline (montado en CP_MOUNT_ID); en otras
+     páginas el pill conserva su comportamiento flotante sin alteración. */
+  if (_pill && _mount) {
+    function _bindOcVisibility(ocId) {
+      var oc = document.getElementById(ocId);
+      if (!oc) return;
+      oc.addEventListener('show.bs.offcanvas',   function () { _pill.classList.add('cp-pill--hidden'); });
+      oc.addEventListener('hidden.bs.offcanvas', function () { _pill.classList.remove('cp-pill--hidden'); });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      _bindOcVisibility('helpOffcanvas');
+      _bindOcVisibility('resumenOffcanvas');
+    });
+  }
+  const _oc = document.getElementById('cpOffcanvas');
+  if (_oc && _oc.parentElement !== document.body) {
+    document.body.appendChild(_oc);
+  }
+
+  /* Cálculo inicial diferido: espera a que todos los scripts de la página corran */
+  setTimeout(window.calcularProgreso, 0);
+
+})();
+</script>

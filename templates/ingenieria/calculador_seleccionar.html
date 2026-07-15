@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Nuevo Despiece — {{ sistema.codigo }}{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Calculador{% endblock %}
+{% block breadcrumb %}{{ sistema.codigo }} · Configurar despiece{% endblock %}
+
+{% block extra_head %}
+<style>
+.sel-wrap { max-width: 860px; margin: 0 auto; }
+
+/* ── Pasos ──────────────────────────────────────────────────────────────── */
+.sel-steps {
+  display: flex;
+  gap: 0;
+  margin-bottom: 28px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.08);
+  overflow: hidden;
+}
+.sel-step {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #888;
+  border-right: 1px solid rgba(0,0,0,.08);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sel-step:last-child { border-right: none; }
+.sel-step.active { color: var(--theme-accent); }
+.sel-step__num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.08);
+  color: #888;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.sel-step.active .sel-step__num {
+  background: var(--theme-accent);
+  color: #fff;
+}
+
+/* ── Card de subsistema ─────────────────────────────────────────────────── */
+.sub-card {
+  background: #fff;
+  border-radius: 10px;
+  border: 2px solid rgba(0,0,0,.08);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+  overflow: hidden;
+}
+.sub-card:has(.sub-radio:checked),
+.sub-card.selected {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 3px rgba(var(--theme-accent-rgb, 59,130,246),.12);
+}
+.sub-card__head {
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sub-radio {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--theme-accent);
+  flex-shrink: 0;
+}
+.sub-info { flex: 1; }
+.sub-codigo { font-weight: 700; font-size: 12px; color: var(--theme-accent); }
+.sub-nombre { font-size: 13px; font-weight: 600; color: #222; }
+.sub-badge {
+  font-size: 10.5px; color: #888;
+  background: rgba(0,0,0,.05); border-radius: 20px; padding: 2px 7px;
+}
+/* Cuerpo: dos columnas cuando está seleccionado */
+.sub-card__body { display: none; }
+.sub-card:has(.sub-radio:checked) .sub-card__body,
+.sub-card.selected .sub-card__body { display: block; }
+
+.sub-body-cols {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 0;
+  border-top: 1px solid rgba(0,0,0,.06);
+}
+.sub-body-left { padding: 12px 16px 14px; }
+.sub-body-right {
+  border-left: 1px solid rgba(0,0,0,.06);
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  min-height: 140px;
+}
+.sub-imagen-tecnica {
+  max-width: 100%; max-height: 160px;
+  object-fit: contain; border-radius: 6px;
+  cursor: zoom-in;
+  transition: opacity .15s;
+}
+.sub-imagen-tecnica:hover { opacity: .88; }
+.sub-imagen-placeholder {
+  text-align: center; color: #aaa; font-size: 11.5px; line-height: 1.5;
+}
+.sub-imagen-placeholder i { font-size: 28px; display: block; margin-bottom: 4px; opacity: .4; }
+
+/* ── Lightbox overlay ─────────────────────────────────────────────────── */
+#img-lightbox {
+  display: none;
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.82);
+  align-items: center; justify-content: center;
+  cursor: zoom-out;
+  animation: lbFadeIn .15s ease;
+}
+#img-lightbox.open { display: flex; }
+@keyframes lbFadeIn {
+  from { opacity: 0; } to { opacity: 1; }
+}
+#img-lightbox img {
+  max-width: 90vw; max-height: 88vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  pointer-events: none;
+}
+#img-lightbox-caption {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,.7); font-size: 12px; letter-spacing: .04em;
+  pointer-events: none;
+}
+
+/* ── Subconjuntos dentro del subsistema ────────────────────────────────── */
+.sq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+.sq-check-label {
+  display: flex; align-items: flex-start; gap: 7px;
+  background: rgba(0,0,0,.03); border: 1.5px solid rgba(0,0,0,.08);
+  border-radius: 7px; padding: 7px 9px; cursor: pointer;
+  font-size: 12px; transition: border-color .15s, background .15s;
+}
+.sq-check-label:has(input:checked) {
+  background: var(--theme-accent-pale, #e8f0fe);
+  border-color: var(--theme-accent);
+}
+.sq-check-label input {
+  margin-top: 2px; accent-color: var(--theme-accent); flex-shrink: 0;
+}
+.sq-nombre { font-weight: 600; color: #333; }
+.sq-desc { font-size: 10.5px; color: #888; margin-top: 1px; }
+
+/* ── Botones ────────────────────────────────────────────────────────────── */
+.sel-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(0,0,0,.08);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sel-wrap">
+
+  <!-- Pasos -->
+  <div class="sel-steps">
+    <div class="sel-step">
+      <span class="sel-step__num">✓</span> Sistema
+    </div>
+    <div class="sel-step active">
+      <span class="sel-step__num">2</span> Subsistema y subconjuntos
+    </div>
+    <div class="sel-step">
+      <span class="sel-step__num">3</span> Calcular
+    </div>
+  </div>
+
+  <!-- Cabecera del sistema -->
+  <div class="mb-3">
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span class="fw-bold fs-5" style="color:var(--theme-accent)">{{ sistema.codigo }}</span>
+      <span class="text-muted">·</span>
+      <span class="fw-semibold">{{ sistema.nombre }}</span>
+    </div>
+    <div class="text-muted small">Selecciona el subsistema que quieres calcular y los subconjuntos a incluir.</div>
+  </div>
+
+  <form method="post" action="" id="selForm">
+    {% csrf_token %}
+    {% if proyecto %}
+    <input type="hidden" name="proyecto_pk" value="{{ proyecto.pk }}">
+    {% endif %}
+
+    <!-- Campo nombre opcional -->
+    <div class="mb-3">
+      <label class="form-label fw-semibold small">Nombre del despiece <span class="text-muted fw-normal">(opcional)</span></label>
+      <input type="text" name="nombre" class="form-control form-control-sm"
+             placeholder="Ej: Cubierta oficinas – Lote Norte" maxlength="200">
+    </div>
+
+    <!-- Lista de subsistemas -->
+    <div class="mb-2 fw-semibold small text-uppercase text-muted" style="letter-spacing:.05em">Subsistemas disponibles</div>
+
+    {% for sub in subsistemas %}
+    <div class="sub-card" id="subCard{{ sub.pk }}" onclick="selectSub({{ sub.pk }}, this)">
+      <div class="sub-card__head">
+        <input type="radio" name="subsistema_pk" value="{{ sub.pk }}"
+               class="sub-radio" id="sub{{ sub.pk }}"
+               onclick="event.stopPropagation()">
+        <div class="sub-info">
+          <div class="sub-codigo">{{ sub.codigo }}</div>
+          <div class="sub-nombre">{{ sub.nombre }}</div>
+        </div>
+        {% with cnt=sub.subconjuntos_receta.count %}
+        {% if cnt %}
+        <span class="sub-badge"><i class="bi bi-puzzle"></i> {{ cnt }} subconjunto{{ cnt|pluralize:"s" }}</span>
+        {% endif %}
+        {% endwith %}
+      </div>
+
+      <div class="sub-card__body">
+        <div class="sub-body-cols">
+          <!-- Columna izquierda: subconjuntos -->
+          <div class="sub-body-left">
+            {% with sq_activos=sub.subconjuntos_receta.all %}
+            {% if sq_activos %}
+            <div class="text-muted small mb-1" style="font-size:11px;">Selecciona los subconjuntos a incluir:</div>
+            <div class="sq-grid">
+              {% for sq in sq_activos %}
+              {% if sq.activo %}
+              <label class="sq-check-label">
+                <input type="checkbox" name="subconjuntos[]" value="{{ sq.pk }}">
+                <div>
+                  <div class="sq-nombre">{{ sq.nombre }}</div>
+                  {% if sq.descripcion %}<div class="sq-desc">{{ sq.descripcion }}</div>{% endif %}
+                </div>
+              </label>
+              {% endif %}
+              {% endfor %}
+            </div>
+            <div class="mt-2">
+              <button type="button" class="btn btn-link btn-sm p-0 text-muted" style="font-size:11px;"
+                      onclick="toggleAll(this, {{ sub.pk }})">Marcar todos</button>
+            </div>
+            {% else %}
+            <div style="color:#aaa;font-size:12px;padding:8px 0;">
+              <i class="bi bi-info-circle"></i> Componentes generales — sin subconjuntos definidos.
+            </div>
+            {% endif %}
+            {% endwith %}
+          </div>
+          <!-- Columna derecha: imagen técnica -->
+          <div class="sub-body-right">
+            {% if sub.imagen_tecnica %}
+            <img src="{{ sub.imagen_tecnica.url }}" alt="Imagen técnica {{ sub.nombre }}"
+                 class="sub-imagen-tecnica"
+                 onclick="event.stopPropagation(); abrirLightbox(this)"
+                 title="Click para ampliar">
+            {% else %}
+            <div class="sub-imagen-placeholder">
+              <i class="bi bi-image"></i>
+              Sin imagen técnica
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% empty %}
+    <div class="text-muted text-center py-4">Este sistema no tiene subsistemas activos.</div>
+    {% endfor %}
+
+    <div class="sel-footer">
+      {% if proyecto %}
+      <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Volver al proyecto
+      </a>
+      {% else %}
+      <a href="{% url 'ingenieria:calculador_sistemas' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Volver
+      </a>
+      {% endif %}
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-arrow-right"></i> Ir al calculador
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Checkpoint calculador seleccionar -->
+<script>
+window.CP_TITULO  = "Configurar despiece";
+window.CP_FORM_ID = "selForm";
+window.CP_SECCIONES = [
+  {
+    label: 'Sistema confirmado', anchor: '', fn: function() {
+      /* El sistema ya fue seleccionado antes de llegar a esta vista */
+      return { puntaje: 25, maximo: 25, estado: 'ok', errores: [], advertencias: [] };
+    }
+  },
+  {
+    label: 'Subsistema seleccionado', anchor: '', fn: function() {
+      const sel = document.querySelector('input[name="subsistema_pk"]:checked');
+      if (sel) return { puntaje: 40, maximo: 40, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: 0, maximo: 40, estado: 'error',
+               errores: ['Selecciona un subsistema para continuar'], advertencias: [] };
+    }
+  },
+  {
+    label: 'Subconjuntos seleccionados', anchor: '', fn: function() {
+      const subSel = document.querySelector('input[name="subsistema_pk"]:checked');
+      if (!subSel) return { puntaje: 0, maximo: 35, estado: 'error',
+                            errores: ['Selecciona primero un subsistema'], advertencias: [] };
+      const checks = document.querySelectorAll('input[name="subconjuntos[]"]');
+      if (checks.length === 0)
+        return { puntaje: 35, maximo: 35, estado: 'ok', errores: [],
+                 advertencias: ['Este subsistema no tiene subconjuntos definidos'] };
+      const checked = document.querySelectorAll('input[name="subconjuntos[]"]:checked');
+      if (checked.length === 0)
+        return { puntaje: 5, maximo: 35, estado: 'advertencia', errores: [],
+                 advertencias: ['Selecciona al menos un subconjunto'] };
+      return { puntaje: 35, maximo: 35, estado: 'ok', errores: [], advertencias: [] };
+    }
+  },
+];
+</script>
+{% include "ingenieria/_checkpoint_panel.html" %}
+
+<!-- Lightbox overlay -->
+<div id="img-lightbox" onclick="cerrarLightbox()">
+  <img id="img-lightbox-img" src="" alt="">
+  <div id="img-lightbox-caption">Click para cerrar</div>
+</div>
+
+<script>
+function abrirLightbox(img) {
+  const lb = document.getElementById('img-lightbox');
+  document.getElementById('img-lightbox-img').src = img.src;
+  lb.classList.add('open');
+}
+
+function cerrarLightbox() {
+  document.getElementById('img-lightbox').classList.remove('open');
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') cerrarLightbox();
+});
+
+function selectSub(pk, card) {
+  // Deselect all
+  document.querySelectorAll('.sub-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.sub-radio').forEach(r => r.checked = false);
+  // Select clicked
+  card.classList.add('selected');
+  document.getElementById('sub' + pk).checked = true;
+}
+
+document.getElementById('selForm').addEventListener('submit', function(e) {
+  const selected = document.querySelector('input[name="subsistema_pk"]:checked');
+  if (!selected) {
+    e.preventDefault();
+    alert('Selecciona un subsistema antes de continuar.');
+  }
+});
+
+function toggleAll(btn, subPk) {
+  const card = document.getElementById('subCard' + subPk);
+  const checks = card.querySelectorAll('input[type=checkbox]');
+  const allChecked = Array.from(checks).every(c => c.checked);
+  checks.forEach(c => c.checked = !allChecked);
+  btn.textContent = allChecked ? 'Marcar todos' : 'Desmarcar todos';
+}
+</script>
+{% endblock %}

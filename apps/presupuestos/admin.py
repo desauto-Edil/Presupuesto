@@ -40,6 +40,7 @@ class ConfiguracionAPUAdmin(admin.ModelAdmin):
 
 class APULineaInline(admin.TabularInline):
     model = APULinea
+    fk_name = "apu"
     extra = 0
     fields = ("tipo", "descripcion", "rendimiento", "precio_referencia", "costo_unitario", "valor_unitario", "editable")
     readonly_fields = ("costo_unitario", "valor_unitario")

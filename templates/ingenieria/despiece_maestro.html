@@ -1,0 +1,1902 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ despiece.nombre|default:"Despiece" }} — Workbench{% endblock %}
+{% block nav_ingenieria %}active{% endblock %}
+{% block page_title %}Despiece Maestro{% endblock %}
+{% block breadcrumb %}
+  {% include "ingenieria/partials/_despiece_breadcrumb.html" %}
+{% endblock %}
+
+{% block topbar_actions %}
+  {% include "ingenieria/partials/_despiece_topbar_actions.html" %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.wb-layout {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+/* Con notas técnicas: tercera zona a la derecha */
+.wb-layout--notas { grid-template-columns: 232px 1fr 248px; }
+@media (max-width: 1400px) { .wb-layout--notas { grid-template-columns: 232px 1fr; } }
+@media (max-width: 900px)  { .wb-layout, .wb-layout--notas { grid-template-columns: 1fr; } }
+
+/* ── Panel de Notas técnicas (zona 3) ────────────────────────────────────── */
+.wb-notas {
+  background: #fff; border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08); box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden; position: sticky; top: 72px;
+}
+.wb-notas__head {
+  padding: 13px 16px; border-bottom: 1px solid rgba(0,0,0,.08);
+  border-top: 3px solid #1a4fa0;
+  background: linear-gradient(135deg, rgba(26,79,160,.10) 0%, rgba(255,255,255,0) 80%);
+}
+.wb-notas__title {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: #1a4fa0;
+  display: flex; align-items: center; gap: 6px;
+}
+.wb-notas__body {
+  padding: 12px 15px; font-size: 13px; line-height: 1.6; color: #444;
+  white-space: pre-wrap; max-height: calc(100vh - 200px); overflow-y: auto;
+}
+
+/* ── Ojo de detalle: fórmula + valores + resultado ───────────────────────── */
+.dp-eye-btn {
+  background: none; border: none; padding: 0 0 0 6px; cursor: pointer;
+  color: #aaa; font-size: 13px; vertical-align: middle;
+}
+.dp-eye-btn:hover { color: var(--theme-accent); }
+.det-formula {
+  font-family: ui-monospace, monospace; font-size: 12.5px;
+  background: #f6f8fa; border-radius: 8px; padding: 9px 12px; color: #24292f;
+  word-break: break-word;
+}
+.det-sub { font-family: ui-monospace, monospace; font-size: 12.5px;
+  background: #f6f8fa; border-radius: 8px; padding: 9px 12px; color: #24292f; word-break: break-word; }
+.det-val-tag {
+  display: inline-block; background: var(--theme-accent-pale,#e8f0fe);
+  color: var(--theme-accent); border-radius: 6px; padding: 1px 7px;
+  font-size: 11.5px; font-weight: 600; margin: 2px 4px 2px 0;
+  font-family: ui-monospace, monospace;
+}
+.det-result {
+  font-size: 16px; font-weight: 800; color: #198754;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Panel de variables ─────────────────────────────────────────────────── */
+.wb-panel {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden;
+  position: sticky;
+  top: 72px;
+}
+.wb-panel__head {
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(0,0,0,.08);
+  background: linear-gradient(135deg, var(--theme-accent-pale,#e8f0fe) 0%, rgba(255,255,255,0) 80%);
+  border-top: 3px solid var(--theme-accent);
+}
+.wb-panel__title {
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--theme-accent);
+}
+.wb-panel__sub { font-size: 11px; color: #666; margin-top: 2px; }
+.wb-panel__body {
+  padding: 10px 14px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.var-row { margin-bottom: 7px; }
+.var-row label {
+  font-size: 11px; font-weight: 600; color: #555;
+  margin-bottom: 2px; display: flex; justify-content: space-between;
+}
+.var-unit { font-weight: 400; color: #999; font-size: 10.5px; }
+.var-input {
+  border-radius: 6px; border: 1.5px solid rgba(0,0,0,.12);
+  font-size: 12px; height: 28px; text-align: right; font-weight: 600;
+  transition: border-color .15s;
+}
+.var-input:focus { border-color: var(--theme-accent); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+
+.wb-actions {
+  padding: 12px 16px; border-top: 1px solid rgba(0,0,0,.08);
+  display: flex; flex-direction: column; gap: 7px;
+}
+.btn-calcular {
+  background: var(--theme-accent); color: #fff; border: none; border-radius: 8px;
+  padding: 9px 0; font-size: 13px; font-weight: 600; width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  cursor: pointer; transition: opacity .15s;
+}
+.btn-calcular:hover { opacity: .88; }
+.btn-calcular:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-guardar {
+  background: #198754; color: #fff; border: none; border-radius: 8px;
+  padding: 8px 0; font-size: 13px; font-weight: 600; width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  cursor: pointer; transition: opacity .15s;
+}
+.btn-guardar:hover { opacity: .88; }
+.btn-guardar:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.wb-spinner {
+  display: none; width: 15px; height: 15px;
+  border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Panel de resultados ─────────────────────────────────────────────────── */
+.wb-result {
+  background: #fff; border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.08); box-shadow: 0 1px 6px rgba(0,0,0,.04);
+  overflow: hidden;
+}
+.wb-result__head {
+  padding: 13px 20px; border-bottom: 1px solid rgba(0,0,0,.08);
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+}
+.wb-result__title { font-size: 14px; font-weight: 700; color: #222; }
+.wb-result__count { font-size: 12px; color: #888; }
+
+.sq-tags-bar {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  padding: 8px 20px; border-bottom: 1px solid rgba(0,0,0,.06);
+  background: rgba(0,0,0,.015);
+}
+.sq-tag {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px;
+  background: var(--theme-accent-pale,#e8f0fe); color: var(--theme-accent);
+}
+
+/* ── Tabla ───────────────────────────────────────────────────────────────── */
+.dp-table-wrap { overflow-x: auto; }
+.dp-table {
+  width: 100%; font-size: 13px; border-collapse: collapse;
+  min-width: 780px;
+}
+.dp-table th {
+  padding: 9px 12px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: #999;
+  background: #fafafa; border-bottom: 1px solid rgba(0,0,0,.07);
+  white-space: nowrap; position: sticky; top: 0; z-index: 2;
+}
+.dp-table td {
+  padding: 8px 12px; border-bottom: 1px solid rgba(0,0,0,.045); vertical-align: middle;
+}
+.dp-table tr:last-child td { border-bottom: none; }
+.dp-table tr:hover td { background: rgba(0,0,0,.012); }
+
+.td-comp        { font-weight: 600; color: #222; }
+.td-comp small  { font-size: 11px; color: #999; font-weight: 400; display: block; }
+.td-cant        { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: #555; }
+.td-red         { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: #222; }
+.td-und         { color: #888; font-size: 12px; white-space: nowrap; }
+.td-precio      { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-fecha       { font-size: 11px; color: #aaa; white-space: nowrap; }
+.text-sin-precio { color: #dc3545; font-size: 11px; font-style: italic; }
+.text-pendiente  { color: #e0a800; font-size: 11px; font-style: italic; }
+
+/* ── Selector de producto inline ─────────────────────────────────────────── */
+.prod-selector { position: relative; min-width: 200px; }
+.prod-input {
+  width: 100%; border-radius: 7px; border: 1.5px solid rgba(0,0,0,.12);
+  font-size: 12px; height: 30px; padding: 0 26px 0 8px;
+  background: #fafafa; transition: border-color .15s; color: #333;
+}
+.prod-input::placeholder { color: #bbb; }
+.prod-input:focus { outline: none; border-color: var(--theme-accent); background: #fff; }
+.prod-input.has-product {
+  border-color: #198754; background: rgba(25,135,84,.04); font-weight: 600;
+}
+.prod-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: #bbb; cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 0; display: none;
+}
+.prod-clear.visible { display: block; }
+.prod-clear:hover { color: #dc3545; }
+.prod-dropdown {
+  position: absolute; top: 33px; left: 0; right: 0; z-index: 1050;
+  background: #fff; border: 1px solid rgba(0,0,0,.15); border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.13); max-height: 220px; overflow-y: auto;
+  display: none;
+}
+.prod-dropdown.open { display: block; }
+.prod-option {
+  padding: 8px 11px; cursor: pointer;
+  border-bottom: 1px solid rgba(0,0,0,.05); transition: background .1s;
+}
+.prod-option:last-child { border-bottom: none; }
+.prod-option:hover { background: rgba(0,0,0,.04); }
+.prod-opt-nombre { font-size: 12px; font-weight: 600; color: #222; }
+.prod-opt-meta   { font-size: 11px; color: #888; margin-top: 2px; }
+.prod-opt-empty  { padding: 10px 12px; text-align: center; color: #bbb; font-size: 12px; }
+
+/* Chip de advertencia no bloqueante por unidad/presentación */
+.prod-warning-slot { margin-top: 4px; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+.prod-warning-slot:empty { display: none; }
+/* Coherencia Producto ↔ variable OPCION_UNICA (validación informativa) */
+.prod-warning-chip--ok {
+  background: rgba(22,101,52,.12) !important;
+  color: #166534 !important;
+  border-color: rgba(22,101,52,.30) !important;
+}
+.prod-warning-chip--info {
+  background: rgba(202,138,4,.08) !important;
+  color: #92400e !important;
+  border-color: rgba(202,138,4,.20) !important;
+}
+.prod-warning-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(245,158,11,.13);
+  color: #92400e;
+  border: 1px solid rgba(245,158,11,.35);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 10.5px; font-weight: 600;
+  line-height: 1.35;
+  max-width: 100%;
+}
+.prod-warning-chip i { font-size: 12px; flex-shrink: 0; }
+
+/* ── Empty ────────────────────────────────────────────────────────────────── */
+.wb-empty {
+  padding: 52px 20px; text-align: center; color: #bbb;
+}
+.wb-empty i { font-size: 38px; margin-bottom: 10px; opacity: .4; display: block; }
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+.wb-toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: #222; color: #fff; border-radius: 10px;
+  padding: 11px 18px; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; z-index: 9999;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  transform: translateY(20px); opacity: 0;
+  transition: all .3s ease; pointer-events: none;
+}
+.wb-toast.show { transform: translateY(0); opacity: 1; }
+.wb-toast.ok   { background: #198754; }
+.wb-toast.err  { background: #dc3545; }
+
+/* ── Fila separadora de subconjunto ─────────────────────────────────────── */
+.dp-group-row td {
+  padding: 5px 12px 4px;
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--theme-accent);
+  background: var(--theme-accent-pale, #e8f0fe);
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+
+/* ── Pill cantidad redondeada ────────────────────────────────────────────── */
+.td-red-pill {
+  display: inline-flex; align-items: center;
+  background: var(--theme-accent-pale, #e8f0fe);
+  color: var(--theme-accent);
+  border-radius: 10px; padding: 1px 8px;
+  font-size: 12px; font-weight: 700;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* ── Columna de checkbox para modo consolidación ─────────────────────────── */
+.td-check-col { width: 32px; text-align: center; vertical-align: middle; }
+
+/* ── Fila consolidada ─────────────────────────────────────────────────────── */
+.dp-consolidada-row > td {
+  background: rgba(25,135,84,.04);
+  border-left: 3px solid #198754;
+}
+.dp-consolidada-row:hover > td { background: rgba(25,135,84,.08); }
+.dp-cons-badge {
+  display: inline-block;
+  font-size: 9.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: #198754; background: rgba(25,135,84,.12);
+  border-radius: 8px; padding: 1px 6px; margin-right: 5px;
+}
+.dp-cons-origen { font-size: 11px; color: #888; font-weight: 400; display: block; margin-top: 2px; }
+.dp-link-btn {
+  background: none; border: none; padding: 0;
+  color: var(--theme-accent); font-size: 11px; cursor: pointer;
+  text-decoration: underline;
+}
+.dp-link-btn:hover { opacity: .75; }
+.dp-link-undo { color: #dc3545; }
+
+/* ── Barra inferior de consolidación ─────────────────────────────────────── */
+.dp-consolidar-bar {
+  padding: 10px 20px; border-top: 1px solid rgba(0,0,0,.07);
+  background: #fffbe6; display: flex; align-items: center; gap: 8px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wb-layout{% if notas_tecnicas %} wb-layout--notas{% endif %}">
+
+  <!-- ── Panel izquierdo: variables ── -->
+  <div class="wb-panel">
+    <div class="wb-panel__head">
+      <div class="wb-panel__title">Variables de entrada</div>
+      <div class="wb-panel__sub">{{ despiece.subsistema.codigo }} · {{ despiece.subsistema.nombre }}</div>
+    </div>
+
+    <div class="wb-panel__body">
+      {% if variables_filtradas %}
+      <div style="font-size:10.5px;color:var(--theme-accent);background:var(--theme-accent-pale);
+                  border-radius:6px;padding:5px 9px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+        <i class="bi bi-funnel-fill" style="flex-shrink:0;"></i>
+        <span>Mostrando variables para los subconjuntos seleccionados.</span>
+        <button type="button" onclick="mostrarTodasVariables()"
+                style="margin-left:auto;background:none;border:none;padding:0;font-size:10.5px;
+                       color:var(--theme-accent);text-decoration:underline;cursor:pointer;">
+          Ver todas
+        </button>
+      </div>
+      {% endif %}
+      {% if not variables_requeridas and not variables_extra %}
+      <div style="font-size:11.5px;color:var(--ink-soft);background:var(--surface);
+                  border:1px dashed var(--border);border-radius:6px;
+                  padding:9px 12px;line-height:1.5;">
+        <i class="bi bi-info-circle" style="margin-right:4px;color:var(--theme-accent);"></i>
+        No se encontraron variables aplicables para los subconjuntos seleccionados.
+      </div>
+      {% endif %}
+      {% if variables_requeridas %}
+        {% for v in variables_requeridas %}
+        <div class="var-row">
+          <label for="var_{{ v.variable }}">
+            {{ v.label|default:v.variable }}
+            {% if v.unidad %}<span class="var-unit">{{ v.unidad }}</span>{% endif %}
+          </label>
+          {% if v.tipo_entrada == 'OPCION_UNICA' and v.opciones %}
+            {# Renderizar como chips seleccionables para OPCION_UNICA #}
+            <div class="var-chips" data-var="{{ v.variable }}"
+                 style="display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;">
+              {% for op in v.opciones %}
+              <button type="button"
+                      class="var-chip{% if op|stringformat:'s' == v.valor_actual|stringformat:'s' %} var-chip--active{% endif %}"
+                      data-val="{{ op }}"
+                      onclick="seleccionarChip(this)"
+                      style="padding:3px 11px;border-radius:20px;border:1.5px solid var(--theme-accent);
+                             font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;
+                             background:{% if op|stringformat:'s' == v.valor_actual|stringformat:'s' %}var(--theme-accent){% else %}transparent{% endif %};
+                             color:{% if op|stringformat:'s' == v.valor_actual|stringformat:'s' %}#fff{% else %}var(--theme-accent){% endif %};">
+                {{ op }}
+              </button>
+              {% endfor %}
+            </div>
+            {# Input oculto que porta el valor al JS getVariables() #}
+            <input type="hidden" id="var_{{ v.variable }}"
+                   class="var-input"
+                   data-var="{{ v.variable }}"
+                   value="{{ v.valor_actual }}">
+          {% else %}
+            {# Input numérico/texto normal #}
+            <input type="{% if v.tipo_entrada == 'TEXTO' %}text{% else %}number{% endif %}"
+                   id="var_{{ v.variable }}"
+                   class="form-control var-input"
+                   data-var="{{ v.variable }}"
+                   value="{{ v.valor_actual }}"
+                   {% if v.tipo_entrada != 'TEXTO' %}step="any"{% endif %}
+                   autocomplete="off">
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% if variables_extra %}
+        <div id="varExtraSection" style="display:none;">
+          {% for v in variables_extra %}
+          <div class="var-row">
+            <label for="var_{{ v.variable }}">
+              {{ v.label|default:v.variable }}
+              {% if v.unidad %}<span class="var-unit">{{ v.unidad }}</span>{% endif %}
+            </label>
+            {% if v.tipo_entrada == 'OPCION_UNICA' and v.opciones %}
+              <div class="var-chips" data-var="{{ v.variable }}"
+                   style="display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;">
+                {% for op in v.opciones %}
+                <button type="button"
+                        class="var-chip{% if op|stringformat:'s' == v.valor_actual|stringformat:'s' %} var-chip--active{% endif %}"
+                        data-val="{{ op }}" onclick="seleccionarChip(this)">{{ op }}</button>
+                {% endfor %}
+                <input type="hidden" id="var_{{ v.variable }}" class="var-input"
+                       data-var="{{ v.variable }}" value="{{ v.valor_actual }}">
+              </div>
+            {% elif v.tipo_entrada == 'TEXTO' %}
+              <input type="text" id="var_{{ v.variable }}" class="form-control var-input"
+                     data-var="{{ v.variable }}" value="{{ v.valor_actual }}" autocomplete="off">
+            {% else %}
+              <input type="number" id="var_{{ v.variable }}" class="form-control var-input"
+                     data-var="{{ v.variable }}" value="{{ v.valor_actual }}"
+                     step="any" autocomplete="off">
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% else %}
+        <div class="text-muted small text-center py-3">Sin variables configuradas.</div>
+      {% endif %}
+    </div>
+
+    <div class="wb-actions">
+      <button type="button" id="btnCalcular" class="btn-calcular" onclick="calcular()">
+        <span id="calcIcon"><i class="bi bi-play-fill"></i></span>
+        <span class="wb-spinner" id="calcSpinner"></span>
+        <span>Calcular</span>
+      </button>
+      <button type="button" id="btnGuardar" class="btn-guardar" onclick="guardar()"
+              {% if not despiece.tiene_lineas %}disabled{% endif %}>
+        <span id="guardarIcon"><i class="bi bi-floppy"></i></span>
+        <span class="wb-spinner" id="guardarSpinner"></span>
+        <span id="guardarText">Guardar despiece</span>
+      </button>
+      {% if puede_generar_apu %}
+      {# ── Fase 6D: botón principal "Armar mi APU" abre el modal. ────────── #}
+      {# El modal exige seleccionar producto principal antes de generar. ── #}
+      <button type="button"
+              class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1"
+              data-bs-toggle="modal" data-bs-target="#modalArmarApu">
+        <i class="bi bi-file-earmark-bar-graph"></i>
+        Armar mi APU
+      </button>
+      {% if apu_pk %}
+      <a href="{% url 'presupuestos:apu_detail' apu_pk %}"
+         class="btn btn-outline-secondary btn-sm text-center">
+        <i class="bi bi-box-arrow-right"></i> Ver APU existente
+      </a>
+      {% endif %}
+      {% endif %}
+      {% if proyecto %}
+      <a href="{% url 'comercial:proyecto_detail' proyecto.pk %}" class="btn btn-outline-secondary btn-sm text-center">
+        <i class="bi bi-arrow-left"></i> Volver al proyecto
+      </a>
+      {% else %}
+      <a href="{% url 'ingenieria:despiece_list' %}" class="btn btn-outline-secondary btn-sm text-center">
+        <i class="bi bi-arrow-left"></i> Volver a despieces
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Panel derecho: tabla ── -->
+  <div class="wb-result">
+    <div class="wb-result__head">
+      <div class="wb-result__title">
+        {{ despiece.nombre|default:"Despiece" }}
+        <span class="text-muted fw-normal" style="font-size:13px">#{{ despiece.pk }}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div class="wb-result__count" id="resultCount">Cargando…</div>
+        <button type="button" id="btnModoConsolidar"
+                class="btn btn-sm btn-outline-secondary"
+                onclick="toggleModoConsolidacion()" style="display:none">
+          <i class="bi bi-layers"></i> Consolidar materiales
+        </button>
+        <!-- Progreso integrado: el partial _checkpoint_panel monta aquí #cpPill -->
+        <div id="cpProgressSlot" class="cp-progress-slot"></div>
+      </div>
+    </div>
+
+    {% if subconjuntos_seleccionados %}
+    <div class="sq-tags-bar">
+      {% for sq in subconjuntos_seleccionados %}
+      <span class="sq-tag">{{ sq.nombre }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div id="resultBody"></div>
+  </div>
+
+  {% include "ingenieria/partials/_despiece_notas.html" %}
+</div>
+
+{% include "ingenieria/partials/_modal_detalle_calculo.html" %}
+
+<!-- Toast -->
+<div class="wb-toast" id="wbToast"></div>
+
+{% include "ingenieria/partials/_modal_consolidar.html" %}
+
+{% include "ingenieria/partials/_modal_origen.html" %}
+
+{% if puede_generar_apu %}
+{% include "ingenieria/partials/_modal_armar_apu.html" %}
+{% endif %}
+
+<script>
+const CALCULAR_URL         = "{% url 'ingenieria:despiece_calcular' despiece.pk %}";
+const GUARDAR_URL          = "{% url 'ingenieria:despiece_guardar' despiece.pk %}";
+const PRODUCTOS_URL        = "{% url 'ingenieria:buscar_productos' %}";
+const CSRF                 = "{{ csrf_token }}";
+const LINEAS_INIT          = {{ lineas_json|safe }};
+const CONSOLIDACIONES_INIT = {{ consolidaciones_json|safe }};
+const PUEDE_APU            = {{ puede_generar_apu|yesno:"true,false" }};
+/* Mapa {variable_tecnica: label_visible} para mostrar etiqueta legible
+   junto al nombre técnico en el modal de Detalle del cálculo. */
+const VAR_LABELS           = {{ var_labels_json|safe }};
+/* Fase 2C — Reglas de cascada entre variables OPCION_UNICA del subsistema.
+   Configuradas en Editar Subsistema (bloque 2.5). Cada regla activa:
+   { var_origen, val_origen, var_destino, val_destino }.
+   El click en un chip dispara _aplicarDependenciasVariables(). */
+const DEP_VARS             = {{ dependencias_variables_json|safe }};
+
+/* ── Estado global ───────────────────────────────────────────────────────── */
+let filasCalc       = [];   // líneas técnicas calculadas (flat)
+let consolidaciones = [];   // [{cid, label, indices, cantidad_total, cantidad_redondeada, unidad, _prod}]
+let variablesUsadas = null;
+let modoConsolidacion = false;
+let _nextCid = 0;
+
+/* ── Variables extra (filtradas) ─────────────────────────────────────────── */
+function mostrarTodasVariables() {
+  const sec = document.getElementById('varExtraSection');
+  if (sec) sec.style.display = '';
+  const btn = document.querySelector('[onclick="mostrarTodasVariables()"]');
+  if (btn) btn.closest('[style*="background"]').remove();
+}
+
+/* ── Chips de opción única ───────────────────────────────────────────────── */
+function seleccionarChip(btn) {
+  const wrap = btn.closest('.var-chips');
+  if (!wrap) return;
+  /* Desactivar todos los chips del mismo grupo */
+  wrap.querySelectorAll('.var-chip').forEach(b => {
+    b.classList.remove('var-chip--active');
+    b.style.background = 'transparent';
+    b.style.color = 'var(--theme-accent)';
+  });
+  /* Activar el pulsado */
+  btn.classList.add('var-chip--active');
+  btn.style.background = 'var(--theme-accent)';
+  btn.style.color = '#fff';
+  /* Sincronizar el input oculto */
+  const inp = document.querySelector('.var-input[data-var="' + wrap.dataset.var + '"]');
+  if (inp) inp.value = btn.dataset.val;
+  /* Fase 2C — Cascada de dependencias entre variables del subsistema. */
+  _aplicarDependenciasVariables(wrap.dataset.var, btn.dataset.val);
+}
+
+/* ── Fase 2C — Cascada de dependencias entre variables ───────────────────────
+ * Cuando el usuario selecciona un valor de una variable origen, busca reglas
+ * activas en DEP_VARS y aplica automáticamente el valor destino en la
+ * variable correspondiente. Anti-ciclo con `visited` (Set de var_origen ya
+ * procesadas en esta cadena). Si una variable destino no existe en el DOM
+ * (ej. fue oculta por filtro de subconjuntos), no rompe — se ignora.
+ */
+function _setVariableValue(varName, value) {
+  if (!varName) return false;
+  const sel = '.var-chips[data-var="' + CSS.escape(varName) + '"]';
+  const wrap = document.querySelector(sel);
+  if (!wrap) return false;
+  /* Sincronizar el input oculto (fuente de verdad). */
+  const inp = document.querySelector(
+    '.var-input[data-var="' + CSS.escape(varName) + '"]'
+  );
+  if (inp) inp.value = String(value);
+  /* Buscar el chip que corresponde al valor. */
+  const target = Array.from(wrap.querySelectorAll('.var-chip'))
+    .find(b => String(b.dataset.val) === String(value));
+  if (!target) return false;
+  /* Estilo: desactivar todos los chips del grupo, activar el target. */
+  wrap.querySelectorAll('.var-chip').forEach(b => {
+    b.classList.remove('var-chip--active');
+    b.style.background = 'transparent';
+    b.style.color = 'var(--theme-accent)';
+  });
+  target.classList.add('var-chip--active');
+  target.style.background = 'var(--theme-accent)';
+  target.style.color = '#fff';
+  return true;
+}
+
+function _aplicarDependenciasVariables(varOrigen, valOrigen, visited) {
+  if (!Array.isArray(DEP_VARS) || DEP_VARS.length === 0) return;
+  visited = visited || new Set();
+  if (visited.has(varOrigen)) return;          /* anti-ciclo */
+  visited.add(varOrigen);
+  DEP_VARS.forEach(d => {
+    if (!d || d.var_origen !== varOrigen) return;
+    if (String(d.val_origen) !== String(valOrigen)) return;
+    const ok = _setVariableValue(d.var_destino, d.val_destino);
+    if (ok) {
+      _aplicarDependenciasVariables(d.var_destino, d.val_destino, visited);
+    } else {
+      try {
+        console.warn('[deps] No se pudo aplicar',
+                     d.var_origen, '=', d.val_origen,
+                     '→', d.var_destino, '=', d.val_destino,
+                     '(chip o variable destino no encontrada)');
+      } catch (_) {}
+    }
+  });
+}
+
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
+function getVariables() {
+  const v = {};
+  document.querySelectorAll('.var-input[data-var]').forEach(inp => {
+    const raw = inp.value;
+    const n = parseFloat(raw);
+    /* Para OPCION_UNICA el input oculto guarda strings como "4" o "6";
+       se envía como número si es parseable, como string si no. */
+    v[inp.dataset.var] = isNaN(n) ? raw : n;
+  });
+  return v;
+}
+
+function fmt(n, dec) {
+  if (n === null || n === undefined || isNaN(Number(n))) return '—';
+  return Number(n).toLocaleString('es-CO', {
+    minimumFractionDigits: dec ?? 2,
+    maximumFractionDigits: dec ?? 2,
+  });
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('wbToast');
+  t.textContent = msg;
+  t.className = 'wb-toast show ' + (type || '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function setLoading(btnId, spinnerId, iconId, on) {
+  const btn  = document.getElementById(btnId);
+  const spin = document.getElementById(spinnerId);
+  const icon = document.getElementById(iconId);
+  if (btn)  btn.disabled       = on;
+  if (spin) spin.style.display = on ? 'block' : 'none';
+  if (icon) icon.style.display = on ? 'none'  : 'block';
+}
+
+/* ── Calcular conjuntos de índices consolidados ──────────────────────────── */
+function _buildConsolidationMaps() {
+  const consolidatedSet    = new Set();   // todos los índices en alguna consolidación
+  const positionMap        = new Map();   // índice → consolidacion (solo el primero de cada grupo)
+
+  consolidaciones.forEach(c => {
+    if (!c.indices.length) return;
+    const sorted = [...c.indices].sort((a, b) => a - b);
+    positionMap.set(sorted[0], c);
+    sorted.forEach(i => consolidatedSet.add(i));
+  });
+
+  return { consolidatedSet, positionMap };
+}
+
+/* ── Autocomplete ──────────────────────────────────────────────────────────── */
+let _searchTimer = null;
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.prod-selector')) {
+    document.querySelectorAll('.prod-dropdown.open').forEach(d => d.classList.remove('open'));
+  }
+});
+
+function _buildProdObj(p) {
+  return {
+    producto_id:     p.id,
+    producto_codigo: p.codigo,
+    producto_nombre: p.nombre,
+    precio_unitario: p.precio_unitario,
+    moneda:          p.moneda,
+    fecha_precio:    p.fecha_actualizacion_precio,
+    // Unidad principal del producto (para advertencia no bloqueante)
+    unidad_producto:       p.unidad || '',
+    // ── Presentación técnica (snapshot ligero, para advertencias futuras) ──
+    presentacion_nombre:   p.presentacion_nombre || '',
+    ancho_presentacion:    p.ancho_presentacion ?? null,
+    largo_presentacion:    p.largo_presentacion ?? null,
+    unidad_dimension:      p.unidad_dimension || '',
+    cantidad_presentacion: p.cantidad_presentacion ?? null,
+    unidad_presentacion:   p.unidad_presentacion || '',
+  };
+}
+
+/* ── Advertencia no bloqueante por unidad ──────────────────────────────────
+ * Compara la unidad de la línea contra la unidad principal del producto y
+ * contra la unidad de presentación si existe. Si la línea no coincide con
+ * ninguna de las dos, retorna un texto descriptivo; en caso contrario null.
+ */
+function _normUnidad(u) {
+  return String(u || '').trim().toLowerCase();
+}
+function _unidadWarning(lineaUnidad, prod) {
+  if (!prod) return null;
+  const uLinea = _normUnidad(lineaUnidad);
+  if (!uLinea) return null;
+  const uProd  = _normUnidad(prod.unidad_producto);
+  const uPres  = _normUnidad(prod.unidad_presentacion);
+  // Si no tenemos información del producto, no se puede comparar.
+  if (!uProd && !uPres) return null;
+  if (uProd && uProd === uLinea) return null;
+  if (uPres && uPres === uLinea) return null;
+  // Mensaje corto: prioriza unidad principal del producto.
+  const uMostrar = prod.unidad_producto || prod.unidad_presentacion || '—';
+  return `La línea usa ${lineaUnidad} y el producto está configurado en ${uMostrar}. Revise si corresponde.`;
+}
+function _renderProdWarning(tr, lineaUnidad, prod) {
+  const slot = tr.querySelector('.prod-warning-slot');
+  if (!slot) return;
+  // Usar sub-span [data-warning="unidad"] para no pisar el chip de coherencia
+  // de presentación que vive en [data-warning="presentacion"].
+  let span = slot.querySelector('[data-warning="unidad"]');
+  const text = _unidadWarning(lineaUnidad, prod);
+  if (!text) { if (span) span.remove(); return; }
+  if (!span) {
+    span = document.createElement('span');
+    span.setAttribute('data-warning', 'unidad');
+    slot.prepend(span);
+  }
+  span.className = 'prod-warning-chip';
+  span.title = text;
+  span.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i>${esc(text)}`;
+}
+
+/* ── Coherencia presentación técnica ↔ variable OPCION_UNICA ────────────────
+ * Validación informativa, no bloqueante. Recorre los tokens de la fórmula del
+ * componente, identifica los que corresponden a variables OPCION_UNICA con
+ * opciones, y compara `prod.cantidad_presentacion` contra esas opciones con
+ * tolerancia 0.01.
+ *  - Verde:        match con una opción → "Presentación coherente: 87.96 m² · Label"
+ *  - Ámbar fuerte: hay variable OPCION_UNICA pero no hay match → advertencia
+ *  - Ámbar suave:  producto sin cantidad_presentacion configurada
+ *  - null:         la fórmula no usa ninguna variable OPCION_UNICA → no se pinta
+ */
+const _COHERENCIA_TOL = 0.01;
+const _TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]*/g;
+
+function _collectVarsOpcionUnica() {
+  // Lee del DOM las variables OPCION_UNICA presentes en la pantalla. Devuelve
+  // también el VALOR ACTUALMENTE SELECCIONADO desde el input oculto, que es la
+  // fuente de verdad mantenida por seleccionarChip(btn).
+  const map = {};
+  document.querySelectorAll('.var-chips[data-var]').forEach(wrap => {
+    const name = wrap.getAttribute('data-var');
+    if (!name) return;
+    const opciones = Array.from(wrap.querySelectorAll('button[data-val]'))
+      .map(b => String(b.getAttribute('data-val') || '').trim())
+      .filter(Boolean);
+    if (opciones.length === 0) return;
+    const labelEl = document.querySelector(`label[for="var_${name}"]`);
+    let label = name, unidad = '';
+    if (labelEl) {
+      const unitEl = labelEl.querySelector('.var-unit');
+      if (unitEl) unidad = unitEl.textContent.trim();
+      label = labelEl.textContent.replace(unidad, '').trim() || name;
+    }
+    const inputEl = document.querySelector(`input.var-input[data-var="${CSS.escape(name)}"]`);
+    const selected = inputEl ? String(inputEl.value || '').trim() : '';
+    map[name] = { opciones, label, unidad, selected };
+  });
+  return map;
+}
+
+function _normNum(s) {
+  // Acepta "87,96" / "87.96" / "87.9600". Devuelve Number o null.
+  if (s === null || s === undefined) return null;
+  const t = String(s).trim().replace(',', '.');
+  if (t === '') return null;
+  const n = parseFloat(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _normName(s) {
+  // Normaliza identificadores para comparación tolerante: lowercase + solo
+  // alfanuméricos. Así "anchoUtilDeck", "ancho_util_deck" y "AnchoUtilDeck"
+  // colapsan al mismo valor "anchoutildeck".
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function _coherenciaChipFor(prod, formula_texto, varsMap) {
+  // Fase 1 — Reglas estrictas:
+  //   1. Solo se valida si la fórmula referencia al menos una variable
+  //      OPCION_UNICA. Sin fallback global sobre el subsistema.
+  //   2. Se compara contra el VALOR SELECCIONADO de esa variable, NO contra
+  //      todas sus opciones.
+  //   3. Si hay varias referenciadas, se desambigua por unidad: la cuya
+  //      unidad coincide con prod.unidad_presentacion gana. Si no se puede
+  //      aislar exactamente una, info suave — nunca verde falso.
+  //   4. Producto sin cantidad_presentacion → info suave, sin búsquedas.
+  const formula = String(formula_texto || '');
+  if (!formula) return null;
+  const tokens = formula.match(_TOKEN_RE) || [];
+  const varNames = Object.keys(varsMap);
+
+  // Recolectar variables OPCION_UNICA referenciadas por la fórmula (estricto
+  // + tolerante a estilo de identificador).
+  const referenciadas = [];
+  const seen = new Set();
+  tokens.forEach(t => {
+    if (varsMap[t] && !seen.has(t)) {
+      seen.add(t);
+      referenciadas.push({ name: t, ...varsMap[t] });
+      return;
+    }
+    const tn = _normName(t);
+    if (!tn) return;
+    const found = varNames.find(v => _normName(v) === tn);
+    if (found && !seen.has(found)) {
+      seen.add(found);
+      referenciadas.push({ name: found, ...varsMap[found] });
+    }
+  });
+  if (referenciadas.length === 0) return null;  // fórmula no usa OPCION_UNICA
+
+  const prodUnidad = (prod && prod.unidad_presentacion)
+    ? ` ${prod.unidad_presentacion}` : '';
+
+  // Producto sin presentación técnica: no mostrar chip. La validación solo
+  // aplica si el producto tiene cantidad_presentacion configurada.
+  const cantNum = _normNum(prod && prod.cantidad_presentacion);
+  if (cantNum === null) return null;
+
+  // Desambiguar a UNA sola variable de presentación.
+  let candidata = null;
+  if (referenciadas.length === 1) {
+    candidata = referenciadas[0];
+  } else if (prod && prod.unidad_presentacion) {
+    const uProd = String(prod.unidad_presentacion).trim().toLowerCase();
+    const porUnidad = referenciadas.filter(
+      r => String(r.unidad || '').trim().toLowerCase() === uProd
+    );
+    if (porUnidad.length === 1) candidata = porUnidad[0];
+  }
+  if (!candidata) {
+    return {
+      kind: 'info',
+      text: 'No se pudo validar la presentación técnica contra una variable del cálculo.'
+    };
+  }
+
+  // Comparar contra el valor SELECCIONADO de la variable.
+  const selectedNum = _normNum(candidata.selected);
+  if (selectedNum === null) {
+    return {
+      kind: 'info',
+      text: `Selecciona el valor de ${candidata.label} para validar la presentación.`
+    };
+  }
+
+  if (Math.abs(selectedNum - cantNum) <= _COHERENCIA_TOL) {
+    return {
+      kind: 'ok',
+      text: `Presentación coherente: ${candidata.selected}${prodUnidad} · ${candidata.label}`
+    };
+  }
+
+  return {
+    kind: 'warn',
+    text: `El producto seleccionado tiene una presentación de ${cantNum}${prodUnidad}, pero ${candidata.label} está configurada en ${candidata.selected}${prodUnidad}.`
+  };
+}
+
+function _renderCoherenciaChip(tr, formula_texto, prod) {
+  const slot = tr.querySelector('.prod-warning-slot');
+  if (!slot) return;
+  let span = slot.querySelector('[data-warning="presentacion"]');
+  const varsMap = _collectVarsOpcionUnica();
+  const res = prod ? _coherenciaChipFor(prod, formula_texto, varsMap) : null;
+  if (!res) { if (span) span.remove(); return; }
+  if (!span) {
+    span = document.createElement('span');
+    span.setAttribute('data-warning', 'presentacion');
+    slot.appendChild(span);
+  }
+  const cls =
+    res.kind === 'ok'   ? 'prod-warning-chip prod-warning-chip--ok' :
+    res.kind === 'info' ? 'prod-warning-chip prod-warning-chip--info' :
+                          'prod-warning-chip';
+  const icon =
+    res.kind === 'ok'   ? 'bi-check-circle-fill' :
+    res.kind === 'info' ? 'bi-info-circle-fill'  :
+                          'bi-exclamation-triangle-fill';
+  span.className = cls;
+  span.title = res.text;
+  span.innerHTML = `<i class="bi ${icon}"></i>${esc(res.text)}`;
+}
+
+/* Re-pinta los chips de coherencia en todas las filas con producto cuando el
+ * usuario cambia el valor de una variable OPCION_UNICA (click en .var-chip
+ * dentro de .var-chips[data-var]). Usa tr._fila guardado por los selectores.
+ */
+function _rerenderCoherenciaTodos() {
+  document.querySelectorAll('tr').forEach(tr => {
+    if (!tr._fila || !tr.querySelector('.prod-warning-slot')) return;
+    _renderCoherenciaChip(tr, tr._fila.formula_texto, tr._fila._prod);
+  });
+}
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.var-chips[data-var] .var-chip[data-val]');
+  if (!btn) return;
+  // El handler inline seleccionarChip(btn) actualiza el input oculto antes
+  // que esto. Diferimos un tick para garantizar el orden.
+  setTimeout(_rerenderCoherenciaTodos, 0);
+});
+/* También para inputs NUMERO/TEXTO que sean OPCION_UNICA con opciones libres
+ * (no aplica al caso actual pero protege futuros estilos). */
+document.addEventListener('change', e => {
+  if (e.target && e.target.classList && e.target.classList.contains('var-input')) {
+    setTimeout(_rerenderCoherenciaTodos, 0);
+  }
+});
+
+function _displayProductoLabel(p) {
+  // Etiqueta visible cuando se selecciona un producto: nombre + presentación si existe.
+  const presentacion = (p && p.presentacion_nombre) ? p.presentacion_nombre : '';
+  return presentacion ? `${p.nombre} — ${presentacion}` : (p ? p.nombre : '');
+}
+
+function _updateProdUI(tr, prod) {
+  const precioEl = tr.querySelector('.td-precio-val');
+  const fechaEl  = tr.querySelector('.td-fecha-val');
+  if (precioEl) {
+    precioEl.innerHTML = prod.precio_unitario != null
+      ? `$${fmt(prod.precio_unitario)} <small class="td-und" style="font-weight:400">${esc(prod.moneda)}</small>`
+      : '<span class="text-sin-precio">Sin precio</span>';
+  }
+  if (fechaEl) {
+    fechaEl.textContent = prod.fecha_precio
+      ? String(prod.fecha_precio).substring(0, 10) : '—';
+  }
+}
+
+async function _buscar(q, categoria, drop, onSelect) {
+  drop.innerHTML = '<div class="prod-opt-empty">Buscando…</div>';
+  drop.classList.add('open');
+  document.querySelectorAll('.prod-dropdown.open').forEach(d => { if (d !== drop) d.classList.remove('open'); });
+
+  const url = `${PRODUCTOS_URL}?q=${encodeURIComponent(q)}&categoria=${encodeURIComponent(categoria)}`;
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.productos?.length) { drop.innerHTML = '<div class="prod-opt-empty">Sin resultados</div>'; return; }
+    drop.innerHTML = '';
+    data.productos.forEach(p => {
+      const opt = document.createElement('div');
+      opt.className = 'prod-option';
+      const presentacionHtml = p.presentacion_nombre
+        ? `<div class="prod-opt-meta" style="color:#1470e6;">${esc(p.presentacion_nombre)}</div>`
+        : '';
+      opt.innerHTML = `<div class="prod-opt-nombre">${esc(p.nombre)}</div>
+        ${presentacionHtml}
+        <div class="prod-opt-meta">${esc(p.codigo)} · ${esc(p.unidad)} · $${fmt(p.precio_unitario)}</div>`;
+      opt.addEventListener('click', () => { onSelect(p); drop.classList.remove('open'); });
+      drop.appendChild(opt);
+    });
+  } catch { drop.innerHTML = '<div class="prod-opt-empty">Error al buscar</div>'; }
+}
+
+/* Selector para fila técnica normal */
+function initSelector(tr, fila) {
+  const inp   = tr.querySelector('.prod-input');
+  const clear = tr.querySelector('.prod-clear');
+  const drop  = tr.querySelector('.prod-dropdown');
+  if (!inp) return;
+
+  const lineaUnidad = fila.unidad_apu || fila.unidad || '';
+  // Guardar referencia liviana para re-render desde el listener global de
+  // cambios de variable.
+  tr._fila = fila;
+
+  if (fila._prod?.producto_nombre) {
+    inp.value = _displayProductoLabel({
+      nombre: fila._prod.producto_nombre,
+      presentacion_nombre: fila._prod.presentacion_nombre || '',
+    });
+    inp.classList.add('has-product');
+    clear.classList.add('visible');
+  }
+  _renderProdWarning(tr, lineaUnidad, fila._prod);
+  _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
+
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim();
+    clearTimeout(_searchTimer);
+    if (!q) { drop.classList.remove('open'); return; }
+    _searchTimer = setTimeout(() =>
+      _buscar(q, fila.categoria_nombre || '', drop, p => {
+        inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
+        fila._prod = _buildProdObj(p);
+        _updateProdUI(tr, fila._prod);
+        _renderProdWarning(tr, lineaUnidad, fila._prod);
+        _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
+      }), 260);
+  });
+
+  inp.addEventListener('focus', () => {
+    const q = inp.value.trim();
+    if (q) _buscar(q, fila.categoria_nombre || '', drop, p => {
+      inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
+      fila._prod = _buildProdObj(p);
+      _updateProdUI(tr, fila._prod);
+      _renderProdWarning(tr, lineaUnidad, fila._prod);
+      _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
+    });
+  });
+
+  clear.addEventListener('click', e => {
+    e.stopPropagation();
+    inp.value = ''; inp.classList.remove('has-product'); clear.classList.remove('visible');
+    drop.classList.remove('open'); fila._prod = null;
+    const precioEl = tr.querySelector('.td-precio-val');
+    const fechaEl  = tr.querySelector('.td-fecha-val');
+    if (precioEl) precioEl.innerHTML  = '<span class="text-pendiente">Sin producto</span>';
+    if (fechaEl)  fechaEl.textContent = '—';
+    _renderProdWarning(tr, lineaUnidad, null);
+    _renderCoherenciaChip(tr, fila.formula_texto, null);
+  });
+}
+
+/* Selector para fila consolidada */
+function initSelectorConsolidada(tr, c) {
+  const inp   = tr.querySelector('.prod-input');
+  const clear = tr.querySelector('.prod-clear');
+  const drop  = tr.querySelector('.prod-dropdown');
+  if (!inp) return;
+
+  const lineaUnidad = c.unidad || '';
+  tr._fila = c;
+
+  if (c._prod?.producto_nombre) {
+    inp.value = _displayProductoLabel({
+      nombre: c._prod.producto_nombre,
+      presentacion_nombre: c._prod.presentacion_nombre || '',
+    });
+    inp.classList.add('has-product');
+    clear.classList.add('visible');
+  }
+  _renderProdWarning(tr, lineaUnidad, c._prod);
+  _renderCoherenciaChip(tr, c.formula_texto, c._prod);
+
+  const onSelect = p => {
+    inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
+    c._prod = _buildProdObj(p);
+    _updateProdUI(tr, c._prod);
+    _renderProdWarning(tr, lineaUnidad, c._prod);
+    _renderCoherenciaChip(tr, c.formula_texto, c._prod);
+  };
+
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim();
+    clearTimeout(_searchTimer);
+    if (!q) { drop.classList.remove('open'); return; }
+    _searchTimer = setTimeout(() => _buscar(q, '', drop, onSelect), 260);
+  });
+
+  inp.addEventListener('focus', () => {
+    const q = inp.value.trim();
+    if (q) _buscar(q, '', drop, onSelect);
+  });
+
+  clear.addEventListener('click', e => {
+    e.stopPropagation();
+    inp.value = ''; inp.classList.remove('has-product'); clear.classList.remove('visible');
+    drop.classList.remove('open'); c._prod = null;
+    const precioEl = tr.querySelector('.td-precio-val');
+    const fechaEl  = tr.querySelector('.td-fecha-val');
+    if (precioEl) precioEl.innerHTML  = '<span class="text-pendiente">Sin producto</span>';
+    if (fechaEl)  fechaEl.textContent = '—';
+    _renderProdWarning(tr, lineaUnidad, null);
+    _renderCoherenciaChip(tr, c.formula_texto, null);
+  });
+}
+
+/* ── Helpers de render HTML ─────────────────────────────────────────────── */
+function _precioHtml(prod) {
+  if (!prod) return '<span class="text-pendiente">Sin producto</span>';
+  if (prod.precio_unitario != null)
+    return `$${fmt(prod.precio_unitario)} <small class="td-und" style="font-weight:400">${esc(prod.moneda)}</small>`;
+  return '<span class="text-sin-precio">Sin precio</span>';
+}
+
+function _fechaStr(prod) {
+  return (prod?.fecha_precio) ? String(prod.fecha_precio).substring(0, 10) : '—';
+}
+
+function _rowNormal(f, i, cols) {
+  const cantRed = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada);
+  const chk = cols > 7
+    ? `<td class="td-check-col"><input type="checkbox" data-idx="${i}" class="form-check-input" style="cursor:pointer"></td>`
+    : '';
+  return `<tr data-idx="${i}">
+    ${chk}
+    <td class="td-comp">${esc(f.componente_nombre)}<small>${esc(f.componente_codigo)}</small></td>
+    <td class="td-cant">${fmt(f.cantidad_calculada, 4)}<button type="button" class="dp-eye-btn" title="Ver fórmula y valores usados" onclick="verDetalle(${i})"><i class="bi bi-eye"></i></button></td>
+    <td class="td-red"><span class="td-red-pill">${cantRed}</span></td>
+    <td class="td-und">${esc(f.unidad)}</td>
+    <td><div class="prod-selector">
+      <input type="text" class="prod-input" placeholder="Buscar producto…" autocomplete="off">
+      <button type="button" class="prod-clear">×</button>
+      <div class="prod-dropdown"></div>
+    </div><div class="prod-warning-slot"></div></td>
+    <td class="td-precio"><span class="td-precio-val">${_precioHtml(f._prod)}</span></td>
+    <td class="td-fecha"><span class="td-fecha-val">${esc(_fechaStr(f._prod))}</span></td>
+  </tr>`;
+}
+
+function _rowConsolidada(c, cols) {
+  const chk = cols > 7 ? `<td class="td-check-col"></td>` : '';
+  return `<tr data-cid="${c.cid}" class="dp-consolidada-row">
+    ${chk}
+    <td class="td-comp">
+      <span class="dp-cons-badge">Consolidado</span>
+      <strong>${esc(c.label)}</strong>
+      <span class="dp-cons-origen">
+        ${c.indices.length} línea${c.indices.length !== 1 ? 's' : ''} técnica${c.indices.length !== 1 ? 's' : ''}
+        · <button type="button" class="dp-link-btn" onclick="verOrigen(${c.cid})"><i class="bi bi-diagram-3"></i> Ver origen</button>
+        · <button type="button" class="dp-link-btn" onclick="verDetalleConsolidada(${c.cid})"><i class="bi bi-calculator"></i> Fórmulas</button>
+        · <button type="button" class="dp-link-btn dp-link-undo" onclick="deshacerConsolidacion(${c.cid})"><i class="bi bi-arrow-counterclockwise"></i> Deshacer</button>
+      </span>
+    </td>
+    <td class="td-cant">${fmt(c.cantidad_total, 4)}<button type="button" class="dp-eye-btn" title="Ver detalle del cálculo de las líneas que componen este consolidado" onclick="verDetalleConsolidada(${c.cid})"><i class="bi bi-eye"></i></button></td>
+    <td class="td-red"><span class="td-red-pill">${c.cantidad_redondeada}</span></td>
+    <td class="td-und">${esc(c.unidad)}</td>
+    <td><div class="prod-selector">
+      <input type="text" class="prod-input" placeholder="Buscar producto…" autocomplete="off">
+      <button type="button" class="prod-clear">×</button>
+      <div class="prod-dropdown"></div>
+    </div><div class="prod-warning-slot"></div></td>
+    <td class="td-precio"><span class="td-precio-val">${_precioHtml(c._prod)}</span></td>
+    <td class="td-fecha"><span class="td-fecha-val">${esc(_fechaStr(c._prod))}</span></td>
+  </tr>`;
+}
+
+/* ── Render principal ────────────────────────────────────────────────────── */
+function renderTabla(lineas) {
+  filasCalc = lineas.map(l => ({
+    ...l,
+    _prod: (l.producto_id || l.producto_nombre) ? {
+      producto_id:     l.producto_id,
+      producto_codigo: l.producto_codigo || '',
+      producto_nombre: l.producto_nombre || '',
+      precio_unitario: l.precio_unitario,
+      moneda:          l.moneda || '',
+      fecha_precio:    l.fecha_precio || null,
+      presentacion_nombre: l.presentacion_nombre || '',
+      unidad_producto:     l.unidad_producto || '',
+      unidad_presentacion: l.unidad_presentacion || '',
+    } : null,
+  }));
+  _renderBody();
+}
+
+function _renderBody() {
+  const body  = document.getElementById('resultBody');
+  const count = document.getElementById('resultCount');
+  const btnCons = document.getElementById('btnModoConsolidar');
+
+  if (!filasCalc.length) {
+    body.innerHTML = `<div class="wb-empty"><i class="bi bi-inbox"></i><div>Sin componentes</div></div>`;
+    count.textContent = 'Sin componentes';
+    if (btnCons) btnCons.style.display = 'none';
+    return;
+  }
+
+  // Mostrar botón consolidar solo cuando hay líneas
+  if (btnCons) btnCons.style.display = '';
+
+  const { consolidatedSet, positionMap } = _buildConsolidationMaps();
+  const cols = modoConsolidacion ? 8 : 7;
+
+  let rows = '';
+  let lastSqId = '__INIT__';
+
+  for (let i = 0; i < filasCalc.length; i++) {
+    const f = filasCalc[i];
+
+    // Cabecera de subconjunto
+    if (f.subconjunto_id !== lastSqId) {
+      lastSqId = f.subconjunto_id;
+      if (f.subconjunto_nombre && f.subconjunto_nombre !== 'General') {
+        rows += `<tr class="dp-group-row"><td colspan="${cols}">${esc(f.subconjunto_nombre)}</td></tr>`;
+      }
+    }
+
+    if (positionMap.has(i)) {
+      // Primera línea de un grupo consolidado → render fila consolidada
+      rows += _rowConsolidada(positionMap.get(i), cols);
+      continue;
+    }
+    if (consolidatedSet.has(i)) {
+      // Línea incluida en consolidación pero no la primera → omitir
+      continue;
+    }
+
+    // Fila técnica normal
+    rows += _rowNormal(f, i, cols);
+  }
+
+  const consCount = consolidaciones.length;
+  count.textContent = `${filasCalc.length} componente${filasCalc.length !== 1 ? 's' : ''}` +
+    (consCount ? ` · ${consCount} consolidado${consCount !== 1 ? 's' : ''}` : '');
+
+  const barraHtml = modoConsolidacion ? `
+    <div class="dp-consolidar-bar">
+      <button type="button" class="btn btn-success btn-sm" onclick="consolidarSeleccionadas()">
+        <i class="bi bi-layers"></i> Consolidar seleccionadas
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleModoConsolidacion()">
+        Cancelar
+      </button>
+      <span id="countSeleccionadas" class="text-muted small ms-2"></span>
+    </div>` : '';
+
+  const thCheck = modoConsolidacion ? '<th class="td-check-col"></th>' : '';
+
+  body.innerHTML = `
+    <div class="dp-table-wrap"><table class="dp-table">
+      <thead><tr>
+        ${thCheck}
+        <th>Componente</th>
+        <th class="text-end">Cantidad</th>
+        <th class="text-end" title="Cantidad operativa redondeada para compra o uso">Cant. redondeada</th>
+        <th>Und</th>
+        <th style="min-width:200px">Producto seleccionado</th>
+        <th class="text-end">P. unitario</th>
+        <th>Actualización</th>
+      </tr></thead>
+      <tbody id="dpTbody">${rows}</tbody>
+    </table></div>
+    ${barraHtml}`;
+
+  // Inicializar selectores de producto
+  document.querySelectorAll('#dpTbody tr[data-idx]').forEach(tr => {
+    initSelector(tr, filasCalc[parseInt(tr.dataset.idx, 10)]);
+  });
+  document.querySelectorAll('#dpTbody tr[data-cid]').forEach(tr => {
+    const cid = parseInt(tr.dataset.cid, 10);
+    const c   = consolidaciones.find(x => x.cid === cid);
+    if (c) initSelectorConsolidada(tr, c);
+  });
+
+  // Checkboxes en modo consolidación
+  if (modoConsolidacion) {
+    document.querySelectorAll('#dpTbody input[type=checkbox][data-idx]').forEach(cb => {
+      cb.addEventListener('change', _actualizarConteo);
+    });
+  }
+}
+
+/* ── Modo consolidación ───────────────────────────────────────────────────── */
+function toggleModoConsolidacion() {
+  modoConsolidacion = !modoConsolidacion;
+  const btn = document.getElementById('btnModoConsolidar');
+  if (btn) {
+    if (modoConsolidacion) {
+      btn.innerHTML = '<i class="bi bi-x"></i> Cancelar consolidación';
+      btn.className = 'btn btn-sm btn-warning';
+    } else {
+      btn.innerHTML = '<i class="bi bi-layers"></i> Consolidar materiales';
+      btn.className = 'btn btn-sm btn-outline-secondary';
+    }
+  }
+  _renderBody();
+}
+
+function _actualizarConteo() {
+  const n  = document.querySelectorAll('#dpTbody input[type=checkbox][data-idx]:checked').length;
+  const el = document.getElementById('countSeleccionadas');
+  if (el) el.textContent = n ? `${n} seleccionada${n !== 1 ? 's' : ''}` : '';
+}
+
+/* ── Sugerencia de nombre ─────────────────────────────────────────────────── */
+function _sugerirNombre(nombres) {
+  if (nombres.length === 1) return nombres[0];
+  const primer = nombres[0].split(' ');
+  let comunes  = primer.length;
+  for (let k = 1; k < nombres.length; k++) {
+    const parts = nombres[k].split(' ');
+    let ok = 0;
+    for (let j = 0; j < Math.min(comunes, parts.length); j++) {
+      if (primer[j].toLowerCase() === parts[j].toLowerCase()) ok++;
+      else break;
+    }
+    comunes = ok;
+  }
+  return comunes > 0 ? primer.slice(0, comunes).join(' ') : nombres[0];
+}
+
+/* ── Flujo de consolidación ───────────────────────────────────────────────── */
+function consolidarSeleccionadas() {
+  const checked  = [...document.querySelectorAll('#dpTbody input[type=checkbox][data-idx]:checked')];
+  const indices  = checked.map(cb => parseInt(cb.dataset.idx, 10));
+
+  if (indices.length < 2) { showToast('Selecciona al menos 2 líneas para consolidar.', 'err'); return; }
+
+  // No mezclar con líneas ya consolidadas
+  const { consolidatedSet } = _buildConsolidationMaps();
+  if (indices.some(i => consolidatedSet.has(i))) {
+    showToast('Una o más líneas ya están consolidadas. Deshaz la consolidación existente primero.', 'err');
+    return;
+  }
+
+  // Validar unidades iguales
+  const unidades = [...new Set(indices.map(i => filasCalc[i].unidad))];
+  if (unidades.length > 1) {
+    showToast(`No se pueden consolidar líneas con unidades diferentes (${unidades.join(', ')}).`, 'err');
+    return;
+  }
+
+  const cantTotal = indices.reduce((s, i) => s + filasCalc[i].cantidad_calculada, 0);
+  const cantRed   = Math.ceil(cantTotal);
+  const unidad    = filasCalc[indices[0]].unidad;
+  const nombres   = indices.map(i => filasCalc[i].componente_nombre);
+  const sugerido  = _sugerirNombre(nombres);
+
+  // Llenar y abrir modal
+  const lineasHtml = indices.map(i => {
+    const f   = filasCalc[i];
+    const red = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada);
+    return `<tr>
+      <td>${esc(f.componente_nombre)}<br><small class="text-muted">${esc(f.subconjunto_nombre || '')}</small></td>
+      <td class="text-end">${fmt(f.cantidad_calculada, 4)}</td>
+      <td class="text-end">${red}</td>
+      <td>${esc(f.unidad)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('modalConsolidarBody').innerHTML = `
+    <p class="small text-muted mb-2">Se van a consolidar estas líneas técnicas:</p>
+    <table class="table table-sm table-bordered mb-3">
+      <thead><tr><th>Componente</th><th class="text-end">Cantidad</th><th class="text-end">Redondeada</th><th>Und</th></tr></thead>
+      <tbody>${lineasHtml}</tbody>
+      <tfoot><tr class="table-light fw-bold">
+        <td>Total</td>
+        <td class="text-end">${fmt(cantTotal, 4)}</td>
+        <td class="text-end">${cantRed}</td>
+        <td>${esc(unidad)}</td>
+      </tr></tfoot>
+    </table>
+    <div class="mb-2">
+      <label class="form-label fw-semibold small mb-1">Nombre del material consolidado</label>
+      <input type="text" id="inputLabelConsolidacion" class="form-control form-control-sm"
+             value="${esc(sugerido)}" placeholder="Ej: Deck galvanizado Cal. 22">
+      <div class="form-text">Este nombre aparecerá en la tabla y en el APU.</div>
+    </div>`;
+
+  document.getElementById('btnConfirmarConsolidacion').onclick = () => {
+    const label = document.getElementById('inputLabelConsolidacion').value.trim();
+    if (!label) { showToast('El nombre es obligatorio.', 'err'); return; }
+    bootstrap.Modal.getInstance(document.getElementById('modalConsolidar')).hide();
+    _confirmarConsolidacion(indices, cantTotal, cantRed, unidad, label);
+  };
+
+  new bootstrap.Modal(document.getElementById('modalConsolidar')).show();
+}
+
+function _confirmarConsolidacion(indices, cantTotal, cantRed, unidad, label) {
+  consolidaciones.push({
+    cid:                _nextCid++,
+    label,
+    indices:            [...indices].sort((a, b) => a - b),
+    lineas_ids:         [],   // se populan al guardar (backend devuelve PKs)
+    cantidad_total:     cantTotal,
+    cantidad_redondeada: cantRed,
+    unidad,
+    _prod:              null,
+  });
+  modoConsolidacion = false;
+  const btn = document.getElementById('btnModoConsolidar');
+  if (btn) { btn.innerHTML = '<i class="bi bi-layers"></i> Consolidar materiales'; btn.className = 'btn btn-sm btn-outline-secondary'; }
+  _renderBody();
+  document.getElementById('btnGuardar').disabled = false;
+  showToast(`✓ "${label}" consolidado`, 'ok');
+}
+
+function deshacerConsolidacion(cid) {
+  consolidaciones = consolidaciones.filter(c => c.cid !== cid);
+  _renderBody();
+  showToast('Consolidación deshecha.', '');
+}
+
+function verOrigen(cid) {
+  const c = consolidaciones.find(x => x.cid === cid);
+  if (!c) return;
+
+  const html = c.indices.map(i => {
+    if (i >= filasCalc.length) return '';
+    const f   = filasCalc[i];
+    const red = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada);
+    return `<tr>
+      <td>${esc(f.componente_nombre)}<br><small class="text-muted">${esc(f.componente_codigo)}</small></td>
+      <td class="text-muted small">${esc(f.subconjunto_nombre || 'General')}</td>
+      <td class="text-end">${fmt(f.cantidad_calculada, 4)}</td>
+      <td class="text-end fw-bold">${red}</td>
+      <td>${esc(f.unidad)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('modalOrigenBody').innerHTML = `
+    <p class="fw-semibold small mb-2">${esc(c.label)} — ${fmt(c.cantidad_total, 4)} ${esc(c.unidad)}</p>
+    <table class="table table-sm table-bordered">
+      <thead><tr>
+        <th>Componente</th><th>Subconjunto</th>
+        <th class="text-end">Cantidad</th><th class="text-end">Redondeada</th><th>Und</th>
+      </tr></thead>
+      <tbody>${html}</tbody>
+      <tfoot><tr class="table-light fw-bold">
+        <td colspan="2">Total consolidado</td>
+        <td class="text-end">${fmt(c.cantidad_total, 4)}</td>
+        <td class="text-end">${c.cantidad_redondeada}</td>
+        <td>${esc(c.unidad)}</td>
+      </tr></tfoot>
+    </table>`;
+
+  new bootstrap.Modal(document.getElementById('modalOrigen')).show();
+}
+
+/* ── Ojo de detalle: fórmula + valores usados + resultado ─────────────────── */
+function verDetalle(i) {
+  const f = filasCalc[i];
+  if (!f) return;
+  const formula = f.formula_texto || '';
+  const valores = f.valores_usados || {};
+
+  // Construir fórmula con sustitución textual de los valores conocidos
+  let sustituida = formula;
+  Object.keys(valores).sort((a, b) => b.length - a.length).forEach(k => {
+    const v = valores[k];
+    const vstr = (typeof v === 'number') ? fmt(v, 4) : esc(String(v));
+    sustituida = sustituida.replace(new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g'), vstr);
+  });
+
+  const tags = Object.keys(valores).length
+    ? Object.keys(valores).map(k => {
+        const v = valores[k];
+        const lbl = VAR_LABELS[k];
+        const head = lbl
+          ? `${esc(lbl)} <small class="text-muted">(${esc(k)})</small>`
+          : esc(k);
+        return `<span class="det-val-tag">${head} = ${typeof v === 'number' ? fmt(v, 4) : esc(String(v))}</span>`;
+      }).join('')
+    : '<span class="text-muted small">Sin variables en la fórmula.</span>';
+
+  const cantRed = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada);
+
+  document.getElementById('modalDetalleBody').innerHTML = `
+    <p class="fw-semibold mb-1">${esc(f.componente_nombre)} <small class="text-muted">${esc(f.componente_codigo)}</small></p>
+    <div class="mb-3 small text-muted">${esc(f.subconjunto_nombre || 'General')}</div>
+
+    <div class="text-muted small mb-1">Fórmula usada</div>
+    <div class="det-formula mb-3">${esc(formula) || '<span class="text-muted">— sin fórmula —</span>'}</div>
+
+    <div class="text-muted small mb-1">Valores usados</div>
+    <div class="mb-3">${tags}</div>
+
+    <div class="text-muted small mb-1">Sustitución</div>
+    <div class="det-sub mb-3">${esc(sustituida) || '—'}</div>
+
+    <div class="d-flex align-items-center gap-3">
+      <div><div class="text-muted small">Resultado</div>
+        <span class="det-result">${fmt(f.cantidad_calculada, 4)}</span> <span class="text-muted">${esc(f.unidad || '')}</span></div>
+      <div><div class="text-muted small">Redondeada</div>
+        <span class="fw-bold" style="font-size:16px">${cantRed}</span></div>
+    </div>
+    <p class="text-muted mt-3 mb-0" style="font-size:11px">
+      <i class="bi bi-shield-check"></i> Fórmula y valores son un snapshot guardado; no dependen de la receta actual del componente.
+    </p>`;
+
+  new bootstrap.Modal(document.getElementById('modalDetalle')).show();
+}
+
+/* ── Ojo de detalle de un CONSOLIDADO: detalla cada línea técnica origen ── */
+function verDetalleConsolidada(cid) {
+  const c = consolidaciones.find(x => x.cid === cid);
+  if (!c) return;
+
+  const bloques = c.indices.map(i => {
+    const f = filasCalc[i];
+    if (!f) return '';
+    const formula = f.formula_texto || '';
+    const valores = f.valores_usados || {};
+
+    let sustituida = formula;
+    Object.keys(valores).sort((a, b) => b.length - a.length).forEach(k => {
+      const v = valores[k];
+      const vstr = (typeof v === 'number') ? fmt(v, 4) : esc(String(v));
+      sustituida = sustituida.replace(new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g'), vstr);
+    });
+
+    const tags = Object.keys(valores).length
+      ? Object.keys(valores).map(k => {
+          const v = valores[k];
+          const lbl = VAR_LABELS[k];
+          const head = lbl
+            ? `${esc(lbl)} <small class="text-muted">(${esc(k)})</small>`
+            : esc(k);
+          return `<span class="det-val-tag">${head} = ${typeof v === 'number' ? fmt(v, 4) : esc(String(v))}</span>`;
+        }).join('')
+      : '<span class="text-muted small">Sin variables en la fórmula.</span>';
+
+    const cantRed = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada);
+
+    return `
+      <div class="border rounded p-2 mb-3" style="background:#fafbfd">
+        <p class="fw-semibold mb-1">${esc(f.componente_nombre)} <small class="text-muted">${esc(f.componente_codigo)}</small></p>
+        <div class="mb-2 small text-muted">${esc(f.subconjunto_nombre || 'General')}</div>
+
+        <div class="text-muted small mb-1">Fórmula usada</div>
+        <div class="det-formula mb-2">${esc(formula) || '<span class="text-muted">— sin fórmula —</span>'}</div>
+
+        <div class="text-muted small mb-1">Valores usados</div>
+        <div class="mb-2">${tags}</div>
+
+        <div class="text-muted small mb-1">Sustitución</div>
+        <div class="det-sub mb-2">${esc(sustituida) || '—'}</div>
+
+        <div class="d-flex align-items-center gap-3">
+          <div><div class="text-muted small">Resultado</div>
+            <span class="det-result">${fmt(f.cantidad_calculada, 4)}</span> <span class="text-muted">${esc(f.unidad || '')}</span></div>
+          <div><div class="text-muted small">Redondeada</div>
+            <span class="fw-bold" style="font-size:16px">${cantRed}</span></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const totalRed = c.cantidad_redondeada ?? Math.ceil(c.cantidad_total);
+
+  document.getElementById('modalDetalleBody').innerHTML = `
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <span class="dp-cons-badge">Consolidado</span>
+      <p class="fw-semibold mb-0">${esc(c.label)}</p>
+    </div>
+    <div class="mb-3 small text-muted">
+      ${c.indices.length} línea${c.indices.length !== 1 ? 's' : ''} técnica${c.indices.length !== 1 ? 's' : ''} origen ·
+      Total <strong>${fmt(c.cantidad_total, 4)}</strong> ${esc(c.unidad || '')} ·
+      Redondeada <strong>${totalRed}</strong>
+    </div>
+
+    <div class="text-muted small mb-2">Detalle por línea técnica origen</div>
+    ${bloques || '<div class="text-muted small">Sin líneas origen disponibles.</div>'}
+
+    <p class="text-muted mt-2 mb-0" style="font-size:11px">
+      <i class="bi bi-shield-check"></i> Fórmula y valores son un snapshot guardado por cada línea técnica; el consolidado solo suma sus cantidades.
+    </p>`;
+
+  new bootstrap.Modal(document.getElementById('modalDetalle')).show();
+}
+
+/* ── Calcular ─────────────────────────────────────────────────────────────── */
+async function calcular() {
+  setLoading('btnCalcular', 'calcSpinner', 'calcIcon', true);
+  const vars = getVariables();
+
+  try {
+    const resp = await fetch(CALCULAR_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body:    JSON.stringify({ variables_entrada: vars }),
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      const lineas = [];
+      data.subconjuntos.forEach(sq => sq.lineas.forEach(l => lineas.push(l)));
+
+      // Recalcular limpia consolidaciones (cantidades pueden haber cambiado)
+      consolidaciones = [];
+      modoConsolidacion = false;
+      variablesUsadas = vars;
+      renderTabla(lineas);
+      document.getElementById('btnGuardar').disabled = false;
+
+      if (data.errores?.length) {
+        showToast(`⚠ ${data.errores.length} componente(s) con error`, 'err');
+      } else {
+        showToast(`✓ ${lineas.length} componentes calculados`, 'ok');
+      }
+    } else {
+      showToast('Error: ' + (data.error || 'desconocido'), 'err');
+    }
+  } catch(e) {
+    showToast('Error de red: ' + e.message, 'err');
+  } finally {
+    setLoading('btnCalcular', 'calcSpinner', 'calcIcon', false);
+  }
+}
+
+/* ── Guardar ──────────────────────────────────────────────────────────────── */
+async function guardar() {
+  if (!filasCalc.length) return;
+  setLoading('btnGuardar', 'guardarSpinner', 'guardarIcon', true);
+  document.getElementById('guardarText').style.opacity = '.6';
+
+  // Índices que están en alguna consolidación → no enviar producto individual
+  const { consolidatedSet } = _buildConsolidationMaps();
+
+  const seleccion = {};
+  filasCalc.forEach((f, i) => {
+    if (!consolidatedSet.has(i) && f._prod) seleccion[f.componente_codigo] = f._prod;
+  });
+
+  // Siempre tomar el estado actual de los inputs al guardar.
+  // Antes se reusaba `variablesUsadas` (snapshot del último Calcular o de la
+  // carga inicial), lo que perdía ediciones hechas después de Calcular y
+  // dejaba esos campos vacíos al recargar (progreso bajaba de 100 → 90).
+  // El backend recalcula con estos valores, así que el resultado siempre
+  // queda alineado con lo que el usuario ve en pantalla.
+  const variablesActuales = getVariables();
+  const payload = {
+    variables_entrada:   variablesActuales,
+    seleccion_productos: seleccion,
+    consolidaciones:     consolidaciones.map(c => ({
+      label:               c.label,
+      indices:             c.indices,
+      cantidad_total:      c.cantidad_total,
+      cantidad_redondeada: c.cantidad_redondeada,
+      unidad:              c.unidad,
+      _prod:               c._prod || null,
+    })),
+  };
+
+  try {
+    const resp = await fetch(GUARDAR_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body:    JSON.stringify(payload),
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      showToast('✓ Despiece guardado correctamente', 'ok');
+      setTimeout(() => window.location.href = data.redirect_url, 900);
+    } else {
+      showToast('Error al guardar: ' + (data.error || 'desconocido'), 'err');
+    }
+  } catch(e) {
+    showToast('Error de red: ' + e.message, 'err');
+  } finally {
+    setLoading('btnGuardar', 'guardarSpinner', 'guardarIcon', false);
+    document.getElementById('guardarText').style.opacity = '1';
+  }
+}
+
+/* ── Checkpoint despiece ─────────────────────────────────────────────────── */
+window.CP_TITULO  = "Progreso del despiece";
+/* Integrar el progreso (no flotante) en el encabezado de la tarjeta de resultados */
+window.CP_MOUNT_ID = "cpProgressSlot";
+window.CP_SECCIONES = [
+  {
+    label: 'Variables completas', anchor: '', fn: function() {
+      /* Solo evaluar las variables VISIBLES = requeridas por los
+         subconjuntos/componentes seleccionados. Las variables extra/no usadas
+         viven dentro de #varExtraSection (oculto) y NO cuentan para el
+         progreso, aunque el usuario las despliegue con "Ver todas". */
+      const todos = document.querySelectorAll('.var-input[data-var]');
+      const totalConfiguradas = todos.length;
+      const extra = document.getElementById('varExtraSection');
+      const inputs = Array.prototype.filter.call(
+        todos, inp => !(extra && extra.contains(inp))
+      );
+
+      /* Fallback seguro: no hay variables configuradas en el subsistema. */
+      if (totalConfiguradas === 0)
+        return { puntaje: 30, maximo: 30, estado: 'ok', errores: [], advertencias: [],
+                 info: 'Este subsistema no tiene variables de entrada configuradas.' };
+
+      /* Fallback seguro: no se pudo determinar el subconjunto de variables
+         visibles (no debería pasar) → evaluar todas y avisar discretamente. */
+      let evaluables = inputs;
+      let fallback = false;
+      if (evaluables.length === 0) {
+        evaluables = Array.prototype.slice.call(todos);
+        fallback = true;
+      }
+
+      const errores = [];
+      const advertencias = [];
+      evaluables.forEach(inp => {
+        const nombre = inp.dataset.var;
+        const v = inp.value.toString().trim();
+
+        /* OPCION_UNICA visible: hay un grupo de chips con data-var = nombre.
+           Validar que tenga valor Y que esté dentro de las opciones. */
+        const chips = document.querySelector('.var-chips[data-var="' + nombre + '"]');
+        if (chips) {
+          if (v === '') {
+            advertencias.push(`Selecciona una opción: ${nombre}`);
+            return;
+          }
+          const permitidas = Array.prototype.map.call(
+            chips.querySelectorAll('.var-chip'), c => String(c.dataset.val).trim()
+          );
+          if (permitidas.length && permitidas.indexOf(v) === -1) {
+            errores.push(`Opción no válida en ${nombre}`);
+          }
+          return;
+        }
+
+        /* Numérica / texto: vacía o cero = pendiente. */
+        if (v === '' || v === '0') advertencias.push(`Variable sin valor: ${nombre}`);
+      });
+
+      const incompletas = errores.length + advertencias.length;
+      const puntaje = incompletas === 0 ? 30 : Math.max(5, 30 - incompletas * 5);
+      const estado  = errores.length ? 'error' : (advertencias.length ? 'advertencia' : 'ok');
+      const info = fallback
+        ? `No se pudieron filtrar las variables del cálculo; evaluando las ${evaluables.length} configuradas como respaldo.`
+        : `Variables evaluadas: ${evaluables.length} visible(s) de ${totalConfiguradas} configurada(s) en el subsistema.`;
+
+      return { puntaje, maximo: 30, estado, errores, advertencias, info };
+    }
+  },
+  {
+    label: 'Cálculo ejecutado', anchor: '', fn: function() {
+      const count = document.getElementById('resultCount');
+      const text  = count ? count.textContent : '';
+      const calculado = text && !text.includes('Cargando') && !text.includes('Pendiente');
+      if (calculado)
+        return { puntaje: 30, maximo: 30, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: 0, maximo: 30, estado: 'error',
+               errores: ['Presiona Calcular para ver los materiales'], advertencias: [] };
+    }
+  },
+  {
+    label: 'Productos seleccionados', anchor: '', fn: function() {
+      const filas = document.querySelectorAll('#dpTbody tr[data-idx]');
+      if (filas.length === 0)
+        return { puntaje: 10, maximo: 20, estado: 'advertencia', errores: [],
+                 advertencias: ['Calcula primero para seleccionar productos'] };
+      let sinProducto = 0;
+      filas.forEach(tr => {
+        const inp = tr.querySelector('.prod-input');
+        if (!inp || !inp.classList.contains('has-product')) sinProducto++;
+      });
+      if (sinProducto === 0)
+        return { puntaje: 20, maximo: 20, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: Math.max(5, 20 - sinProducto * 2), maximo: 20, estado: 'advertencia',
+               errores: [], advertencias: [`${sinProducto} componente(s) sin producto asignado`] };
+    }
+  },
+  {
+    label: 'Despiece guardado', anchor: '', fn: function() {
+      const badge = document.querySelector('.badge.bg-success');
+      if (badge)
+        return { puntaje: 20, maximo: 20, estado: 'ok', errores: [], advertencias: [] };
+      return { puntaje: 0, maximo: 20, estado: 'advertencia', errores: [],
+               advertencias: ['Guarda el despiece para registrar el resultado'] };
+    }
+  },
+];
+
+/* ── Inicialización ───────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  if (LINEAS_INIT.length > 0) {
+    variablesUsadas = {{ despiece.variables_entrada|default:"{}"|safe }};
+
+    // Reconstruir consolidaciones con índices desde PKs
+    const pkToIdx = {};
+    LINEAS_INIT.forEach((l, i) => { if (l.pk) pkToIdx[l.pk] = i; });
+
+    consolidaciones = CONSOLIDACIONES_INIT.map(c => ({
+      cid:                 _nextCid++,
+      label:               c.label,
+      lineas_ids:          c.lineas_ids || [],
+      indices:             (c.lineas_ids || []).map(pk => pkToIdx[pk]).filter(i => i !== undefined),
+      cantidad_total:      c.cantidad_total,
+      cantidad_redondeada: c.cantidad_redondeada,
+      unidad:              c.unidad,
+      _prod: (c.producto_id || c.producto_nombre) ? {
+        producto_id:     c.producto_id,
+        producto_codigo: c.producto_codigo || '',
+        producto_nombre: c.producto_nombre || '',
+        precio_unitario: c.precio_unitario,
+        moneda:          c.moneda || '',
+        fecha_precio:    c.fecha_precio || null,
+        presentacion_nombre: c.presentacion_nombre || '',
+        unidad_producto:     c.unidad_producto || '',
+        unidad_presentacion: c.unidad_presentacion || '',
+      } : null,
+    }));
+
+    renderTabla(LINEAS_INIT);
+    document.getElementById('btnGuardar').disabled = false;
+  } else {
+    document.getElementById('resultBody').innerHTML = `
+      <div class="wb-empty">
+        <i class="bi bi-calculator"></i>
+        <div class="fw-semibold mb-1">Ingresa las variables y presiona Calcular</div>
+        <div class="small text-muted">Los resultados aparecerán aquí.</div>
+      </div>`;
+    document.getElementById('resultCount').textContent = 'Pendiente de calcular';
+  }
+});
+
+/* ── Resumen del despiece (solo esta vista) ───────────────────────────────── */
+const RESUMEN_META = {
+  sistema:     "{{ despiece.subsistema.sistema.codigo|escapejs }} · {{ despiece.subsistema.sistema.nombre|escapejs }}",
+  subsistema:  "{{ despiece.subsistema.codigo|escapejs }} · {{ despiece.subsistema.nombre|escapejs }}",
+  subconjuntos: [{% for sq in subconjuntos_seleccionados %}"{{ sq.nombre|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}],
+};
+
+function _resumenRow(label, value, extra) {
+  return `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 16px;border-bottom:1px solid var(--border,#eee);">
+    <span style="font-size:12px;color:#888;">${esc(label)}</span>
+    <span style="font-size:13px;font-weight:600;text-align:right;${extra||''}">${value}</span>
+  </div>`;
+}
+
+window.abrirResumen = function () {
+  /* Toggle excluyente: si ya está abierto se cierra; si no, cierra los otros. */
+  if (window.toggleFloatingPanel && window.toggleFloatingPanel('resumenOffcanvas')) return;
+  const body = document.getElementById('resumenOffcanvasBody');
+  if (!body) return;
+
+  // Variables ingresadas (con valor)
+  const vars = getVariables();
+  const varsConValor = Object.keys(vars).filter(k => {
+    const v = vars[k];
+    return v !== '' && v !== null && v !== undefined && !(typeof v === 'number' && v === 0);
+  });
+
+  // Productos: contar filas técnicas no consolidadas + consolidadas
+  const { consolidatedSet } = _buildConsolidationMaps();
+  let conProd = 0, sinProd = 0;
+  filasCalc.forEach((f, i) => {
+    if (consolidatedSet.has(i)) return;          // se cuenta en su consolidación
+    if (f._prod && f._prod.producto_nombre) conProd++; else sinProd++;
+  });
+  consolidaciones.forEach(c => { if (c._prod && c._prod.producto_nombre) conProd++; else sinProd++; });
+
+  // Estado de guardado
+  const guardado = !!document.querySelector('.badge.bg-success');
+
+  const subList = RESUMEN_META.subconjuntos.length
+    ? RESUMEN_META.subconjuntos.map(s => `<span class="sq-tag" style="margin:2px">${esc(s)}</span>`).join('')
+    : '<span class="text-muted small">Todos / sin subconjuntos</span>';
+
+  const varList = varsConValor.length
+    ? varsConValor.map(k => `<span class="det-val-tag">${esc(k)} = ${esc(String(vars[k]))}</span>`).join('')
+    : '<span class="text-muted small">Ninguna ingresada aún</span>';
+
+  body.innerHTML = `
+    ${_resumenRow('Sistema', esc(RESUMEN_META.sistema))}
+    ${_resumenRow('Subsistema', esc(RESUMEN_META.subsistema))}
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border,#eee);">
+      <div style="font-size:12px;color:#888;margin-bottom:5px;">Subconjuntos seleccionados</div>${subList}
+    </div>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border,#eee);">
+      <div style="font-size:12px;color:#888;margin-bottom:5px;">Variables ingresadas (${varsConValor.length})</div>${varList}
+    </div>
+    ${_resumenRow('Componentes calculados', filasCalc.length)}
+    ${_resumenRow('Líneas consolidadas', consolidaciones.length)}
+    ${_resumenRow('Productos seleccionados', conProd, 'color:#198754')}
+    ${_resumenRow('Productos pendientes', sinProd, sinProd ? 'color:#c0392b' : 'color:#888')}
+    ${_resumenRow('Estado', guardado ? '<span style="color:#198754">Guardado</span>' : '<span style="color:#c49010">Borrador</span>')}
+  `;
+
+  if (window.bootstrap) {
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('resumenOffcanvas')).show();
+  }
+};
+</script>
+
+{% include "ingenieria/partials/_despiece_resumen_offcanvas.html" %}
+
+{% include "ingenieria/_checkpoint_panel.html" %}
+{% endblock %}

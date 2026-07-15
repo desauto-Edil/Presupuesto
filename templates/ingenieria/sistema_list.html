@@ -9,42 +9,290 @@
 {% block extra_head %}
 <link href="{% static 'css/catalogos.css' %}" rel="stylesheet">
 <style>
-  /* ── Tarjeta sistema: header visual ── */
-  .sist-card-header {
-    position: relative;
-    background: linear-gradient(135deg, var(--theme-accent-pale) 0%, var(--surface-2) 100%);
-    border-radius: 16px 16px 0 0;
-    padding: 22px 20px 18px;
-    min-height: 88px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    border-bottom: 1px solid var(--sidebar-light-border);
-  }
-  .sist-card-codigo {
-    font-family: 'Lato';
-    font-size: 20px;
-    font-weight: 800;
-    color: var(--theme-accent);
-    letter-spacing: .04em;
-    line-height: 1;
-  }
-  .sist-card-linea {
-    font-family: 'Lato';
-    font-size: 10px;
-    color: rgba(14,17,23,0.40);
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    margin-top: 4px;
-    font-weight: 600;
-  }
-  .sist-card-nombre {
-    font-family: 'Lato';
-    font-weight: 700;
-    font-size: 14px;
-    color: var(--ink);
-    margin-bottom: 6px;
-  }
+/* ══ TARJETA DE SISTEMA ══════════════════════════════════════════ */
+.sis-card {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow .2s, border-color .2s, transform .18s;
+}
+.sis-card:hover {
+  box-shadow: 0 6px 24px rgba(0,0,0,0.10);
+  border-color: rgba(0,0,0,0.13);
+  transform: translateY(-2px);
+}
+
+/* Cabecera de color según tipo */
+.sis-card__head {
+  padding: 18px 18px 14px;
+  position: relative;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.sis-card__head--constructivo {
+  background: linear-gradient(135deg, var(--theme-accent-pale) 0%, rgba(255,255,255,0) 80%);
+  border-top: 3px solid var(--theme-accent);
+}
+.sis-card__head--consumo {
+  background: linear-gradient(135deg, rgba(16,130,80,.10) 0%, rgba(255,255,255,0) 80%);
+  border-top: 3px solid #108250;
+}
+
+.sis-card__codigo {
+  font-family: 'Lato', monospace;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  line-height: 1;
+  margin-bottom: 5px;
+}
+.sis-card__head--constructivo .sis-card__codigo { color: var(--theme-accent); }
+.sis-card__head--consumo .sis-card__codigo { color: #108250; }
+
+.sis-card__nombre {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+.sis-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sis-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+.sis-badge--constructivo {
+  background: var(--theme-accent-pale);
+  color: var(--theme-accent);
+  border: 1px solid var(--theme-accent-border);
+}
+.sis-badge--consumo {
+  background: rgba(16,130,80,.10);
+  color: #108250;
+  border: 1px solid rgba(16,130,80,.22);
+}
+.sis-badge--activo {
+  background: rgba(34,197,94,.10);
+  color: #16a34a;
+  border: 1px solid rgba(34,197,94,.22);
+}
+.sis-badge--inactivo {
+  background: rgba(0,0,0,.06);
+  color: var(--ink-soft);
+  border: 1px solid rgba(0,0,0,.10);
+}
+.sis-badge--linea {
+  background: var(--surface);
+  color: var(--ink-soft);
+  border: 1px solid var(--border);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+/* Cuerpo */
+.sis-card__body {
+  padding: 14px 18px 10px;
+  flex: 1;
+}
+.sis-card__desc {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  margin-bottom: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Contador subsistemas */
+.sis-card__count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.sis-card__count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.sis-card__count-num {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1;
+}
+.sis-card__head--constructivo ~ .sis-card__body .sis-card__count-num { color: var(--theme-accent); }
+.sis-card__head--consumo ~ .sis-card__body .sis-card__count-num { color: #108250; }
+
+/* Lista de subsistemas colapsable */
+.sis-prods {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .3s ease, opacity .25s ease;
+  opacity: 0;
+}
+.sis-prods.open { max-height: 600px; opacity: 1; }
+.sis-prods-inner {
+  border-top: 1px solid rgba(0,0,0,0.06);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sis-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 8px;
+  gap: 8px;
+  transition: background .12s;
+}
+.sis-sub-row:hover { background: var(--surface); }
+.sis-sub-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--theme-accent);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+.sis-sub-dot--consumo { background: #108250; }
+.sis-sub-name { font-size: 12.5px; font-weight: 500; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sis-sub-code { font-size: 10.5px; color: var(--ink-soft); font-family: monospace; }
+
+/* Footer */
+.sis-card__footer {
+  padding: 10px 18px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(0,0,0,.05);
+}
+
+/* ══ CHIPS FILTRO ════════════════════════════════════════════════ */
+.sis-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.sis-chip {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all .14s;
+  user-select: none;
+  background: var(--surface);
+  color: var(--ink-soft);
+  border-color: rgba(0,0,0,.10);
+}
+.sis-chip:hover { border-color: var(--theme-accent); color: var(--theme-accent); }
+.sis-chip.active-all { background: var(--ink); color: #fff; border-color: transparent; }
+.sis-chip.active-constructivo { background: var(--theme-accent); color: #fff; border-color: transparent; }
+.sis-chip.active-consumo { background: #108250; color: #fff; border-color: transparent; }
+
+.sis-search {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: 280px;
+}
+.sis-search input {
+  width: 100%;
+  padding: 7px 12px 7px 32px;
+  border: 1.5px solid rgba(0,0,0,.10);
+  border-radius: 8px;
+  font-size: 12.5px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.sis-search input:focus {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 3px var(--theme-accent-glow);
+}
+.sis-search::before {
+  content: "⌕";
+  position: absolute;
+  left: 10px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+
+/* ══ SECCIÓN DE TIPO (separadores visuales) ══════════════════════ */
+.sis-tipo-sep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+.sis-tipo-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ══ GRID ════════════════════════════════════════════════════════ */
+.sis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 14px;
+}
+
+/* ══ TOGGLE BOTÓN ════════════════════════════════════════════════ */
+.sis-toggle-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 11.5px; font-weight: 600; color: var(--ink-soft);
+  padding: 0; display: flex; align-items: center; gap: 4px;
+  font-family: inherit; transition: color .12s;
+}
+.sis-toggle-btn:hover { color: var(--ink); }
+.sis-toggle-icon { font-size: 10px; transition: transform .2s; display: inline-block; }
+.sis-toggle-btn.open .sis-toggle-icon { transform: rotate(180deg); }
+
+/* ══ CAMPOS CONSUMO MODAL ════════════════════════════════════════ */
+.consumo-fields { display: none; }
+.consumo-fields.visible { display: block; }
+
+/* ══ MODAL TIPO SELECTOR ════════════════════════════════════════ */
+.tipo-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.tipo-option { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 10px; border: 2px solid var(--border); cursor: pointer; transition: all .15s; }
+.tipo-option input[type=radio] { display: none; }
+.tipo-option:has(input:checked) { border-color: var(--theme-accent); background: var(--theme-accent-pale); }
+.tipo-option.tipo-consumo:has(input:checked) { border-color: #108250; background: rgba(16,130,80,.08); }
+.tipo-option__icon { font-size: 20px; }
+.tipo-option__label { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.tipo-option__sub { font-size: 11px; color: var(--ink-soft); line-height: 1.4; }
 </style>
 {% endblock %}
 
@@ -60,16 +308,16 @@
             data-bs-toggle="modal"
             data-bs-target="#modalSistema"
             role="menuitem">
-      <span class="cat-dropdown-icon" style="color: var(--primary); margin-top: 2px;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-bounding-box" viewBox="0 0 16 16">
+      <span class="cat-dropdown-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-bounding-box" viewBox="0 0 16 16">
           <path d="M5 2V0H0v5h2v6H0v5h5v-2h6v2h5v-5h-2V5h2V0h-5v2zm6 1v2h2v6h-2v2H5v-2H3V5h2V3zm1-2h3v3h-3zm3 11v3h-3v-3zM4 15H1v-3h3zM1 4V1h3v3z"/>
         </svg>
       </span>
       <span class="d-flex flex-column text-start">
-        <strong style="line-height: 1.2;">Nuevo sistema</strong>
-        <small class="text-muted" style="font-size: 0.75rem;">Familia técnica de componentes</small>
+        <strong>Nuevo sistema</strong>
+        <small>Constructivo o de consumo</small>
       </span>
-    </button>      
+    </button>
 
     <div class="cat-dropdown-divider"></div>
 
@@ -78,14 +326,14 @@
             data-bs-toggle="modal"
             data-bs-target="#modalSubsistema"
             role="menuitem">
-      <span class="cat-dropdown-icon" style="color: var(--primary); margin-top: 2px;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-diagram-3-fill" viewBox="0 0 16 16">
+      <span class="cat-dropdown-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-diagram-3-fill" viewBox="0 0 16 16">
           <path fill-rule="evenodd" d="M6 3.5A1.5 1.5 0 0 1 7.5 2h1A1.5 1.5 0 0 1 10 3.5v1A1.5 1.5 0 0 1 8.5 6v1H14a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 2 7h5.5V6A1.5 1.5 0 0 1 6 4.5zm-6 8A1.5 1.5 0 0 1 1.5 10h1A1.5 1.5 0 0 1 4 11.5v1A1.5 1.5 0 0 1 2.5 14h-1A1.5 1.5 0 0 1 0 12.5zm6 0A1.5 1.5 0 0 1 7.5 10h1a1.5 1.5 0 0 1 1.5 1.5v1A1.5 1.5 0 0 1 8.5 14h-1A1.5 1.5 0 0 1 6 12.5zm6 0a1.5 1.5 0 0 1 1.5-1.5h1a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5z"/>
         </svg>
       </span>
       <span class="d-flex flex-column text-start">
-        <strong style="line-height: 1.2;">Nuevo subsistema</strong>
-        <small class="text-muted" style="font-size: 0.75rem;">Receta técnica dentro de un sistema</small>
+        <strong>Nuevo subsistema / producto</strong>
+        <small>Variante o producto dentro de un sistema</small>
       </span>
     </button>
 
@@ -118,146 +366,144 @@
   </div>
 </div>
 
+<!-- ── FILTROS ── -->
+<div class="sis-filter-bar fade-up">
+  <div class="sis-search">
+    <input type="text" id="sisSearch" placeholder="Buscar sistema…" autocomplete="off">
+  </div>
+  <button class="sis-chip active-all" data-filter="all">Todos</button>
+  <button class="sis-chip" data-filter="CONSTRUCTIVO">Constructivo</button>
+  <button class="sis-chip" data-filter="CONSUMO">Consumo</button>
+</div>
 
-<!-- ── GRID DE SISTEMAS COMO TARJETAS ── -->
+<!-- ── GRID DE SISTEMAS ── -->
 {% if sistemas %}
-<div class="cat-grid fade-up-1" id="sistGrid">
+<div class="sis-grid fade-up-1" id="sistGrid">
 
   {% for sis in sistemas %}
-  <div class="cat-card" data-name="{{ sis.nombre|lower }} {{ sis.codigo|lower }}">
+  <div class="sis-card" data-name="{{ sis.nombre|lower }} {{ sis.codigo|lower }}" data-tipo="{{ sis.tipo_sistema }}">
 
-    <!-- Header visual con código -->
-    <div class="sist-card-header">
-      <div class="sist-card-codigo">{{ sis.codigo }}</div>
-      <div class="sist-card-linea">{{ sis.get_linea_negocio_display }}</div>
-      <span class="cat-card__status {% if sis.activo %}cat-card__status--activa{% else %}cat-card__status--inactiva{% endif %}">
-        {% if sis.activo %}● Activo{% else %}○ Inactivo{% endif %}
-      </span>
+    <!-- Cabecera con color por tipo -->
+    <div class="sis-card__head sis-card__head--{{ sis.tipo_sistema|lower }}">
+      <div class="sis-card__codigo">{{ sis.codigo }}</div>
+      <div class="sis-card__nombre">{{ sis.nombre }}</div>
+      <div class="sis-card__meta">
+        <span class="sis-badge sis-badge--{{ sis.tipo_sistema|lower }}">
+          {% if sis.tipo_sistema == 'CONSUMO' %}⬤{% else %}◈{% endif %}
+          {{ sis.get_tipo_sistema_display }}
+        </span>
+        <span class="sis-badge sis-badge--linea">{{ sis.get_linea_negocio_display }}</span>
+        <span class="sis-badge {% if sis.activo %}sis-badge--activo{% else %}sis-badge--inactivo{% endif %}">
+          {% if sis.activo %}Activo{% else %}Inactivo{% endif %}
+        </span>
+      </div>
     </div>
 
     <!-- Cuerpo -->
-    <div class="cat-card__body">
+    <div class="sis-card__body">
+      {% if sis.descripcion %}
+      <div class="sis-card__desc">{{ sis.descripcion }}</div>
+      {% endif %}
 
-      <div class="sist-card-nombre">{{ sis.nombre }}</div>
-
-      <div class="cat-card__desc">
-        {{ sis.descripcion|default:"Sin descripción registrada." }}
-      </div>
-
-      <!-- Subsistemas de este sistema -->
       {% with subs=sis.subsistemas.all %}
-      <div class="cat-card__count-row">
-        <div class="cat-card__count">
-          <span class="cat-card__count-num">{{ subs|length }}</span>
-          <span>subsistema{{ subs|length|pluralize }}</span>
+      <div class="sis-card__count-row">
+        <div class="sis-card__count">
+          <span class="sis-card__count-num">{{ subs|length }}</span>
+          <span>{% if sis.tipo_sistema == 'CONSUMO' %}producto{{ subs|length|pluralize }}{% else %}subsistema{{ subs|length|pluralize }}{% endif %}</span>
         </div>
         {% if subs %}
-        <button class="cat-card__toggle"
-                data-target="subs-{{ sis.pk }}"
-                aria-expanded="false">
-          Ver lista <span class="cat-card__toggle-icon">▾</span>
+        <button class="sis-toggle-btn" data-target="subs-{{ sis.pk }}">
+          Ver <span class="sis-toggle-icon">▾</span>
         </button>
         {% endif %}
       </div>
 
       {% if subs %}
-      <div class="cat-prods" id="subs-{{ sis.pk }}">
-        <div class="cat-prods-inner">
+      <div class="sis-prods" id="subs-{{ sis.pk }}">
+        <div class="sis-prods-inner">
           {% for sub in subs %}
-          <div class="cat-prod-item">
-            <div class="cat-prod-item__left">
-              <span class="cat-prod-item__dot"></span>
-              <div>
-                <div class="cat-prod-item__name">{{ sub.nombre }}</div>
-                <div class="cat-prod-item__sub">{{ sub.codigo }}</div>
+          <div class="sis-sub-row">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+              <span class="sis-sub-dot {% if sis.tipo_sistema == 'CONSUMO' %}sis-sub-dot--consumo{% endif %}"></span>
+              <div style="min-width:0;">
+                <div class="sis-sub-name">{{ sub.nombre }}</div>
+                <div class="sis-sub-code">{{ sub.codigo }}</div>
               </div>
             </div>
-            <div class="cat-prod-item__right">
-              <div class="d-inline-flex gap-1">
-                <a href="{% url 'ingenieria:subsistema_update' sub.pk %}"
-                  class="btn btn-ghost btn-xs d-inline-flex align-items-center justify-content-center"
-                  title="Editar subsistema"
-                  style="width: 24px; height: 24px; padding: 0;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-pencil-fill" viewBox="0 0 16 16">
-                    <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/>
-                  </svg>
-                </a>
-
-                <button class="btn btn-ghost btn-xs d-inline-flex align-items-center justify-content-center"
-                        data-bs-toggle="modal"
-                        data-bs-target="#deleteModal"
-                        data-delete-url="{% url 'ingenieria:subsistema_delete' sub.pk %}"
-                        data-delete-name="{{ sub.nombre }}"
-                        title="Eliminar subsistema"
-                        style="color:rgba(14,17,23,0.28); width: 24px; height: 24px; padding: 0;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
-                    <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
-                  </svg>
-                </button>
-              </div>
+            <div style="display:flex;gap:4px;flex-shrink:0;">
+              <a href="{% url 'ingenieria:subsistema_update' sub.pk %}"
+                 class="btn btn-ghost btn-xs" title="Editar" style="width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;">
+                <i class="bi bi-pencil" style="font-size:11px;"></i>
+              </a>
+              <button class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.28);width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;"
+                      data-bs-toggle="modal" data-bs-target="#deleteModal"
+                      data-delete-url="{% url 'ingenieria:subsistema_delete' sub.pk %}"
+                      data-delete-name="{{ sub.nombre }}" title="Eliminar">
+                <i class="bi bi-trash3" style="font-size:11px;"></i>
+              </button>
             </div>
           </div>
           {% endfor %}
         </div>
       </div>
       {% else %}
-      <div class="cat-prods-empty">Sin subsistemas. Agrega el primero.</div>
+      <div style="font-size:11.5px;color:var(--ink-soft);font-style:italic;padding:6px 0;">
+        Sin {% if sis.tipo_sistema == 'CONSUMO' %}productos{% else %}subsistemas{% endif %}. Agrega el primero.
+      </div>
       {% endif %}
       {% endwith %}
-
-    </div><!-- /.cat-card__body -->
+    </div>
 
     <!-- Footer -->
-    <div class="cat-card__footer">
+    <div class="sis-card__footer">
+      {% if sis.tipo_sistema == 'CONSUMO' %}
+      <a href="{% url 'ingenieria:subsistema_create' %}?sistema={{ sis.pk }}"
+         class="btn btn-ghost btn-xs">
+        + Producto
+      </a>
+      {% else %}
       <button type="button"
               class="btn btn-ghost btn-xs"
               data-bs-toggle="modal"
               data-bs-target="#modalSubsistema"
               data-sistema-pk="{{ sis.pk }}"
-              data-sistema-nombre="{{ sis.nombre }}">
+              data-sistema-nombre="{{ sis.nombre }}"
+              data-sistema-tipo="{{ sis.tipo_sistema }}">
         + Subsistema
       </button>
-      <div class="cat-card__actions d-flex gap-1">
-        <a href="{% url 'ingenieria:sistema_update' sis.pk %}"
-           class="btn btn-ghost btn-xs d-inline-flex align-items-center"
-           title="Editar sistema">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-pencil-fill me-1" viewBox="0 0 16 16">
-            <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/>
-          </svg>
+      {% endif %}
+      <div style="display:flex;gap:4px;">
+        <a href="{% url 'ingenieria:sistema_detail' sis.pk %}"
+           class="btn btn-ghost btn-xs" title="Ver detalle">
+          <i class="bi bi-eye" style="font-size:12px;"></i>
         </a>
-
-        <button class="btn btn-ghost btn-xs d-inline-flex align-items-center"
-                data-bs-toggle="modal"
-                data-bs-target="#deleteModal"
+        <a href="{% url 'ingenieria:sistema_update' sis.pk %}"
+           class="btn btn-ghost btn-xs" title="Editar">
+          <i class="bi bi-pencil" style="font-size:12px;"></i>
+        </a>
+        <button class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.28);"
+                data-bs-toggle="modal" data-bs-target="#deleteModal"
                 data-delete-url="{% url 'ingenieria:sistema_delete' sis.pk %}"
-                data-delete-name="{{ sis.nombre }}"
-                title="Eliminar sistema"
-                style="color:rgba(14,17,23,0.3);">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
-            <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
-          </svg>
+                data-delete-name="{{ sis.nombre }}" title="Eliminar">
+          <i class="bi bi-trash3" style="font-size:12px;"></i>
         </button>
-      </div>
       </div>
     </div>
 
-  </div><!-- /.cat-card -->
+  </div>
   {% endfor %}
 
-</div><!-- /#sistGrid -->
+</div>
 
 {% else %}
-<div class="cat-grid fade-up-1">
+<div class="sis-grid fade-up-1">
   <div class="cat-empty">
     <div class="cat-empty__icon">◈</div>
     <div class="cat-empty__title">Sin sistemas registrados</div>
     <div class="cat-empty__sub">
-      Los sistemas agrupan subsistemas técnicos que definen las recetas de componentes para presupuestar.
+      Crea tu primer sistema constructivo o de consumo.
     </div>
-    <button type="button"
-            class="btn btn-primary btn-sm"
-            data-bs-toggle="modal"
-            data-bs-target="#modalSistema">
+    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalSistema">
       + Crear primer sistema
     </button>
   </div>
@@ -278,6 +524,27 @@
       <form method="post" action="{% url 'ingenieria:sistema_create' %}">
         {% csrf_token %}
         <div class="modal-body">
+
+          <!-- Selector visual de tipo -->
+          <div style="margin-bottom:20px;">
+            <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);display:block;margin-bottom:10px;">
+              Tipo de sistema <span style="color:var(--red)">*</span>
+            </label>
+            <div class="tipo-selector">
+              <label class="tipo-option">
+                <input type="radio" name="tipo_sistema" value="CONSTRUCTIVO" checked>
+                <span class="tipo-option__icon">◈</span>
+                <span class="tipo-option__label">Constructivo</span>
+                <span class="tipo-option__sub">Receta técnica con componentes, fórmulas y variables de entrada.</span>
+              </label>
+              <label class="tipo-option tipo-consumo">
+                <input type="radio" name="tipo_sistema" value="CONSUMO">
+                <span class="tipo-option__icon" style="color:#108250;">⬤</span>
+                <span class="tipo-option__label">De consumo</span>
+                <span class="tipo-option__sub">Sistema de capas con datos técnicos de producto (impermeabilización, cubiertas…).</span>
+              </label>
+            </div>
+          </div>
 
           <div class="form-grid-2">
             <div class="form-group">
@@ -307,19 +574,17 @@
             </div>
           </div>
 
-          <!-- Subsistemas inline -->
-          <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+          <!-- Subsistemas inline (solo constructivo) -->
+          <div id="secSubsInline" style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-              <span style="font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">
-                Subsistemas (recetas técnicas)
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">
+                Subsistemas (opcional)
               </span>
               <button type="button" class="btn btn-ghost btn-xs" id="btnAddSubRow">+ Agregar</button>
             </div>
-            <div id="subRowsContainer">
-              <!-- filas dinámicas -->
-            </div>
+            <div id="subRowsContainer"></div>
             <p style="font-size:11px;color:var(--ink-soft);margin-top:6px;">
-              Opcional. El código debe coincidir con la definición backend en <code>system_defs/</code>.
+              El código debe coincidir con la definición en <code>system_defs/</code>.
             </p>
           </div>
 
@@ -335,13 +600,13 @@
 
 
 <!-- ════════════════════════════════════════════════════════
-     MODAL — CREAR SUBSISTEMA
+     MODAL — CREAR SUBSISTEMA / CAPA
 ════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="modalSubsistema" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header cat-modal-header">
-        <h5 class="modal-title">Nuevo subsistema</h5>
+        <h5 class="modal-title" id="modalSubsistemaTitle">Nuevo subsistema</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form method="post" action="{% url 'ingenieria:subsistema_create' %}">
@@ -372,18 +637,182 @@
           <div class="form-group">
             <div class="form-check">
               {{ create_subsistema_form.activo }}
-              <label class="form-check-label" style="font-size:13px;">Subsistema activo</label>
+              <label class="form-check-label" style="font-size:13px;">Activo</label>
+            </div>
+          </div>
+
+          <!-- ── CAMPOS CONSUMO ── -->
+          <div id="subConsumoFields" class="consumo-fields">
+            <div style="margin-top:16px;padding:14px 16px;background:rgba(16,130,80,.06);border:1px solid rgba(16,130,80,.18);border-radius:10px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#108250;margin-bottom:14px;display:flex;align-items:center;gap:6px;">
+                <span>⬤</span> Datos técnicos del producto
+              </div>
+
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label>Tipo de producto</label>
+                  {{ create_subsistema_form.tipo_producto }}
+                </div>
+                <div class="form-group">
+                  <label>Interior / Exterior</label>
+                  {{ create_subsistema_form.interior_exterior }}
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Resistencia química</label>
+                {{ create_subsistema_form.resistencia_quimica }}
+              </div>
+
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label>Temperatura mínima (°C)</label>
+                  {{ create_subsistema_form.temperatura_min }}
+                </div>
+                <div class="form-group">
+                  <label>Temperatura máxima (°C)</label>
+                  {{ create_subsistema_form.temperatura_max }}
+                </div>
+              </div>
+
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label>Consumo mín. (g/m²)</label>
+                  {{ create_subsistema_form.consumo_min_g_m2 }}
+                </div>
+                <div class="form-group">
+                  <label>Consumo máx. (g/m²)</label>
+                  {{ create_subsistema_form.consumo_max_g_m2 }}
+                </div>
+              </div>
+
+              <p style="font-size:11px;color:var(--ink-soft);margin:6px 0 0;">
+                Para configurar funciones, problemas, superficies y productos técnicos asociados, use el formulario completo de edición.
+              </p>
             </div>
           </div>
 
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary btn-sm">Guardar subsistema</button>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
         </div>
       </form>
     </div>
   </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════
+     CATÁLOGOS DE CONSUMO
+════════════════════════════════════════════════════════ -->
+<div style="margin-top:36px;">
+  <button class="sis-toggle-btn" id="btnToggleCatalogos" data-open="false"
+          style="font-size:12.5px;font-weight:700;gap:6px;padding:8px 0;">
+    <i class="bi bi-tags" style="font-size:13px;"></i>
+    Catálogos de consumo
+    <span class="sis-toggle-icon" style="font-size:11px;">▾</span>
+  </button>
+
+  <div id="seccionCatalogos" style="display:none;margin-top:12px;">
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
+
+      <!-- Funciones -->
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;overflow:hidden;">
+        <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">
+            <i class="bi bi-lightning-charge"></i> Funciones
+          </span>
+        </div>
+        <div style="padding:10px 16px;">
+          {% for f in funciones_catalogo %}
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.04);">
+            <span style="font-size:13px;">{{ f.nombre }}</span>
+            <button class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.28);"
+                    data-bs-toggle="modal" data-bs-target="#deleteModal"
+                    data-delete-url="{% url 'ingenieria:funcion_consumo_delete' f.pk %}"
+                    data-delete-name="{{ f.nombre }}">
+              <i class="bi bi-trash3" style="font-size:11px;"></i>
+            </button>
+          </div>
+          {% empty %}
+          <p style="font-size:12px;color:var(--ink-soft);font-style:italic;margin:6px 0;">Sin funciones registradas.</p>
+          {% endfor %}
+        </div>
+        <div style="padding:10px 16px;border-top:1px solid var(--border);">
+          <form method="post" action="{% url 'ingenieria:funcion_consumo_create' %}" style="display:flex;gap:6px;">
+            {% csrf_token %}
+            <input type="text" name="nombre" class="form-control form-control-sm" placeholder="Nueva función…" required style="flex:1;">
+            <button type="submit" class="btn btn-primary btn-xs">+ Agregar</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Problemas que resuelve -->
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;overflow:hidden;">
+        <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">
+            <i class="bi bi-check2-circle"></i> Problemas que resuelve
+          </span>
+        </div>
+        <div style="padding:10px 16px;">
+          {% for p in problemas_catalogo %}
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.04);">
+            <span style="font-size:13px;">{{ p.nombre }}</span>
+            <button class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.28);"
+                    data-bs-toggle="modal" data-bs-target="#deleteModal"
+                    data-delete-url="{% url 'ingenieria:problema_resuelto_delete' p.pk %}"
+                    data-delete-name="{{ p.nombre }}">
+              <i class="bi bi-trash3" style="font-size:11px;"></i>
+            </button>
+          </div>
+          {% empty %}
+          <p style="font-size:12px;color:var(--ink-soft);font-style:italic;margin:6px 0;">Sin problemas registrados.</p>
+          {% endfor %}
+        </div>
+        <div style="padding:10px 16px;border-top:1px solid var(--border);">
+          <form method="post" action="{% url 'ingenieria:problema_resuelto_create' %}" style="display:flex;gap:6px;">
+            {% csrf_token %}
+            <input type="text" name="nombre" class="form-control form-control-sm" placeholder="Nuevo problema…" required style="flex:1;">
+            <button type="submit" class="btn btn-primary btn-xs">+ Agregar</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Superficies compatibles -->
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:12px;overflow:hidden;">
+        <div style="padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">
+            <i class="bi bi-square-half"></i> Superficies compatibles
+          </span>
+        </div>
+        <div style="padding:10px 16px;">
+          {% for s in superficies_catalogo %}
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.04);">
+            <span style="font-size:13px;">{{ s.nombre }}</span>
+            <button class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.28);"
+                    data-bs-toggle="modal" data-bs-target="#deleteModal"
+                    data-delete-url="{% url 'ingenieria:superficie_compatible_delete' s.pk %}"
+                    data-delete-name="{{ s.nombre }}">
+              <i class="bi bi-trash3" style="font-size:11px;"></i>
+            </button>
+          </div>
+          {% empty %}
+          <p style="font-size:12px;color:var(--ink-soft);font-style:italic;margin:6px 0;">Sin superficies registradas.</p>
+          {% endfor %}
+        </div>
+        <div style="padding:10px 16px;border-top:1px solid var(--border);">
+          <form method="post" action="{% url 'ingenieria:superficie_compatible_create' %}" style="display:flex;gap:6px;">
+            {% csrf_token %}
+            <input type="text" name="nombre" class="form-control form-control-sm" placeholder="Nueva superficie…" required style="flex:1;">
+            <button type="submit" class="btn btn-primary btn-xs">+ Agregar</button>
+          </form>
+        </div>
+      </div>
+
+    </div><!-- /grid -->
+  </div><!-- /seccionCatalogos -->
 </div>
 
 {% endblock %}
@@ -392,51 +821,113 @@
 {% block extra_js %}
 <script src="{% static 'js/catalogos.js' %}"></script>
 <script>
-// Pre-selecciona el sistema cuando se hace clic en "+ Subsistema" de una tarjeta
-document.addEventListener('click', function(e) {
-  const btn = e.target.closest('[data-sistema-pk]');
-  if (!btn) return;
-  const pk = btn.dataset.sistemaPk;
-  const select = document.querySelector('#modalSubsistema select[name="sistema"]');
-  if (select && pk) select.value = pk;
-});
-
-// ── Filas inline de subsistemas en modal "Nuevo sistema" ──────────────────
 (function () {
-  const container = document.getElementById('subRowsContainer');
-  const btnAdd    = document.getElementById('btnAddSubRow');
-  if (!btnAdd || !container) return;
+  // ── Mapa sistema → tipo ────────────────────────────────────────────────────
+  const sistemaTipos = {
+    {% for sis in sistemas %}"{{ sis.pk }}": "{{ sis.tipo_sistema }}"{% if not forloop.last %},{% endif %}{% endfor %}
+  };
 
-  let rowCount = 0;
+  // ── Toggle de subsistemas ─────────────────────────────────────────────────
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.sis-toggle-btn');
+    if (!btn) return;
+    const target = document.getElementById(btn.dataset.target);
+    if (!target) return;
+    const open = target.classList.toggle('open');
+    btn.classList.toggle('open', open);
+  });
 
-  function addRow() {
-    rowCount++;
-    const row = document.createElement('div');
-    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:start;';
-    row.innerHTML = `
-      <div>
-        <input type="text" name="sub_codigo[]" class="form-control form-control-sm"
-               placeholder="Código (ej: PG_PLUS_TPO)" required style="font-family:monospace;">
-      </div>
-      <div>
-        <input type="text" name="sub_nombre[]" class="form-control form-control-sm"
-               placeholder="Nombre del subsistema" required>
-      </div>
-      <button type="button" class="btn btn-ghost btn-xs"
-              style="color:rgba(14,17,23,0.35);padding:4px 8px;margin-top:2px;"
-              onclick="this.closest('div[style]').remove()">✕</button>
-    `;
-    container.appendChild(row);
-    row.querySelector('input').focus();
+  // ── Filtro de chips ───────────────────────────────────────────────────────
+  const chips = document.querySelectorAll('.sis-chip');
+  const cards = document.querySelectorAll('.sis-card');
+  chips.forEach(chip => {
+    chip.addEventListener('click', function () {
+      chips.forEach(c => c.className = 'sis-chip');
+      const filter = this.dataset.filter;
+      if (filter === 'all') this.classList.add('active-all');
+      else if (filter === 'CONSTRUCTIVO') this.classList.add('active-constructivo');
+      else this.classList.add('active-consumo');
+      cards.forEach(card => {
+        card.style.display = (filter === 'all' || card.dataset.tipo === filter) ? '' : 'none';
+      });
+    });
+  });
+
+  // ── Búsqueda ──────────────────────────────────────────────────────────────
+  document.getElementById('sisSearch').addEventListener('input', function () {
+    const q = this.value.toLowerCase().trim();
+    cards.forEach(card => {
+      card.style.display = (!q || card.dataset.name.includes(q)) ? '' : 'none';
+    });
+  });
+
+  // ── Modal subsistema: pre-selecciona y muestra/oculta campos CONSUMO ──────
+  function actualizarModalSub(pk) {
+    const tipo = sistemaTipos[String(pk)] || 'CONSTRUCTIVO';
+    const camposConsumo = document.getElementById('subConsumoFields');
+    const titulo = document.getElementById('modalSubsistemaTitle');
+    const esConsumo = tipo === 'CONSUMO';
+    if (camposConsumo) camposConsumo.classList.toggle('visible', esConsumo);
+    if (titulo) titulo.textContent = esConsumo ? 'Nuevo producto' : 'Nuevo subsistema';
   }
 
-  btnAdd.addEventListener('click', addRow);
-
-  // Limpiar filas al cerrar el modal
-  document.getElementById('modalSistema').addEventListener('hidden.bs.modal', function () {
-    container.innerHTML = '';
-    rowCount = 0;
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-sistema-pk]');
+    if (!btn) return;
+    const pk = btn.dataset.sistemaPk;
+    const select = document.querySelector('#modalSubsistema select[name="sistema"]');
+    if (select && pk) {
+      select.value = pk;
+      actualizarModalSub(pk);
+    }
   });
+
+  const selSis = document.querySelector('#modalSubsistema select[name="sistema"]');
+  if (selSis) {
+    selSis.addEventListener('change', function () { actualizarModalSub(this.value); });
+  }
+
+  // ── Modal sistema: tipo selector ajusta subsistemas inline ─────────────────
+  const tipoRadios = document.querySelectorAll('#modalSistema input[name="tipo_sistema"]');
+  const secSubsInline = document.getElementById('secSubsInline');
+  tipoRadios.forEach(r => {
+    r.addEventListener('change', function () {
+      if (secSubsInline) secSubsInline.style.display = this.value === 'CONSTRUCTIVO' ? '' : 'none';
+    });
+  });
+
+  // ── Filas inline de subsistemas ───────────────────────────────────────────
+  const container = document.getElementById('subRowsContainer');
+  const btnAdd = document.getElementById('btnAddSubRow');
+  if (btnAdd && container) {
+    btnAdd.addEventListener('click', function () {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:8px;align-items:start;';
+      row.innerHTML = `
+        <div><input type="text" name="sub_codigo[]" class="form-control form-control-sm" placeholder="Código (ej: PG_PLUS)" style="font-family:monospace;" required></div>
+        <div><input type="text" name="sub_nombre[]" class="form-control form-control-sm" placeholder="Nombre" required></div>
+        <button type="button" class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.35);padding:4px 8px;margin-top:2px;" onclick="this.closest('div[style]').remove()">✕</button>
+      `;
+      container.appendChild(row);
+      row.querySelector('input').focus();
+    });
+    document.getElementById('modalSistema').addEventListener('hidden.bs.modal', function () {
+      container.innerHTML = '';
+    });
+  }
+
+  // El modal delete es manejado globalmente por static/js/modals.js
+
+  // ── Toggle catálogos de consumo ───────────────────────────────────────────
+  const btnCat = document.getElementById('btnToggleCatalogos');
+  const secCat = document.getElementById('seccionCatalogos');
+  if (btnCat && secCat) {
+    btnCat.addEventListener('click', function () {
+      const open = secCat.style.display === 'none';
+      secCat.style.display = open ? '' : 'none';
+      this.classList.toggle('open', open);
+    });
+  }
 })();
 </script>
 {% endblock %}

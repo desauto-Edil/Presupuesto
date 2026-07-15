@@ -1,0 +1,60 @@
+{% comment %}
+   ============================================================
+   Partial: FAB + Offcanvas "Resumen del despiece".
+
+   Uso (al final del bloque content de despiece_maestro.html, después del
+   </script> y antes del include del checkpoint_panel):
+       {% include "ingenieria/partials/_despiece_resumen_offcanvas.html" %}
+
+   Contrato:
+     Render puro. No recibe variables. El contenido del cuerpo se
+     construye dinámicamente desde el JS de despiece_maestro.html.
+
+   IDs preservados (críticos para el JS):
+     - #resumenFab              → botón flotante; dispara abrirResumen().
+     - #resumenOffcanvas        → contenedor abierto por:
+                                  · abrirResumen() (línea ~1504)
+                                    usa bootstrap.Offcanvas.getOrCreateInstance(...).show()
+                                  · window.toggleFloatingPanel('resumenOffcanvas')
+                                    (sistema de paneles flotantes excluyentes).
+     - #resumenOffcanvasTitle   → referenciado por aria-labelledby.
+     - #resumenOffcanvasBody    → slot poblado vía innerHTML por abrirResumen().
+
+   Clases preservadas:
+     - FAB:        assist-fab, assist-fab--resumen, assist-fab__icon, assist-fab__label
+     - Offcanvas:  offcanvas, offcanvas-end, offcanvas-header,
+                   offcanvas-title, offcanvas-body, p-0
+     - BS5:        btn-close, data-bs-dismiss="offcanvas"
+
+   Atributos preservados:
+     - tabindex="-1"
+     - aria-labelledby="resumenOffcanvasTitle"
+     - aria-label="Cerrar"
+     - title="Resumen de lo realizado"
+
+   Estilos inline preservados (no se mueven a CSS en esta fase):
+     - border-bottom:1px solid var(--border,#eee);  en offcanvas-header
+     - font-size:11px;color:#888;margin:2px 0 0;    en la línea descriptiva
+
+   JS:
+     Cero JavaScript aquí. La lógica vive en el bloque <script> de
+     despiece_maestro.html (función abrirResumen, RESUMEN_META, _resumenRow).
+   ============================================================
+{% endcomment %}
+<!-- ── Botón "Resumen" → se reubica en el dock de asistencia (inferior derecha) ── -->
+<button class="assist-fab assist-fab--resumen" id="resumenFab" type="button"
+        onclick="abrirResumen()" title="Resumen de lo realizado">
+  <span class="assist-fab__icon"><i class="bi bi-clipboard-data-fill"></i></span>
+  <span class="assist-fab__label">Resumen</span>
+</button>
+
+<div class="offcanvas offcanvas-end" id="resumenOffcanvas" tabindex="-1" aria-labelledby="resumenOffcanvasTitle">
+  <div class="offcanvas-header" style="border-bottom:1px solid var(--border,#eee);">
+    <div>
+      <h6 class="offcanvas-title mb-0" id="resumenOffcanvasTitle">Resumen del despiece</h6>
+      <p style="font-size:11px;color:#888;margin:2px 0 0;">Lo que has hecho en esta pantalla</p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body p-0" id="resumenOffcanvasBody"></div>
+</div>

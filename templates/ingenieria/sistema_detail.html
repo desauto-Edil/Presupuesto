@@ -1,80 +1,490 @@
 {% extends "base.html" %}
-{% block title %}Sistema — {{ sistema.nombre }}{% endblock %}
+{% block title %}{{ sistema.nombre }}{% endblock %}
 {% block nav_ingenieria %}active{% endblock %}
 {% block page_title %}Sistema{% endblock %}
-{% block breadcrumb %}Ingeniería → Sistemas → {{ sistema.nombre }}{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'ingenieria:sistema_list' %}" style="color:inherit;text-decoration:none;">Sistemas</a>
+  · {{ sistema.codigo }}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Cabecera del sistema ── */
+.sd-hero {
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,.07);
+}
+.sd-hero--constructivo {
+  background: linear-gradient(135deg, var(--theme-accent-pale) 0%, rgba(255,255,255,0) 60%);
+  border-top: 4px solid var(--theme-accent);
+}
+.sd-hero--consumo {
+  background: linear-gradient(135deg, rgba(16,130,80,.10) 0%, rgba(255,255,255,0) 60%);
+  border-top: 4px solid #108250;
+}
+.sd-hero__codigo {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.sd-hero--constructivo .sd-hero__codigo { color: var(--theme-accent); }
+.sd-hero--consumo .sd-hero__codigo      { color: #108250; }
+.sd-hero__nombre {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+.sd-hero__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.sd-pill--constructivo { background: var(--theme-accent-pale); color: var(--theme-accent); border: 1px solid var(--theme-accent-border); }
+.sd-pill--consumo      { background: rgba(16,130,80,.12); color: #108250; border: 1px solid rgba(16,130,80,.22); }
+.sd-pill--linea        { background: var(--surface); color: var(--ink-soft); border: 1px solid var(--border); }
+.sd-pill--activo       { background: rgba(34,197,94,.10); color: #16a34a; border: 1px solid rgba(34,197,94,.22); }
+.sd-pill--inactivo     { background: rgba(0,0,0,.06); color: var(--ink-soft); border: 1px solid rgba(0,0,0,.10); }
+
+/* ── Info box backend ── */
+.sd-info-box {
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 12.5px;
+}
+.sd-info-box--ok    { background: #e8f5e9; border-left: 3px solid #4caf50; }
+.sd-info-box--warn  { background: #fff8e1; border-left: 3px solid #ff9800; }
+.sd-info-box__title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+.sd-info-box--ok   .sd-info-box__title { color: #2e7d32; }
+.sd-info-box--warn .sd-info-box__title { color: #e65100; }
+.sd-info-box__sub { font-size: 11.5px; }
+.sd-info-box--ok   .sd-info-box__sub { color: #388e3c; }
+.sd-info-box--warn .sd-info-box__sub { color: #bf360c; }
+
+/* ── Sección con encabezado ── */
+.sd-section { margin-bottom: 22px; }
+.sd-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border);
+}
+.sd-section__title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sd-section__title-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--theme-accent);
+  flex-shrink: 0;
+}
+.sd-section__title-dot--consumo { background: #108250; }
+
+/* ── Tabla de capas (consumo) ── */
+.capas-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.capas-table thead th {
+  padding: 9px 14px;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.capas-table thead th.col-left { text-align: left; }
+.capas-table tbody td {
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  vertical-align: middle;
+}
+.capas-table tbody tr:hover td { background: rgba(16,130,80,.04); }
+.capas-table .col-num {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #108250;
+}
+.capas-table .col-num--empty { color: rgba(14,17,23,.25); font-size: 13px; font-weight: 400; }
+
+/* Nombre + chips de la capa */
+.capa-nombre { font-weight: 700; font-size: 13.5px; color: var(--ink); margin-bottom: 4px; }
+.capa-chips  { display: flex; gap: 5px; flex-wrap: wrap; }
+.capa-chip {
+  font-size: 9.5px; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px;
+  background: var(--surface); color: var(--ink-soft);
+  border: 1px solid var(--border);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.capa-chip--tipo { background: rgba(16,130,80,.10); color: #108250; border-color: rgba(16,130,80,.20); }
+.capa-chip--estado { background: rgba(86,83,148,.08); color: var(--theme-accent); border-color: var(--theme-accent-border); }
+
+/* Función */
+.capa-funcion { font-size: 12.5px; color: var(--ink-soft); font-style: italic; }
+
+/* ── Tabla propiedades técnicas ── */
+.props-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.props-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.props-table td {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--ink);
+}
+.props-table td.muted { color: var(--ink-soft); font-style: italic; }
+.props-table tr:hover td { background: rgba(16,130,80,.03); }
+
+/* ── Tabla subsistemas constructivos ── */
+.subs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.subs-table th {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.subs-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(14,17,23,.05);
+  vertical-align: middle;
+}
+.subs-table tr:last-child td { border-bottom: none; }
+.subs-table tr:hover td { background: var(--theme-accent-pale); }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+<div style="display:flex;gap:8px;">
+  {% if sistema.es_consumo %}
+  <a href="{% url 'ingenieria:calculadora_consumo' sistema.pk %}" class="btn btn-primary btn-sm">
+    🧮 Calculadora de consumo
+  </a>
+  {% endif %}
+  <a href="{% url 'ingenieria:sistema_update' sistema.pk %}" class="btn btn-ghost btn-sm">
+    <i class="bi bi-pencil me-1"></i>Editar
+  </a>
+  <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">← Sistemas</a>
+</div>
+{% endblock %}
 
 {% block content %}
-<div class="panel">
-  <div class="panel-header">
-    <span>{{ sistema.nombre }}</span>
-    <div style="display:flex;gap:8px;">
-      <a href="{% url 'ingenieria:sistema_update' sistema.pk %}" class="btn btn-ghost btn-sm">Editar</a>
-      <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-ghost btn-sm">← Volver</a>
+
+<!-- ── HERO ── -->
+<div class="sd-hero sd-hero--{{ sistema.tipo_sistema|lower }} fade-up">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+    <div>
+      <div class="sd-hero__codigo">{{ sistema.codigo }}</div>
+      <div class="sd-hero__nombre">{{ sistema.nombre }}</div>
+      <div class="sd-hero__meta">
+        <span class="sd-pill sd-pill--{{ sistema.tipo_sistema|lower }}">
+          {% if sistema.tipo_sistema == 'CONSUMO' %}⬤{% else %}◈{% endif %}
+          {{ sistema.get_tipo_sistema_display }}
+        </span>
+        <span class="sd-pill sd-pill--linea">{{ sistema.get_linea_negocio_display }}</span>
+        <span class="sd-pill {% if sistema.activo %}sd-pill--activo{% else %}sd-pill--inactivo{% endif %}">
+          {% if sistema.activo %}Activo{% else %}Inactivo{% endif %}
+        </span>
+      </div>
+      {% if sistema.descripcion %}
+      <p style="font-size:13px;color:var(--ink-soft);margin-top:10px;max-width:560px;line-height:1.6;">
+        {{ sistema.descripcion }}
+      </p>
+      {% endif %}
     </div>
+
+    {% if sistema.tipo_sistema != 'CONSUMO' %}
+    <div style="min-width:220px;">
+      {% if tiene_def_backend %}
+      <div class="sd-info-box sd-info-box--ok">
+        <div class="sd-info-box__title">✓ Receta técnica registrada</div>
+        <div class="sd-info-box__sub">{{ subsistemas_def|length }} subsistema{{ subsistemas_def|length|pluralize }} con definición Python</div>
+      </div>
+      {% else %}
+      <div class="sd-info-box sd-info-box--warn">
+        <div class="sd-info-box__title">⚠ Sin definición backend</div>
+        <div class="sd-info-box__sub">
+          Código <code>{{ sistema.codigo }}</code> no está en <code>system_defs/</code>.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     SISTEMA DE CONSUMO — Tabla de composición por capas
+══════════════════════════════════════════════════════ -->
+{% if sistema.tipo_sistema == 'CONSUMO' %}
+
+<div class="sd-section fade-up-1">
+  <div class="sd-section__head">
+    <div class="sd-section__title">
+      <span class="sd-section__title-dot sd-section__title-dot--consumo"></span>
+      Composición del sistema por capas
+      <span style="font-size:11px;font-weight:400;color:var(--ink-soft);margin-left:4px;">
+        ({{ subsistemas|length }} capa{{ subsistemas|length|pluralize }})
+      </span>
+    </div>
+    <a href="{% url 'ingenieria:sistema_list' %}#modalSubsistema"
+       class="btn btn-ghost btn-xs">+ Capa</a>
   </div>
 
-  <div style="padding:16px 20px;">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-      <div>
-        <div class="section-label">Datos del catálogo</div>
-        <table class="data-table" style="margin-top:8px;">
-          <tr><td style="color:var(--muted);width:130px;">Código</td><td><strong>{{ sistema.codigo }}</strong></td></tr>
-          <tr><td style="color:var(--muted);">Línea de negocio</td><td>{{ sistema.get_linea_negocio_display }}</td></tr>
-          <tr><td style="color:var(--muted);">Descripción</td><td>{{ sistema.descripcion|default:"—" }}</td></tr>
-          <tr><td style="color:var(--muted);">Estado</td>
-            <td>{% if sistema.activo %}<span class="badge-status bs-success">Activo</span>{% else %}<span class="badge-status bs-error">Inactivo</span>{% endif %}</td>
-          </tr>
-        </table>
-      </div>
-      <div>
-        <div class="section-label">Definición backend</div>
-        {% if tiene_def_backend %}
-        <div style="margin-top:8px;padding:12px;background:#e8f5e9;border-radius:6px;border-left:3px solid #4caf50;">
-          <div style="font-size:11.5px;font-weight:700;color:#2e7d32;">✓ Receta técnica registrada</div>
-          <div style="font-size:11px;color:#388e3c;margin-top:4px;">
-            {{ subsistemas_def|length }} subsistema(s) con recetas Python definidas
-          </div>
-        </div>
-        {% else %}
-        <div style="margin-top:8px;padding:12px;background:#fff8e1;border-radius:6px;border-left:3px solid #ff9800;">
-          <div style="font-size:11.5px;font-weight:700;color:#e65100;">⚠ Sin definición backend</div>
-          <div style="font-size:11px;color:#bf360c;margin-top:4px;">
-            Código <code>{{ sistema.codigo }}</code> no está en <code>system_defs/registry.py</code>.
-          </div>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-    {# Tabla de subsistemas #}
-    <div class="section-label" style="margin:20px 0 10px;">Subsistemas</div>
-    <table class="data-table">
+  {% if subsistemas %}
+  <div style="overflow-x:auto;border-radius:12px;border:1px solid var(--border);box-shadow:0 1px 6px rgba(0,0,0,.04);">
+    <table class="capas-table">
       <thead>
         <tr>
-          <th>Código</th><th>Nombre</th><th>Estado</th><th>Receta backend</th><th></th>
+          <th class="col-left" rowspan="2" style="min-width:200px;">Producto / Capa</th>
+          <th rowspan="2" style="min-width:120px;">Función</th>
+          <th colspan="3" style="background:rgba(16,130,80,.07);color:#108250;">Número de capas por área</th>
+          <th rowspan="2" style="width:60px;"></th>
+        </tr>
+        <tr>
+          <th style="width:90px;background:rgba(16,130,80,.04);color:var(--ink-soft);">
+            <span title="Áreas de parqueo">🅿 Parqueo</span>
+          </th>
+          <th style="width:100px;background:rgba(16,130,80,.04);color:var(--ink-soft);">
+            <span title="Áreas transitables">🚶 Transitable</span>
+          </th>
+          <th style="width:100px;background:rgba(16,130,80,.04);color:var(--ink-soft);">
+            <span title="Rampa / arranque / frenado">⬆ Rampa</span>
+          </th>
         </tr>
       </thead>
       <tbody>
         {% for sub in subsistemas %}
         <tr>
-          <td><code style="font-size:11px;">{{ sub.codigo }}</code></td>
-          <td>{{ sub.nombre }}</td>
-          <td>{% if sub.activo %}<span class="badge-status bs-success">Activo</span>{% else %}<span class="badge-status bs-error">Inactivo</span>{% endif %}</td>
           <td>
-            {% for sd in subsistemas_def %}{% if sd.codigo == sub.codigo %}
-              <span class="badge-status bs-success">✓ Definida</span>
-            {% endif %}{% endfor %}
+            <div class="capa-nombre">{{ sub.nombre }}</div>
+            <div class="capa-chips">
+              {% if sub.tipo_producto %}
+              <span class="capa-chip capa-chip--tipo">{{ sub.get_tipo_producto_display }}</span>
+              {% endif %}
+              {% if sub.estado_producto %}
+              <span class="capa-chip capa-chip--estado">{{ sub.get_estado_producto_display }}</span>
+              {% endif %}
+              {% if sub.categoria_consumo %}
+              <span class="capa-chip">{{ sub.categoria_consumo.nombre }}</span>
+              {% endif %}
+            </div>
+          </td>
+          <td class="capa-funcion">{{ sub.funcion|default:"—" }}</td>
+          <td class="{% if sub.capas_parqueo %}col-num{% else %}col-num col-num--empty{% endif %}">
+            {% if sub.capas_parqueo %}{{ sub.capas_parqueo }}{% else %}—{% endif %}
+          </td>
+          <td class="{% if sub.capas_transitable %}col-num{% else %}col-num col-num--empty{% endif %}">
+            {% if sub.capas_transitable %}{{ sub.capas_transitable }}{% else %}—{% endif %}
+          </td>
+          <td class="{% if sub.capas_rampa %}col-num{% else %}col-num col-num--empty{% endif %}">
+            {% if sub.capas_rampa %}{{ sub.capas_rampa }}{% else %}—{% endif %}
+          </td>
+          <td style="text-align:center;white-space:nowrap;">
+            <a href="{% url 'ingenieria:subsistema_update' sub.pk %}"
+               class="btn btn-ghost btn-xs" title="Editar capa"
+               style="width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;">
+              <i class="bi bi-pencil" style="font-size:11px;"></i>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Propiedades técnicas -->
+  {% with has_props=False %}
+  {% for sub in subsistemas %}
+    {% if sub.resistencia_quimica or sub.temperatura or sub.superficie %}
+    {% with has_props=True %}{% endwith %}
+    {% endif %}
+  {% endfor %}
+  {% endwith %}
+
+  <div class="sd-section" style="margin-top:22px;">
+    <div class="sd-section__head">
+      <div class="sd-section__title">
+        <span class="sd-section__title-dot sd-section__title-dot--consumo"></span>
+        Propiedades técnicas por producto
+      </div>
+    </div>
+    <div style="overflow-x:auto;border-radius:12px;border:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.03);">
+      <table class="props-table">
+        <thead>
+          <tr>
+            <th style="min-width:160px;">Producto</th>
+            <th style="min-width:80px;">Función</th>
+            <th style="min-width:200px;">Resistencia química</th>
+            <th style="min-width:130px;">Temperatura</th>
+            <th style="min-width:150px;">Superficie</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sub in subsistemas %}
+          <tr>
+            <td style="font-weight:600;">{{ sub.nombre }}</td>
+            <td>{{ sub.funcion|default:"—" }}</td>
+            <td {% if not sub.resistencia_quimica %}class="muted"{% endif %}>
+              {{ sub.resistencia_quimica|default:"No especificada" }}
+            </td>
+            <td {% if not sub.temperatura %}class="muted"{% endif %}>
+              {{ sub.temperatura|default:"No especificada" }}
+            </td>
+            <td {% if not sub.superficie %}class="muted"{% endif %}>
+              {{ sub.superficie|default:"No especificada" }}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" class="muted" style="text-align:center;padding:24px;">
+              Sin capas registradas.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- Estado vacío -->
+  <div style="text-align:center;padding:50px 24px;background:#fff;border-radius:12px;border:1px dashed rgba(16,130,80,.25);">
+    <div style="font-size:32px;margin-bottom:10px;opacity:.3;">⬤</div>
+    <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px;">Sin capas definidas</div>
+    <div style="font-size:13px;color:var(--ink-soft);margin-bottom:18px;">
+      Agrega las capas del sistema desde la lista de sistemas.
+    </div>
+    <a href="{% url 'ingenieria:sistema_list' %}" class="btn btn-primary btn-sm">
+      Ir a Sistemas
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     SISTEMA CONSTRUCTIVO — Tabla de subsistemas
+══════════════════════════════════════════════════════ -->
+{% else %}
+
+<div class="sd-section fade-up-1">
+  <div class="sd-section__head">
+    <div class="sd-section__title">
+      <span class="sd-section__title-dot"></span>
+      Subsistemas
+      <span style="font-size:11px;font-weight:400;color:var(--ink-soft);margin-left:4px;">
+        ({{ subsistemas|length }})
+      </span>
+    </div>
+    <button type="button"
+            class="btn btn-ghost btn-xs"
+            data-bs-toggle="modal"
+            data-bs-target="#modalSubsistema"
+            data-sistema-pk="{{ sistema.pk }}"
+            data-sistema-nombre="{{ sistema.nombre }}"
+            onclick="window.location='{% url 'ingenieria:sistema_list' %}?nuevo_sub={{ sistema.pk }}'">
+      + Subsistema
+    </button>
+  </div>
+
+  <div style="border-radius:12px;border:1px solid var(--border);overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.04);">
+    <table class="subs-table">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Estado</th>
+          <th>Receta backend</th>
+          <th style="text-align:right;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sub in subsistemas %}
+        <tr>
+          <td><code style="font-size:11.5px;background:var(--surface);padding:2px 7px;border-radius:4px;border:1px solid var(--border);">{{ sub.codigo }}</code></td>
+          <td style="font-weight:500;">{{ sub.nombre }}</td>
+          <td>
+            {% if sub.activo %}
+            <span style="font-size:11px;font-weight:700;color:#16a34a;background:rgba(34,197,94,.10);padding:2px 8px;border-radius:20px;">Activo</span>
+            {% else %}
+            <span style="font-size:11px;font-weight:700;color:var(--ink-soft);background:rgba(0,0,0,.06);padding:2px 8px;border-radius:20px;">Inactivo</span>
+            {% endif %}
+          </td>
+          <td>
+            {% for sd in subsistemas_def %}
+              {% if sd.codigo == sub.codigo %}
+              <span style="font-size:11px;font-weight:700;color:#16a34a;">✓ Definida</span>
+              {% endif %}
+            {% endfor %}
           </td>
           <td style="text-align:right;">
-            <a href="{% url 'ingenieria:subsistema_detail' sub.pk %}" class="btn btn-ghost btn-sm">Ver</a>
+            <div style="display:flex;gap:4px;justify-content:flex-end;">
+              <a href="{% url 'ingenieria:subsistema_detail' sub.pk %}" class="btn btn-ghost btn-xs" title="Ver detalle">
+                <i class="bi bi-eye" style="font-size:12px;"></i>
+              </a>
+              <a href="{% url 'ingenieria:subsistema_update' sub.pk %}" class="btn btn-ghost btn-xs" title="Editar">
+                <i class="bi bi-pencil" style="font-size:12px;"></i>
+              </a>
+            </div>
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px;">Sin subsistemas.</td></tr>
+        <tr>
+          <td colspan="5" style="text-align:center;padding:30px;color:var(--ink-soft);font-style:italic;">
+            Sin subsistemas definidos para este sistema.
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+{% endif %}
+
 {% endblock %}

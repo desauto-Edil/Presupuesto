@@ -1,0 +1,93 @@
+{% comment %}
+   ============================================================
+   Partial: tarjeta informativa por sección APU (Fase 6L-E/6L-F).
+
+   Uso (dentro del bucle {% for cat in categorias_apu %} en apu_detail.html):
+       {% include "presupuestos/partials/_apu_info_card.html" with cat=cat %}
+
+   Contrato:
+     - cat.tipo, cat.label, cat.icon, cat.color
+     - cat.info_card (dict construido por _build_info_card_data):
+        · Para MATERIALES:
+            producto_principal, cantidad_base, unidad_base,
+            modo_rendimiento, formula, mensaje
+        · Para HERRAMIENTAS_EQUIPOS / TRANSPORTE / MANO_DE_OBRA / ADMINISTRACION:
+            num_personas, dias_duracion, items_configurados,
+            base_calculo, mensaje
+
+   Comportamiento:
+     - Compacta, fondo suave, borde ligero, 2-3 columnas.
+     - Si un dato no existe, muestra "No definido" (regla: no inventar datos).
+     - Materiales siempre muestra el bloque PP; las otras 4 categorías
+       comparten un mismo layout para mantener consistencia visual.
+   ============================================================
+{% endcomment %}
+{% with ic=cat.info_card %}
+<div class="apu-info-card"
+     style="background:{{ cat.color }}0F;border:1px solid {{ cat.color }}33;border-radius:10px;padding:10px 14px;margin-bottom:12px;">
+
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+    <i class="bi {{ cat.icon }}" style="color:{{ cat.color }};font-size:14px;"></i>
+    <span style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:{{ cat.color }};">
+      {{ cat.label }}
+    </span>
+  </div>
+
+  {% if cat.tipo == "MATERIALES" %}
+  {# ── Tarjeta para Materiales ──────────────────────────────── #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px 16px;">
+    <div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Producto principal</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink);">
+        {{ ic.producto_principal|default:"No definido" }}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Cantidad base</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink);">
+        {% if ic.cantidad_base %}{{ ic.cantidad_base }}{% else %}No definido{% endif %}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Unidad base</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink);">
+        {{ ic.unidad_base|default:"No definido" }}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Modo de rendimiento</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink);">
+        {% if ic.modo_rendimiento == "PRODUCTO_PRINCIPAL" %}Producto principal{% elif ic.modo_rendimiento %}{{ ic.modo_rendimiento }}{% else %}Legacy{% endif %}
+      </div>
+    </div>
+  </div>
+  {# Fase 6L-6: se eliminó la línea de "Fórmula" — no aporta al usuario final. #}
+
+  {% else %}
+  {# ── Tarjeta para Herramientas / Transporte / MO / Administración ──── #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px 16px;">
+    <div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">N° de personas</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink);">
+        {% if ic.num_personas %}{{ ic.num_personas }}{% else %}No definido{% endif %}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">N° de días</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink);">
+        {% if ic.dias_duracion %}{{ ic.dias_duracion }}{% else %}No definido{% endif %}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Ítems configurados</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink);">
+        {{ ic.items_configurados|default:0 }}
+      </div>
+    </div>
+    {# Fase 6L-6: se eliminó "Base de cálculo" — texto técnico no deseado. #}
+  </div>
+  {% endif %}
+
+  {# Fase 6L-6: se eliminó el "mensaje" técnico largo — tarjetas más limpias. #}
+</div>
+{% endwith %}

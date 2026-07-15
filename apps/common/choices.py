@@ -9,24 +9,38 @@ from django.db import models
 
 
 class UnidadNegocio(models.TextChoices):
+    # Unidades operativas
     IMPERANDINA = "IMPERANDINA", "Imperandina"
     SOLARANDINA = "SOLARANDINA", "Solarandina"
     IMPERTIENDA = "IMPERTIENDA", "Impertienda"
+    # Fase 12.3 ext — Unidad corporativa/técnica reservada al ADMINISTRADOR
+    # global. No representa una unidad operativa; sólo da identidad visual
+    # (tema gris/negro/blanco) al alcance global. No limita el alcance del
+    # administrador, que sigue viendo todas las unidades.
+    EDILANDINA = "EDILANDINA", "Edilandina"
 
 
 
 class RolSistema(models.TextChoices):
+    # Jerarquía funcional (Fase 12.3 ext): ADMINISTRADOR global → GERENTE por
+    # unidad → PRESUPUESTOS / ASESOR_COMERCIAL / COMPRAS / SOLO_LECTURA.
     ADMINISTRADOR = "ADMINISTRADOR", "Administrador"
+    GERENTE = "GERENTE", "Gerente"
     PRESUPUESTOS = "PRESUPUESTOS", "Presupuestos"
-    COMPRAS = "COMPRAS", "Compras"
     ASESOR_COMERCIAL = "ASESOR_COMERCIAL", "Asesor comercial"
+    COMPRAS = "COMPRAS", "Compras"
     SOLO_LECTURA = "SOLO_LECTURA", "Solo lectura"
 
 
 class EstadoSolicitud(models.TextChoices):
     BORRADOR = "BORRADOR", "Borrador"
     EN_GESTION = "EN_GESTION", "En gestión"
+    EN_PRESUPUESTO = "EN_PRESUPUESTO", "En presupuesto"
+    EN_REVISION = "EN_REVISION", "En revisión"
     APROBADA = "APROBADA", "Aprobada"
+    DEVUELTA = "DEVUELTA", "Devuelta"
+    # RECHAZADA queda solo por compatibilidad de datos legacy.
+    # En la UI del flujo de presupuestos se trata visualmente como "Devuelta".
     RECHAZADA = "RECHAZADA", "Rechazada"
     CERRADA = "CERRADA", "Cerrada"
 
@@ -76,3 +90,29 @@ class TipoAPU(models.TextChoices):
     TRANSPORTE = "TRANSPORTE", "Transporte"
     MANO_DE_OBRA = "MANO_DE_OBRA", "Mano de obra"
     ADMINISTRACION = "ADMINISTRACION", "Administración"
+
+
+class TipoSistema(models.TextChoices):
+    CONSTRUCTIVO = "CONSTRUCTIVO", "Sistema constructivo"
+    CONSUMO = "CONSUMO", "Sistema de consumo"
+
+
+class TipoProductoConsumo(models.TextChoices):
+    MONOCOMPONENTE = "MONOCOMPONENTE", "Monocomponente"
+    BICOMPONENTE = "BICOMPONENTE", "Bicomponente"
+    MULTICOMPONENTE = "MULTICOMPONENTE", "Multicomponente"
+
+
+class EstadoFisicoProducto(models.TextChoices):
+    LIQUIDO = "LIQUIDO", "Líquido"
+    SOLIDO = "SOLIDO", "Sólido"
+    PASTOSO = "PASTOSO", "Pastoso"
+    POLVO = "POLVO", "Polvo"
+    ROLLO_PREFORMADO = "ROLLO_PREFORMADO", "Rollo preformado"
+    MIXTO = "MIXTO", "Mixto"
+
+
+class InteriorExterior(models.TextChoices):
+    INTERIOR = "INTERIOR", "Interior"
+    EXTERIOR = "EXTERIOR", "Exterior"
+    AMBOS = "AMBOS", "Interior y exterior"

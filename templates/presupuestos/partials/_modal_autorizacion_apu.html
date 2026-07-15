@@ -1,0 +1,120 @@
+{% load auth_tags %}
+{% comment %}
+_modal_autorizacion_apu.html — Modal contextual de "Autorización de revisión APU"
+para el revisor. Se invoca desde el bucket de APU dentro del panel de Solicitud
+y del detalle de Proyecto cuando el usuario actual es revisor del APU.
+
+NO aprueba ni rechaza. Solo permite ver información y navegar a:
+  - Ver APU (apu_detail)
+  - Editar APU (apu_update — solo si el rol tiene permiso y el APU no está
+    aprobado/archivado)
+  - Ver despiece (deshabilitado por ahora — pendiente Sub-fase E)
+
+Variables esperadas:
+  - apu             instancia APUProyecto
+  - puede_editar    boolean — calculado por el template padre vía
+                    {% verbatim %}{% puede_editar_apu apu as puede_editar %}{% endverbatim %}
+                    y pasado en el include.
+{% endcomment %}
+{% enviado_revision_info apu as envio_info %}
+<div class="modal fade" id="modalAutorizacion_{{ apu.pk }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="border-bottom:1px solid var(--border);">
+        <h5 class="modal-title" style="font-size:14px;">
+          <i class="bi bi-shield-check" style="margin-right:6px;color:var(--theme-accent);"></i>
+          Autorización de revisión APU
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body" style="font-size:13px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;
+                    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+                    padding:12px 14px;margin-bottom:12px;">
+          {% if apu.proyecto_sistema %}
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Proyecto</div>
+            <div style="color:var(--ink);font-weight:600;">
+              {% if apu.proyecto_sistema.proyecto %}{{ apu.proyecto_sistema.proyecto.consecutivo }}{% else %}—{% endif %}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Sistema / Subsistema</div>
+            <div style="color:var(--ink);font-weight:600;">
+              {{ apu.proyecto_sistema.sistema.nombre }}
+              {% if apu.proyecto_sistema.subsistema %} · {{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
+            </div>
+          </div>
+          {% endif %}
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">APU</div>
+            <div style="color:var(--ink);font-weight:600;">#{{ apu.pk }} · {{ apu.nombre|truncatechars:40 }}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Estado</div>
+            <div style="color:var(--ink);font-weight:600;">
+              {% if apu.archivado %}Archivado
+              {% elif apu.modalidad_aiu_seleccionada %}Aprobado · Mod. {{ apu.modalidad_aiu_seleccionada }}
+              {% elif apu.fecha_envio_revision %}En revisión
+              {% else %}Borrador{% endif %}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Líneas</div>
+            <div style="color:var(--ink);font-weight:600;">{{ apu.total_lineas|default:"0" }}</div>
+          </div>
+          {% if apu.total_general_venta %}
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Total estimado</div>
+            <div style="color:var(--ink);font-weight:600;">${{ apu.total_general_venta|floatformat:"0g" }}</div>
+          </div>
+          {% endif %}
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Enviado por</div>
+            <div style="color:var(--ink);font-weight:600;">
+              {% if envio_info.usuario %}{{ envio_info.usuario }}{% else %}No disponible{% endif %}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Fecha y hora de envío</div>
+            <div style="color:var(--ink);font-weight:600;">
+              {% if envio_info.fecha %}{{ envio_info.fecha|date:"d/m/Y H:i" }}
+              {% elif apu.fecha_envio_revision %}{{ apu.fecha_envio_revision|date:"d/m/Y H:i" }}
+              {% else %}No disponible{% endif %}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Revisor asignado</div>
+            <div style="color:var(--ink);font-weight:600;">
+              {% if apu.revisor %}{{ apu.revisor.nombre_completo|default:apu.revisor.email }}{% else %}— sin asignar —{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size:11.5px;color:var(--ink-soft);line-height:1.5;
+                    padding:8px 12px;background:rgba(20,112,230,.05);
+                    border-left:3px solid var(--theme-accent);border-radius:6px;">
+          Esta ventana solo permite consultar la información de la autorización
+          y navegar al detalle del APU. La aprobación o devolución se realiza
+          desde la pantalla de revisión correspondiente.
+        </div>
+      </div>
+      <div class="modal-footer" style="gap:6px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cerrar</button>
+        {# Botón "Ver despiece" deshabilitado hasta Sub-fase E (modo readonly). #}
+        <button type="button" class="btn btn-ghost btn-sm" disabled
+                title="Disponible próximamente — vista solo lectura del despiece.">
+          <i class="bi bi-diagram-3" style="margin-right:4px;"></i>Ver despiece
+        </button>
+        {% if puede_editar and not apu.modalidad_aiu_seleccionada and not apu.archivado %}
+        <a href="{% url 'presupuestos:apu_update' apu.pk %}" class="btn btn-ghost btn-sm">
+          <i class="bi bi-pencil" style="margin-right:4px;"></i>Editar APU
+        </a>
+        {% endif %}
+        <a href="{% url 'presupuestos:apu_detail' apu.pk %}" class="btn btn-primary btn-sm">
+          <i class="bi bi-file-earmark-bar-graph" style="margin-right:4px;"></i>Ver APU
+        </a>
+      </div>
+    </div>
+  </div>
+</div>

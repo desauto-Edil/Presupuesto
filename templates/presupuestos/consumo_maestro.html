@@ -1,0 +1,594 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Consumo · {{ ps.sistema.nombre }}{% endblock %}
+{% block nav_presupuestos %}active{% endblock %}
+{% block page_title %}Cálculo de Consumo{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'presupuestos:despiece_list' %}" style="color:inherit;text-decoration:none;">Proyectos</a>
+  · <a href="{% url 'ingenieria:despiece_list' %}?proyecto_pk={{ proyecto.pk }}" style="color:inherit;text-decoration:none;">{{ proyecto.consecutivo }}</a>
+  · {{ ps.sistema.nombre }}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+
+/* ══ Layout ════════════════════════════════════════════════════════════════ */
+.consumo-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .consumo-grid { grid-template-columns: 1fr; }
+}
+
+/* ══ Panel ═════════════════════════════════════════════════════════════════ */
+.c-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.c-panel__head {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.c-panel__title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+}
+.c-panel__body { padding: 18px 20px; }
+
+/* ══ Badge tipo ════════════════════════════════════════════════════════════ */
+.badge-consumo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: rgba(16,130,80,.1);
+  color: #108250;
+  border: 1px solid rgba(16,130,80,.2);
+}
+.badge-bi {
+  background: rgba(37,99,235,.08);
+  color: #2563eb;
+  border-color: rgba(37,99,235,.2);
+}
+
+/* ══ Info técnica ══════════════════════════════════════════════════════════ */
+.tech-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.tech-row:last-child { border-bottom: none; }
+.tech-row__label {
+  font-size: 11px;
+  color: var(--ink-soft);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tech-row__value {
+  font-size: 12px;
+  color: var(--ink);
+  text-align: right;
+}
+
+/* ══ Capa resultado ════════════════════════════════════════════════════════ */
+.capa-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.capa-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+.capa-card__nombre {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.capa-card__cantidad {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.capa-card__body { padding: 12px 16px; }
+
+/* ══ Selector de producto ═════════════════════════════════════════════════ */
+.producto-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.badge-resuelto {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #108250;
+  background: rgba(16,130,80,.08);
+  border: 1px solid rgba(16,130,80,.2);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.badge-pendiente {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #d97706;
+  background: rgba(217,119,6,.08);
+  border: 1px solid rgba(217,119,6,.2);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+/* ══ Sub-componentes (bicomponente) ═══════════════════════════════════════ */
+.comp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 8px;
+  background: var(--surface);
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.comp-row__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.comp-row__pct {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.comp-row__qty {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* ══ Estado vacío ══════════════════════════════════════════════════════════ */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--ink-soft);
+}
+.empty-state__icon { font-size: 36px; display: block; margin-bottom: 12px; }
+.empty-state__title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+.empty-state__desc  { font-size: 13px; line-height: 1.6; }
+
+/* ══ Alerta sin capas ══════════════════════════════════════════════════════ */
+.alert-sin-capas {
+  background: rgba(217,119,6,.06);
+  border: 1px solid rgba(217,119,6,.25);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+<div style="margin-bottom:16px;">
+  {% for msg in messages %}
+  <div class="msg-bar msg-{{ msg.tags }}" style="margin-bottom:6px;">{{ msg }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Encabezado del sistema -->
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+  <div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:18px;font-weight:800;color:var(--ink);">{{ ps.sistema.nombre }}</span>
+      <span class="badge-consumo">⬡ CONSUMO</span>
+      {% if ps.subsistema %}
+      <span style="font-size:12px;color:var(--ink-soft);">{{ ps.subsistema.nombre }}</span>
+      {% if ps.subsistema.tipo_producto == 'BICOMPONENTE' %}
+      <span class="badge-bi">⚗ Bicomponente</span>
+      {% endif %}
+      {% endif %}
+    </div>
+    <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">
+      Proyecto <strong>{{ proyecto.consecutivo }}</strong>
+      · Área: <strong>{{ area_m2|default:"—" }} m²</strong>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <a href="{% url 'ingenieria:despiece_list' %}?proyecto_pk={{ proyecto.pk }}" class="btn btn-ghost btn-sm">← Volver al proyecto</a>
+    <form method="post" action="{% url 'presupuestos:consumo_ejecutar' ps.pk %}" style="margin:0;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary btn-sm">
+        {% if tiene_resultados %}↺ Recalcular{% else %}▶ Calcular consumo{% endif %}
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="consumo-grid">
+
+  <!-- ══ Columna izquierda — ficha técnica del subsistema ══════════════════ -->
+  <div>
+
+    <!-- Datos técnicos -->
+    {% if ps.subsistema %}
+    <div class="c-panel" style="margin-bottom:16px;">
+      <div class="c-panel__head">
+        <span class="c-panel__title">Ficha técnica</span>
+      </div>
+      <div class="c-panel__body" style="padding:14px 18px;">
+        {% if ps.subsistema.funcion %}
+        <div class="tech-row">
+          <span class="tech-row__label">Función</span>
+          <span class="tech-row__value">{{ ps.subsistema.funcion }}</span>
+        </div>
+        {% endif %}
+        {% if ps.subsistema.get_estado_producto_display %}
+        <div class="tech-row">
+          <span class="tech-row__label">Estado físico</span>
+          <span class="tech-row__value">{{ ps.subsistema.get_estado_producto_display }}</span>
+        </div>
+        {% endif %}
+        {% if ps.subsistema.get_tipo_producto_display %}
+        <div class="tech-row">
+          <span class="tech-row__label">Tipo</span>
+          <span class="tech-row__value">{{ ps.subsistema.get_tipo_producto_display }}</span>
+        </div>
+        {% endif %}
+        {% if ps.subsistema.temperatura %}
+        <div class="tech-row">
+          <span class="tech-row__label">Temperatura</span>
+          <span class="tech-row__value">{{ ps.subsistema.temperatura }}</span>
+        </div>
+        {% endif %}
+        {% if ps.subsistema.resistencia_quimica %}
+        <div class="tech-row">
+          <span class="tech-row__label">Resistencia química</span>
+          <span class="tech-row__value">{{ ps.subsistema.resistencia_quimica }}</span>
+        </div>
+        {% endif %}
+        {% if ps.subsistema.superficie %}
+        <div class="tech-row">
+          <span class="tech-row__label">Superficie</span>
+          <span class="tech-row__value">{{ ps.subsistema.superficie }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Definición de capas -->
+    {% if capas %}
+    <div class="c-panel" style="margin-bottom:16px;">
+      <div class="c-panel__head">
+        <span class="c-panel__title">Capas definidas</span>
+        <span style="font-size:11px;color:var(--ink-soft);">{{ capas|length }} capa(s)</span>
+      </div>
+      <div class="c-panel__body" style="padding:10px 14px;">
+        {% for capa in capas %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid var(--border);{% if forloop.last %}border-bottom:none;{% endif %}gap:8px;">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--ink);">{{ capa.nombre }}</div>
+            {% if capa.categoria %}
+            <div style="font-size:11px;color:var(--ink-soft);">{{ capa.categoria.nombre }}</div>
+            {% endif %}
+          </div>
+          <div style="text-align:right;white-space:nowrap;">
+            <div style="font-size:12px;font-weight:700;color:var(--ink);">{{ capa.consumo_m2 }} {{ capa.unidad }}/m²</div>
+            <div style="font-size:10.5px;color:var(--ink-soft);">× {{ capa.num_capas }} capa(s){% if capa.desperdicio_pct %} + {{ capa.desperdicio_pct }}% desp.{% endif %}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Componentes químicos -->
+    {% if componentes_quimicos %}
+    <div class="c-panel">
+      <div class="c-panel__head">
+        <span class="c-panel__title">Mezcla bicomponente</span>
+      </div>
+      <div class="c-panel__body" style="padding:10px 14px;">
+        {% for cq in componentes_quimicos %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid var(--border);{% if forloop.last %}border-bottom:none;{% endif %}">
+          <div style="font-size:12px;color:var(--ink);">{{ cq.nombre }}</div>
+          <div style="font-size:13px;font-weight:700;color:var(--ink);">{{ cq.porcentaje }}%</div>
+        </div>
+        {% endfor %}
+        <div style="margin-top:8px;font-size:11px;color:var(--ink-soft);text-align:right;">
+          Total: <strong>{% for cq in componentes_quimicos %}{{ cq.porcentaje|add:0 }}{% if not forloop.last %}+{% endif %}{% endfor %}</strong>%
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- ══ Columna derecha — resultados del cálculo ═════════════════════════ -->
+  <div>
+
+    {% if sin_capas_definidas %}
+    <!-- Sin capas definidas en el subsistema -->
+    <div class="c-panel">
+      <div class="c-panel__body">
+        <div class="alert-sin-capas">
+          <strong>⚠ Sin capas definidas</strong><br>
+          El subsistema <strong>{{ ps.subsistema.nombre }}</strong> no tiene capas de consumo configuradas.<br>
+          <a href="{% url 'ingenieria:subsistema_update' ps.subsistema.pk %}">
+            Ir al editor del subsistema →
+          </a>
+        </div>
+      </div>
+    </div>
+
+    {% elif not tiene_resultados %}
+    <!-- Sin cálculo ejecutado -->
+    <div class="c-panel">
+      <div class="c-panel__body">
+        <div class="empty-state">
+          <span class="empty-state__icon">⬡</span>
+          <div class="empty-state__title">Sin resultados aún</div>
+          <div class="empty-state__desc">
+            Haz clic en <strong>"Calcular consumo"</strong> para generar las cantidades
+            a partir del área del proyecto ({{ area_m2|default:"—" }} m²)
+            y la definición de capas del subsistema.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% else %}
+    <!-- Resultados -->
+    <div class="c-panel" style="margin-bottom:16px;">
+      <div class="c-panel__head">
+        <span class="c-panel__title">Resultados del cálculo</span>
+        <span style="font-size:11px;color:var(--ink-soft);">{{ lineas|length }} capa(s) · {{ area_m2 }} m²</span>
+      </div>
+      <div class="c-panel__body" style="padding:14px;">
+
+        {% for linea in lineas %}
+        <div class="capa-card">
+          <div class="capa-card__head">
+            <div>
+              <div class="capa-card__nombre">{{ linea.capa_nombre }}</div>
+              {% if linea.categoria_producto %}
+              <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">{{ linea.categoria_producto.nombre }}</div>
+              {% endif %}
+            </div>
+            <div style="text-align:right;">
+              <div class="capa-card__cantidad">{{ linea.cantidad_final|floatformat:2 }} <span style="font-size:13px;font-weight:500;">{{ linea.unidad }}</span></div>
+              <div style="font-size:10.5px;color:var(--ink-soft);">{{ linea.consumo_m2 }} {{ linea.unidad }}/m² × {{ linea.num_capas }} capa(s)</div>
+            </div>
+          </div>
+
+          <div class="capa-card__body">
+
+            <!-- Selector de producto -->
+            <div class="producto-selector" data-linea-pk="{{ linea.pk }}">
+              {% if linea.producto %}
+                <span class="badge-resuelto">✓ Resuelto</span>
+                <span style="font-size:12px;font-weight:600;color:var(--ink);">{{ linea.producto.nombre }}</span>
+                {% if linea.precio_snapshot %}
+                <span style="font-size:11px;color:var(--ink-soft);">${{ linea.precio_snapshot|floatformat:0 }}/{{ linea.unidad }}</span>
+                {% endif %}
+                <button type="button"
+                        class="btn btn-ghost btn-xs btn-cambiar-producto"
+                        data-linea="{{ linea.pk }}"
+                        data-url="{% url 'presupuestos:consumo_api_productos_linea' linea.pk %}">
+                  Cambiar
+                </button>
+              {% elif linea.categoria_producto %}
+                <span class="badge-pendiente">Pendiente</span>
+                <button type="button"
+                        class="btn btn-ghost btn-xs btn-seleccionar-producto"
+                        data-linea="{{ linea.pk }}"
+                        data-url="{% url 'presupuestos:consumo_api_productos_linea' linea.pk %}">
+                  Seleccionar producto →
+                </button>
+              {% else %}
+                <span style="font-size:12px;color:var(--ink-soft);font-style:italic;">Sin categoría asignada</span>
+              {% endif %}
+            </div>
+
+            <!-- Sub-componentes bicomponente -->
+            {% if linea.componentes_quimicos.all %}
+            <div style="margin-top:10px;">
+              <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:6px;">Componentes de mezcla</div>
+              {% for comp in linea.componentes_quimicos.all %}
+              <div class="comp-row">
+                <div>
+                  <div class="comp-row__label">{{ comp.capa_nombre|cut:linea.capa_nombre }}</div>
+                  {% if comp.categoria_producto %}
+                  <div style="font-size:11px;color:var(--ink-soft);">{{ comp.categoria_producto.nombre }}</div>
+                  {% endif %}
+                </div>
+                <span class="comp-row__pct">{{ comp.porcentaje_componente }}%</span>
+                <span class="comp-row__qty">{{ comp.cantidad_final|floatformat:2 }} {{ comp.unidad }}</span>
+                <!-- Selector de producto para componente -->
+                <div class="producto-selector" data-linea-pk="{{ comp.pk }}">
+                  {% if comp.producto %}
+                    <span class="badge-resuelto">✓</span>
+                    <span style="font-size:11px;">{{ comp.producto.nombre }}</span>
+                  {% elif comp.categoria_producto %}
+                    <button type="button"
+                            class="btn btn-ghost btn-xs btn-seleccionar-producto"
+                            data-linea="{{ comp.pk }}"
+                            data-url="{% url 'presupuestos:consumo_api_productos_linea' comp.pk %}">
+                      Seleccionar →
+                    </button>
+                  {% endif %}
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+        {% endfor %}
+
+      </div>
+    </div>
+
+    <!-- Resumen numérico -->
+    <div class="c-panel">
+      <div class="c-panel__head">
+        <span class="c-panel__title">Resumen</span>
+      </div>
+      <div class="c-panel__body" style="padding:14px 18px;">
+        {% for linea in lineas %}
+        <div class="tech-row">
+          <span class="tech-row__label">{{ linea.capa_nombre }}</span>
+          <div style="text-align:right;">
+            <span style="font-size:13px;font-weight:700;color:var(--ink);">{{ linea.cantidad_final|floatformat:2 }} {{ linea.unidad }}</span>
+            {% if linea.precio_snapshot %}
+            <div style="font-size:11px;color:var(--ink-soft);">
+              ≈ ${{ linea.precio_snapshot|floatformat:0 }} × {{ linea.cantidad_final|floatformat:2 }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Modal selector de producto ─────────────────────────────────────── -->
+<div id="modalProducto" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:14px;font-weight:700;color:var(--ink);">Seleccionar producto</span>
+      <button type="button" id="btnCerrarModal" class="btn btn-ghost btn-xs">✕</button>
+    </div>
+    <div id="modalProductoBody" style="padding:16px 20px;max-height:360px;overflow-y:auto;">
+      <p style="font-size:13px;color:var(--ink-soft);">Cargando…</p>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+
+  const modal      = document.getElementById('modalProducto');
+  const modalBody  = document.getElementById('modalProductoBody');
+  let lineaPkActual = null;
+
+  function abrirModal(lineaPk, url) {
+    lineaPkActual = lineaPk;
+    modalBody.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);">Cargando…</p>';
+    modal.style.display = 'flex';
+
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.productos || data.productos.length === 0) {
+          modalBody.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);font-style:italic;">Sin productos disponibles para esta categoría.</p>';
+          return;
+        }
+        modalBody.innerHTML = data.productos.map(p => `
+          <button type="button" class="btn-producto-item" data-pk="${p.pk}"
+            style="display:flex;justify-content:space-between;align-items:center;width:100%;
+                   padding:10px 12px;border:1px solid var(--border);border-radius:8px;
+                   margin-bottom:6px;background:var(--surface);cursor:pointer;text-align:left;">
+            <span style="font-size:13px;font-weight:600;color:var(--ink);">${p.nombre}</span>
+            <span style="font-size:12px;color:var(--ink-soft);white-space:nowrap;margin-left:12px;">
+              $${Number(p.precio_actual||0).toLocaleString()} / ${p.unidad__abreviatura||'und'}
+            </span>
+          </button>
+        `).join('');
+      })
+      .catch(() => {
+        modalBody.innerHTML = '<p style="font-size:13px;color:#c0392b;">Error al cargar productos.</p>';
+      });
+  }
+
+  function cerrarModal() {
+    modal.style.display = 'none';
+    lineaPkActual = null;
+  }
+
+  document.getElementById('btnCerrarModal').addEventListener('click', cerrarModal);
+  modal.addEventListener('click', e => { if (e.target === modal) cerrarModal(); });
+
+  // Abrir modal al hacer click en "Seleccionar" o "Cambiar"
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.btn-seleccionar-producto, .btn-cambiar-producto');
+    if (btn) {
+      abrirModal(btn.dataset.linea, btn.dataset.url);
+    }
+  });
+
+  // Seleccionar producto desde el modal
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.btn-producto-item');
+    if (!btn || !lineaPkActual) return;
+
+    const productoPk = btn.dataset.pk;
+    const url = `/presupuestos/consumo/api/asignar-producto/${lineaPkActual}/`;
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+      body: JSON.stringify({ producto_pk: productoPk }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        cerrarModal();
+        window.location.reload();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    })
+    .catch(() => alert('Error de red al asignar producto.'));
+  });
+
+  function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? v[2] : null;
+  }
+
+})();
+</script>
+{% endblock %}

@@ -240,13 +240,28 @@
 
             <div>
                 <label class="form-label">
-                    Observaciones <span class="req">*</span>
+                    Observaciones
                 </label>
                 {{ form.observaciones }}
                 {% if form.observaciones.errors %}
                 <div class="invalid-feedback d-block">{{ form.observaciones.errors.0 }}</div>
                 {% endif %}
             </div>
+
+            {% if not object %}
+            <!-- ─── ARCHIVOS — solo en creación (opcional) ─── -->
+            <div style="margin-top:22px;">
+                <div class="section-heading">Archivos adjuntos</div>
+                <div style="margin-bottom:6px;">
+                    <input type="file" name="archivos" id="archivosInput"
+                           class="form-control form-control-sm" multiple
+                           style="margin-bottom:6px;">
+                    <div class="field-help">
+                        Opcional. Puede seleccionar varios archivos. Formatos: PDF, Word, Excel, imágenes, etc.
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
         </div>
 
@@ -260,7 +275,63 @@
 
     </form>
 
-    <!-- ─── SECCIÓN ARCHIVOS ─── -->
+<!-- Checkpoint solicitud -->
+<script>
+window.CP_TITULO  = "{% if object %}Editar solicitud{% else %}Nueva solicitud{% endif %}";
+window.CP_FORM_ID = "formSolicitud";
+window.CP_SECCIONES = [
+  {
+    label: 'Referencia Salesforce', anchor: '', fn: function() {
+      const cons = document.querySelector('input[name="consecutivo"]');
+      const link = document.querySelector('input[name="link_salesforce"]');
+      const errores = [];
+      if (!cons || !cons.value.trim()) errores.push('Consecutivo Salesforce obligatorio');
+      if (!link || !link.value.trim()) errores.push('Link de Salesforce obligatorio');
+      const puntaje = errores.length === 0 ? 25 : Math.max(0, 25 - errores.length * 12);
+      return { puntaje, maximo: 25, estado: errores.length ? 'error' : 'ok', errores, advertencias: [] };
+    }
+  },
+  {
+    label: 'Cliente y proyecto', anchor: '', fn: function() {
+      const cliente = document.querySelector('select[name="cliente"]');
+      const fecha   = document.querySelector('input[name="fecha_entrega"]');
+      const nombre  = document.querySelector('input[name="nombre"]');
+      const errores = [];
+      if (!cliente || !cliente.value) errores.push('Cliente obligatorio');
+      if (!fecha   || !fecha.value)   errores.push('Fecha de entrega obligatoria');
+      if (!nombre  || !nombre.value.trim()) errores.push('Nombre/descripción breve obligatorio');
+      const puntaje = errores.length === 0 ? 35 : Math.max(0, 35 - errores.length * 11);
+      return { puntaje, maximo: 35, estado: errores.length ? 'error' : 'ok', errores, advertencias: [] };
+    }
+  },
+  {
+    label: 'Descripción', anchor: '', fn: function() {
+      const desc = document.querySelector('textarea[name="descripcion"]');
+      const errores = [];
+      if (!desc || !desc.value.trim()) errores.push('Descripción completa obligatoria');
+      return { puntaje: errores.length ? 0 : 25, maximo: 25,
+               estado: errores.length ? 'error' : 'ok', errores, advertencias: [] };
+    }
+  },
+  {
+    label: 'Archivos adjuntos', anchor: '', fn: function() {
+      const inp = document.getElementById('archivosInput');
+      const advertencias = [];
+      /* Solo aplica en creación (el input existe) */
+      if (!inp) return { puntaje: 15, maximo: 15, estado: 'ok', errores: [], advertencias: [] };
+      if (!inp.files || inp.files.length === 0)
+        advertencias.push('Se requiere al menos un archivo adjunto');
+      const puntaje = advertencias.length ? 5 : 15;
+      return { puntaje, maximo: 15,
+               estado: advertencias.length ? 'advertencia' : 'ok', errores: [], advertencias };
+    }
+  },
+];
+</script>
+{% include "ingenieria/_checkpoint_panel.html" %}
+
+    <!-- ─── ARCHIVOS — solo en edición ─── -->
+    {% if object %}
     <div style="border-top:1px solid var(--border);">
         <div style="padding:18px 28px 8px;">
             <div class="section-heading" style="margin-bottom:14px;">
@@ -304,7 +375,6 @@
             </div>
             {% endif %}
 
-            <!-- Subir nuevo archivo -->
             <form method="post"
                   action="{% url 'comercial:solicitud_archivo_create' object.pk %}"
                   enctype="multipart/form-data"
@@ -324,6 +394,7 @@
             </form>
         </div>
     </div>
+    {% endif %}
 
 </div>
 {% endblock %}

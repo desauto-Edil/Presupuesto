@@ -234,10 +234,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("\n✅ Datos PowerGrip cargados correctamente.\n"))
         self.stdout.write("URLs para probar el wizard:")
         self.stdout.write(self.style.HTTP_INFO(
-            f"  Universal 7 → http://localhost:8000/presupuestos/powergrip/{pry_u7.pk}/"
+            f"  Universal 7 → http://localhost:8080/presupuestos/powergrip/{pry_u7.pk}/"
         ))
         self.stdout.write(self.style.HTTP_INFO(
-            f"  Plus TPO    → http://localhost:8000/presupuestos/powergrip/{pry_tpo.pk}/"
+            f"  Plus TPO    → http://localhost:8080/presupuestos/powergrip/{pry_tpo.pk}/"
         ))
         self.stdout.write("\nProductos disponibles por categoría:")
         from apps.catalogos.models import CategoriaProducto

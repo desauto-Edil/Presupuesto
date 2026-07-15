@@ -1,0 +1,637 @@
+{% load static %}{% load catalogo_tags %}<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>APU Interno — {{ apu.nombre }}</title>
+<style>
+  :root {
+    --yellow:     #F4D000;
+    --black:      #111111;
+    --gray-dark:  #333333;
+    --gray-mid:   #B8B8B8;
+    --gray-light: #EDEDED;
+    --white:      #FFFFFF;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 15mm 18mm;
+    @bottom-right {
+      content: "Pág. " counter(page) " / " counter(pages);
+      font-size: 7.5pt;
+      color: #888;
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 9pt;
+    color: var(--black);
+    line-height: 1.4;
+    background: var(--white);
+  }
+
+  /* ── Barra de impresión (solo pantalla) ── */
+  .print-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: var(--black); color: var(--white);
+    padding: 10px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+  }
+  .print-bar a { color: var(--gray-mid); text-decoration: none; font-size: 12px; }
+  .print-bar a:hover { color: var(--white); }
+  .btn-print {
+    background: var(--yellow); color: var(--black);
+    border: none; padding: 7px 18px;
+    border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 700;
+  }
+  @media print {
+    .print-bar { display: none; }
+    body { background: var(--white); }
+    .page { padding: 0; margin-top: 0; }
+  }
+
+  .page { max-width: 1100px; margin: 0 auto; padding: 28px 36px; margin-top: 50px; }
+
+  /* ── CABECERA ── */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    border-bottom: 3px solid var(--yellow);
+    padding-bottom: 10px; margin-bottom: 14px;
+  }
+  .header__logo { max-height: 48px; width: auto; }
+  .header__right { text-align: right; font-size: 7.5pt; color: var(--gray-dark); line-height: 1.7; }
+  .header__right strong { color: var(--black); }
+
+  /* Etiqueta confidencial */
+  .badge-confidencial {
+    display: inline-block;
+    background: var(--yellow); color: var(--black);
+    padding: 3px 10px; border-radius: 3px;
+    font-size: 7.5pt; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .06em;
+    margin-bottom: 4px;
+  }
+
+  /* ── BANNER APU ── */
+  .banner {
+    border: 1px solid var(--gray-mid);
+    border-left: 5px solid var(--yellow);
+    background: var(--gray-light);
+    border-radius: 4px;
+    padding: 10px 16px; margin-bottom: 14px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .banner__left .title { font-size: 12pt; font-weight: 800; color: var(--black); }
+  .banner__left .sub { font-size: 8pt; color: var(--gray-dark); margin-top: 3px; }
+  .banner__right { text-align: right; }
+  .banner__right .total-label {
+    font-size: 7pt; color: var(--gray-dark);
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  .banner__right .total-value {
+    font-size: 16pt; font-weight: 800; color: var(--black);
+    font-variant-numeric: tabular-nums;
+  }
+  .banner__right .cost-value { font-size: 8.5pt; color: var(--gray-dark); }
+
+  /* ── KPI CARDS ── */
+  .kpi-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .kpi {
+    flex: 1; min-width: 100px;
+    border: 1px solid var(--gray-mid);
+    border-top: 3px solid var(--yellow);
+    border-radius: 4px;
+    padding: 7px 10px;
+    background: var(--white);
+  }
+  .kpi__label {
+    font-size: 6.5pt; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: var(--gray-dark); margin-bottom: 3px;
+  }
+  .kpi__value {
+    font-size: 9.5pt; font-weight: 800;
+    color: var(--black);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── SECCIONES ── */
+  .section { margin-bottom: 16px; page-break-inside: avoid; }
+  .section__head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 10px;
+    background: var(--gray-dark); color: var(--white);
+    border-radius: 4px 4px 0 0;
+  }
+  .section__head h3 { font-size: 8.5pt; font-weight: 700; letter-spacing: .02em; }
+  .section__head span { font-size: 8.5pt; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  /* ── TABLAS ── */
+  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  thead tr { background: var(--gray-light); }
+  th {
+    padding: 5px 7px; text-align: right;
+    font-size: 7.5pt; font-weight: 700; color: var(--gray-dark);
+    text-transform: uppercase; letter-spacing: .03em;
+    border-bottom: 1.5px solid var(--yellow);
+    white-space: nowrap;
+  }
+  th:first-child { text-align: left; }
+  td { padding: 5px 7px; border-bottom: 1px solid var(--gray-light); text-align: right; }
+  td:first-child { text-align: left; }
+  tr:last-child td { border-bottom: none; }
+  tfoot td {
+    font-weight: 700;
+    background: var(--gray-light);
+    border-top: 1.5px solid var(--gray-mid);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Resumen consolidación ── */
+  .bloque-consolidacion {
+    border: 1px solid var(--gray-mid);
+    border-left: 4px solid var(--yellow);
+    background: var(--gray-light);
+    border-radius: 4px;
+    padding: 10px 14px; margin-bottom: 14px;
+    page-break-inside: avoid;
+  }
+  .bloque-consolidacion__titulo {
+    font-size: 9pt; font-weight: 700;
+    color: var(--black); letter-spacing: .04em;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+
+  /* ── Resumen comercial ── */
+  .resumen-wrap { display: flex; justify-content: flex-end; margin-top: 16px; }
+  table.resumen-table { width: 360px; border-collapse: collapse; font-size: 8.5pt; }
+  table.resumen-table thead th {
+    background: var(--black); color: var(--white);
+    padding: 5px 10px; text-align: left;
+    font-size: 7.5pt; letter-spacing: .04em; text-transform: uppercase;
+    border: 1px solid var(--gray-mid);
+  }
+  table.resumen-table thead th:last-child { text-align: right; }
+  table.resumen-table td {
+    padding: 4px 10px;
+    border: 1px solid var(--gray-light);
+  }
+  table.resumen-table td:last-child {
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  table.resumen-table tr.row-sub td { background: var(--gray-light); font-weight: 700; }
+  table.resumen-table tr.row-total td {
+    background: var(--yellow); font-weight: 800; font-size: 9.5pt;
+    color: var(--black); border-top: 2px solid var(--black);
+  }
+
+  /* ── Footer ── */
+  .footer-note {
+    margin-top: 18px;
+    border-top: 1px solid var(--gray-mid);
+    padding-top: 7px;
+    display: flex; justify-content: space-between;
+    font-size: 7pt; color: var(--gray-mid);
+  }
+</style>
+</head>
+<body>
+
+<!-- Barra de impresión -->
+<div class="print-bar">
+  <div>
+    <strong style="color:var(--yellow);">CONFIDENCIAL — Uso Interno</strong>
+    <span style="margin-left:12px;color:#aaa;">{{ apu.nombre }}</span>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;">
+    <a href="/presupuestos/apu/{{ apu.pk }}/">← Volver al APU</a>
+    <button class="btn-print" onclick="window.print()">⎙ Imprimir / Guardar PDF</button>
+  </div>
+</div>
+
+<div class="page">
+
+<!-- Cabecera -->
+<div class="header">
+  <div>
+    <img src="{% static 'img/logoImperandina.png' %}" alt="Imperandina" class="header__logo">
+    <div style="font-size:7.5pt;color:var(--gray-dark);margin-top:4px;">
+      Análisis de Precios Unitarios — USO INTERNO
+    </div>
+  </div>
+  <div class="header__right">
+    <div class="badge-confidencial">Confidencial — Datos Internos</div>
+    <div>Fecha: <strong>{{ fecha_generacion }}</strong></div>
+    {% if proyecto %}
+    <div>Proyecto: <strong>{{ proyecto.consecutivo }}</strong></div>
+    <div>Cliente: <strong>{{ proyecto.cliente.razon_social }}</strong></div>
+    {% endif %}
+    {% if apu.es_consolidado %}
+    <div style="margin-top:3px;font-weight:700;">APU CONSOLIDADO</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Banner APU -->
+<div class="banner">
+  <div class="banner__left">
+    <div class="title">{{ apu.nombre }}</div>
+    <div class="sub">
+      {% if apu.proyecto_sistema %}
+        {{ apu.proyecto_sistema.sistema.nombre }}
+        {% if apu.proyecto_sistema.subsistema %} / {{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
+      {% elif apu.es_consolidado %}
+        APU consolidado
+        {% if resumen_consolidacion %} · {{ resumen_consolidacion.apus_origen_count }} APUs origen{% endif %}
+        {% if proyecto %} · {{ proyecto.nombre }}{% endif %}
+      {% endif %}
+      {% if apu.descripcion %} — {{ apu.descripcion }}{% endif %}
+    </div>
+  </div>
+  <div class="banner__right">
+    <div class="total-label">Total venta</div>
+    <div class="total-value">{{ apu.total_valor_venta|currency_nodec }}</div>
+    <div class="cost-value">Costo interno: {{ apu.total_costo|currency_nodec }}</div>
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi__label">Materiales</div>
+    <div class="kpi__value">{{ apu.subtotal_materiales|currency_nodec }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__label">Herramientas</div>
+    <div class="kpi__value">{{ apu.subtotal_herramientas|currency_nodec }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__label">Transporte</div>
+    <div class="kpi__value">{{ apu.subtotal_transporte|currency_nodec }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__label">Mano de Obra</div>
+    <div class="kpi__value">{{ apu.subtotal_mano_obra|currency_nodec }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__label">Administración</div>
+    <div class="kpi__value">{{ apu.subtotal_administracion|currency_nodec }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__label">Factor venta</div>
+    <div class="kpi__value">{{ apu.factor_venta_pct }}%</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__label">IVA</div>
+    <div class="kpi__value">{% if apu.aplica_iva %}{{ apu.iva_pct }}%{% else %}N/A{% endif %}</div>
+  </div>
+</div>
+
+{% if apu.es_consolidado %}
+{# ── Resumen de consolidación ── #}
+<div class="bloque-consolidacion">
+  <div class="bloque-consolidacion__titulo">Resumen de Consolidación</div>
+  {% if resumen_consolidacion %}
+  <table style="width:100%;border-collapse:collapse;font-size:8pt;border:1px solid var(--gray-mid);">
+    <tr>
+      <td style="padding:5px 8px;border-right:1px solid var(--gray-light);width:16.6%;">
+        <div style="font-size:6.5pt;color:var(--gray-dark);text-transform:uppercase;">APUs origen</div>
+        <div style="font-weight:800;font-size:11pt;">{{ resumen_consolidacion.apus_origen_count }}</div>
+      </td>
+      <td style="padding:5px 8px;border-right:1px solid var(--gray-light);width:16.6%;">
+        <div style="font-size:6.5pt;color:var(--gray-dark);text-transform:uppercase;">Sistemas</div>
+        <div style="font-weight:800;font-size:11pt;">{{ resumen_consolidacion.sistemas|length }}</div>
+      </td>
+      <td style="padding:5px 8px;border-right:1px solid var(--gray-light);width:16.6%;">
+        <div style="font-size:6.5pt;color:var(--gray-dark);text-transform:uppercase;">Subsistemas</div>
+        <div style="font-weight:800;font-size:11pt;">{{ resumen_consolidacion.subsistemas|length }}</div>
+      </td>
+      <td style="padding:5px 8px;border-right:1px solid var(--gray-light);width:16.6%;">
+        <div style="font-size:6.5pt;color:var(--gray-dark);text-transform:uppercase;">Materiales</div>
+        <div style="font-weight:800;font-size:11pt;">{{ resumen_consolidacion.materiales_total }}</div>
+      </td>
+      <td style="padding:5px 8px;border-right:1px solid var(--gray-light);width:16.6%;">
+        <div style="font-size:6.5pt;color:var(--gray-dark);text-transform:uppercase;">No-mat. antes</div>
+        <div style="font-weight:800;font-size:11pt;">{{ resumen_consolidacion.no_materiales_antes }}</div>
+      </td>
+      <td style="padding:5px 8px;width:16.6%;background:rgba(244,208,0,0.15);">
+        <div style="font-size:6.5pt;color:var(--gray-dark);text-transform:uppercase;">No-mat. después</div>
+        <div style="font-weight:800;font-size:11pt;">{{ resumen_consolidacion.no_materiales_despues }}</div>
+      </td>
+    </tr>
+  </table>
+  {% if resumen_consolidacion.sistemas or resumen_consolidacion.subsistemas %}
+  <div style="margin-top:6px;font-size:7.5pt;color:var(--gray-dark);">
+    {% if resumen_consolidacion.sistemas %}
+      <strong>Sistemas:</strong> {{ resumen_consolidacion.sistemas|join:" · " }}
+    {% endif %}
+    {% if resumen_consolidacion.subsistemas %}
+      &nbsp;·&nbsp;<strong>Subsistemas:</strong> {{ resumen_consolidacion.subsistemas|join:" · " }}
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+
+<div class="bloque-consolidacion">
+  <div class="bloque-consolidacion__titulo">APUs Origen</div>
+  <table style="border:1px solid var(--gray-mid);">
+    <thead>
+      <tr>
+        <th style="text-align:left;font-size:7pt;">APU</th>
+        <th style="text-align:left;font-size:7pt;">Nombre</th>
+        <th style="text-align:left;font-size:7pt;">Sistema · Subsistema</th>
+        <th style="text-align:left;font-size:7pt;">Estado</th>
+        <th style="text-align:left;font-size:7pt;">Modalidad</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if apus_origen %}
+        {% for apu_o in apus_origen %}
+        <tr>
+          <td style="font-weight:700;">#{{ apu_o.pk }}</td>
+          <td>{{ apu_o.nombre }}</td>
+          <td style="color:var(--gray-dark);">
+            {% if apu_o.proyecto_sistema %}
+              {{ apu_o.proyecto_sistema.sistema.nombre }}
+              {% if apu_o.proyecto_sistema.subsistema %} / {{ apu_o.proyecto_sistema.subsistema.nombre }}{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if apu_o.modalidad_aiu_seleccionada %}
+              <span style="background:rgba(244,208,0,0.2);color:var(--gray-dark);padding:1px 6px;border-radius:3px;font-weight:700;">Aprobado</span>
+            {% elif apu_o.fecha_envio_revision %}
+              <span style="background:var(--gray-light);color:var(--gray-dark);padding:1px 6px;border-radius:3px;font-weight:700;">En revisión</span>
+            {% else %}
+              <span style="background:var(--gray-light);color:var(--gray-dark);padding:1px 6px;border-radius:3px;">Borrador</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--gray-dark);">
+            {% if apu_o.modalidad_aiu_seleccionada %}Modalidad {{ apu_o.modalidad_aiu_seleccionada }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        {% for oc in apu.origenes_consolidado.all %}
+        <tr>
+          <td style="font-weight:700;">#{{ oc.apu_origen.pk }}</td>
+          <td colspan="4">{{ oc.apu_origen.nombre }}</td>
+        </tr>
+        {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% regroup lineas by tipo as lineas_por_tipo %}
+
+{% for grupo in lineas_por_tipo %}
+{% if grupo.list %}
+
+{% if grupo.grouper == "MATERIALES" %}
+<div class="section">
+  <div class="section__head">
+    <h3>Materiales</h3>
+    <span>{{ apu.subtotal_materiales|currency_nodec }}</span>
+  </div>
+{% elif grupo.grouper == "HERRAMIENTAS_EQUIPOS" %}
+<div class="section">
+  <div class="section__head">
+    <h3>Herramientas y Equipos</h3>
+    <span>{{ apu.subtotal_herramientas|currency_nodec }}</span>
+  </div>
+{% elif grupo.grouper == "TRANSPORTE" %}
+<div class="section">
+  <div class="section__head">
+    <h3>Transporte</h3>
+    <span>{{ apu.subtotal_transporte|currency_nodec }}</span>
+  </div>
+{% elif grupo.grouper == "MANO_DE_OBRA" %}
+<div class="section">
+  <div class="section__head">
+    <h3>Mano de Obra</h3>
+    <span>{{ apu.subtotal_mano_obra|currency_nodec }}</span>
+  </div>
+{% elif grupo.grouper == "ADMINISTRACION" %}
+<div class="section">
+  <div class="section__head">
+    <h3>Administración</h3>
+    <span>{{ apu.subtotal_administracion|currency_nodec }}</span>
+  </div>
+{% else %}
+<div class="section">
+  <div class="section__head">
+    <h3>{{ grupo.grouper }}</h3>
+    <span>&nbsp;</span>
+  </div>
+{% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left;">Descripción</th>
+        <th>Rendimiento</th>
+        <th>Precio ref.</th>
+        <th>Costo unit.</th>
+        <th>Costo total</th>
+        <th>Factor venta</th>
+        <th>Valor unit.</th>
+        <th>Valor total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if grupo.grouper == "MATERIALES" %}
+        {% if apu.es_consolidado and materiales_por_origen_consolidado %}
+          {% for bloque in materiales_por_origen_consolidado %}
+          <tr style="background:rgba(244,208,0,0.12);page-break-inside:avoid;">
+            <td colspan="8" style="font-weight:700;font-size:9pt;padding:6px 8px;">
+              {% if bloque.apu %}
+                APU #{{ bloque.apu.pk }} — {{ bloque.apu.nombre }}
+              {% else %}
+                Materiales sin APU origen (legacy)
+              {% endif %}
+              <span style="font-weight:400;color:var(--gray-dark);font-size:8pt;">
+                · {{ bloque.total_lineas }} línea{{ bloque.total_lineas|pluralize }}
+              </span>
+              <span style="float:right;font-weight:700;">
+                Subtotal valor: {{ bloque.subtotal_valor|currency_nodec }}
+              </span>
+            </td>
+          </tr>
+            {% for g in bloque.grupos %}
+            {% if g.sistema or g.subsistema %}
+            <tr style="background:var(--gray-light);">
+              <td colspan="8" style="font-weight:600;font-size:8.5pt;padding:4px 12px;color:var(--gray-dark);">
+                {{ g.sistema }}{% if g.subsistema %} / {{ g.subsistema }}{% endif %}
+              </td>
+            </tr>
+            {% endif %}
+              {% for linea in g.lineas %}
+              <tr>
+                <td style="padding-left:14px;">{{ linea.descripcion }}{% if linea.iva_aplicado %} (+IVA){% endif %}</td>
+                <td>{{ linea.rendimiento|floatformat:5 }}</td>
+                <td>{{ linea.precio_referencia|currency }}</td>
+                <td>{{ linea.costo_unitario|currency }}</td>
+                <td>{{ linea.costo_total|currency_nodec }}</td>
+                <td>{{ linea.factor_venta_aplicado|floatformat:2 }}%</td>
+                <td>{{ linea.valor_unitario|currency }}</td>
+                <td>{{ linea.valor_total|currency_nodec }}</td>
+              </tr>
+              {% endfor %}
+            {% endfor %}
+          {% endfor %}
+        {% else %}
+        {% regroup grupo.list by subsistema_nombre_snapshot as materiales_por_sub %}
+        {% for sub in materiales_por_sub %}
+        {% if sub.grouper %}
+        <tr style="background:var(--gray-light);">
+          <td colspan="8" style="font-weight:700;font-size:8pt;color:var(--gray-dark);padding:4px 8px;">
+            Materiales — {{ sub.grouper }}
+          </td>
+        </tr>
+        {% endif %}
+        {% for linea in sub.list %}
+        <tr>
+          <td>{{ linea.descripcion }}{% if linea.iva_aplicado %} (+IVA){% endif %}</td>
+          <td>{{ linea.rendimiento|floatformat:5 }}</td>
+          <td>{{ linea.precio_referencia|currency }}</td>
+          <td>{{ linea.costo_unitario|currency }}</td>
+          <td>{{ linea.costo_total|currency_nodec }}</td>
+          <td>{{ linea.factor_venta_aplicado|floatformat:2 }}%</td>
+          <td>{{ linea.valor_unitario|currency }}</td>
+          <td>{{ linea.valor_total|currency_nodec }}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        {% endif %}
+      {% else %}
+        {% for linea in grupo.list %}
+        <tr>
+          <td>{{ linea.descripcion }}{% if linea.iva_aplicado %} (+IVA){% endif %}</td>
+          <td>{{ linea.rendimiento|floatformat:5 }}</td>
+          <td>{{ linea.precio_referencia|currency }}</td>
+          <td>{{ linea.costo_unitario|currency }}</td>
+          <td>{{ linea.costo_total|currency_nodec }}</td>
+          <td>{{ linea.factor_venta_aplicado|floatformat:2 }}%</td>
+          <td>{{ linea.valor_unitario|currency }}</td>
+          <td>{{ linea.valor_total|currency_nodec }}</td>
+        </tr>
+        {% endfor %}
+      {% endif %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4">Subtotal costo</td>
+        <td>
+          {% if grupo.grouper == "MATERIALES" %}{{ apu.subtotal_materiales|currency_nodec }}
+          {% elif grupo.grouper == "HERRAMIENTAS_EQUIPOS" %}{{ apu.subtotal_herramientas|currency_nodec }}
+          {% elif grupo.grouper == "TRANSPORTE" %}{{ apu.subtotal_transporte|currency_nodec }}
+          {% elif grupo.grouper == "MANO_DE_OBRA" %}{{ apu.subtotal_mano_obra|currency_nodec }}
+          {% elif grupo.grouper == "ADMINISTRACION" %}{{ apu.subtotal_administracion|currency_nodec }}
+          {% endif %}
+        </td>
+        <td colspan="3"></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+{% endif %}
+{% endfor %}
+
+<!-- Resumen de costos -->
+<div class="resumen-wrap">
+  <table class="resumen-table">
+    <thead>
+      <tr>
+        <th>Resumen de costos</th>
+        <th>Valor (COP)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Total materiales</td><td>{{ apu.subtotal_materiales|currency_nodec }}</td></tr>
+      <tr><td>Total herramientas</td><td>{{ apu.subtotal_herramientas|currency_nodec }}</td></tr>
+      <tr><td>Total transporte</td><td>{{ apu.subtotal_transporte|currency_nodec }}</td></tr>
+      <tr><td>Total mano de obra</td><td>{{ apu.subtotal_mano_obra|currency_nodec }}</td></tr>
+      <tr><td>Total administración</td><td>{{ apu.subtotal_administracion|currency_nodec }}</td></tr>
+      <tr class="row-sub"><td>TOTAL COSTO</td><td>{{ apu.total_costo|currency_nodec }}</td></tr>
+      <tr class="row-total"><td>TOTAL VENTA</td><td>{{ apu.total_valor_venta|currency_nodec }}</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Resumen comercial / Cotización interna -->
+<div class="section" style="margin-top:24px;page-break-before:auto;">
+  <div class="section__head">
+    <h3>Resumen comercial / Cotización interna</h3>
+    <span>
+      {% if resumen.es_preliminar %}PRELIMINAR{% else %}Modalidad {{ resumen.modalidad_oficial }} aprobada{% endif %}
+    </span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left;">Concepto</th>
+        <th>Valor (COP)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Subtotal materiales</td><td>{{ resumen.subtotal_materiales|currency_nodec }}</td></tr>
+      {% if resumen.garantia.aplica %}
+      <tr><td>Garantía Red Shield (recargo sobre materiales)</td><td>{{ resumen.garantia_valor_recargo|currency_nodec }}</td></tr>
+      {% endif %}
+      <tr><td>Herramientas</td><td>{{ resumen.subtotal_herramientas|currency_nodec }}</td></tr>
+      <tr><td>Transporte</td><td>{{ resumen.subtotal_transporte|currency_nodec }}</td></tr>
+      <tr><td>Mano de obra / Personal</td><td>{{ resumen.subtotal_mano_obra|currency_nodec }}</td></tr>
+      <tr><td>Administración</td><td>{{ resumen.subtotal_administracion|currency_nodec }}</td></tr>
+      <tr class="row-sub">
+        <td>Subtotal costos directos</td><td>{{ resumen.subtotal_directos_tecnico|currency_nodec }}</td>
+      </tr>
+      <tr><td>AIU — Administración ({{ resumen.porcentaje_admin|floatformat:2 }}%)</td><td>{{ resumen.valor_admin|currency_nodec }}</td></tr>
+      <tr><td>AIU — Imprevistos ({{ resumen.porcentaje_imprevistos|floatformat:2 }}%)</td><td>{{ resumen.valor_imprevistos|currency_nodec }}</td></tr>
+      <tr><td>AIU — Utilidad ({{ resumen.porcentaje_utilidad|floatformat:2 }}%)</td><td>{{ resumen.valor_utilidad|currency_nodec }}</td></tr>
+      <tr class="row-sub"><td>Subtotal con AIU</td><td>{{ resumen.subtotal_con_aiu|currency_nodec }}</td></tr>
+      <tr>
+        <td>{{ resumen.iva_label }}</td>
+        <td>{% if resumen.aplica_iva %}{{ resumen.iva_valor|currency_nodec }}{% else %}$ 0{% endif %}</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr class="row-total"><td>TOTAL FINAL</td><td>{{ resumen.total_final|currency_nodec }}</td></tr>
+    </tfoot>
+  </table>
+
+  <div style="margin-top:8px;font-size:8pt;color:var(--gray-dark);">
+    <strong>Modalidad AIU:</strong>
+    {% if resumen.es_preliminar %}
+      Pendiente de aprobación
+    {% else %}
+      {{ resumen.modalidad_oficial }} —
+      aprobado por <strong>{{ resumen.aprobado_por|default:"—" }}</strong>
+      {% if resumen.fecha_aprobacion %}el {{ resumen.fecha_aprobacion|date:"d/m/Y H:i" }}{% endif %}
+    {% endif %}
+  </div>
+  {% if resumen.garantia.aplica %}
+  <div style="margin-top:4px;font-size:8pt;color:var(--gray-dark);">
+    <strong>Garantía:</strong>
+    {{ resumen.garantia.tipo_nombre|default:"Red Shield" }}
+    · {{ resumen.garantia.porcentaje_aplicado|default:"—" }}%
+    sobre {{ resumen.garantia.modo_aplicacion|default:"—" }}
+    (base {{ resumen.garantia.base_valor|default:0|currency_nodec }})
+  </div>
+  {% endif %}
+</div>
+
+<div class="footer-note">
+  <span>EDIL ANDINA SAS / IMPERANDINA — Documento de uso interno. No compartir con terceros.</span>
+  <span>Generado: {{ fecha_generacion }}</span>
+</div>
+
+</div>{# /page #}
+</body>
+</html>

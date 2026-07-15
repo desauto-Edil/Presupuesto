@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% load catalogo_tags %}
+{% block nav_apu %}active{% endblock %}
+{% block title %}Cotización — {{ apu.nombre }}{% endblock %}
+
+{% block content %}
+<div class="page-header mb-3">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-1">
+      <li class="breadcrumb-item"><a href="{% url 'presupuestos:apu_list' %}">APUs</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'presupuestos:apu_detail' apu.pk %}">{{ apu.nombre }}</a></li>
+      <li class="breadcrumb-item active">Cotización</li>
+    </ol>
+  </nav>
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h1 class="page-title mb-0">
+      <i class="bi bi-receipt me-2"></i>
+      {% if resumen.es_preliminar %}Vista preliminar de cotización{% else %}Cotización final{% endif %}
+    </h1>
+    {% if resumen.es_preliminar %}
+      <span class="badge rounded-pill bg-warning text-dark px-3 py-2">
+        <i class="bi bi-exclamation-triangle me-1"></i>Preliminar
+      </span>
+    {% else %}
+      <span class="badge rounded-pill bg-success px-3 py-2">
+        <i class="bi bi-check-circle me-1"></i>Modalidad {{ resumen.modalidad_oficial }} aprobada
+      </span>
+    {% endif %}
+  </div>
+</div>
+
+{% if resumen.es_preliminar %}
+<div class="alert alert-warning d-flex align-items-start gap-2 mb-4" role="alert">
+  <i class="bi bi-exclamation-triangle-fill"></i>
+  <div>
+    <strong>Este APU aún no tiene modalidad AIU aprobada.</strong>
+    <div class="small mt-1">
+      La cotización se muestra como referencia. Para emitirla al cliente, primero debe aprobarse una modalidad desde
+      <a href="{% url 'presupuestos:apu_revisar' apu.pk %}">la vista de revisión</a>.
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ───────────────────────── Encabezado y datos ───────────────────────── -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-light fw-semibold">
+        <i class="bi bi-building me-1"></i>Cliente
+      </div>
+      <div class="card-body">
+        {% if resumen.cliente %}
+          <div class="fw-semibold">{{ resumen.cliente.razon_social }}</div>
+          <div class="small text-muted">NIT: {{ resumen.cliente.nit }}</div>
+          {% if resumen.contacto %}
+            <div class="mt-2">
+              <div><strong>Contacto:</strong> {{ resumen.contacto.nombre }}{% if resumen.contacto.cargo %} — {{ resumen.contacto.cargo }}{% endif %}</div>
+              {% if resumen.contacto.email %}<div class="small">Email: {{ resumen.contacto.email }}</div>{% endif %}
+              {% if resumen.contacto.telefono %}<div class="small">Tel: {{ resumen.contacto.telefono }}</div>{% endif %}
+            </div>
+          {% endif %}
+        {% else %}
+          <div class="text-muted">Sin cliente asignado.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-light fw-semibold">
+        <i class="bi bi-folder me-1"></i>Proyecto
+      </div>
+      <div class="card-body">
+        {% if resumen.proyecto %}
+          <div><strong>Consecutivo:</strong> {{ resumen.proyecto.consecutivo }} <span class="text-muted small">v{{ resumen.proyecto.version }}</span></div>
+          <div><strong>Nombre:</strong> {{ resumen.proyecto.nombre|default:"—" }}</div>
+          {% if resumen.solicitud %}
+            <div><strong>Solicitud:</strong> {{ resumen.solicitud.consecutivo }}</div>
+            {% if resumen.solicitud.fecha_entrega %}
+              <div class="small"><strong>Fecha de entrega solicitada:</strong> {{ resumen.solicitud.fecha_entrega|date:"d/m/Y" }}</div>
+            {% endif %}
+          {% endif %}
+          {% if resumen.proyecto.dias_duracion %}
+            <div class="small"><strong>Duración estimada:</strong> {{ resumen.proyecto.dias_duracion }} días</div>
+          {% endif %}
+        {% else %}
+          <div class="text-muted">APU sin proyecto asociado.</div>
+        {% endif %}
+        <div class="mt-2 small text-muted">
+          Fecha de emisión: {% now "d/m/Y" %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────── Descripción técnica resumen ───────────────────────── -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-header bg-light fw-semibold">
+    <i class="bi bi-diagram-3 me-1"></i>Alcance
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <div class="small text-muted">Sistema</div>
+        <div class="fw-semibold">{{ resumen.sistema.nombre|default:"—" }}</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="small text-muted">Subsistema</div>
+        <div class="fw-semibold">{{ resumen.subsistema.nombre|default:"—" }}</div>
+      </div>
+      <div class="col-12">
+        <div class="small text-muted">Descripción del APU</div>
+        <div>{{ apu.descripcion|default:"—" }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────── Tabla de resumen comercial ───────────────────────── -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-header bg-primary bg-opacity-10 fw-semibold">
+    <i class="bi bi-list-columns me-1"></i>Resumen comercial
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="ps-3" style="width:55%;">Concepto</th>
+          <th class="text-end pe-3">Valor (COP)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="ps-3">Materiales</td>
+          <td class="text-end pe-3">{{ resumen.subtotal_materiales|currency_nodec }}</td>
+        </tr>
+        {% if resumen.garantia.aplica %}
+        <tr class="table-warning">
+          <td class="ps-3">
+            <i class="bi bi-shield-check me-1"></i>Garantía Red Shield (recargo sobre Materiales)
+          </td>
+          <td class="text-end pe-3">{{ resumen.garantia_valor_recargo|currency_nodec }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td class="ps-3">Herramientas</td>
+          <td class="text-end pe-3">{{ resumen.subtotal_herramientas|currency_nodec }}</td>
+        </tr>
+        <tr>
+          <td class="ps-3">Transporte</td>
+          <td class="text-end pe-3">{{ resumen.subtotal_transporte|currency_nodec }}</td>
+        </tr>
+        <tr>
+          <td class="ps-3">Mano de obra / Personal</td>
+          <td class="text-end pe-3">{{ resumen.subtotal_mano_obra|currency_nodec }}</td>
+        </tr>
+        <tr class="table-secondary fw-semibold">
+          <td class="ps-3">Subtotal costos directos (base AIU)</td>
+          <td class="text-end pe-3">{{ resumen.subtotal_directos_tecnico|currency_nodec }}</td>
+        </tr>
+        <tr>
+          <td class="ps-3">
+            A — Administración ({{ resumen.porcentaje_admin }}%)
+          </td>
+          <td class="text-end pe-3">{{ resumen.valor_admin|currency_nodec }}</td>
+        </tr>
+        <tr>
+          <td class="ps-3">
+            I — Imprevistos ({{ resumen.porcentaje_imprevistos }}%)
+          </td>
+          <td class="text-end pe-3">{{ resumen.valor_imprevistos|currency_nodec }}</td>
+        </tr>
+        <tr>
+          <td class="ps-3">
+            U — Utilidad ({{ resumen.porcentaje_utilidad }}%)
+          </td>
+          <td class="text-end pe-3">{{ resumen.valor_utilidad|currency_nodec }}</td>
+        </tr>
+        <tr class="table-secondary">
+          <td class="ps-3">Subtotal con AIU</td>
+          <td class="text-end pe-3">{{ resumen.subtotal_con_aiu|currency_nodec }}</td>
+        </tr>
+        <tr>
+          <td class="ps-3">
+            {{ resumen.iva_label }}
+          </td>
+          <td class="text-end pe-3">
+            {% if resumen.aplica_iva %}
+              {{ resumen.iva_valor|currency_nodec }}
+            {% else %}
+              <span class="text-muted">$ 0</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr class="table-success fw-bold fs-5">
+          <td class="ps-3">Total final de la cotización</td>
+          <td class="text-end pe-3">{{ resumen.total_final|currency_nodec }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer small text-muted">
+    Fórmula: SubtotalConAIU (base directa + A + I + U) + garantía Red Shield + IVA sobre subtotal con AIU.
+    Administración entra como A del AIU; no se suma dos veces.
+  </div>
+</div>
+
+<!-- ───────────────────────── Comparativo modalidades (solo preliminar) ───────────────────────── -->
+{% if resumen.es_preliminar and resumen.modalidades_disponibles %}
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-header bg-warning bg-opacity-10 fw-semibold">
+    <i class="bi bi-arrow-left-right me-1"></i>Comparativo de modalidades (referencia)
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="ps-3">Modalidad</th>
+          <th>Base AIU</th>
+          <th>Total AIU</th>
+          <th class="text-end pe-3">Gran total (sin IVA)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="ps-3"><strong>Modalidad 1</strong> — {{ resumen.modalidades_disponibles.modalidad1.label }}</td>
+          <td>{{ resumen.modalidades_disponibles.modalidad1.base|currency_nodec }}</td>
+          <td>{{ resumen.modalidades_disponibles.modalidad1.total_aiu|currency_nodec }}</td>
+          <td class="text-end pe-3">{{ resumen.modalidades_disponibles.modalidad1.gran_total|currency_nodec }}</td>
+        </tr>
+        <tr>
+          <td class="ps-3"><strong>Modalidad 2</strong> — {{ resumen.modalidades_disponibles.modalidad2.label }}</td>
+          <td>{{ resumen.modalidades_disponibles.modalidad2.base|currency_nodec }}</td>
+          <td>{{ resumen.modalidades_disponibles.modalidad2.total_aiu|currency_nodec }}</td>
+          <td class="text-end pe-3">{{ resumen.modalidades_disponibles.modalidad2.gran_total|currency_nodec }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer small text-muted">
+    Gran total de referencia (sin IVA). Al aprobar una modalidad, el IVA se calcula sobre el subtotal con AIU.
+  </div>
+</div>
+{% endif %}
+
+<!-- ───────────────────────── Garantía Red Shield ───────────────────────── -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-header bg-light fw-semibold">
+    <i class="bi bi-shield-check me-1"></i>Garantía
+  </div>
+  <div class="card-body">
+    {% if resumen.garantia.aplica %}
+      <div class="row g-2">
+        <div class="col-12 col-md-6">
+          <div class="small text-muted">Tipo de garantía</div>
+          <div class="fw-semibold">{{ resumen.garantia.tipo_nombre|default:"Garantía Red Shield" }}</div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="small text-muted">% aplicado</div>
+          <div class="fw-semibold">{{ resumen.garantia.porcentaje_aplicado|default:"—" }}%</div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="small text-muted">Modo</div>
+          <div class="fw-semibold">{{ resumen.garantia.modo_aplicacion|default:"—" }}</div>
+        </div>
+        {% if resumen.garantia.material_snapshot %}
+        <div class="col-12">
+          <div class="small text-muted">Material específico</div>
+          <div>{{ resumen.garantia.material_snapshot }}</div>
+        </div>
+        {% endif %}
+        <div class="col-12 col-md-6">
+          <div class="small text-muted">Base del recargo</div>
+          <div>{{ resumen.garantia.base_valor|default:0|currency_nodec }}</div>
+        </div>
+        <div class="col-12 col-md-6">
+          <div class="small text-muted">Recargo comercial</div>
+          <div class="fw-bold text-warning-emphasis">{{ resumen.garantia.valor_recargo|currency_nodec }}</div>
+        </div>
+        {% if resumen.garantia.condiciones %}
+        <div class="col-12">
+          <div class="small text-muted mt-2">Condiciones</div>
+          <div class="small">{{ resumen.garantia.condiciones|linebreaksbr }}</div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="alert alert-info small mt-3 mb-0">
+        El recargo de garantía Red Shield se aplica sobre Materiales y se suma al total como concepto independiente. No entra en la base AIU ni en la base IVA.
+      </div>
+    {% else %}
+      <div class="text-muted">Esta cotización <strong>no incluye</strong> garantía Red Shield.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ───────────────────────── Condiciones comerciales ───────────────────────── -->
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-header bg-light fw-semibold">
+    <i class="bi bi-file-text me-1"></i>Condiciones comerciales
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <div class="small text-muted">Forma de pago</div>
+        <div class="text-muted fst-italic">Por definir</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="small text-muted">Validez de la oferta</div>
+        <div class="text-muted fst-italic">Por definir</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="small text-muted">Tiempo de entrega</div>
+        <div>
+          {% if resumen.proyecto.dias_duracion %}
+            {{ resumen.proyecto.dias_duracion }} días estimados
+          {% elif resumen.solicitud.fecha_entrega %}
+            Solicitada para el {{ resumen.solicitud.fecha_entrega|date:"d/m/Y" }}
+          {% else %}
+            <span class="text-muted fst-italic">Por definir</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="small text-muted">Exclusiones</div>
+        <div class="text-muted fst-italic">Por definir</div>
+      </div>
+      {% if resumen.proyecto.observaciones %}
+      <div class="col-12">
+        <div class="small text-muted">Observaciones del proyecto</div>
+        <div>{{ resumen.proyecto.observaciones|linebreaksbr }}</div>
+      </div>
+      {% endif %}
+      {% if resumen.solicitud.observaciones %}
+      <div class="col-12">
+        <div class="small text-muted">Observaciones de la solicitud</div>
+        <div>{{ resumen.solicitud.observaciones|linebreaksbr }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if not resumen.es_preliminar %}
+<div class="small text-muted mb-4">
+  Modalidad AIU aprobada por
+  <strong>{{ resumen.aprobado_por|default:"—" }}</strong>
+  {% if resumen.fecha_aprobacion %}el {{ resumen.fecha_aprobacion|date:"d/m/Y H:i" }}{% endif %}.
+</div>
+{% endif %}
+
+<div class="d-flex gap-2 justify-content-end mb-4">
+  <a href="{% url 'presupuestos:apu_detail' apu.pk %}" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Volver al APU
+  </a>
+  {% if resumen.es_preliminar %}
+  <a href="{% url 'presupuestos:apu_revisar' apu.pk %}" class="btn btn-warning">
+    <i class="bi bi-check2-square me-1"></i>Ir a revisión
+  </a>
+  {% endif %}
+</div>
+{% endblock %}

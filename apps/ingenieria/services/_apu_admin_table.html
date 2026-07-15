@@ -1,0 +1,45 @@
+{% comment %}
+  Tabla especial para la categoría ADMINISTRACION.
+  Muestra una vista simplificada sin rendimiento técnico.
+
+  Contexto esperado:
+  - cat: dict de la categoría ADMINISTRACION con la clave `lineas_admin_detalle`.
+{% endcomment %}
+{% load humanize %}
+
+<div class="table-responsive">
+  <table class="table table-sm table-hover">
+    <thead>
+      <tr>
+        <th scope="col">Concepto</th>
+        <th scope="col" class="text-end">Valor Base</th>
+        <th scope="col" class="text-end">Cantidad</th>
+        <th scope="col" class="text-end">Meses</th>
+        <th scope="col" class="text-end">% Aplicado</th>
+        <th scope="col" class="text-end">Valor Total</th>
+        <th scope="col"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for linea in cat.lineas_admin_detalle %}
+        <tr>
+          <td>{{ linea.descripcion }}</td>
+          <td class="text-end text-nowrap">$ {{ linea.precio_referencia|intcomma }}</td>
+          <td class="text-end">{{ linea.admin_cantidad|intcomma }}</td>
+          <td class="text-end">{{ linea.admin_numero_meses|floatformat:2 }}</td>
+          <td class="text-end">{{ linea.admin_porcentaje|floatformat:2 }}%</td>
+          <td class="text-end fw-bold text-nowrap">$ {{ linea.valor_total|intcomma }}</td>
+          <td class="text-end">
+            {# Aquí irían los botones de edición si fueran necesarios #}
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="7" class="text-center text-muted fst-italic">
+            No hay ítems de administración en este APU.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

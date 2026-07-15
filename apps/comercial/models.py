@@ -2,6 +2,8 @@
 apps/comercial/models.py
 """
 
+from decimal import Decimal
+
 from django.db import models
 from django.utils import timezone
 
@@ -111,6 +113,11 @@ class Solicitud(models.Model):
         max_length=20, choices=EstadoSolicitud.choices, default=EstadoSolicitud.EN_GESTION
     )
     observaciones = models.TextField(blank=True, null=True)
+    # Fase 11.5.4 — motivo de devolución interna del presupuesto (no rechazo comercial)
+    motivo_devolucion = models.TextField(
+        blank=True, default="",
+        help_text="Motivo registrado por el aprobador cuando devuelve la solicitud para ajustes.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -126,6 +133,14 @@ class Solicitud(models.Model):
         if not self.contacto_id and self.cliente_id:
             self.contacto = self.cliente.contacto_principal
         super().save(*args, **kwargs)
+
+    @property
+    def tiene_apu_aprobado(self) -> bool:
+        """
+        True si cualquiera de los proyectos de la solicitud tiene un APU
+        aprobado. Cuando es True, la solicitud queda en solo lectura.
+        """
+        return any(p.tiene_apu_aprobado for p in self.proyectos.all())
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +215,7 @@ class Proyecto(models.Model):
     )
 
     # ── Datos del proyecto ───────────────────────────────────────────────────
-    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos")
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name="proyectos", null=True, blank=True)
     creado_por = models.ForeignKey(
         "configuracion.ConfiguracionSistema", on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyectos_creados",
@@ -209,11 +224,9 @@ class Proyecto(models.Model):
         TipoProyecto, on_delete=models.SET_NULL,
         blank=True, null=True, related_name="proyectos",
     )
-    nombre = models.CharField(max_length=300)
+    nombre = models.CharField(max_length=300, blank=True, default="")
     descripcion = models.TextField(blank=True, null=True)
     fecha_proyecto = models.DateField(auto_now_add=True)
-    area_total_m2 = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)
-    perimetro_ml = models.DecimalField(max_digits=14, decimal_places=4, blank=True, null=True)
     dias_duracion = models.PositiveIntegerField(
         blank=True, null=True,
         verbose_name="Días de duración",
@@ -295,6 +308,23 @@ class Proyecto(models.Model):
         self.estado = EstadoProyecto.APU
         self.save(update_fields=["estado", "updated_at"])
 
+    # ── Bloqueo por APU aprobado ───────────────────────────────────────────────
+
+    @property
+    def tiene_apu_aprobado(self) -> bool:
+        """
+        True si el proyecto tiene algún APU aprobado (individual, vía
+        proyecto_sistema, o consolidado). Fuente del bloqueo de solo lectura
+        del proyecto y su despiece cuando ya existe una aprobación.
+        """
+        from apps.presupuestos.models import APUProyecto
+        if self.apus_consolidados.filter(fecha_aprobacion__isnull=False).exists():
+            return True
+        return APUProyecto.objects.filter(
+            proyecto_sistema__proyecto=self,
+            fecha_aprobacion__isnull=False,
+        ).exists()
+
 
 # ---------------------------------------------------------------------------
 # LOG DEL SISTEMA
@@ -344,3 +374,66 @@ class LogSistema(models.Model):
 
     def __str__(self):
         return f"[{self.unidad_negocio}] {self.accion} — {self.configuracion} ({self.created_at:%d/%m/%Y %H:%M})"
+
+
+# ---------------------------------------------------------------------------
+# TIPO DE GARANTÍA (Fase 9)
+# ---------------------------------------------------------------------------
+
+class TipoGarantia(models.Model):
+    """
+    Catálogo de tipos de garantía ofrecidos en la propuesta comercial.
+
+    No afecta el cálculo de materiales, rendimiento ni AIU; es parte del
+    documento técnico-comercial (APU). Cada APUProyecto puede tener una
+    garantía asociada (FK opcional).
+    """
+    nombre = models.CharField(
+        max_length=120,
+        help_text="Nombre comercial. Ej: 'Garantía 10 años — Membrana TPO'.",
+    )
+    porcentaje_recargo = models.DecimalField(
+        max_digits=6, decimal_places=2, default=Decimal("0"),
+        help_text="Porcentaje de recargo comercial aplicado sobre Materiales. Ej: 5.00 = 5%.",
+    )
+    duracion_meses = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="(Legacy Fase 9) Duración en meses. Oculto en el formulario actual.",
+    )
+    descripcion = models.CharField(
+        max_length=300, blank=True, default="",
+        help_text="Descripción corta visible junto al nombre.",
+    )
+    condiciones = models.TextField(
+        blank=True, default="",
+        help_text="Condiciones y exclusiones detalladas (texto largo).",
+    )
+    orden = models.PositiveIntegerField(default=0)
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "comercial"
+        db_table = "tipos_garantia"
+        ordering = ["orden", "nombre"]
+        verbose_name = "Tipo de garantía"
+        verbose_name_plural = "Tipos de garantía"
+
+    def __str__(self):
+        pct = self.porcentaje_recargo or Decimal("0")
+        return f"{self.nombre} ({pct}%)"
+
+    @property
+    def duracion_label(self) -> str:
+        """Legacy: tolerante si duracion_meses está vacío."""
+        if not self.duracion_meses:
+            return ""
+        if self.duracion_meses % 12 == 0:
+            return f"{self.duracion_meses // 12} años"
+        return f"{self.duracion_meses} meses"
+
+    @property
+    def porcentaje_label(self) -> str:
+        pct = self.porcentaje_recargo or Decimal("0")
+        return f"{pct}%"

@@ -1,0 +1,45 @@
+{% comment %}
+   ============================================================
+   Partial: Breadcrumb del Despiece Maestro.
+
+   Uso (dentro del {% block breadcrumb %} de despiece_maestro.html):
+       {% block breadcrumb %}
+         {% include "ingenieria/partials/_despiece_breadcrumb.html" %}
+       {% endblock %}
+
+   Contrato (variables que espera del contexto de la vista):
+     despiece                            DespieceMaestro actual.
+     despiece.proyecto                   Proyecto opcional. Si está, se
+                                         renderiza la ruta comercial completa;
+                                         si no, se muestra "Despiece rápido".
+     despiece.proyecto.solicitud         Solicitud opcional (sólo si hay proyecto).
+     despiece.proyecto.solicitud.pk
+     despiece.proyecto.solicitud.consecutivo
+     despiece.proyecto.pk
+     despiece.proyecto.consecutivo
+     despiece.subsistema.sistema.codigo  Para el modo "Despiece rápido".
+     despiece.subsistema.codigo          Idem.
+
+   URLs usadas:
+     - comercial:solicitud_list           (link "Solicitudes")
+     - comercial:solicitud_detail         (link al consecutivo de la solicitud)
+     - comercial:proyecto_detail          (link al consecutivo del proyecto)
+
+   Estilos inline preservados (no se mueven a CSS en esta fase):
+     style="color:inherit;text-decoration:none;"  en los <a> internos
+     (el color y la subraya los hereda del breadcrumb del layout).
+
+   JS:
+     Cero JavaScript. Solo links y texto.
+   ============================================================
+{% endcomment %}
+{% if despiece.proyecto %}
+  <a href="{% url 'comercial:solicitud_list' %}" style="color:inherit;text-decoration:none;">Solicitudes</a>
+  {% if despiece.proyecto.solicitud %}
+    → <a href="{% url 'comercial:solicitud_detail' despiece.proyecto.solicitud.pk %}" style="color:inherit;text-decoration:none;">{{ despiece.proyecto.solicitud.consecutivo }}</a>
+  {% endif %}
+  → <a href="{% url 'comercial:proyecto_detail' despiece.proyecto.pk %}" style="color:inherit;text-decoration:none;">{{ despiece.proyecto.consecutivo }}</a>
+  → Despiece
+{% else %}
+  Despiece rápido — {{ despiece.subsistema.sistema.codigo }} · {{ despiece.subsistema.codigo }}
+{% endif %}

@@ -56,6 +56,15 @@ class DespieceService:
             logger.warning("[DespieceService] PS %s sin sistema/subsistema definido.", ps.pk)
             return []
 
+        # ── RESTRICCIÓN CRÍTICA: no calcular despiece en sistemas de CONSUMO ──
+        from apps.common.choices import TipoSistema
+        if ps.sistema.tipo_sistema == TipoSistema.CONSUMO:
+            raise ValueError(
+                f"DespieceService NO puede operar sobre el sistema '{ps.sistema.codigo}' "
+                f"porque es de tipo CONSUMO. "
+                f"Use ConsumoService para sistemas de consumo."
+            )
+
         # ── Elegir fuente de componentes ──────────────────────────────────────
         componentes_db = list(
             ComponenteSubsistema.objects.filter(subsistema=ps.subsistema)

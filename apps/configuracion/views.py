@@ -1,12 +1,44 @@
 """apps/configuracion/views.py — Vistas unificadas de Configuración."""
 
 from django.contrib import messages
+from django.contrib.auth.hashers import check_password, make_password, identify_hasher
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from .models import ConfiguracionSistema, UnidadNegocioInfo, UnidadPolitica, UnidadClausula, UnidadAlianza
 from .forms import ConfiguracionSistemaForm
+from apps.common.mixins import AdminRequiredMixin
+
+
+def _es_hash_django(valor: str) -> bool:
+    """True si el valor almacenado en password_hash ya es un hash de Django."""
+    if not valor:
+        return False
+    try:
+        identify_hasher(valor)
+        return True
+    except Exception:
+        return False
+
+
+def _verificar_password(cfg, password_plano: str) -> bool:
+    """
+    Verifica la contraseña con auto-upgrade transparente.
+    - Si el valor en BD ya es hash → check_password.
+    - Si es texto plano (legacy) → comparación directa y re-hash inmediato.
+    """
+    if not password_plano:
+        return False
+    almacenado = cfg.password_hash or ""
+    if _es_hash_django(almacenado):
+        return check_password(password_plano, almacenado)
+    # Legacy: contraseña plana en BD. Comparar y migrar.
+    if almacenado == password_plano:
+        cfg.password_hash = make_password(password_plano)
+        cfg.save(update_fields=["password_hash", "updated_at"])
+        return True
+    return False
 
 
 def _form_errors(form):
@@ -19,7 +51,7 @@ def _form_errors(form):
 
 # ── Vista principal unificada ──────────────────────────────────────────────────
 
-class ConfiguracionView(ListView):
+class ConfiguracionView(AdminRequiredMixin, ListView):
     """Página principal de Configuración: usuarios + unidades de negocio."""
     model = ConfiguracionSistema
     template_name = "configuracion/configuracion_list.html"
@@ -40,18 +72,7 @@ ConfiguracionListView = ConfiguracionView
 
 # ── CRUD ConfiguracionSistema (usuarios) ──────────────────────────────────────
 
-class ConfiguracionCreateView(CreateView):
-    model = ConfiguracionSistema
-    form_class = ConfiguracionSistemaForm
-    template_name = "configuracion/configuracion_list.html"
-    success_url = reverse_lazy("configuracion:configuracion")
-
-    def form_invalid(self, form):
-        messages.error(self.request, _form_errors(form))
-        return redirect("configuracion:configuracion")
-
-
-class ConfiguracionUpdateView(UpdateView):
+class ConfiguracionCreateView(AdminRequiredMixin, CreateView):
     model = ConfiguracionSistema
     form_class = ConfiguracionSistemaForm
     template_name = "configuracion/configuracion_list.html"
@@ -59,11 +80,30 @@ class ConfiguracionUpdateView(UpdateView):
 
     def form_valid(self, form):
         cfg = form.save(commit=False)
-        nueva_password = form.cleaned_data.get("password_hash", "").strip()
+        password_plano = (form.cleaned_data.get("password_hash") or "").strip()
+        cfg.password_hash = make_password(password_plano)
+        cfg.save()
+        messages.success(self.request, f"Usuario {cfg.nombre_completo} creado.")
+        return redirect(self.success_url)
+
+    def form_invalid(self, form):
+        messages.error(self.request, _form_errors(form))
+        return redirect("configuracion:configuracion")
+
+
+class ConfiguracionUpdateView(AdminRequiredMixin, UpdateView):
+    model = ConfiguracionSistema
+    form_class = ConfiguracionSistemaForm
+    template_name = "configuracion/configuracion_list.html"
+    success_url = reverse_lazy("configuracion:configuracion")
+
+    def form_valid(self, form):
+        cfg = form.save(commit=False)
+        nueva_password = (form.cleaned_data.get("password_hash") or "").strip()
         if not nueva_password:
             cfg.password_hash = ConfiguracionSistema.objects.get(pk=cfg.pk).password_hash
         else:
-            cfg.password_hash = nueva_password
+            cfg.password_hash = make_password(nueva_password)
         cfg.save()
         messages.success(self.request, f"Usuario {cfg.nombre_completo} actualizado.")
         return redirect(self.success_url)
@@ -79,17 +119,17 @@ class ConfiguracionDetailView(DetailView):
     context_object_name = "configuracion"
 
 
-class ConfiguracionDeleteView(DeleteView):
+class ConfiguracionDeleteView(AdminRequiredMixin, DeleteView):
     model = ConfiguracionSistema
     success_url = reverse_lazy("configuracion:configuracion")
 
 
 # ── CRUD UnidadNegocioInfo ────────────────────────────────────────────────────
 
-class UnidadCreateView(CreateView):
+class UnidadCreateView(AdminRequiredMixin, CreateView):
     model = UnidadNegocioInfo
     fields = ["codigo", "razon_social", "nit", "ciudad", "direccion", "telefono",
-              "email", "sitio_web", "quienes_somos", "mision", "vision", "activa"]
+              "email", "sitio_web", "quienes_somos", "activa"]
     success_url = reverse_lazy("configuracion:configuracion")
 
     def form_invalid(self, form):
@@ -97,10 +137,10 @@ class UnidadCreateView(CreateView):
         return redirect("configuracion:configuracion")
 
 
-class UnidadUpdateView(UpdateView):
+class UnidadUpdateView(AdminRequiredMixin, UpdateView):
     model = UnidadNegocioInfo
     fields = ["razon_social", "nit", "ciudad", "direccion", "telefono",
-              "email", "sitio_web", "quienes_somos", "mision", "vision", "activa"]
+              "email", "sitio_web", "quienes_somos", "activa"]
     success_url = reverse_lazy("configuracion:configuracion")
 
     def form_valid(self, form):
@@ -113,7 +153,7 @@ class UnidadUpdateView(UpdateView):
         return redirect("configuracion:configuracion")
 
 
-class UnidadDeleteView(DeleteView):
+class UnidadDeleteView(AdminRequiredMixin, DeleteView):
     model = UnidadNegocioInfo
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("configuracion:configuracion")
@@ -201,9 +241,9 @@ class ClausulaDeleteView(DeleteView):
 
 # ── CRUD Alianzas ─────────────────────────────────────────────────────────────
 
-class AlianzaCreateView(CreateView):
+class AlianzaCreateView(AdminRequiredMixin, CreateView):
     model = UnidadAlianza
-    fields = ["nombre", "descripcion", "url", "orden"]
+    fields = ["nombre", "descripcion", "imagen", "orden"]
 
     def form_valid(self, form):
         unidad = get_object_or_404(UnidadNegocioInfo, pk=self.kwargs["unidad_pk"])
@@ -218,9 +258,9 @@ class AlianzaCreateView(CreateView):
         return redirect("configuracion:configuracion")
 
 
-class AlianzaUpdateView(UpdateView):
+class AlianzaUpdateView(AdminRequiredMixin, UpdateView):
     model = UnidadAlianza
-    fields = ["nombre", "descripcion", "url", "orden"]
+    fields = ["nombre", "descripcion", "imagen", "orden"]
     success_url = reverse_lazy("configuracion:configuracion")
 
     def form_valid(self, form):
@@ -233,7 +273,7 @@ class AlianzaUpdateView(UpdateView):
         return redirect("configuracion:configuracion")
 
 
-class AlianzaDeleteView(DeleteView):
+class AlianzaDeleteView(AdminRequiredMixin, DeleteView):
     model = UnidadAlianza
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("configuracion:configuracion")
@@ -254,13 +294,14 @@ class LoginConfiguracionView(View):
         password = request.POST.get("password")
         try:
             cfg = ConfiguracionSistema.objects.get(email=email, activo=True)
-            if cfg.password_hash == password:
+            if _verificar_password(cfg, password):
                 # Guardar con ambas claves para compatibilidad con sesiones existentes
                 request.session["configuracion_id"]     = cfg.id
                 request.session["usuario_id"]           = cfg.id
                 request.session["usuario_nombre"]       = cfg.nombre_completo
                 request.session["configuracion_nombre"] = cfg.nombre_completo
                 request.session["unidad_negocio"]       = cfg.unidad_negocio
+                request.session["rol"]                  = cfg.rol
                 return redirect("comercial:dashboard")
             else:
                 messages.error(request, "Credenciales inválidas.")

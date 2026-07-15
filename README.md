@@ -104,9 +104,9 @@ python manage.py runserver
 ```
 
 Acceder a:
-- **Admin:** http://127.0.0.1:8000/admin/
-- **Proyectos:** http://127.0.0.1:8000/proyectos/
-- **API Despiece:** http://127.0.0.1:8000/api/despiece/
+- **Admin:** http://127.0.0.1:8080/admin/
+- **Proyectos:** http://127.0.0.1:8080/proyectos/
+- **API Despiece:** http://127.0.0.1:8080/api/despiece/
 
 ---
 
@@ -215,7 +215,7 @@ python manage.py diffsettings
 
 # Servidor de desarrollo
 python manage.py runserver
-python manage.py runserver 0.0.0.0:8000     # Accesible en red local
+python manage.py runserver 0.0.0.0:8080     # Accesible en red local
 ```
 
 ---

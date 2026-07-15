@@ -21,6 +21,67 @@ from .apu_service      import APUService
 logger = logging.getLogger(__name__)
 
 
+def clonar_proyecto_como_version(proyecto_base, usuario):
+    """
+    Clona un Proyecto existente creando una nueva versión dentro de la misma Solicitud.
+
+    · Copia todos los campos editables del proyecto base.
+    · La nueva versión queda vinculada a la misma solicitud y hereda el cliente.
+    · El auto-versionado (version, es_version_actual) lo gestiona Proyecto.save().
+    · No copia APU aprobado ni despieces (cada versión comienza limpia).
+    · Registra un LogSistema de la acción.
+
+    Retorna el nuevo Proyecto creado.
+    """
+    from apps.comercial.models import Proyecto, LogSistema
+
+    nuevo = Proyecto(
+        solicitud=proyecto_base.solicitud,
+        cliente=proyecto_base.cliente,
+        creado_por=usuario,
+        tipo_proyecto=proyecto_base.tipo_proyecto,
+        nombre=proyecto_base.nombre,
+        descripcion=proyecto_base.descripcion,
+        dias_duracion=proyecto_base.dias_duracion,
+        num_personas=proyecto_base.num_personas,
+        trm=proyecto_base.trm,
+        margen_comercial_pct=proyecto_base.margen_comercial_pct,
+        iva_pct=proyecto_base.iva_pct,
+        aiu_pct=proyecto_base.aiu_pct,
+        moneda=proyecto_base.moneda,
+        aplica_exencion_iva=proyecto_base.aplica_exencion_iva,
+        observaciones=proyecto_base.observaciones,
+        # estado siempre arranca como SOLICITUD para la nueva versión
+    )
+    # version y es_version_actual los asigna Proyecto.save()
+    nuevo.save()
+
+    try:
+        unidad = proyecto_base.solicitud.creado_por.unidad_negocio if (
+            proyecto_base.solicitud and proyecto_base.solicitud.creado_por
+        ) else ""
+        LogSistema.objects.create(
+            configuracion=usuario,
+            unidad_negocio=unidad,
+            accion="CLONAR_PROYECTO",
+            descripcion=(
+                f"Proyecto {nuevo.consecutivo} v{nuevo.version} creado como clon de "
+                f"{proyecto_base.consecutivo} v{proyecto_base.version}"
+            ),
+            modelo_afectado="Proyecto",
+            objeto_id=nuevo.pk,
+        )
+    except Exception:
+        pass
+
+    logger.info(
+        "[ProyectoService] Clon: %s v%s → %s v%s.",
+        proyecto_base.consecutivo, proyecto_base.version,
+        nuevo.consecutivo, nuevo.version,
+    )
+    return nuevo
+
+
 _ESTADOS_DESPIECE_PERMITIDOS = frozenset({
     "SOLICITUD",
     "DESPIECE",

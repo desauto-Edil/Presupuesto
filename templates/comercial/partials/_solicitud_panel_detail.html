@@ -1,0 +1,728 @@
+{% load auth_tags %}
+{% es_admin_actual as es_admin_flag %}
+{% comment %}
+_solicitud_panel_detail.html — Detalle reutilizable de una Solicitud.
+Se usa desde solicitud_list.html (panel master-detail con ?sel=<pk>).
+Recibe del contexto: solicitud, archivos, proyectos, proyectos_data,
+apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
+{% endcomment %}
+
+{% with proyecto_actual_obj=proyecto_actual %}
+
+{# ════════════════════════ TARJETA SUPERIOR CONSOLIDADA ════════════════════════ #}
+<div class="sol-summary fade-up">
+    <div class="sol-summary-head">
+        <div class="sol-summary-title">
+            <div class="sol-summary-id">{{ solicitud.consecutivo }}</div>
+            <div class="sol-summary-name">{{ solicitud.nombre }}</div>
+            <div class="sol-summary-client">{{ solicitud.cliente.razon_social }}</div>
+        </div>
+        <div class="sol-summary-state">
+            <span class="solpanel-badge
+                {% if solicitud.estado == 'EN_GESTION' %}is-pendiente
+                {% elif solicitud.estado == 'EN_PRESUPUESTO' %}is-info
+                {% elif solicitud.estado == 'EN_REVISION' %}is-warn
+                {% elif solicitud.estado == 'APROBADA' %}is-ok
+                {% elif solicitud.estado == 'DEVUELTA' or solicitud.estado == 'RECHAZADA' %}is-warn
+                {% elif solicitud.estado == 'CERRADA' %}is-muted
+                {% else %}is-muted{% endif %}">
+                {% if solicitud.estado == 'DEVUELTA' or solicitud.estado == 'RECHAZADA' %}Devuelta{% else %}{{ solicitud.get_estado_display }}{% endif %}
+            </span>
+        </div>
+    </div>
+
+    {% comment %}
+    Cuerpo del grid: solo datos COMPLEMENTARIOS. NO repetir consecutivo,
+    estado ni cliente — eso ya está en el encabezado de arriba.
+    {% endcomment %}
+    <div class="sol-summary-grid">
+        {# Bloque 1: contacto y cargo #}
+        <div class="sol-summary-col">
+            <div>
+                <div class="sol-field-label">Contacto</div>
+                {% if solicitud.contacto %}
+                <div class="sol-field-value">
+                    {{ solicitud.contacto.nombre }}
+                    {% if solicitud.contacto.cargo %}
+                    <div class="sol-field-value is-muted">{{ solicitud.contacto.cargo }}</div>
+                    {% endif %}
+                    {% if solicitud.contacto.email %}
+                    <div><a href="mailto:{{ solicitud.contacto.email }}">{{ solicitud.contacto.email }}</a></div>
+                    {% endif %}
+                    {% if solicitud.contacto.telefono %}
+                    <div class="sol-field-value is-muted">{{ solicitud.contacto.telefono }}</div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="sol-field-value is-muted">Sin contacto asignado</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Bloque 2: unidad de negocio + creado por #}
+        <div class="sol-summary-col">
+            <div>
+                <div class="sol-field-label">Unidad de negocio</div>
+                <div class="sol-field-value">
+                    {% if solicitud.unidad_negocio %}
+                        {{ solicitud.get_unidad_negocio_display|default:solicitud.unidad_negocio }}
+                    {% elif solicitud.creado_por.unidad_negocio %}
+                        {{ solicitud.creado_por.get_unidad_negocio_display|default:solicitud.creado_por.unidad_negocio }}
+                    {% else %}—{% endif %}
+                </div>
+            </div>
+            <div>
+                <div class="sol-field-label">Creado por</div>
+                <div class="sol-field-value">{{ solicitud.creado_por|default:"—" }}</div>
+            </div>
+        </div>
+
+        {# Bloque 3: fechas #}
+        <div class="sol-summary-col">
+            <div>
+                <div class="sol-field-label">Fecha registro</div>
+                <div class="sol-field-value">{{ solicitud.created_at|date:"d/m/Y" }}</div>
+            </div>
+            {% if solicitud.fecha_entrega %}
+            <div>
+                <div class="sol-field-label">Fecha entrega</div>
+                <div class="sol-field-value">{{ solicitud.fecha_entrega|date:"d/m/Y" }}</div>
+            </div>
+            {% endif %}
+            <div>
+                <div class="sol-field-label">Última edición</div>
+                <div class="sol-field-value is-muted">{{ solicitud.updated_at|date:"d/m/Y H:i" }}</div>
+            </div>
+        </div>
+
+        {# Bloque 4: archivos + link externo #}
+        <div class="sol-summary-col">
+            <div>
+                <div class="sol-field-label">Archivos adjuntos</div>
+                <div class="sol-field-value">
+                    <strong style="font-size:18px;">{{ archivos|length }}</strong>
+                    <span class="sol-field-value is-muted" style="display:inline;">archivo{{ archivos|length|pluralize }}</span>
+                </div>
+            </div>
+            {% if solicitud.link_salesforce %}
+            <div>
+                <div class="sol-field-label">Link externo</div>
+                <div class="sol-field-value">
+                    <a href="{{ solicitud.link_salesforce }}" target="_blank" rel="noopener">
+                        Ver en Salesforce ↗
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if solicitud.tiene_apu_aprobado %}
+<div class="fade-up" style="background:#d1fae5;border:1px solid #86efac;border-radius:8px;padding:9px 13px;margin-bottom:10px;font-size:12.5px;color:#065f46;font-weight:600;">
+    <i class="bi bi-lock-fill" style="margin-right:6px;"></i>
+    Esta solicitud tiene un APU aprobado: la información quedó en solo lectura.
+</div>
+{% endif %}
+
+{# ════════════════════════ ACCIONES PRINCIPALES (únicas) ════════════════════════ #}
+<div class="solpanel-actions fade-up">
+    {% if proyecto_actual_obj %}
+        {# Solicitud con proyecto: Ver / Editar / Clonar proyecto + Archivar solicitud #}
+        <a href="{% url 'comercial:proyecto_detail' proyecto_actual_obj.pk %}"
+           class="btn btn-primary btn-sm">Ver proyecto</a>
+        {% if not proyecto_actual_obj.tiene_apu_aprobado %}
+        <a href="{% url 'comercial:proyecto_update' proyecto_actual_obj.pk %}"
+           class="btn btn-ghost btn-sm">Editar proyecto</a>
+        {% endif %}
+        <form method="post" action="{% url 'comercial:proyecto_clonar' proyecto_actual_obj.pk %}"
+              style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-ghost btn-sm"
+                    title="Crear una nueva versión a partir del proyecto actual">
+                Clonar proyecto existente
+            </button>
+        </form>
+    {% else %}
+        {# Solicitud sin proyecto: Agregar proyecto + Editar solicitud #}
+        <button type="button" class="btn btn-primary btn-sm"
+                data-bs-toggle="modal" data-bs-target="#modalCrearProyecto">
+            Agregar proyecto
+        </button>
+        {% if not solicitud.tiene_apu_aprobado %}
+        <a href="{% url 'comercial:solicitud_update' solicitud.pk %}"
+           class="btn btn-ghost btn-sm">Editar solicitud</a>
+        {% endif %}
+    {% endif %}
+
+    {% if solicitud.estado == 'EN_REVISION' and puede_devolver %}
+    <button type="button" class="btn btn-ghost btn-sm" style="color:var(--warning,#b07a00);"
+            data-bs-toggle="modal" data-bs-target="#modalDevolverSolicitud"
+            title="Devolver el presupuesto para ajustes (no es rechazo comercial).">
+        Devolver
+    </button>
+    {% endif %}
+
+    {% if solicitud.estado == 'CERRADA' %}
+    <span class="btn btn-ghost btn-sm" style="color:var(--ink-soft);cursor:default;"
+          title="Solicitud archivada (CERRADA)">Archivada</span>
+    {% else %}
+    <button type="button" class="btn btn-ghost btn-sm" style="color:var(--warning,#b07a00);"
+            data-bs-toggle="modal" data-bs-target="#modalArchivarSolicitud">
+        Archivar solicitud
+    </button>
+    {% endif %}
+</div>
+
+
+{# ════════════════════════ BANNER DE ESTADO ════════════════════════ #}
+{% if solicitud.estado == 'EN_REVISION' %}
+<div style="margin:0 0 14px;padding:14px 18px;border-radius:8px;
+            background:linear-gradient(0deg, rgba(202,138,4,.10), rgba(202,138,4,.06));
+            border-left:6px solid #ca8a04;display:flex;align-items:center;gap:14px;">
+    <div style="font-size:28px;">⏳</div>
+    <div style="flex:1;">
+        <div style="font-size:11px;letter-spacing:.08em;color:#92400e;text-transform:uppercase;font-weight:700;">
+            Solicitud en revisión
+        </div>
+        <div style="font-size:14px;color:var(--ink);margin-top:2px;">
+            Esta solicitud está siendo revisada. Los APUs y documentos asociados aún pueden cambiar.
+        </div>
+    </div>
+</div>
+{% elif solicitud.estado == 'APROBADA' %}
+<div style="margin:0 0 14px;padding:14px 18px;border-radius:8px;
+            background:linear-gradient(0deg, rgba(22,101,52,.12), rgba(22,101,52,.05));
+            border-left:6px solid #166534;display:flex;align-items:center;gap:14px;">
+    <div style="font-size:28px;">✓</div>
+    <div style="flex:1;">
+        <div style="font-size:11px;letter-spacing:.08em;color:#166534;text-transform:uppercase;font-weight:700;">
+            Solicitud aprobada y finalizada
+        </div>
+        <div style="font-size:14px;color:var(--ink);margin-top:2px;">
+            Esta solicitud está aprobada y la cotización final está disponible.
+        </div>
+    </div>
+</div>
+{% elif solicitud.estado == 'DEVUELTA' or solicitud.estado == 'RECHAZADA' %}
+<div style="margin:0 0 14px;padding:14px 18px;border-radius:8px;
+            background:linear-gradient(0deg, rgba(202,138,4,.10), rgba(202,138,4,.06));
+            border-left:6px solid #ca8a04;display:flex;align-items:flex-start;gap:14px;">
+    <div style="font-size:28px;line-height:1;">↺</div>
+    <div style="flex:1;">
+        <div style="font-size:11px;letter-spacing:.08em;color:#92400e;text-transform:uppercase;font-weight:700;">
+            Solicitud devuelta para ajustes
+        </div>
+        <div style="font-size:14px;color:var(--ink);margin-top:2px;">
+            El presupuesto debe corregirse o completarse. No es un rechazo comercial del cliente.
+        </div>
+        {% if solicitud.motivo_devolucion %}
+        <div style="margin-top:8px;font-size:12.5px;color:var(--ink-soft);">
+            <strong style="color:#92400e;">Motivo:</strong> {{ solicitud.motivo_devolucion }}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% elif solicitud.estado == 'CERRADA' %}
+<div style="margin:0 0 14px;padding:14px 18px;border-radius:8px;
+            background:#f5f3ef;border-left:6px solid #8a8170;
+            display:flex;align-items:center;gap:14px;">
+    <div style="font-size:24px;line-height:1;">■</div>
+    <div style="flex:1;">
+        <div style="font-size:11px;letter-spacing:.08em;color:#5b5340;text-transform:uppercase;font-weight:700;">
+            Solicitud cerrada / archivada
+        </div>
+        <div style="font-size:14px;color:var(--ink);margin-top:2px;">
+            Cierre administrativo. Se conserva trazabilidad.
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ════════════════════════ RESUMEN APUs ════════════════════════ #}
+{% if apu_resumen.total %}
+<div style="margin:0 0 14px;display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">
+    <div class="panel" style="padding:12px;text-align:center;">
+        <div style="font-size:10px;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.05em;">Total APUs</div>
+        <div style="font-size:22px;font-weight:700;color:var(--ink);">{{ apu_resumen.total }}</div>
+    </div>
+    <div class="panel" style="padding:12px;text-align:center;">
+        <div style="font-size:10px;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.05em;">Individuales</div>
+        <div style="font-size:22px;font-weight:700;color:var(--ink);">{{ apu_resumen.individuales }}</div>
+    </div>
+    <div class="panel" style="padding:12px;text-align:center;">
+        <div style="font-size:10px;text-transform:uppercase;color:#3730a3;letter-spacing:.05em;">Consolidados</div>
+        <div style="font-size:22px;font-weight:700;color:#3730a3;">{{ apu_resumen.consolidados }}</div>
+    </div>
+    <div class="panel" style="padding:12px;text-align:center;">
+        <div style="font-size:10px;text-transform:uppercase;color:#92400e;letter-spacing:.05em;">En revisión</div>
+        <div style="font-size:22px;font-weight:700;color:#92400e;">{{ apu_resumen.en_revision }}</div>
+    </div>
+    <div class="panel" style="padding:12px;text-align:center;">
+        <div style="font-size:10px;text-transform:uppercase;color:#166534;letter-spacing:.05em;">Aprobados</div>
+        <div style="font-size:22px;font-weight:700;color:#166534;">{{ apu_resumen.aprobados }}</div>
+    </div>
+</div>
+{% endif %}
+
+{# ════════════════════════ INFO INTERNA / OBSERVACIONES ════════════════════════ #}
+{% if solicitud.descripcion or solicitud.observaciones %}
+<div class="panel" style="margin-bottom:14px;">
+    <div class="panel-header">
+        <span class="panel-title">Información interna / observaciones</span>
+        <span style="font-size:10px;color:rgba(14,17,23,0.35);display:inline-flex;align-items:center;gap:3px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M8 0a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 2 13.5v-5a2.5 2.5 0 0 1 2-2.45V4a4 4 0 0 1 4-4m0 1a3 3 0 0 0-3 3v2h6V4a3 3 0 0 0-3-3"/>
+            </svg>
+            Solo equipo interno
+        </span>
+    </div>
+    {% if solicitud.descripcion %}
+    <div style="padding:14px 20px;font-size:13.5px;color:var(--ink);line-height:1.6;border-bottom:1px solid var(--border);">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;margin-bottom:6px;">Descripción</div>
+        {{ solicitud.descripcion|linebreaksbr }}
+    </div>
+    {% endif %}
+    {% if solicitud.observaciones %}
+    <div style="padding:14px 20px;font-size:13px;color:var(--ink-soft);line-height:1.6;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:700;margin-bottom:6px;">Observaciones</div>
+        {{ solicitud.observaciones|linebreaksbr }}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ════════════════════════ PROYECTO(S) Y APUs ════════════════════════ #}
+<div class="panel" style="margin-bottom:14px;">
+    <div class="panel-header accent-top-theme" style="border-radius:var(--radius) var(--radius) 0 0;">
+        <span class="panel-title">Proyecto{{ proyectos|pluralize }}</span>
+        <span style="font-size:10px;color:rgba(14,17,23,.35);margin-left:8px;">{{ proyectos|length }}</span>
+    </div>
+
+    {% if proyectos_data %}
+    <div>
+        {% for item in proyectos_data %}
+        {% with proy=item.proy %}
+        <div style="border-bottom:1px solid var(--border);
+                    {% if proy.es_version_actual %}background:var(--theme-accent-pale);{% endif %}">
+
+            <div style="padding:14px 20px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+                <div style="width:34px;height:34px;border-radius:50%;flex-shrink:0;
+                            background:{% if proy.es_version_actual %}var(--theme-accent){% else %}var(--surface){% endif %};
+                            border:1px solid var(--border);
+                            display:flex;align-items:center;justify-content:center;
+                            font-family:'Syne',sans-serif;font-weight:800;font-size:11px;
+                            color:{% if proy.es_version_actual %}#fff{% else %}var(--ink-soft){% endif %};">
+                    v{{ proy.version }}
+                </div>
+                <div style="flex:1;min-width:200px;">
+                    <div style="font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <a href="{% url 'comercial:proyecto_detail' proy.pk %}"
+                           style="color:inherit;text-decoration:none;">{{ proy.consecutivo }}</a>
+                        <span style="color:var(--ink-soft);font-weight:500;">— {{ proy.nombre|truncatechars:48 }}</span>
+                        {% if proy.es_version_actual %}
+                        <span style="font-size:9px;background:var(--theme-accent);color:#fff;padding:2px 6px;border-radius:3px;font-weight:700;letter-spacing:.05em;">ACTUAL</span>
+                        {% endif %}
+                    </div>
+                    <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">
+                        {{ proy.get_estado_display }}
+                        {% if proy.creado_por %} · {{ proy.creado_por }}{% endif %}
+                        · {{ proy.created_at|date:"d/m/Y" }}
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <a href="{% url 'comercial:proyecto_detail' proy.pk %}" class="btn btn-ghost btn-xs">Ver proyecto</a>
+                    {% if not proy.tiene_apu_aprobado %}
+                    <a href="{% url 'comercial:proyecto_update' proy.pk %}" class="btn btn-ghost btn-xs">Editar proyecto</a>
+                    {% endif %}
+                    <form method="post" action="{% url 'comercial:proyecto_clonar' proy.pk %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-ghost btn-xs"
+                                title="Crear una nueva versión a partir de este proyecto">Clonar proyecto existente</button>
+                    </form>
+                </div>
+            </div>
+
+            {% if item.apus_data or item.despieces_sin_apu %}
+            <div style="background:rgba(0,0,0,.02);border-top:1px solid var(--border);">
+                {% for bucket in item.apus_data %}
+                {% with apu=bucket.apu despieces=bucket.despieces %}
+                <div style="padding:10px 20px 10px 60px;border-bottom:1px solid rgba(14,17,23,.04);">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:11.5px;font-weight:600;color:var(--ink);">
+                                APU #{{ apu.pk }} — {{ apu.nombre|truncatechars:40 }}
+                            </div>
+                            <div style="font-size:10px;color:var(--ink-soft);">
+                                Incluye {{ despieces|length }} despiece{{ despieces|length|pluralize }}
+                            </div>
+                        </div>
+                        {% if apu.modalidad_aiu_seleccionada %}
+                        <span style="font-size:10px;background:rgba(23,168,94,.15);color:#0d7a44;
+                                     padding:2px 7px;border-radius:3px;font-weight:700;">
+                            ✓ Aprobado · Mod. {{ apu.modalidad_aiu_seleccionada }}
+                        </span>
+                        {% if apu.fecha_aprobacion %}
+                        <span style="font-size:10px;color:var(--ink-soft);">{{ apu.fecha_aprobacion|date:"d/m/Y" }}</span>
+                        {% endif %}
+                        {% if apu.aplica_garantia and apu.tipo_garantia %}
+                        <span style="font-size:10px;background:rgba(255,166,0,.15);color:#a86b00;
+                                     padding:2px 7px;border-radius:3px;font-weight:600;">
+                            {{ apu.tipo_garantia.nombre }}
+                        </span>
+                        {% endif %}
+                        {% else %}
+                        <span style="font-size:10px;background:rgba(255,166,0,.15);color:#a86b00;
+                                     padding:2px 7px;border-radius:3px;font-weight:600;">
+                            En revisión · Modalidad pendiente
+                        </span>
+                        {% endif %}
+                    </div>
+                    <ul style="margin:6px 0 6px 16px;padding:0;list-style:disc;font-size:11px;color:var(--ink);">
+                        {% for dm in despieces %}
+                        <li>
+                            <a href="{% url 'ingenieria:despiece_maestro' dm.pk %}"
+                               style="color:var(--ink);text-decoration:none;">
+                                {{ dm.nombre|default:dm.subsistema.nombre }}
+                            </a>
+                            <span style="color:var(--ink-soft);font-size:10px;">
+                                — {{ dm.subsistema.sistema.nombre }} · Incluido en APU #{{ apu.pk }}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+                        {% apu_esta_aprobado apu as apu_aprobado_flag %}
+                        {% puede_aprobar_apu apu as puede_aprobar_flag %}
+                        {% if apu.fecha_envio_revision and not apu_aprobado_flag and puede_aprobar_flag %}
+                        <a href="{% url 'presupuestos:apu_revisar' apu.pk %}"
+                           class="btn btn-xs" style="background:#1f2937;color:#fff;font-size:10px;">Ir a la revisión</a>
+                        {% endif %}
+                        {% comment %}Sub-fase D — Cuando el usuario actual es revisor del APU (puede_aprobar_flag), el botón "Ver APU" pasa a "Ver autorización" y abre un modal contextual.{% endcomment %}
+                        {% if puede_aprobar_flag %}
+                        {% puede_editar_apu apu as puede_editar_flag %}
+                        <button type="button" data-bs-toggle="modal" data-bs-target="#modalAutorizacion_{{ apu.pk }}"
+                                class="btn btn-xs" style="background:var(--theme-accent);color:#fff;font-size:10px;border:none;">
+                            <i class="bi bi-shield-check" style="margin-right:3px;"></i>Ver autorización
+                        </button>
+                        {% include "presupuestos/partials/_modal_autorizacion_apu.html" with apu=apu puede_editar=puede_editar_flag %}
+                        {% else %}
+                        <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
+                           class="btn btn-xs" style="background:var(--theme-accent);color:#fff;font-size:10px;">Ver APU</a>
+                        {% endif %}
+                        <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
+                           class="btn btn-ghost btn-xs" style="font-size:10px;" target="_blank">PDF Int. (vivo)</a>
+                        <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
+                           class="btn btn-ghost btn-xs" style="font-size:10px;" target="_blank">PDF Cli. (vivo)</a>
+                        {% with cot=apu.cotizacion_vigente %}
+                        {% if cot %}
+                        <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;
+                                     border-radius:999px;background:rgba(40,167,69,.12);color:#1c7a3a;
+                                     font-size:9.5px;font-weight:700;">
+                            <i class="bi bi-file-earmark-check-fill"></i>
+                            Cotización aprobada v{{ cot.version }}
+                        </span>
+                        <a href="{% url 'presupuestos:cotizacion_pdf_interno' cot.pk %}"
+                           class="btn btn-xs" style="background:#1c7a3a;color:#fff;font-size:10px;" target="_blank">
+                            PDF Int. aprobado
+                        </a>
+                        <a href="{% url 'presupuestos:cotizacion_pdf_cliente' cot.pk %}"
+                           class="btn btn-xs" style="background:#1c7a3a;color:#fff;font-size:10px;" target="_blank">
+                            PDF Cli. aprobado
+                        </a>
+                        {% endif %}
+                        {% endwith %}
+                    </div>
+                </div>
+                {% endwith %}
+                {% endfor %}
+
+                {% if item.despieces_sin_apu %}
+                <div style="padding:8px 20px 8px 60px;">
+                    <div style="font-size:10px;color:var(--ink-soft);font-weight:600;margin-bottom:4px;">
+                        Despieces sin APU
+                    </div>
+                    {% for dm in item.despieces_sin_apu %}
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+                                padding:4px 0;border-top:1px dashed rgba(14,17,23,.05);">
+                        <span style="font-size:11px;flex:1;min-width:0;">
+                            {{ dm.nombre|default:dm.subsistema.nombre }}
+                            <span style="color:var(--ink-soft);font-size:10px;">
+                                — {{ dm.subsistema.sistema.nombre }}
+                                · {% if dm.esta_guardado %}<span style="color:#17a85e;font-weight:600;">Guardado</span>{% else %}Borrador{% endif %}
+                                · Sin APU
+                            </span>
+                        </span>
+                        <a href="{% url 'ingenieria:despiece_maestro' dm.pk %}"
+                           class="btn btn-ghost btn-xs" style="font-size:10px;">Abrir</a>
+                        {% if dm.esta_guardado %}
+                        <form method="post" action="{% url 'presupuestos:apu_generar_despiece' dm.pk %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-xs"
+                                    style="background:var(--theme-accent);color:#fff;font-size:10px;">Gen. APU</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% comment %}Barra "Consolidar despieces" — visible cuando el proyecto tiene 2+ despieces guardados o 2+ APUs.{% endcomment %}
+            {% if item.puede_consolidar %}
+            <div style="padding:10px 18px;background:rgba(79,70,229,.05);
+                        border-top:1px solid var(--border);
+                        display:flex;justify-content:space-between;align-items:center;
+                        gap:10px;flex-wrap:wrap;">
+                <div style="font-size:11.5px;color:var(--ink-soft);line-height:1.4;">
+                    Puedes unir varios despieces de este proyecto para consolidar materiales y costos.
+                </div>
+                <a href="{% url 'presupuestos:apu_consolidar_seleccionar' proy.pk %}"
+                   class="btn btn-xs"
+                   style="background:#4f46e5;color:#fff;font-size:10.5px;white-space:nowrap;">
+                    <i class="bi bi-layers" style="margin-right:3px;"></i>Consolidar despieces
+                </a>
+            </div>
+            {% endif %}
+
+        </div>
+        {% endwith %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding:32px 24px;text-align:center;">
+        <div style="font-size:13px;color:var(--ink-soft);">
+            Esta solicitud aún no tiene proyecto asociado. Usa el botón
+            <strong style="color:var(--ink);">Agregar proyecto</strong> en la barra de acciones de arriba.
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{# ════════════════════════ ARCHIVOS ADJUNTOS ════════════════════════ #}
+<div class="panel" style="margin-bottom:14px;">
+    <div class="panel-header">
+        <span class="panel-title">Archivos adjuntos</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+            {% if archivos %}
+            <span style="font-size:11px;color:var(--ink-soft);">
+                {{ archivos|length }} archivo{{ archivos|length|pluralize }}
+            </span>
+            {% endif %}
+            {% if not solicitud.tiene_apu_aprobado %}
+            <a href="{% url 'comercial:solicitud_update' solicitud.pk %}"
+               class="btn btn-ghost btn-xs">+ Adjuntar</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if archivos %}
+    <div>
+        {% for archivo in archivos %}
+        <div class="archivo-item">
+            <div class="archivo-ext">
+                {% if archivo.extension == 'pdf' %}📄
+                {% elif archivo.extension in 'jpg,jpeg,png,gif,webp' %}🖼️
+                {% elif archivo.extension in 'xls,xlsx,csv' %}📊
+                {% elif archivo.extension in 'doc,docx' %}📝
+                {% else %}📎{% endif %}
+            </div>
+            <div style="flex:1;min-width:0;">
+                <a href="{{ archivo.archivo.url }}" target="_blank"
+                   class="archivo-nombre">{{ archivo.nombre }}</a>
+                <div class="archivo-meta">
+                    {{ archivo.extension|upper }} ·
+                    {{ archivo.fecha_subida|date:"d/m/Y H:i" }}
+                    {% if archivo.configuracion %} · {{ archivo.configuracion }}{% endif %}
+                </div>
+            </div>
+            <form method="post"
+                  action="{% url 'comercial:solicitud_archivo_delete' archivo.pk %}"
+                  onsubmit="return confirm('¿Eliminar «{{ archivo.nombre }}»?')">
+                {% csrf_token %}
+                <button type="submit" class="archivo-del" title="Eliminar">✕</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:28px 20px;">
+        <div class="empty-state-icon" style="font-size:24px;">📎</div>
+        <div class="empty-state-text">Sin archivos adjuntos.</div>
+    </div>
+    {% endif %}
+</div>
+
+{# ════════════════════════ HISTORIAL ════════════════════════ #}
+<div class="panel fade-up-2" style="margin-bottom:14px;">
+    <div class="panel-header" style="cursor:pointer;" onclick="toggleHistorial()" id="historial-header">
+        <span class="panel-title">Historial de actividad</span>
+        <span style="font-size:11px;color:var(--ink-soft);margin-right:auto;">
+            {% if logs %}{{ logs|length }} evento{{ logs|length|pluralize }}{% else %}Sin eventos{% endif %}
+        </span>
+        <span id="historial-chevron" style="font-size:13px;color:var(--ink-soft);transition:transform .18s;">▾</span>
+    </div>
+
+    {% if logs %}
+    <div id="historial-preview">
+        {% for log in logs|slice:":3" %}
+        <div style="padding:9px 20px;border-bottom:1px solid var(--border);
+                    display:flex;align-items:flex-start;gap:12px;">
+            <div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;
+                        background:{% if log.modelo_afectado == 'Proyecto' %}var(--theme-accent){% elif log.modelo_afectado == 'Solicitud' %}#1470e6{% else %}#64748b{% endif %};">
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:500;line-height:1.4;">
+                    {{ log.descripcion|default:log.accion }}
+                </div>
+                <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <span>{{ log.configuracion.nombre_completo|default:"Sistema" }}</span>
+                    <span style="color:rgba(14,17,23,0.25);">·</span>
+                    <span>{{ log.created_at|date:"d/m/Y H:i" }}</span>
+                    {% if log.modelo_afectado %}
+                    <span style="font-size:10px;background:rgba(0,0,0,0.05);padding:1px 5px;border-radius:4px;font-family:monospace;">{{ log.modelo_afectado }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <span style="font-size:10px;font-family:monospace;background:rgba(86,83,148,0.08);color:rgba(86,83,148,0.80);padding:2px 6px;border-radius:4px;white-space:nowrap;align-self:flex-start;margin-top:2px;">{{ log.accion }}</span>
+        </div>
+        {% endfor %}
+        {% if logs|length > 3 %}
+        <div style="padding:8px 20px;text-align:center;border-top:1px solid var(--border);">
+            <button type="button" onclick="toggleHistorialCompleto()" id="btn-ver-mas"
+                    style="background:none;border:none;cursor:pointer;font-size:11.5px;color:var(--theme-accent);font-weight:500;">
+                Ver {{ logs|length|add:"-3" }} evento{{ logs|length|add:"-3"|pluralize }} más ▾
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if logs|length > 3 %}
+    <div id="historial-completo" style="display:none;">
+        {% for log in logs|slice:"3:" %}
+        <div style="padding:9px 20px;border-bottom:1px solid var(--border);
+                    display:flex;align-items:flex-start;gap:12px;">
+            <div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px;
+                        background:{% if log.modelo_afectado == 'Proyecto' %}var(--theme-accent){% elif log.modelo_afectado == 'Solicitud' %}#1470e6{% else %}#64748b{% endif %};">
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:500;line-height:1.4;">
+                    {{ log.descripcion|default:log.accion }}
+                </div>
+                <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <span>{{ log.configuracion.nombre_completo|default:"Sistema" }}</span>
+                    <span style="color:rgba(14,17,23,0.25);">·</span>
+                    <span>{{ log.created_at|date:"d/m/Y H:i" }}</span>
+                    {% if log.modelo_afectado %}
+                    <span style="font-size:10px;background:rgba(0,0,0,0.05);padding:1px 5px;border-radius:4px;font-family:monospace;">{{ log.modelo_afectado }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <span style="font-size:10px;font-family:monospace;background:rgba(86,83,148,0.08);color:rgba(86,83,148,0.80);padding:2px 6px;border-radius:4px;white-space:nowrap;align-self:flex-start;margin-top:2px;">{{ log.accion }}</span>
+        </div>
+        {% endfor %}
+        <div style="padding:8px 20px;text-align:center;border-top:1px solid var(--border);">
+            <button type="button" onclick="toggleHistorialCompleto()"
+                    style="background:none;border:none;cursor:pointer;font-size:11.5px;color:var(--ink-soft);">
+                Mostrar menos ▴
+            </button>
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="padding:24px 20px;text-align:center;color:var(--ink-soft);font-size:13px;">
+        No hay actividad registrada todavía.
+    </div>
+    {% endif %}
+</div>
+
+{# ════════════════════════ MODALES ════════════════════════ #}
+{% include "comercial/_modal_crear_proyecto.html" %}
+
+{# Modal: Devolver #}
+<div class="modal fade" id="modalDevolverSolicitud" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <form method="post" action="{% url 'comercial:solicitud_devolver' solicitud.pk %}">
+                {% csrf_token %}
+                <div class="modal-header" style="border-bottom:1px solid var(--border);">
+                    <h5 class="modal-title" style="font-size:14px;">Devolver solicitud</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" style="font-size:13px;">
+                    La solicitud queda <strong>devuelta para ajustes</strong>. El equipo podrá corregir
+                    y volver a enviarla a revisión. Esto <em>no es un rechazo comercial</em>.
+                    <div style="margin-top:10px;">
+                        <label style="font-size:11.5px;color:var(--ink-soft);display:block;margin-bottom:4px;">Motivo (obligatorio)</label>
+                        <textarea name="motivo" rows="3" required class="form-control form-control-sm" style="font-size:12px;"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm" style="background:var(--warning,#b07a00);color:#fff;">Devolver</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% comment %}
+Modal único de Archivar (sin modales anidados — evita backdrops huérfanos).
+Si la solicitud no tiene proyectos, expone "Eliminar definitivamente" como
+acción secundaria en el mismo footer, dentro de su propio formulario y con
+confirm() defensivo. No hay data-bs-toggle saltando entre modales.
+{% endcomment %}
+<div class="modal fade" id="modalArchivarSolicitud" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header" style="border-bottom:1px solid var(--border);">
+                <h5 class="modal-title" style="font-size:14px;">Archivar solicitud</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body" style="font-size:13px;">
+                La solicitud pasa a estado <strong>CERRADA</strong> y se conserva su trazabilidad
+                (proyectos, APUs, archivos e historial).
+                {% if not proyectos or es_admin_flag %}
+                <div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--ink-soft);">
+                    {% if es_admin_flag and proyectos %}
+                    Como administrador global puedes eliminar físicamente esta solicitud. Se eliminarán los
+                    proyectos, APUs, cotizaciones/snapshots, despieces y relaciones asociadas a esta solicitud.
+                    Esta acción no se puede deshacer.
+                    {% else %}
+                    Esta solicitud no tiene proyectos asociados. Si necesitas borrarla físicamente,
+                    puedes hacerlo desde abajo.
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                {% if not proyectos or es_admin_flag %}
+                <form method="post" action="{% url 'comercial:solicitud_delete' solicitud.pk %}"
+                      onsubmit="return confirm('¿Eliminar definitivamente {{ solicitud.consecutivo }}? Esta acción no se puede deshacer.');"
+                      style="margin:0;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-ghost btn-sm"
+                            style="color:var(--danger);font-size:11.5px;"
+                            title="{% if es_admin_flag %}Admin global: borrado en cascada incluso con trazabilidad.{% else %}Sin proyectos asociados: se permite eliminación física.{% endif %}">
+                        Eliminar definitivamente
+                    </button>
+                </form>
+                {% else %}<span></span>{% endif %}
+                <div style="display:flex;gap:6px;">
+                    <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <form method="post" action="{% url 'comercial:solicitud_archivar' solicitud.pk %}" style="margin:0;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm"
+                                style="background:var(--warning,#b07a00);color:#fff;">
+                            Archivar solicitud
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endwith %}

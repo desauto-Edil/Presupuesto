@@ -54,6 +54,20 @@ class ProyectoSistema(models.Model):
         except Exception:
             return f"ProyectoSistema #{self.pk}"
 
+    # ── Bloqueo por APU aprobado ───────────────────────────────────────────────
+
+    @property
+    def tiene_apu_aprobado(self) -> bool:
+        """
+        True si el APU individual de este sistema ya está aprobado, o si el
+        proyecto contenedor tiene algún APU (consolidado) aprobado.
+        Se usa para pasar el despiece/selección de productos a solo lectura.
+        """
+        apu = getattr(self, "apu", None)  # OneToOne related_name="apu"
+        if apu is not None and apu.esta_aprobado:
+            return True
+        return self.proyecto.tiene_apu_aprobado if self.proyecto_id else False
+
     # ── Contexto ──────────────────────────────────────────────────────────────
 
     def get_contexto(self) -> dict:

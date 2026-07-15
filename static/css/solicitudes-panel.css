@@ -1,0 +1,335 @@
+/* ============================================================================
+   solicitudes-panel.css — Layout master-detail para la vista de Solicitudes.
+   Solo estilos estructurales (grid, spacing, borders, cards, sombras suaves,
+   responsive). Usa variables CSS existentes del tema activo
+   (--theme-accent, --card, --surface, --border, --ink, --ink-soft). NO quema
+   colores propios de unidad de negocio.
+   ============================================================================ */
+
+.solpanel-wrap {
+  display: grid;
+  /* minmax(0, 1fr) impide que min-content empuje la columna y permite que el
+     detalle se encoja correctamente cuando el contenido interno es ancho. */
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  transition: grid-template-columns .18s ease;
+}
+/* Lista oculta: una sola columna real para que el detalle ocupe el 100%.
+   No usar "0 1fr" porque entonces el auto-placement coloca el detalle en la
+   columna de 0px y rompe el texto en cataratas verticales. */
+.solpanel-wrap.is-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.solpanel-wrap.is-collapsed > .solpanel-list { display: none; }
+
+.solpanel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  flex-wrap: wrap;
+}
+.solpanel-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.solpanel-toggle-icon {
+  display: inline-block;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+/* ── Columna izquierda: lista ───────────────────────────────────────────── */
+.solpanel-list {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 180px);
+  position: sticky;
+  top: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(14, 17, 23, 0.04);
+}
+
+.solpanel-list-header {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.solpanel-list-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+.solpanel-list-subtitle {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.solpanel-filters {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--card);
+}
+.solpanel-filters .form-control,
+.solpanel-filters .form-select { font-size: 12px; }
+.solpanel-filters-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.solpanel-filters-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  font-size: 11px;
+}
+
+.solpanel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tarjeta de solicitud en la lista */
+.solpanel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  text-decoration: none;
+  background: transparent;
+  transition: background-color .12s ease, border-color .12s ease;
+  position: relative;
+}
+.solpanel-item:hover {
+  background: var(--theme-accent-pale, rgba(0,0,0,.03));
+  color: inherit;
+}
+.solpanel-item.is-active {
+  background: var(--theme-accent-pale, rgba(0,0,0,.05));
+  box-shadow: inset 3px 0 0 var(--theme-accent);
+}
+.solpanel-item-icon {
+  width: 30px; height: 30px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+  display: flex; align-items: center; justify-content: center;
+}
+.solpanel-item.is-active .solpanel-item-icon {
+  background: var(--card);
+  color: var(--theme-accent);
+  border-color: var(--theme-accent-border, var(--border));
+}
+.solpanel-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.solpanel-item-id {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--theme-accent);
+  letter-spacing: 0.02em;
+}
+.solpanel-item-client {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.solpanel-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.solpanel-badge::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .8;
+}
+.solpanel-badge.is-pendiente { background: rgba(20,112,230,.10); color: #1470e6; }
+.solpanel-badge.is-info      { background: rgba(55,48,163,.10); color: #3730a3; }
+.solpanel-badge.is-warn      { background: rgba(202,138,4,.14); color: #92400e; }
+.solpanel-badge.is-ok        { background: rgba(22,101,52,.14); color: #166534; }
+.solpanel-badge.is-muted     { background: rgba(100,116,139,.14); color: #475569; }
+
+.solpanel-list-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11px;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ── Columna derecha: detalle ───────────────────────────────────────────── */
+.solpanel-detail {
+  min-width: 0;       /* impide que grid-item asuma min-width: auto */
+  max-width: 100%;
+}
+/* Hijos directos del wrap deben poder encogerse sin reventar el grid */
+.solpanel-wrap > * { min-width: 0; }
+.sol-summary,
+.sol-summary > *,
+.sol-summary-grid > * { min-width: 0; }
+
+.solpanel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.solpanel-empty {
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 60px 30px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.solpanel-empty-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+  opacity: .55;
+}
+.solpanel-empty-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.solpanel-empty-text {
+  font-size: 13px;
+  max-width: 360px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+/* ── Tarjeta superior consolidada (resumen) ─────────────────────────────── */
+.sol-summary {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--theme-accent);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(14, 17, 23, 0.04);
+  padding: 16px 20px;
+  margin-bottom: 14px;
+}
+.sol-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--border);
+}
+.sol-summary-title {
+  margin: 0;
+}
+.sol-summary-id {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--theme-accent);
+  letter-spacing: 0.04em;
+}
+.sol-summary-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-top: 2px;
+}
+.sol-summary-client {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.sol-summary-state {
+  flex-shrink: 0;
+}
+
+.sol-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.sol-summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.sol-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ink-soft);
+  margin-bottom: 2px;
+}
+.sol-field-value {
+  font-size: 13px;
+  color: var(--ink);
+  word-break: break-word;
+}
+.sol-field-value.is-muted { color: var(--ink-soft); font-size: 12.5px; }
+.sol-field-value a { color: var(--theme-accent); text-decoration: none; }
+.sol-field-value a:hover { text-decoration: underline; }
+
+@media (max-width: 980px) {
+  .sol-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .sol-summary-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .solpanel-wrap {
+    grid-template-columns: 1fr;
+  }
+  .solpanel-list {
+    position: static;
+    max-height: none;
+  }
+  .solpanel-scroll {
+    max-height: 420px;
+  }
+}

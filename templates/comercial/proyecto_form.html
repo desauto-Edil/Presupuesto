@@ -50,19 +50,6 @@
         {{ form.descripcion }}
       </div>
 
-      <div class="section-heading" style="margin-top:18px;">Métricas técnicas</div>
-
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label>Área total (m²)</label>
-          {{ form.area_total_m2 }}
-        </div>
-        <div class="form-group">
-          <label>Perímetro (ml)</label>
-          {{ form.perimetro_ml }}
-        </div>
-      </div>
-
       <div class="form-grid-2">
         <div class="form-group">
           <label>Días de duración estimada</label>
@@ -72,26 +59,17 @@
         <div class="form-group">
           <label>Número de personas <span style="font-size:10px;color:var(--ink-soft);">(equipo de trabajo)</span></label>
           {{ form.num_personas }}
-          <small style="color:var(--ink-soft);font-size:10.5px;">
-            7 = cuadrilla de instalación estándar. Otro valor: seleccione quiénes.
-          </small>
+          <small style="color:var(--ink-soft);font-size:10.5px;">Personas en el equipo de trabajo.</small>
         </div>
       </div>
 
-      <div class="section-heading" style="margin-top:18px;">Variables financieras</div>
+      <div class="section-heading" style="margin-top:14px;">Variables financieras</div>
 
-      <div class="form-grid-2">
+      <div class="form-grid-3">
         <div class="form-group">
           <label>TRM (COP/USD)</label>
           {{ form.trm }}
         </div>
-        <div class="form-group">
-          <label>Moneda</label>
-          {{ form.moneda }}
-        </div>
-      </div>
-
-      <div class="form-grid-2">
         <div class="form-group">
           <label>Margen comercial (%)</label>
           {{ form.margen_comercial_pct }}
@@ -102,15 +80,19 @@
         </div>
       </div>
 
-      <div class="form-grid-2">
+      <div class="form-grid-3">
         <div class="form-group">
-          <label>AIU (%)</label>
+          <label>AIU Contratista (%)</label>
           {{ form.aiu_pct }}
         </div>
-        <div class="form-group" style="padding-top:32px;">
+        <div class="form-group">
+          <label>Moneda</label>
+          {{ form.moneda }}
+        </div>
+        <div class="form-group" style="padding-top:26px;">
           <div class="form-check">
             {{ form.aplica_exencion_iva }}
-            <label class="form-check-label" style="font-size:13px;">Aplica exención de IVA</label>
+            <label class="form-check-label" style="font-size:13px;">Exención de IVA</label>
           </div>
         </div>
       </div>
@@ -136,4 +118,49 @@
     </div>
   </form>
 </div>
+
+<!-- Checkpoint proyecto -->
+<script>
+window.CP_TITULO  = "{% if object %}Editar proyecto{% else %}Nuevo proyecto{% endif %}";
+window.CP_SECCIONES = [
+  {
+    label: 'Datos del proyecto', anchor: '', fn: function() {
+      const cliente = document.querySelector('select[name="cliente"]');
+      const nombre  = document.querySelector('input[name="nombre"]');
+      const errores = [];
+      if (!cliente || !cliente.value) errores.push('Cliente obligatorio');
+      if (!nombre  || !nombre.value.trim()) errores.push('Nombre del proyecto obligatorio');
+      const puntaje = errores.length === 0 ? 40 : Math.max(0, 40 - errores.length * 18);
+      return { puntaje, maximo: 40, estado: errores.length ? 'error' : 'ok', errores, advertencias: [] };
+    }
+  },
+  {
+    label: 'Variables financieras', anchor: '', fn: function() {
+      const trm    = document.querySelector('input[name="trm"]');
+      const margen = document.querySelector('input[name="margen_comercial_pct"]');
+      const iva    = document.querySelector('input[name="iva_pct"]');
+      const advertencias = [];
+      if (!trm    || !trm.value)    advertencias.push('TRM no ingresada');
+      if (!margen || !margen.value) advertencias.push('Margen comercial no ingresado');
+      if (!iva    || !iva.value)    advertencias.push('IVA no ingresado');
+      const puntaje = advertencias.length === 0 ? 35 : Math.max(10, 35 - advertencias.length * 8);
+      return { puntaje, maximo: 35,
+               estado: advertencias.length ? 'advertencia' : 'ok', errores: [], advertencias };
+    }
+  },
+  {
+    label: 'Configuración operativa', anchor: '', fn: function() {
+      const dias = document.querySelector('input[name="dias_duracion"]');
+      const pers = document.querySelector('input[name="num_personas"]');
+      const advertencias = [];
+      if (!dias || !dias.value || Number(dias.value) <= 0) advertencias.push('Días de duración recomendados');
+      if (!pers || !pers.value || Number(pers.value) <= 0) advertencias.push('Número de personas recomendado');
+      const puntaje = advertencias.length === 0 ? 25 : Math.max(5, 25 - advertencias.length * 8);
+      return { puntaje, maximo: 25,
+               estado: advertencias.length ? 'advertencia' : 'ok', errores: [], advertencias };
+    }
+  },
+];
+</script>
+{% include "ingenieria/_checkpoint_panel.html" %}
 {% endblock %}

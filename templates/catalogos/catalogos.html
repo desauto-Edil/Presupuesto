@@ -208,6 +208,11 @@
     <span class="cat-chip" data-filter="activa">Activas</span>
     <span class="cat-chip" data-filter="inactiva">Inactivas</span>
   </div>
+  <a href="{% url 'catalogos:producto_list' %}"
+     class="btn btn-ghost btn-sm d-inline-flex align-items-center gap-1"
+     style="white-space:nowrap;font-size:12px;border:1px solid var(--border);">
+    <i class="bi bi-list-ul"></i> Lista completa
+  </a>
 </div>
 
 <!-- ──────────────────────────────────────────────
@@ -255,8 +260,8 @@
              data-prod-nombre="{{ prod.nombre }}"
              data-prod-codigo="{{ prod.codigo }}"
              data-prod-categoria="{{ cat.nombre }}"
-             data-prod-precio="{{ prod.precio_actual|floatformat:0 }}"
-             data-prod-moneda="{{ prod.moneda }}"
+             data-prod-precio="{{ prod.precio_para_display|floatformat:2 }}"
+             data-prod-moneda="{{ prod.moneda_para_display }}"
              data-prod-proveedor="{{ prod.proveedor.nombre|default:'—' }}"
              data-prod-unidad="{{ prod.unidad.abreviatura|default:'—' }}"
              data-prod-marca="{{ prod.marca|default:'—' }}"
@@ -269,7 +274,10 @@
           </div>
           <div class="cat-prod-item__right">
             {% if prod.precio_actual %}
-            <span class="cat-prod-item__price">${{ prod.precio_actual|floatformat:0 }} <span class="cat-prod-item__moneda">{{ prod.moneda }}</span></span>
+            <span class="cat-prod-item__price">
+              {{ prod.precio_para_display|floatformat:2 }}
+              <span class="cat-prod-item__moneda">{{ prod.moneda_para_display }}</span>
+            </span>
             {% else %}<span class="cat-prod-item__no-price">Sin precio</span>{% endif %}
           </div>
         </div>
@@ -281,7 +289,7 @@
                 data-bs-target="#modalListaProductos"
                 data-cat-nombre="{{ cat.nombre }}"
                 data-cat-pk="{{ cat.pk }}"
-                data-productos='[{% for prod in cat.productos.all %}{"nombre":"{{ prod.nombre|escapejs }}","codigo":"{{ prod.codigo|escapejs }}","precio":"{{ prod.precio_actual|floatformat:0 }}","moneda":"{{ prod.moneda }}","proveedor":"{{ prod.proveedor.nombre|default:'—'|escapejs }}","unidad":"{{ prod.unidad.abreviatura|default:'—'|escapejs }}","marca":"{{ prod.marca|default:'—'|escapejs }}","activo":{{ prod.activo|yesno:"true,false" }},"edit_url":"{% url 'catalogos:producto_update' prod.pk %}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
+                data-productos='[{% for prod in cat.productos.all %}{"nombre":"{{ prod.nombre|escapejs }}","codigo":"{{ prod.codigo|escapejs }}","precio":"{{ prod.precio_para_display|floatformat:2 }}","moneda":"{{ prod.moneda_para_display }}","proveedor":"{{ prod.proveedor.nombre|default:'—'|escapejs }}","unidad":"{{ prod.unidad.abreviatura|default:'—'|escapejs }}","marca":"{{ prod.marca|default:'—'|escapejs }}","activo":{{ prod.activo|yesno:"true,false" }},"edit_url":"{% url 'catalogos:producto_update' prod.pk %}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
           + {{ cat.cantidad_productos|add:"-5" }} más — Ver todos
         </button>
         {% endif %}
@@ -365,30 +373,7 @@
             enctype="multipart/form-data">
         {% csrf_token %}
         <div class="modal-body">
-
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Código <span style="color:var(--red)">*</span></label>
-              {{ modal_categoria_form.codigo }}
-            </div>
-            <div class="form-group">
-              <label>Nombre <span style="color:var(--red)">*</span></label>
-              {{ modal_categoria_form.nombre }}
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Descripción</label>
-            {{ modal_categoria_form.descripcion }}
-          </div>
-
-          <div class="form-group">
-            <div class="form-check">
-              {{ modal_categoria_form.activa }}
-              <label class="form-check-label" style="font-size:13px;">Categoría activa</label>
-            </div>
-          </div>
-
+          {% include "catalogos/_categoria_form.html" with form=modal_categoria_form %}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -413,104 +398,7 @@
       <form method="post" action="{% url 'catalogos:producto_create' %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="modal-body">
-
-          <div class="form-group">
-            <label>Nombre del producto <span style="color:var(--red)">*</span></label>
-            {{ modal_producto_form.nombre }}
-          </div>
-
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>
-                Código
-                <span style="font-size:10px;color:var(--ink-soft);margin-left:4px;">(auto-generado)</span>
-              </label>
-              {{ modal_producto_form.codigo }}
-            </div>
-            <div class="form-group">
-              <label>Unidad de medida <span style="color:var(--red)">*</span></label>
-              {{ modal_producto_form.unidad }}
-            </div>
-          </div>
-
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Categoría <span style="color:var(--red)">*</span></label>
-              {{ modal_producto_form.categoria }}
-            </div>
-            <div class="form-group">
-              <label>Origen</label>
-              {{ modal_producto_form.origen }}
-            </div>
-          </div>
-
-          <!-- Proveedor y precio -->
-          <div class="cat-modal-section">
-            <div class="cat-modal-section-label">Proveedor y precio</div>
-            <div class="form-grid-2" style="margin-bottom:10px;">
-              <div class="form-group" style="margin-bottom:0;">
-                <label>Proveedor <span style="color:var(--red)">*</span></label>
-                {{ modal_producto_form.proveedor }}
-              </div>
-              <div class="form-group" style="margin-bottom:0;">
-                <label>Precio actual <span style="color:var(--red)">*</span></label>
-                {{ modal_producto_form.precio_actual }}
-              </div>
-            </div>
-            <div class="form-grid-2" style="margin-top:8px;">
-              <div class="form-group" style="margin-bottom:0;">
-                <label>Moneda <span style="color:var(--red)">*</span></label>
-                {{ modal_producto_form.moneda }}
-              </div>
-              <div class="form-group" style="margin-bottom:0;">
-                <label>Unidades por presentación</label>
-                {{ modal_producto_form.unidades_por_presentacion }}
-                <div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">Ej: 1000 si el precio es por bolsa de 1000 und</div>
-              </div>
-            </div>
-            <div class="form-group" style="margin-top:8px;margin-bottom:0;">
-              <div class="form-check form-switch">
-                {{ modal_producto_form.precio_en_dolares }}
-                <label class="form-check-label fw-bold ms-2" for="{{ modal_producto_form.precio_en_dolares.id_for_label }}" style="font-size:13px;">
-                  Precio en dólares (USD)
-                </label>
-              </div>
-              <div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">
-                Si activo, el precio se dividirá por la TRM del proyecto al calcular el despiece.
-              </div>
-            </div>
-          </div>
-
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Marca</label>
-              {{ modal_producto_form.marca }}
-            </div>
-            <div class="form-group">
-              <label>Línea</label>
-              {{ modal_producto_form.linea }}
-            </div>
-          </div>
-
-          <!-- Ficha técnica -->
-          <div class="cat-modal-section">
-            <div class="cat-modal-section-label">Ficha técnica <span style="font-weight:400;color:var(--ink-soft);">(opcional)</span></div>
-            <div class="form-group" style="margin-bottom:0;">
-              <label style="font-size:11.5px;">{{ modal_producto_form.ficha_tecnica.label }}</label>
-              {{ modal_producto_form.ficha_tecnica }}
-              <div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">
-                PDF o imagen JPG/PNG con las especificaciones técnicas.
-              </div>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <div class="form-check">
-              {{ modal_producto_form.activo }}
-              <label class="form-check-label" style="font-size:13px;">Producto activo</label>
-            </div>
-          </div>
-
+          {% include "catalogos/_producto_form.html" with form=modal_producto_form %}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -535,20 +423,7 @@
       <form method="post" action="{% url 'catalogos:unidad_create' %}">
         {% csrf_token %}
         <div class="modal-body">
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label>Código <span style="color:var(--red)">*</span></label>
-              {{ modal_unidad_form.codigo }}
-            </div>
-            <div class="form-group">
-              <label>Abreviatura <span style="color:var(--red)">*</span></label>
-              {{ modal_unidad_form.abreviatura }}
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Nombre <span style="color:var(--red)">*</span></label>
-            {{ modal_unidad_form.nombre }}
-          </div>
+          {% include "catalogos/_unidad_form.html" with form=modal_unidad_form %}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
@@ -833,36 +708,7 @@
   <div class="offcanvas-body">
     <form id="provForm" method="post" action="{% url 'catalogos:proveedor_create' %}">
       {% csrf_token %}
-      <div class="mb-3">
-        <label class="form-label small fw-bold text-uppercase">NIT <span style="color:var(--brand-red)">*</span></label>
-        <input type="text" name="nit" id="prov_nit" class="form-control" required>
-      </div>
-      <div class="mb-3">
-        <label class="form-label small fw-bold text-uppercase">Nombre / Razón social <span style="color:var(--brand-red)">*</span></label>
-        <input type="text" name="nombre" id="prov_nombre" class="form-control" required>
-      </div>
-      <div class="row g-3 mb-3">
-        <div class="col">
-          <label class="form-label small fw-bold text-uppercase">Ciudad</label>
-          <input type="text" name="ciudad" id="prov_ciudad" class="form-control">
-        </div>
-        <div class="col">
-          <label class="form-label small fw-bold text-uppercase">Teléfono</label>
-          <input type="text" name="telefono" id="prov_telefono" class="form-control">
-        </div>
-      </div>
-      <div class="mb-3">
-        <label class="form-label small fw-bold text-uppercase">Dirección</label>
-        <input type="text" name="direccion" id="prov_direccion" class="form-control">
-      </div>
-      <div class="mb-3">
-        <label class="form-label small fw-bold text-uppercase">Email</label>
-        <input type="email" name="email" id="prov_email" class="form-control">
-      </div>
-      <div class="form-check form-switch mt-4">
-        <input class="form-check-input" type="checkbox" name="activo" id="prov_activo" checked>
-        <label class="form-check-label fw-bold" for="prov_activo">Proveedor activo</label>
-      </div>
+      {% include "catalogos/_proveedor_form.html" with form=modal_proveedor_form %}
       <div class="mt-5 d-grid">
         <button type="submit" class="btn btn-primary">Guardar proveedor</button>
       </div>

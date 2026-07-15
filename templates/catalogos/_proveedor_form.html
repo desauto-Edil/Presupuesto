@@ -1,0 +1,59 @@
+{% comment %}
+   ============================================================
+   Partial fields-only: campos de Proveedor.
+
+   El contenedor (<form>, csrf, botones, action) lo aporta
+   el template incluyente — actualmente solo el offcanvas
+   #offcanvasProv en catalogos.html, que comparte form para
+   crear y editar y direcciona los inputs por id (prov_*).
+
+   Los IDs prov_nit, prov_nombre, prov_ciudad, prov_direccion,
+   prov_telefono, prov_email, prov_activo se fijan desde
+   ProveedorForm.Meta.widgets para que prepareProvForm() en
+   catalogos.html siga funcionando sin cambios en el JS.
+
+   Uso:
+     {% include "catalogos/_proveedor_form.html" with form=mi_form %}
+   ============================================================
+{% endcomment %}
+
+<div class="mb-3">
+  <label class="form-label small fw-bold text-uppercase" for="prov_nit">NIT <span style="color:var(--brand-red)">*</span></label>
+  {{ form.nit }}
+</div>
+<div class="mb-3">
+  <label class="form-label small fw-bold text-uppercase" for="prov_nombre">Nombre / Razón social <span style="color:var(--brand-red)">*</span></label>
+  {{ form.nombre }}
+</div>
+<div class="row g-3 mb-3">
+  <div class="col">
+    <label class="form-label small fw-bold text-uppercase" for="prov_ciudad">Ciudad</label>
+    {{ form.ciudad }}
+  </div>
+  <div class="col">
+    <label class="form-label small fw-bold text-uppercase" for="prov_telefono">Teléfono</label>
+    {{ form.telefono }}
+  </div>
+</div>
+<div class="mb-3">
+  <label class="form-label small fw-bold text-uppercase" for="prov_direccion">Dirección</label>
+  {{ form.direccion }}
+</div>
+<div class="mb-3">
+  <label class="form-label small fw-bold text-uppercase" for="prov_email">Email</label>
+  {{ form.email }}
+</div>
+<div class="form-check form-switch mt-4">
+  {{ form.activo }}
+  <label class="form-check-label fw-bold" for="prov_activo">Proveedor activo</label>
+</div>
+
+{% if form.errors %}
+<div style="background:var(--red-bg);border:1px solid rgba(230,40,51,0.2);border-radius:8px;padding:10px 14px;margin-top:14px;">
+  {% for field in form %}
+    {% for error in field.errors %}
+    <div style="font-size:12.5px;color:var(--brand-red);">{{ field.label }}: {{ error }}</div>
+    {% endfor %}
+  {% endfor %}
+</div>
+{% endif %}

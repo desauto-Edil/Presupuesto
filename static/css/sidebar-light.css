@@ -30,6 +30,9 @@
 .theme-imperandina { --sidebar-light-icon-active: #c9a200; }
 .theme-solarandina { --sidebar-light-icon-active: #e07d10; }
 .theme-impertienda { --sidebar-light-icon-active: #7fa832; }
+/* Fase 12.3 ext — unidad corporativa EDILANDINA y tema admin global */
+.theme-edilandina   { --sidebar-light-icon-active: #4b5563; }
+.theme-admin-global { --sidebar-light-icon-active: #4b5563; }
 
 /* ── RESET CROSS-BROWSER ── */
 *,

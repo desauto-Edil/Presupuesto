@@ -41,6 +41,8 @@ class ProductoForm(forms.ModelForm):
             "codigo", "nombre", "categoria", "unidad",
             "proveedor", "precio_actual", "moneda", "unidades_por_presentacion",
             "origen", "marca", "linea", "precio_en_dolares",
+            "presentacion_nombre", "ancho_presentacion", "largo_presentacion",
+            "unidad_dimension", "cantidad_presentacion", "unidad_presentacion",
             "ficha_tecnica", "activo",
         ]
         widgets = {
@@ -61,6 +63,21 @@ class ProductoForm(forms.ModelForm):
             "marca": forms.TextInput(attrs={"class": "form-control"}),
             "linea": forms.TextInput(attrs={"class": "form-control"}),
             "precio_en_dolares": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "presentacion_nombre": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ej: Rollo 3.05 x 30.48 m",
+            }),
+            "ancho_presentacion": forms.NumberInput(attrs={
+                "class": "form-control", "step": "0.0001", "placeholder": "Ej: 3.05",
+            }),
+            "largo_presentacion": forms.NumberInput(attrs={
+                "class": "form-control", "step": "0.0001", "placeholder": "Ej: 30.48",
+            }),
+            "unidad_dimension": forms.Select(attrs={"class": "form-select"}),
+            "cantidad_presentacion": forms.NumberInput(attrs={
+                "class": "form-control", "step": "0.0001", "placeholder": "Ej: 92.96",
+            }),
+            "unidad_presentacion": forms.Select(attrs={"class": "form-select"}),
             "ficha_tecnica": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
@@ -96,17 +113,23 @@ class ProductoForm(forms.ModelForm):
 
 
 class ProveedorForm(forms.ModelForm):
+    """
+    Form de Proveedor. Los IDs de los widgets se fijan explícitamente
+    (prov_*) porque el offcanvas en catalogos.html los direcciona
+    desde JavaScript (prepareProvForm).
+    """
+
     class Meta:
         model = Proveedor
         fields = ["nit", "nombre", "ciudad", "direccion", "telefono", "email", "activo"]
         widgets = {
-            "nit": forms.TextInput(attrs={"class": "form-control"}),
-            "nombre": forms.TextInput(attrs={"class": "form-control"}),
-            "ciudad": forms.TextInput(attrs={"class": "form-control"}),
-            "direccion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "telefono": forms.TextInput(attrs={"class": "form-control"}),
-            "email": forms.EmailInput(attrs={"class": "form-control"}),
-            "activo": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nit":       forms.TextInput(attrs={"class": "form-control", "id": "prov_nit", "required": True}),
+            "nombre":    forms.TextInput(attrs={"class": "form-control", "id": "prov_nombre", "required": True}),
+            "ciudad":    forms.TextInput(attrs={"class": "form-control", "id": "prov_ciudad"}),
+            "direccion": forms.TextInput(attrs={"class": "form-control", "id": "prov_direccion"}),
+            "telefono":  forms.TextInput(attrs={"class": "form-control", "id": "prov_telefono"}),
+            "email":     forms.EmailInput(attrs={"class": "form-control", "id": "prov_email"}),
+            "activo":    forms.CheckboxInput(attrs={"class": "form-check-input", "id": "prov_activo"}),
         }
 
 

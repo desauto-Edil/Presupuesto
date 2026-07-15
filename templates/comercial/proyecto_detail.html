@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% load static auth_tags %}
+{% es_admin_actual as es_admin_flag %}
 {% block title %}{{ proyecto.consecutivo }} v{{ proyecto.version }}{% endblock %}
 {% block page_title %}Proyecto{% endblock %}
 {% block breadcrumb %}
@@ -9,303 +11,666 @@
   → {{ proyecto.consecutivo }}
 {% endblock %}
 
+{% comment %}
+Acciones únicas en topbar: Nuevo despiece (primary) / Clonar versión /
+Editar / Anular. Sin "Despieces" ni "Nueva vacía" — la acción "Nuevo
+despiece" es la única para crear despieces y no se repite dentro del
+panel "APUs y despieces".
+{% endcomment %}
 {% block topbar_actions %}
-  <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}" class="btn btn-primary btn-sm">⊞ Ir al despiece</a>
-  <a href="{% url 'comercial:crear_proyecto_desde_solicitud' proyecto.solicitud.pk %}" class="btn btn-ghost btn-sm">+ Nueva versión</a>
-  <a href="{% url 'comercial:proyecto_update' proyecto.pk %}" class="btn btn-ghost btn-sm">✎ Editar</a>
+  {% if proyecto.tiene_apu_aprobado %}
+  {# Bloqueado: no se crean despieces nuevos cuando el proyecto ya tiene un APU #}
+  {# aprobado. Mismo criterio de solo-lectura que el resto de la cadena. El     #}
+  {# botón se deja visible pero deshabilitado, con el motivo en el tooltip.     #}
+  <span class="btn btn-primary btn-sm disabled" aria-disabled="true"
+        style="opacity:.55;cursor:not-allowed;"
+        title="No se puede crear un nuevo despiece porque el proyecto ya tiene un APU aprobado.">
+    <i class="bi bi-plus-lg"></i> Nuevo despiece
+  </span>
+  {% else %}
+  <a href="{% url 'ingenieria:calculador_sistemas' %}?proyecto_pk={{ proyecto.pk }}"
+     class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg"></i> Nuevo despiece
+  </a>
+  {% endif %}
+  {% if proyecto.solicitud %}
+  <form method="post" action="{% url 'comercial:proyecto_clonar' proyecto.pk %}" style="display:inline;">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-ghost btn-sm"
+            onclick="return confirm('¿Crear una nueva versión copiando los datos de {{ proyecto.consecutivo }} v{{ proyecto.version }}?')">
+      <i class="bi bi-copy"></i> Clonar versión
+    </button>
+  </form>
+  {% endif %}
+  <a href="{% url 'comercial:proyecto_update' proyecto.pk %}" class="btn btn-ghost btn-sm">
+    <i class="bi bi-pencil"></i> Editar
+  </a>
+  {% if proyecto.estado == "ANULADO" %}
+    <span class="btn btn-ghost btn-sm" style="color:var(--ink-soft);cursor:default;" title="Proyecto anulado">Anulado</span>
+  {% else %}
+    <button type="button" class="btn btn-ghost btn-sm"
+            style="color:var(--danger,#b91c1c);border:1px solid rgba(185,28,28,.35);"
+            data-bs-toggle="modal" data-bs-target="#modalAnularProyecto"
+            title="El proyecto tiene trazabilidad (despieces/APUs/cotizaciones). Solo se anula.">
+      Anular
+    </button>
+  {% endif %}
+  {% if es_admin_flag %}
+    <button type="button" class="btn btn-ghost btn-sm"
+            style="color:#fff;background:var(--danger,#b91c1c);"
+            data-bs-toggle="modal" data-bs-target="#modalEliminarProyecto"
+            title="Admin global: elimina el proyecto y todas sus dependencias.">
+      Eliminar definitivamente
+    </button>
+  {% endif %}
 {% endblock %}
 
 {% block extra_head %}
 <style>
-  .det-grid { display: grid; grid-template-columns: 1fr 300px; gap: 14px; }
-  .det-col { display: flex; flex-direction: column; gap: 14px; }
-  @media (max-width: 768px) { .det-grid { grid-template-columns: 1fr; } }
+  /* ── Tarjeta resumen del proyecto ─────────────────────────────────────── */
+  .pry-summary {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--theme-accent);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgba(14, 17, 23, 0.04);
+    padding: 16px 20px;
+    margin-bottom: 14px;
+  }
+  .pry-summary-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .pry-summary-title {
+    margin: 0;
+    min-width: 0;
+  }
+  .pry-summary-id {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--theme-accent);
+    letter-spacing: 0.04em;
+  }
+  .pry-summary-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-top: 2px;
+  }
+  .pry-summary-client {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .pry-summary-state { flex-shrink: 0; }
+
+  .pry-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+  }
+  .pry-summary-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: 0 16px;
+    border-left: 1px solid var(--border);
+  }
+  .pry-summary-col:first-child {
+    padding-left: 0;
+    border-left: none;
+  }
+  .pry-summary-col:last-child { padding-right: 0; }
+  .pry-field-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-soft);
+    margin-bottom: 2px;
+  }
+  .pry-field-value {
+    font-size: 13px;
+    color: var(--ink);
+    word-break: break-word;
+    font-weight: 600;
+  }
+  .pry-field-value.is-muted { color: var(--ink-soft); font-size: 12.5px; font-weight: 500; }
+  .pry-field-value a { color: var(--theme-accent); text-decoration: none; }
+  .pry-field-value a:hover { text-decoration: underline; }
+
+  /* ── Layout cuerpo ────────────────────────────────────────────────────── */
+  .pry-body-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 14px;
+  }
+  .pry-body-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  @media (max-width: 980px) {
+    .pry-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px; }
+    .pry-summary-col {
+      padding: 0;
+      border-left: none;
+    }
+    .pry-summary-col:nth-child(2) { padding-left: 0; }
+    .pry-body-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .pry-summary-grid { grid-template-columns: 1fr; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- ── CABECERA ── -->
-<div class="project-header fade-up">
-  <div>
-    <div class="project-id">{{ proyecto.consecutivo }}</div>
-    <div class="project-name">{{ proyecto.nombre }}</div>
-    <div class="project-client">{{ proyecto.cliente.razon_social }}</div>
+{% comment %}
+═════════════════════ TARJETA RESUMEN ═════════════════════
+Encabezado consolidado: identificación + estado arriba y grid interno
+con todos los datos del sistema, parámetros técnicos y financieros.
+Elimina las tarjetas "Datos del sistema", "Solicitud origen",
+"Parámetros técnicos" y "Parámetros financieros".
+{% endcomment %}
+<div class="pry-summary fade-up">
+  <div class="pry-summary-head">
+    <div class="pry-summary-title">
+      <div class="pry-summary-id">{{ proyecto.consecutivo }} · v{{ proyecto.version }}</div>
+      <div class="pry-summary-name">{{ proyecto.nombre }}</div>
+      <div class="pry-summary-client">{{ proyecto.cliente.razon_social }}</div>
+    </div>
+    <div class="pry-summary-state">
+      <span class="badge-status
+        {% if proyecto.estado == 'SOLICITUD' %}bs-pendiente
+        {% elif proyecto.estado == 'DESPIECE' or proyecto.estado == 'EN_REVISION_COMPRAS' %}bs-despiece
+        {% elif proyecto.estado == 'DESPIECE_VALIDADO' or proyecto.estado == 'APU' %}bs-apu
+        {% elif proyecto.estado == 'APU_GENERADO' %}bs-validado
+        {% elif proyecto.estado == 'COTIZADO' %}bs-validado
+        {% elif proyecto.estado == 'CERRADO' or proyecto.estado == 'ANULADO' %}bs-cerrado
+        {% else %}bs-inactivo{% endif %}"
+        style="font-size:12px;padding:5px 14px;">
+        {% if proyecto.estado == 'COTIZADO' %}
+          Proyecto cotizado — APU aprobado disponible
+        {% else %}
+          {{ proyecto.get_estado_display }}
+        {% endif %}
+      </span>
+    </div>
   </div>
 
-  <div class="project-divider"></div>
+  <div class="pry-summary-grid">
+    {# Bloque 1 — origen + moneda #}
+    <div class="pry-summary-col">
+      {% if proyecto.solicitud %}
+      <div>
+        <div class="pry-field-label">Solicitud origen</div>
+        <div class="pry-field-value">
+          <a href="{% url 'comercial:solicitud_detail' proyecto.solicitud.pk %}">
+            {{ proyecto.solicitud.consecutivo }}
+          </a>
+        </div>
+      </div>
+      {% endif %}
+      <div>
+        <div class="pry-field-label">Moneda</div>
+        <div class="pry-field-value">{{ proyecto.moneda }}</div>
+      </div>
+      <div>
+        <div class="pry-field-label">TRM</div>
+        <div class="pry-field-value">$ {{ proyecto.trm|floatformat:"0g" }}</div>
+      </div>
+    </div>
 
-  <div>
-    <div class="project-meta-label">Estado</div>
-    <span class="badge-status
-      {% if proyecto.estado == 'SOLICITUD' %}bs-pendiente
-      {% elif proyecto.estado == 'DESPIECE' or proyecto.estado == 'EN_REVISION_COMPRAS' %}bs-despiece
-      {% elif proyecto.estado == 'DESPIECE_VALIDADO' or proyecto.estado == 'APU' %}bs-apu
-      {% elif proyecto.estado == 'APU_GENERADO' %}bs-validado
-      {% elif proyecto.estado == 'CERRADO' or proyecto.estado == 'ANULADO' %}bs-cerrado
-      {% else %}bs-inactivo{% endif %}"
-      style="font-size:12px;padding:4px 12px;">
-      {{ proyecto.get_estado_display }}
-    </span>
+    {# Bloque 2 — autoría y fechas #}
+    <div class="pry-summary-col">
+      <div>
+        <div class="pry-field-label">Creado por</div>
+        <div class="pry-field-value">{{ proyecto.creado_por|default:"—" }}</div>
+      </div>
+      <div>
+        <div class="pry-field-label">Fecha proyecto</div>
+        <div class="pry-field-value">{{ proyecto.fecha_proyecto|date:"d/m/Y" }}</div>
+      </div>
+      <div>
+        <div class="pry-field-label">Última edición</div>
+        <div class="pry-field-value is-muted">{{ proyecto.updated_at|date:"d/m/Y H:i" }}</div>
+      </div>
+    </div>
+
+    {# Bloque 3 — parámetros técnicos #}
+    <div class="pry-summary-col">
+      <div>
+        <div class="pry-field-label">Días de duración</div>
+        <div class="pry-field-value">
+          {% if proyecto.dias_duracion %}{{ proyecto.dias_duracion }} días{% else %}—{% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="pry-field-label">Número de personas</div>
+        <div class="pry-field-value">
+          {% if proyecto.num_personas %}{{ proyecto.num_personas }} pers.{% else %}—{% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# Bloque 4 — parámetros financieros #}
+    <div class="pry-summary-col">
+      <div>
+        <div class="pry-field-label">Margen comercial</div>
+        <div class="pry-field-value">{{ proyecto.margen_comercial_pct|floatformat:0 }} %</div>
+      </div>
+      <div>
+        <div class="pry-field-label">IVA</div>
+        <div class="pry-field-value">{{ proyecto.iva_pct|floatformat:0 }} %</div>
+      </div>
+      <div>
+        <div class="pry-field-label">AIU Contratista</div>
+        <div class="pry-field-value">{{ proyecto.aiu_pct|floatformat:0 }} %</div>
+      </div>
+      <div>
+        <div class="pry-field-label">Exención IVA</div>
+        <div class="pry-field-value is-muted">
+          {% if proyecto.aplica_exencion_iva %}Sí{% else %}No{% endif %}
+        </div>
+      </div>
+    </div>
   </div>
-
-  {% if proyecto.solicitud %}
-  <div class="project-divider"></div>
-  <div>
-    <div class="project-meta-label">Solicitud origen</div>
-    <a href="{% url 'comercial:solicitud_detail' proyecto.solicitud.pk %}"
-       style="font-size:12px;color:var(--theme-accent);">
-      {{ proyecto.solicitud.consecutivo }} ↗
-    </a>
-  </div>
-  {% endif %}
-
-  <div class="project-divider"></div>
-  <div>
-    <div class="project-meta-label">Moneda</div>
-    <div class="project-meta-value">{{ proyecto.moneda }}</div>
-  </div>
-
-  <div class="project-divider"></div>
-  <div>
-    <div class="project-meta-label">TRM</div>
-    <div class="project-meta-value">{{ proyecto.trm }}</div>
-  </div>
-
-  <div class="project-status-chip">◫ {{ proyecto.consecutivo }}</div>
 </div>
 
-<!-- ── CONTENIDO ── -->
-<div class="det-grid fade-up-1">
+{# ═════════════════════ CUERPO ═════════════════════ #}
+<div class="pry-body-grid fade-up-1">
 
-  <div class="det-col">
+  {# ───── Columna principal ───── #}
+  <div class="pry-body-col">
 
-    {% if proyecto.descripcion %}
+    {# Descripción — compacta #}
     <div class="panel">
       <div class="panel-header"><span class="panel-title">Descripción</span></div>
-      <div style="padding:16px 20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;">
-        {{ proyecto.descripcion }}
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Parámetros técnicos -->
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Parámetros técnicos</span></div>
-      <div class="summary-line">
-        <span class="s-label">Días de duración</span>
-        <span class="s-value">{% if proyecto.dias_duracion %}{{ proyecto.dias_duracion }} días{% else %}—{% endif %}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Número de personas</span>
-        <span class="s-value">
-          {% if proyecto.num_personas %}
-            {{ proyecto.num_personas }} pers.
-            {% if proyecto.num_personas == 7 %}
-            <span style="font-size:10px;background:rgba(23,168,94,.12);color:#17a85e;
-                         border-radius:4px;padding:1px 6px;margin-left:4px;font-weight:600;">
-              cuadrilla estándar
-            </span>
-            {% endif %}
-          {% else %}—{% endif %}
-        </span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Área total (m²)</span>
-        <span class="s-value">{{ proyecto.area_total_m2|default:"—" }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Perímetro (ml)</span>
-        <span class="s-value">{{ proyecto.perimetro_ml|default:"—" }}</span>
-      </div>
-    </div>
-
-    <!-- Parámetros financieros -->
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Parámetros financieros</span></div>
-      <div class="summary-line">
-        <span class="s-label">TRM</span>
-        <span class="s-value">{{ proyecto.trm }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Margen comercial (%)</span>
-        <span class="s-value">{{ proyecto.margen_comercial_pct }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">IVA (%)</span>
-        <span class="s-value">{{ proyecto.iva_pct }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">AIU (%)</span>
-        <span class="s-value">{{ proyecto.aiu_pct }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Exención IVA</span>
-        <span class="s-value">{% if proyecto.aplica_exencion_iva %}Sí{% else %}No{% endif %}</span>
+      <div style="padding:14px 20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;">
+        {{ proyecto.descripcion|default:"NA" }}
       </div>
     </div>
 
     {% if proyecto.observaciones %}
     <div class="panel">
       <div class="panel-header"><span class="panel-title">Observaciones</span></div>
-      <div style="padding:16px 20px;font-size:13px;color:var(--ink-soft);line-height:1.6;">
-        {{ proyecto.observaciones }}
+      <div style="padding:14px 20px;font-size:13px;color:var(--ink-soft);line-height:1.6;">
+        {{ proyecto.observaciones|linebreaksbr }}
       </div>
     </div>
     {% endif %}
 
-    <!-- ── DESPIECES / SISTEMAS ── -->
+    {# ───── APUs y despieces ───── #}
+    {# Sin botón "Nuevo despiece" — esa acción vive sólo en la barra superior. #}
     <div class="panel">
       <div class="panel-header accent-top-theme" style="border-radius:var(--radius) var(--radius) 0 0;">
-        <span class="panel-title">Sistemas y despiece</span>
-        {% if proyecto_sistemas %}
-        <span style="font-size:11px;color:var(--ink-soft);">{{ proyecto_sistemas|length }} sistema{{ proyecto_sistemas|length|pluralize }}</span>
+        <span class="panel-title">APUs y despieces</span>
+        {% if total_despieces %}
+        <span style="font-size:11px;color:var(--ink-soft);margin-left:8px;">
+          {{ total_despieces }} despiece{{ total_despieces|pluralize }}
+        </span>
         {% endif %}
-        <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}"
-           class="btn btn-primary btn-xs" style="margin-left:auto;">
-          ⊞ Abrir despiece
-        </a>
       </div>
 
-      {% if proyecto_sistemas %}
+      {% if apus_data or despieces_sin_apu %}
       <div>
-        {% for ps in proyecto_sistemas %}
-        <div style="padding:12px 18px;border-bottom:1px solid var(--border);
-                    display:flex;align-items:center;gap:12px;">
-          <!-- ícono sistema -->
-          <div style="width:32px;height:32px;border-radius:8px;flex-shrink:0;
-                      background:var(--theme-accent-pale);
-                      display:flex;align-items:center;justify-content:center;
-                      font-size:15px;">◱</div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:var(--ink);">
-              {{ ps.sistema.nombre }}
-              {% if ps.subsistema %}
-              <span style="font-size:11px;color:var(--ink-soft);font-weight:400;">
-                / {{ ps.subsistema.nombre }}
+        <form id="form-unir-apus" method="get"
+              action="{% url 'presupuestos:apu_consolidar_seleccionar' proyecto.pk %}"
+              style="margin:0;">
+        {% for bucket in apus_data %}
+        {% with apu=bucket.apu despieces=bucket.despieces %}
+        <div style="padding:14px 18px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            {% if puede_consolidar %}
+            <input type="checkbox" name="apus_pre" value="{{ apu.pk }}"
+                   disabled
+                   title="Para unir APUs, pulsa el botón opcional y selecciónalos en la siguiente vista."
+                   style="flex-shrink:0;">
+            {% endif %}
+            <span style="width:32px;height:32px;border-radius:8px;flex-shrink:0;
+                         background:var(--theme-accent-pale);
+                         display:flex;align-items:center;justify-content:center;
+                         font-size:15px;">∑</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;color:var(--ink);">
+                <span style="font-size:10px;background:rgba(125,125,125,.15);color:var(--ink-soft);
+                             padding:1px 6px;border-radius:3px;font-weight:600;margin-right:4px;">Individual</span>
+                APU #{{ apu.pk }} — {{ apu.nombre }}
+              </div>
+              <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
+                Incluye {{ despieces|length }} despiece{{ despieces|length|pluralize }}
+                · Este APU puede consolidar varios despieces del mismo proyecto/subsistema.
+              </div>
+            </div>
+            {% if apu.modalidad_aiu_seleccionada %}
+              <span style="font-size:11px;background:rgba(23,168,94,.15);color:#0d7a44;
+                           padding:3px 9px;border-radius:4px;font-weight:700;">
+                ✓ Aprobado — Modalidad {{ apu.modalidad_aiu_seleccionada }}
               </span>
+            {% else %}
+              <span style="font-size:11px;background:rgba(255,166,0,.15);color:#a86b00;
+                           padding:3px 9px;border-radius:4px;font-weight:600;">
+                En revisión — modalidad pendiente
+              </span>
+            {% endif %}
+          </div>
+
+          <div style="margin-left:42px;margin-top:8px;font-size:11px;color:var(--ink-soft);
+                      display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+            {% if apu.fecha_aprobacion %}<span>Aprobado {{ apu.fecha_aprobacion|date:"d/m/Y" }}</span>{% endif %}
+            {% if apu.aprobado_por %}<span>· por {{ apu.aprobado_por }}</span>{% endif %}
+            {% if apu.aplica_garantia and apu.tipo_garantia %}
+            <span style="background:rgba(255,166,0,.15);color:#a86b00;
+                         padding:2px 8px;border-radius:4px;font-weight:600;">
+              Garantía {{ apu.tipo_garantia.nombre }}
+            </span>
+            {% endif %}
+          </div>
+
+          <ul style="margin:8px 0 0 60px;padding:0;list-style:disc;font-size:12px;color:var(--ink);">
+            {% for dm in despieces %}
+            <li style="margin-bottom:2px;">
+              <a href="{% url 'ingenieria:despiece_maestro' dm.pk %}"
+                 style="color:var(--ink);text-decoration:none;">
+                {{ dm.nombre|default:dm.subsistema.sistema.nombre }}
+              </a>
+              <span style="color:var(--ink-soft);font-size:11px;">
+                — {{ dm.subsistema.sistema.nombre }} / {{ dm.subsistema.nombre }}
+              </span>
+              <span style="font-size:10px;color:var(--ink-soft);">· Incluido en APU #{{ apu.pk }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+
+          <div style="margin:10px 0 0 42px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            {% comment %}Sub-fase D — "Ver APU" se vuelve "Ver autorización" cuando el usuario actual es el revisor del APU. El modal contextual se carga del parcial.{% endcomment %}
+            {% puede_aprobar_apu apu as puede_aprobar_flag_apu %}
+            {% if puede_aprobar_flag_apu %}
+            {# El modal #modalAutorizacion_<pk> se renderiza al final del bloque content, #}
+            {# fuera de .panel (overflow:hidden) y del <form>, para que Bootstrap no lo   #}
+            {# deje atrapado detrás del backdrop. Aquí solo queda el disparador.          #}
+            <button type="button" data-bs-toggle="modal" data-bs-target="#modalAutorizacion_{{ apu.pk }}"
+                    class="btn btn-xs" style="background:var(--theme-accent);color:#fff;border:none;">
+              <i class="bi bi-shield-check" style="margin-right:3px;"></i>Ver autorización
+            </button>
+            {% else %}
+            <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
+               class="btn btn-xs" style="background:var(--theme-accent);color:#fff;">Ver APU</a>
+            {% endif %}
+            <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
+               class="btn btn-ghost btn-xs" target="_blank">PDF Interno (vivo)</a>
+            <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
+               class="btn btn-ghost btn-xs" target="_blank">PDF Cliente (vivo)</a>
+            {% with cot=apu.cotizacion_vigente %}
+            {% if cot %}
+            <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+                         border-radius:999px;background:rgba(40,167,69,.12);color:#1c7a3a;
+                         font-size:10.5px;font-weight:700;">
+              <i class="bi bi-file-earmark-check-fill"></i>
+              Cotización aprobada v{{ cot.version }}
+            </span>
+            <a href="{% url 'presupuestos:cotizacion_pdf_interno' cot.pk %}"
+               class="btn btn-xs" style="background:#1c7a3a;color:#fff;" target="_blank">
+              PDF Interno aprobado
+            </a>
+            <a href="{% url 'presupuestos:cotizacion_pdf_cliente' cot.pk %}"
+               class="btn btn-xs" style="background:#1c7a3a;color:#fff;" target="_blank">
+              PDF Cliente aprobado
+            </a>
+            {% endif %}
+            {% endwith %}
+          </div>
+        </div>
+        {% endwith %}
+        {% endfor %}
+
+        {% if despieces_sin_apu %}
+        <div style="padding:12px 18px;background:var(--surface-2);">
+          <div style="font-size:11px;color:var(--ink-soft);font-weight:600;margin-bottom:6px;">
+            Despieces sin APU asociado
+          </div>
+          {% for dm in despieces_sin_apu %}
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;
+                      border-top:1px dashed var(--border);">
+            <span style="font-size:12px;color:var(--ink);flex:1;min-width:0;">
+              {{ dm.nombre|default:dm.subsistema.sistema.nombre }}
+              <span style="color:var(--ink-soft);font-size:11px;">
+                — {{ dm.subsistema.sistema.nombre }} / {{ dm.subsistema.nombre }}
+              </span>
+            </span>
+            {% if dm.esta_guardado %}
+            <span style="font-size:11px;background:rgba(23,168,94,.12);color:#17a85e;
+                         padding:2px 8px;border-radius:4px;font-weight:600;">Guardado</span>
+            {% else %}
+            <span style="font-size:11px;background:var(--surface-1);
+                         color:var(--ink-soft);padding:2px 8px;border-radius:4px;">Borrador</span>
+            {% endif %}
+            <span style="font-size:10px;color:var(--ink-soft);">Sin APU</span>
+            <div style="display:flex;gap:6px;">
+              <a href="{% url 'ingenieria:despiece_maestro' dm.pk %}"
+                 class="btn btn-ghost btn-xs">Abrir</a>
+              {% if dm.esta_guardado %}
+              <form method="post" action="{% url 'presupuestos:apu_generar_despiece' dm.pk %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-xs"
+                        style="background:var(--theme-accent);color:#fff;">Generar APU</button>
+              </form>
               {% endif %}
             </div>
-            <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">
-              {{ ps.despiece_lineas.count }} línea{{ ps.despiece_lineas.count|pluralize }} de despiece
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        </form>
+
+        {% if puede_consolidar %}
+        <div style="padding:14px 18px;background:var(--surface-2);
+                    border-bottom:1px solid var(--border);display:flex;
+                    justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="font-size:12px;color:var(--ink-soft);max-width:620px;line-height:1.5;">
+            <strong>Opcional:</strong> los materiales se suman por APU; los no-materiales equivalentes se dejan una sola vez. La consolidación es opcional y requiere confirmación.
+          </div>
+          <a href="{% url 'presupuestos:apu_consolidar_seleccionar' proyecto.pk %}"
+             class="btn btn-xs"
+             style="background:#4f46e5;color:#fff;white-space:nowrap;">
+            ⊕ Unir APUs y consolidar materiales
+          </a>
+        </div>
+        {% endif %}
+
+        {% if apus_consolidados %}
+        <div style="padding:12px 18px;background:rgba(79,70,229,.05);
+                    border-bottom:1px solid var(--border);">
+          <div style="font-size:11px;color:#4f46e5;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">
+            APUs consolidados
+          </div>
+          {% for apu in apus_consolidados %}
+          <div style="padding:10px 0;border-top:1px dashed var(--border);">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-size:10px;background:#e0e7ff;color:#3730a3;
+                           padding:2px 8px;border-radius:3px;font-weight:700;">CONSOLIDADO</span>
+              <strong style="font-size:13px;">APU #{{ apu.pk }} — {{ apu.nombre }}</strong>
+              {% if apu.modalidad_aiu_seleccionada %}
+                <span style="font-size:11px;background:rgba(23,168,94,.15);color:#0d7a44;
+                             padding:2px 8px;border-radius:4px;font-weight:700;">
+                  ✓ Aprobado — Modalidad {{ apu.modalidad_aiu_seleccionada }}
+                </span>
+              {% elif apu.fecha_envio_revision %}
+                <span style="font-size:11px;background:rgba(255,166,0,.15);color:#a86b00;
+                             padding:2px 8px;border-radius:4px;font-weight:600;">En revisión</span>
+              {% else %}
+                <span style="font-size:11px;background:rgba(125,125,125,.12);color:var(--ink-soft);
+                             padding:2px 8px;border-radius:4px;font-weight:600;">Borrador</span>
+              {% endif %}
+            </div>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
+              Origen:
+              {% for oc in apu.origenes_consolidado.all %}
+                <a href="{% url 'presupuestos:apu_detail' oc.apu_origen.pk %}"
+                   style="color:var(--ink-soft);">#{{ oc.apu_origen.pk }}</a>{% if not forloop.last %}, {% endif %}
+              {% endfor %}
+            </div>
+            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
+                 class="btn btn-xs" style="background:#4f46e5;color:#fff;">Ver APU consolidado</a>
+              <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
+                 class="btn btn-ghost btn-xs" target="_blank">PDF Interno (vivo)</a>
+              <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
+                 class="btn btn-ghost btn-xs" target="_blank">PDF Cliente (vivo)</a>
+              {% with cot=apu.cotizacion_vigente %}
+              {% if cot %}
+              <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+                           border-radius:999px;background:rgba(40,167,69,.12);color:#1c7a3a;
+                           font-size:10.5px;font-weight:700;">
+                <i class="bi bi-file-earmark-check-fill"></i>
+                Cotización aprobada v{{ cot.version }}
+              </span>
+              <a href="{% url 'presupuestos:cotizacion_pdf_interno' cot.pk %}"
+                 class="btn btn-xs" style="background:#1c7a3a;color:#fff;" target="_blank">
+                PDF Interno aprobado
+              </a>
+              <a href="{% url 'presupuestos:cotizacion_pdf_cliente' cot.pk %}"
+                 class="btn btn-xs" style="background:#1c7a3a;color:#fff;" target="_blank">
+                PDF Cliente aprobado
+              </a>
+              {% endif %}
+              {% endwith %}
             </div>
           </div>
-          <!-- estado lineas -->
-          {% with total=ps.despiece_lineas.count %}
-          {% if total > 0 %}
-          <span style="font-size:11px;background:var(--theme-accent-pale);
-                       color:var(--theme-accent);padding:2px 8px;border-radius:4px;
-                       font-weight:600;">Calculado</span>
-          {% else %}
-          <span style="font-size:11px;background:var(--surface-2);
-                       color:var(--ink-soft);padding:2px 8px;border-radius:4px;">Pendiente</span>
-          {% endif %}
-          {% endwith %}
+          {% endfor %}
         </div>
-        {% endfor %}
+        {% endif %}
       </div>
       {% else %}
-      <div class="empty-state" style="padding:28px 20px;">
-        <div class="empty-state-icon" style="font-size:22px;">◱</div>
-        <div class="empty-state-text" style="font-size:12.5px;margin-bottom:14px;">
-          Aún no se ha ejecutado el despiece para este proyecto.
+      {# Empty state — sin botón duplicado. La acción Nuevo despiece vive en la barra superior. #}
+      <div class="empty-state" style="padding:48px 24px;text-align:center;">
+        <div class="empty-state-icon" style="font-size:28px;opacity:.5;">◱</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink);margin-top:8px;">
+          Aún no hay despieces para este proyecto.
         </div>
-        <a href="{% url 'presupuestos:despiece_proyecto' proyecto.pk %}"
-           class="btn btn-primary btn-sm">
-          ⊞ Ejecutar despiece
-        </a>
+        <div class="empty-state-text" style="font-size:12.5px;color:var(--ink-soft);margin-top:6px;">
+          Crea el primer despiece para comenzar.
+        </div>
       </div>
       {% endif %}
     </div>
 
   </div>
 
-  <!-- ── COLUMNA LATERAL ── -->
-  <div class="det-col">
+  {# ───── Columna lateral ───── #}
+  <div class="pry-body-col">
 
-    <div class="panel">
-      <div class="panel-header accent-top-theme" style="border-radius:var(--radius) var(--radius) 0 0;">
-        <span class="panel-title">Datos del sistema</span>
-        <span style="font-size:10px;color:rgba(14,17,23,0.35);">🔒 Solo lectura</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Consecutivo</span>
-        <span class="s-value" style="font-family:'Courier New',monospace;font-size:12px;color:var(--theme-accent);">
-          {{ proyecto.consecutivo }}
-        </span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Estado</span>
-        <span class="badge-status
-          {% if proyecto.estado == 'SOLICITUD' %}bs-pendiente
-          {% elif proyecto.estado == 'DESPIECE' %}bs-despiece
-          {% elif proyecto.estado == 'APU_GENERADO' %}bs-validado
-          {% elif proyecto.estado == 'CERRADO' %}bs-cerrado
-          {% else %}bs-inactivo{% endif %}">
-          {{ proyecto.get_estado_display }}
-        </span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Creado por</span>
-        <span class="s-value" style="font-size:12px;">{{ proyecto.creado_por|default:"—" }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Fecha proyecto</span>
-        <span class="s-value" style="font-size:12px;">{{ proyecto.fecha_proyecto|date:"d/m/Y" }}</span>
-      </div>
-      <div class="summary-line">
-        <span class="s-label">Última edición</span>
-        <span class="s-value" style="font-size:12px;">{{ proyecto.updated_at|date:"d/m/Y H:i" }}</span>
-      </div>
-    </div>
-
-    {% if proyecto.solicitud %}
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Solicitud origen</span></div>
-      <div style="padding:14px 18px;">
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--theme-accent);">
-          {{ proyecto.solicitud.consecutivo }}
-        </div>
-        <div style="font-size:13px;margin-top:4px;">{{ proyecto.solicitud.nombre }}</div>
-        <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">
-          {{ proyecto.solicitud.cliente.razon_social }}
-        </div>
-        <a href="{% url 'comercial:solicitud_detail' proyecto.solicitud.pk %}"
-           class="btn btn-ghost btn-xs" style="margin-top:12px;">
-          Ver solicitud →
-        </a>
-      </div>
-    </div>
-
-    <!-- Otras versiones -->
     {% if otras_versiones %}
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">Otras versiones</span>
-        <span style="font-size:10px;color:rgba(14,17,23,.35);">{{ otras_versiones|length }}</span>
+        <span style="font-size:10px;color:rgba(14,17,23,.45);background:var(--surface-2);
+                     padding:2px 8px;border-radius:999px;font-weight:700;">
+          {{ otras_versiones|length }}
+        </span>
       </div>
       {% for ov in otras_versiones %}
-      <div style="padding:9px 16px;border-bottom:1px solid var(--border);
-                  display:flex;align-items:center;gap:9px;">
-        <div style="width:22px;height:22px;border-radius:50%;background:var(--surface-2);
+      <a href="{% url 'comercial:proyecto_detail' ov.pk %}"
+         style="display:flex;align-items:center;gap:10px;padding:11px 16px;
+                border-bottom:1px solid var(--border);text-decoration:none;color:inherit;
+                transition:background-color .12s ease;"
+         onmouseover="this.style.background='var(--theme-accent-pale)';"
+         onmouseout="this.style.background='';">
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--surface-2);
                     display:flex;align-items:center;justify-content:center;
                     font-family:'Syne',sans-serif;font-size:10px;font-weight:800;
                     color:var(--ink-soft);flex-shrink:0;">
-          {{ ov.version }}
+          v{{ ov.version }}
         </div>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:12px;font-weight:500;color:var(--ink);">{{ ov.consecutivo }}</div>
+          <div style="font-size:12.5px;font-weight:600;color:var(--ink);">{{ ov.consecutivo }}</div>
           <div style="font-size:10.5px;color:var(--ink-soft);">{{ ov.get_estado_display }}</div>
+          {% if ov.fecha_proyecto %}
+          <div style="font-size:10px;color:var(--ink-soft);">{{ ov.fecha_proyecto|date:"d/m/Y" }}</div>
+          {% endif %}
         </div>
-        <a href="{% url 'comercial:proyecto_detail' ov.pk %}"
-           class="btn btn-ghost btn-xs">Ver</a>
-      </div>
+        <span style="font-size:14px;color:var(--ink-soft);">›</span>
+      </a>
       {% endfor %}
     </div>
-    {% endif %}
     {% endif %}
 
   </div>
 </div>
+
+{# ════════════════ Modal: Anular proyecto ════════════════ #}
+<div class="modal fade" id="modalAnularProyecto" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'comercial:proyecto_anular' proyecto.pk %}">
+        {% csrf_token %}
+        <div class="modal-header" style="border-bottom:1px solid var(--border);">
+          <h5 class="modal-title" style="font-size:14px;">Anular proyecto</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body" style="font-size:13px;">
+          ¿Anular <strong>{{ proyecto.consecutivo }} v{{ proyecto.version }}</strong>?
+          El proyecto pasa a estado ANULADO. Se conserva la trazabilidad de despieces,
+          APUs y cotizaciones.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-sm" style="background:var(--warning,#b07a00);color:#fff;">Anular</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if es_admin_flag %}
+{# ════════════════ Modal: Eliminar definitivamente (admin) ════════════════ #}
+<div class="modal fade" id="modalEliminarProyecto" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'comercial:proyecto_delete' proyecto.pk %}"
+            onsubmit="return confirm('¿Eliminar definitivamente {{ proyecto.consecutivo }} v{{ proyecto.version }}? Esta acción borra despieces, APUs y cotizaciones asociadas y NO se puede deshacer.');">
+        {% csrf_token %}
+        <div class="modal-header" style="border-bottom:1px solid var(--border);">
+          <h5 class="modal-title" style="font-size:14px;color:var(--danger);">Eliminar proyecto</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body" style="font-size:13px;">
+          Se eliminarán los APUs, cotizaciones/snapshots, despieces y relaciones asociadas a
+          <strong>{{ proyecto.consecutivo }} v{{ proyecto.version }}</strong>. Esta acción eliminará
+          información asociada y no se puede deshacer.
+          <div style="margin-top:10px;padding:8px 10px;background:rgba(185,28,28,.08);border-left:3px solid var(--danger);font-size:11.5px;color:var(--ink-soft);">
+            Disponible solo para el administrador global. Si quieres conservar trazabilidad, usa <em>Anular</em>.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-sm" style="background:var(--danger,#b91c1c);color:#fff;">Eliminar definitivamente</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ════════════════ Modales: Autorización de revisión APU ════════════════ #}
+{# Renderizados a nivel de página (fuera de .panel con overflow:hidden y del  #}
+{# <form> de consolidación) para que abran limpios, sin quedar detrás del     #}
+{# backdrop ni recortados por la card. Un modal por APU; ID único por apu.pk. #}
+{% for bucket in apus_data %}
+  {% with apu=bucket.apu %}
+    {% puede_aprobar_apu apu as puede_aprobar_flag_modal %}
+    {% if puede_aprobar_flag_modal %}
+      {% puede_editar_apu apu as puede_editar_flag_modal %}
+      {% include "presupuestos/partials/_modal_autorizacion_apu.html" with apu=apu puede_editar=puede_editar_flag_modal %}
+    {% endif %}
+  {% endwith %}
+{% endfor %}
 
 {% endblock %}

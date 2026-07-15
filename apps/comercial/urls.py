@@ -29,6 +29,8 @@ urlpatterns = [
     path("solicitudes/<int:pk>/", views.SolicitudDetailView.as_view(), name="solicitud_detail"),
     path("solicitudes/<int:pk>/editar/", views.SolicitudUpdateView.as_view(), name="solicitud_update"),
     path("solicitudes/<int:pk>/eliminar/", views.SolicitudDeleteView.as_view(), name="solicitud_delete"),
+    path("solicitudes/<int:pk>/archivar/", views.SolicitudArchivarView.as_view(), name="solicitud_archivar"),
+    path("solicitudes/<int:pk>/devolver/", views.SolicitudDevolverView.as_view(), name="solicitud_devolver"),
 
     # ── Archivos de Solicitud ─────────────────────────────────────────────────
     path("solicitudes/<int:solicitud_pk>/archivos/subir/",
@@ -52,6 +54,14 @@ urlpatterns = [
     path("proyectos/<int:pk>/", views.ProyectoDetailView.as_view(), name="proyecto_detail"),
     path("proyectos/<int:pk>/editar/", views.ProyectoUpdateView.as_view(), name="proyecto_update"),
     path("proyectos/<int:pk>/eliminar/", views.ProyectoDeleteView.as_view(), name="proyecto_delete"),
+    path("proyectos/<int:pk>/anular/", views.ProyectoAnularView.as_view(), name="proyecto_anular"),
+    path("proyectos/<int:pk>/clonar/", views.ClonarProyectoComoVersionView.as_view(), name="proyecto_clonar"),
+
+    # ── Garantías (Fase 9) ────────────────────────────────────────────────────
+    path("garantias/", views.TipoGarantiaListView.as_view(), name="garantia_list"),
+    path("garantias/nueva/", views.TipoGarantiaCreateView.as_view(), name="garantia_create"),
+    path("garantias/<int:pk>/editar/", views.TipoGarantiaUpdateView.as_view(), name="garantia_update"),
+    path("garantias/<int:pk>/eliminar/", views.TipoGarantiaDeleteView.as_view(), name="garantia_delete"),
 
     # ── Logs ──────────────────────────────────────────────────────────────────
     path("logs/", views.LogListView.as_view(), name="log_list"),

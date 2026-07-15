@@ -1,8 +1,11 @@
 """apps/comercial/forms.py — Formularios del módulo comercial."""
 
+import mimetypes
+
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
-from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto
+from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto, TipoGarantia
 
 
 class ClienteForm(forms.ModelForm):
@@ -83,6 +86,7 @@ class SolicitudForm(forms.ModelForm):
     Formulario de Solicitud.
     · Todos los campos son obligatorios (backend + frontend).
     · estado y creado_por son controlados por el sistema (excluidos).
+    · El campo cliente se filtra por unidad_negocio si se provee.
     """
 
     class Meta:
@@ -118,10 +122,28 @@ class SolicitudForm(forms.ModelForm):
             }),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, unidad_negocio=None, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.required = True
+        self._unidad_negocio = unidad_negocio
+        if unidad_negocio:
+            self.fields["cliente"].queryset = Cliente.objects.filter(
+                unidad_negocio=unidad_negocio, activo=True
+            ).order_by("razon_social")
+        else:
+            self.fields["cliente"].queryset = Cliente.objects.filter(
+                activo=True
+            ).order_by("razon_social")
+
+    def clean_cliente(self):
+        cliente = self.cleaned_data.get("cliente")
+        if cliente and self._unidad_negocio:
+            if cliente.unidad_negocio != self._unidad_negocio:
+                raise ValidationError(
+                    "El cliente seleccionado no pertenece a la unidad de negocio actual."
+                )
+        return cliente
 
 
 class TipoProyectoForm(forms.ModelForm):
@@ -138,8 +160,6 @@ class TipoProyectoForm(forms.ModelForm):
 _PROYECTO_WIDGETS = {
     "nombre":               forms.TextInput(attrs={"class": "form-control"}),
     "descripcion":          forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-    "area_total_m2":        forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
-    "perimetro_ml":         forms.NumberInput(attrs={"class": "form-control", "step": "0.0001"}),
     "dias_duracion":        forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     "num_personas":         forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     "trm":                  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
@@ -157,7 +177,7 @@ class ProyectoForm(forms.ModelForm):
         model = Proyecto
         fields = [
             "cliente", "nombre", "descripcion",
-            "area_total_m2", "perimetro_ml", "dias_duracion", "num_personas",
+            "dias_duracion", "num_personas",
             "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
@@ -170,11 +190,26 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
         model = Proyecto
         fields = [
             "nombre", "descripcion",
-            "area_total_m2", "perimetro_ml", "dias_duracion", "num_personas",
+            "dias_duracion", "num_personas",
             "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
         widgets = _PROYECTO_WIDGETS
+
+
+_EXTENSIONES_PERMITIDAS = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png",
+}
+
+_MIME_PERMITIDOS = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "image/jpeg",
+    "image/png",
+}
 
 
 class SolicitudArchivoForm(forms.ModelForm):
@@ -189,4 +224,61 @@ class SolicitudArchivoForm(forms.ModelForm):
                 "class": "form-control",
                 "placeholder": "Nombre descriptivo del archivo",
             }),
+        }
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data.get("archivo")
+        if not archivo:
+            return archivo
+
+        max_mb = getattr(settings, "MAX_UPLOAD_SIZE_MB", 10)
+        max_bytes = max_mb * 1024 * 1024
+        if archivo.size > max_bytes:
+            raise ValidationError(
+                f"El archivo supera el tamaño máximo permitido ({max_mb} MB). "
+                f"El archivo pesa {archivo.size / 1024 / 1024:.1f} MB."
+            )
+
+        nombre = archivo.name.lower()
+        ext = "." + nombre.rsplit(".", 1)[-1] if "." in nombre else ""
+        if ext not in _EXTENSIONES_PERMITIDAS:
+            raise ValidationError(
+                f"Tipo de archivo no permitido («{ext or 'sin extensión'}»). "
+                f"Formatos aceptados: {', '.join(sorted(_EXTENSIONES_PERMITIDAS))}."
+            )
+
+        mime, _ = mimetypes.guess_type(archivo.name)
+        if mime and mime not in _MIME_PERMITIDOS:
+            raise ValidationError(
+                "El tipo de contenido del archivo no está permitido. "
+                "Use PDF, Word, Excel o imágenes JPG/PNG."
+            )
+
+        return archivo
+
+
+class TipoGarantiaForm(forms.ModelForm):
+    """Form de TipoGarantia (Fase 9). Patrón fields-only + wrapper."""
+
+    class Meta:
+        model = TipoGarantia
+        fields = ["nombre", "porcentaje_recargo", "descripcion", "condiciones", "orden", "activo"]
+        labels = {
+            "porcentaje_recargo": "Porcentaje de recargo (%)",
+        }
+        help_texts = {
+            "porcentaje_recargo": "Recargo comercial aplicado sobre Materiales. Ej: 5 = 5%.",
+        }
+        widgets = {
+            "nombre":             forms.TextInput(attrs={"class": "form-control",
+                                                        "placeholder": "Ej: Garantía 10 años — Membrana TPO"}),
+            "porcentaje_recargo": forms.NumberInput(attrs={"class": "form-control",
+                                                           "min": "0", "step": "0.01",
+                                                           "placeholder": "Ej: 5"}),
+            "descripcion":    forms.TextInput(attrs={"class": "form-control",
+                                                    "placeholder": "Resumen visible en la propuesta"}),
+            "condiciones":    forms.Textarea(attrs={"class": "form-control", "rows": 4,
+                                                   "placeholder": "Cláusulas, exclusiones, alcance…"}),
+            "orden":          forms.NumberInput(attrs={"class": "form-control", "min": "0"}),
+            "activo":         forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }

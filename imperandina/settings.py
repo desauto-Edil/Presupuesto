@@ -46,14 +46,24 @@ if not _use_decouple:
 # ---------------------------------------------------------------------------
 # Seguridad
 # ---------------------------------------------------------------------------
-SECRET_KEY = config(
-    "SECRET_KEY",
-    default="django-insecure-(oh!&*+-2$1bgyj^%fk#1pxv&j)a-pwlz7bznvg(u=hq%(4jj3",
-)
 
-DEBUG = config("DEBUG", default=True, cast=bool)
+def _require_env(key: str) -> str:
+    """Falla con mensaje claro si una variable de entorno obligatoria no está definida."""
+    value = config(key, default=None)
+    if not value:
+        raise RuntimeError(
+            f"\n\n[IMPERANDINA] Variable de entorno obligatoria no definida: {key}\n"
+            f"Crea o revisa el archivo .env y define {key}=<valor>.\n"
+            f"Consulta .env.example para la lista completa de variables requeridas.\n"
+        )
+    return value
 
-_allowed = config("ALLOWED_HOSTS", default="localhost,127.0.0.1,testserver")
+
+SECRET_KEY = _require_env("SECRET_KEY")
+
+DEBUG = config("DEBUG", default=False, cast=bool)
+
+_allowed = config("ALLOWED_HOSTS", default="localhost,127.0.0.1")
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 
 
@@ -84,8 +94,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'apps.configuracion.middleware.AuthCustomMiddleware',
+    "apps.configuracion.middleware.AuthCustomMiddleware",
 ]
 
 ROOT_URLCONF = "imperandina.urls"
@@ -117,9 +126,10 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": config("DB_NAME", default="presupuestos"),
         "USER": config("DB_USER", default="postgres"),
-        "PASSWORD": config("DB_PASSWORD", default="Edil"),
+        "PASSWORD": _require_env("DB_PASSWORD"),
         "HOST": config("DB_HOST", default="localhost"),
         "PORT": config("DB_PORT", default="5432"),
+        "CONN_MAX_AGE": 60,
     }
 }
 
@@ -147,7 +157,7 @@ USE_TZ   = True
 # ---------------------------------------------------------------------------
 # Archivos estáticos
 # ---------------------------------------------------------------------------
-STATIC_URL   = "static/"
+STATIC_URL   = "/static/"
 STATIC_ROOT  = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
@@ -160,6 +170,54 @@ MEDIA_ROOT = BASE_DIR / "media"
 # ---------------------------------------------------------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+
+# ---------------------------------------------------------------------------
+# Cache (Fase 0 — base arquitectónica)
+# ---------------------------------------------------------------------------
+# Desarrollo: LocMemCache (por defecto).
+# Producción: definir CACHE_BACKEND=redis y REDIS_URL=redis://host:6379/1 en .env.
+#
+# La política de uso (cache-aside, TTLs, namespaces, invalidación) vive en
+# apps/common/cache.py — settings.py solo declara el backend.
+_CACHE_BACKEND = config("CACHE_BACKEND", default="locmem")
+
+if _CACHE_BACKEND == "redis":
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": config("REDIS_URL", default="redis://127.0.0.1:6379/1"),
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "andinacost-dev",
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# Seguridad HTTP (producción)
+# Todos por defecto apagados para no romper desarrollo local sin HTTPS.
+# En producción activar en .env:
+#   SECURE_SSL_REDIRECT=True
+#   SESSION_COOKIE_SECURE=True
+#   CSRF_COOKIE_SECURE=True
+#   SECURE_HSTS_SECONDS=31536000
+#   SECURE_HSTS_INCLUDE_SUBDOMAINS=True
+#   X_FRAME_OPTIONS=DENY
+# ---------------------------------------------------------------------------
+SECURE_SSL_REDIRECT             = config("SECURE_SSL_REDIRECT",             default=False, cast=bool)
+SESSION_COOKIE_SECURE           = config("SESSION_COOKIE_SECURE",           default=False, cast=bool)
+CSRF_COOKIE_SECURE              = config("CSRF_COOKIE_SECURE",              default=False, cast=bool)
+SESSION_COOKIE_HTTPONLY         = True
+SECURE_HSTS_SECONDS             = config("SECURE_HSTS_SECONDS",             default=0,     cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS  = config("SECURE_HSTS_INCLUDE_SUBDOMAINS",  default=False, cast=bool)
+X_FRAME_OPTIONS                 = config("X_FRAME_OPTIONS",                 default="SAMEORIGIN")
+
+# Tamaño máximo de subida de archivos (configurable, default 10 MB)
+MAX_UPLOAD_SIZE_MB = config("MAX_UPLOAD_SIZE_MB", default=10, cast=int)
 
 # ---------------------------------------------------------------------------
 # Logging
