@@ -79,6 +79,7 @@ class DespieceService:
 
     def _ejecutar_desde_db(self, ps, componentes_db, DespieceLinea) -> list[dict]:
         """Ejecuta el despiece usando componentes definidos en ComponenteSubsistema."""
+        import re as _re
         from apps.ingenieria.models import VariableSubsistema
 
         contexto = ps.get_contexto()
@@ -88,17 +89,140 @@ class DespieceService:
             if var.variable not in contexto:
                 contexto[var.variable] = float(var.valor_default)
 
+        # Pre-fetch lineas existentes para re-evaluar componentes diferidos con producto ya asignado
+        lineas_existentes = {
+            l.componente_codigo: l
+            for l in DespieceLinea.objects.filter(
+                proyecto_sistema=ps
+            ).select_related("producto")
+        }
+
+        # Variables cuya fuente quedó diferida; usadas para detectar cascade-blocks
+        deferred_vars: set[str] = set()
+
         logger.debug("[DespieceService][DB] Contexto PS %s: %s", ps.pk, contexto)
         resultados = []
 
         for comp in componentes_db:
+            categoria = comp.categoria
+
+            # ── Componente con cálculo diferido por presentación ──────────────
+            if comp.requiere_presentacion_producto:
+                linea_exist = lineas_existentes.get(comp.codigo)
+                cantidad_float_def: float | None = None
+
+                if (
+                    linea_exist
+                    and linea_exist.producto_id
+                    and comp.variable_presentacion_producto
+                ):
+                    pres = getattr(linea_exist.producto, "cantidad_presentacion", None)
+                    if pres and pres > 0:
+                        ctx_tmp = {**contexto, comp.variable_presentacion_producto: float(pres)}
+                        try:
+                            cantidad_float_def = comp.evaluar(ctx_tmp)
+                        except Exception as exc:
+                            logger.error(
+                                "[DespieceService][DB] Error re-evaluando diferido '%s' (PS %s): %s",
+                                comp.codigo, ps.pk, exc,
+                            )
+
+                if cantidad_float_def is not None:
+                    # Re-evaluación exitosa con producto ya asignado
+                    if comp.variable_salida:
+                        contexto[comp.variable_salida] = cantidad_float_def
+
+                    cantidad_decimal = Decimal(str(cantidad_float_def)).quantize(
+                        Decimal("0.000001"), rounding=ROUND_HALF_UP
+                    )
+                    linea, _ = DespieceLinea.objects.update_or_create(
+                        proyecto_sistema=ps,
+                        componente_codigo=comp.codigo,
+                        defaults={
+                            "proyecto": ps.proyecto,
+                            "cantidad_calculada": cantidad_decimal,
+                            "pendiente_producto": False,
+                            "presentacion_snapshot": linea_exist.producto.cantidad_presentacion,
+                            "categoria_producto": categoria,
+                            "es_dependencia_automatica": False,
+                        },
+                    )
+                    linea.capturar_precio()
+                    resultados.append({
+                        "componente_codigo": comp.codigo,
+                        "nombre": comp.nombre,
+                        "cantidad": float(cantidad_decimal),
+                        "unidad": comp.unidad,
+                        "categoria": categoria.nombre if categoria else "",
+                        "pendiente": False,
+                        "estado": linea.estado_tecnico,
+                    })
+                else:
+                    # Sin producto válido → pendiente
+                    if comp.variable_salida:
+                        deferred_vars.add(comp.variable_salida)
+
+                    DespieceLinea.objects.update_or_create(
+                        proyecto_sistema=ps,
+                        componente_codigo=comp.codigo,
+                        defaults={
+                            "proyecto": ps.proyecto,
+                            "cantidad_calculada": None,
+                            "pendiente_producto": True,
+                            "categoria_producto": categoria,
+                            "es_dependencia_automatica": False,
+                        },
+                    )
+                    resultados.append({
+                        "componente_codigo": comp.codigo,
+                        "nombre": comp.nombre,
+                        "cantidad": None,
+                        "unidad": comp.unidad,
+                        "categoria": categoria.nombre if categoria else "",
+                        "pendiente": True,
+                        "estado": "PENDIENTE_PRODUCTO",
+                    })
+                continue
+
+            # ── Evaluación normal ─────────────────────────────────────────────
+            formula_vars = set(_re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', comp.formula_texto or ""))
+            es_cascade = bool(formula_vars & deferred_vars)
+
             try:
                 cantidad_float = comp.evaluar(contexto)
             except (KeyError, ValueError) as exc:
-                logger.error(
-                    "[DespieceService][DB] Error en componente '%s' (PS %s): %s",
-                    comp.codigo, ps.pk, exc,
-                )
+                if es_cascade:
+                    logger.warning(
+                        "[DespieceService][DB] Componente '%s' bloqueado por cascade (PS %s): %s",
+                        comp.codigo, ps.pk, exc,
+                    )
+                    if comp.variable_salida:
+                        deferred_vars.add(comp.variable_salida)
+                    DespieceLinea.objects.update_or_create(
+                        proyecto_sistema=ps,
+                        componente_codigo=comp.codigo,
+                        defaults={
+                            "proyecto": ps.proyecto,
+                            "cantidad_calculada": None,
+                            "pendiente_producto": True,
+                            "categoria_producto": categoria,
+                            "es_dependencia_automatica": False,
+                        },
+                    )
+                    resultados.append({
+                        "componente_codigo": comp.codigo,
+                        "nombre": comp.nombre,
+                        "cantidad": None,
+                        "unidad": comp.unidad,
+                        "categoria": categoria.nombre if categoria else "",
+                        "pendiente": True,
+                        "estado": "PENDIENTE_PRODUCTO",
+                    })
+                else:
+                    logger.error(
+                        "[DespieceService][DB] Error en componente '%s' (PS %s): %s",
+                        comp.codigo, ps.pk, exc,
+                    )
                 continue
 
             if comp.variable_salida:
@@ -108,14 +232,13 @@ class DespieceService:
                 Decimal("0.000001"), rounding=ROUND_HALF_UP
             )
 
-            categoria = comp.categoria  # ya FK directo
-
             linea, created = DespieceLinea.objects.update_or_create(
                 proyecto_sistema=ps,
                 componente_codigo=comp.codigo,
                 defaults={
                     "proyecto": ps.proyecto,
                     "cantidad_calculada": cantidad_decimal,
+                    "pendiente_producto": False,  # reset si antes era cascade-bloqueado
                     "categoria_producto": categoria,
                     "es_dependencia_automatica": False,
                 },

@@ -570,14 +570,18 @@ class GuardarDespieceMaestroView(GestionIngenieriaMixin, View):
         svc = DespieceMaestroService(dm)
 
         try:
-            resultados = svc.calcular()
+            svc.guardar(variables_entrada=variables_entrada, seleccion_productos=seleccion_productos)
+        except ValidationError as exc:
+            # Corregido: Manejo seguro de mensajes de ValidationError
+            if hasattr(exc, "message_dict"):
+                error_payload = exc.message_dict
+            else:
+                # exc.message puede no existir, exc.messages es más seguro.
+                error_payload = "; ".join(getattr(exc, 'messages', [str(exc)]))
+            return JsonResponse({"ok": False, "error": error_payload}, status=400)
         except Exception as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
-
-        try:
-            svc.guardar(resultados, variables_entrada, seleccion_productos)
-        except Exception as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=500)
+            logger.exception("[GuardarDespieceMaestroView] Error inesperado al guardar despiece #%s", pk)
+            return JsonResponse({"ok": False, "error": "Ocurrió un error inesperado en el servidor."}, status=500)
 
         # ── Guardar consolidaciones ───────────────────────────────────────────
         if consolidaciones_data:
@@ -636,7 +640,7 @@ class GuardarDespieceMaestroView(GestionIngenieriaMixin, View):
             "ok": True,
             "redirect_url": reverse("ingenieria:despiece_maestro", kwargs={"pk": dm.pk}),
             "estado": dm.estado,
-            "total_lineas": len(resultados),
+            "total_lineas": dm.lineas.count(),
         })
 
 

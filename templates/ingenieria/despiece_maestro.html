@@ -193,6 +193,21 @@
 .text-sin-precio { color: #dc3545; font-size: 11px; font-style: italic; }
 .text-pendiente  { color: #e0a800; font-size: 11px; font-style: italic; }
 
+/* ── Cálculo diferido por presentación del producto ─────────────────────── */
+.dp-pending-row > td { background: rgba(255,193,7,.035); }
+.dp-pending-state {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
+  font-size: 10.5px; font-weight: 700; color: #8a6500;
+}
+.dp-pending-state i { font-size: 11px; }
+.dp-pending-state--ready { color: #0f6b3e; }
+.dp-pending-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,193,7,.16); color: #765600;
+  border: 1px solid rgba(255,193,7,.32); border-radius: 9px;
+  padding: 2px 7px; font-size: 10.5px; font-weight: 700;
+}
+
 /* ── Selector de producto inline ─────────────────────────────────────────── */
 .prod-selector { position: relative; min-width: 200px; }
 .prod-input {
@@ -1025,6 +1040,10 @@ function initSelector(tr, fila) {
         _updateProdUI(tr, fila._prod);
         _renderProdWarning(tr, lineaUnidad, fila._prod);
         _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
+        if (_esCalculoDiferido(fila)) {
+          _renderBody();
+          showToast('Producto seleccionado. Guarda el despiece para calcular la cantidad.', 'ok');
+        }
       }), 260);
   });
 
@@ -1036,6 +1055,10 @@ function initSelector(tr, fila) {
       _updateProdUI(tr, fila._prod);
       _renderProdWarning(tr, lineaUnidad, fila._prod);
       _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
+      if (_esCalculoDiferido(fila)) {
+        _renderBody();
+        showToast('Producto seleccionado. Guarda el despiece para calcular la cantidad.', 'ok');
+      }
     });
   });
 
@@ -1049,6 +1072,12 @@ function initSelector(tr, fila) {
     if (fechaEl)  fechaEl.textContent = '—';
     _renderProdWarning(tr, lineaUnidad, null);
     _renderCoherenciaChip(tr, fila.formula_texto, null);
+    if (_esCalculoDiferido(fila)) {
+      fila.cantidad_calculada = null;
+      fila.cantidad_redondeada = null;
+      fila.pendiente_producto = true;
+      _renderBody();
+    }
   });
 }
 
@@ -1118,16 +1147,51 @@ function _fechaStr(prod) {
   return (prod?.fecha_precio) ? String(prod.fecha_precio).substring(0, 10) : '—';
 }
 
+function _esCalculoDiferido(f) {
+  return Boolean(f && (f.requiere_presentacion_producto || f.pendiente_producto));
+}
+
+function _cantidadRedondeada(f) {
+  if (f.cantidad_redondeada !== null && f.cantidad_redondeada !== undefined) {
+    return f.cantidad_redondeada;
+  }
+  if (f.cantidad_calculada !== null && f.cantidad_calculada !== undefined && !isNaN(Number(f.cantidad_calculada))) {
+    return Math.ceil(Number(f.cantidad_calculada));
+  }
+  return null;
+}
+
+function _estadoDiferidoHtml(f) {
+  if (!f.pendiente_producto) {
+    return f.pendiente_dependencia ? '<div class="dp-pending-state"><i class="bi bi-hourglass-split"></i> Pendiente de cálculo previo</div>' : '';
+  }
+  const listo = Boolean(f._prod && f._prod.producto_id);
+  return `<div class="dp-pending-state${listo ? ' dp-pending-state--ready' : ''}">
+    <i class="bi ${listo ? 'bi-check-circle-fill' : 'bi-hourglass-split'}"></i>
+    ${listo ? 'Producto listo · se calculará al guardar' : 'Requiere producto para calcular'}
+  </div>`;
+}
+
 function _rowNormal(f, i, cols) {
-  const cantRed = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada);
+  const cantRed = _cantidadRedondeada(f);
+  const pendiente = f.pendiente_producto || f.pendiente_dependencia;
   const chk = cols > 7
-    ? `<td class="td-check-col"><input type="checkbox" data-idx="${i}" class="form-check-input" style="cursor:pointer"></td>`
+    ? `<td class="td-check-col"><input type="checkbox" data-idx="${i}" class="form-check-input" style="cursor:pointer" ${pendiente ? 'disabled title="Primero selecciona y guarda el producto"' : ''}></td>`
     : '';
-  return `<tr data-idx="${i}">
+  
+  let cantidadHtml = '—';
+  if (f.cantidad_calculada !== null && f.cantidad_calculada !== undefined) {
+    cantidadHtml = `${fmt(f.cantidad_calculada, 4)}<button type="button" class="dp-eye-btn" title="Ver fórmula y valores usados" onclick="verDetalle(${i})"><i class="bi bi-eye"></i></button>`;
+  } else if (f.pendiente_producto || f.pendiente_dependencia) {
+    cantidadHtml = `<span class="dp-pending-pill"><i class="bi bi-hourglass-split"></i> Pendiente</span>`;
+  }
+
+  const redHtml = cantRed === null ? '—' : `<span class="td-red-pill">${cantRed}</span>`;
+  return `<tr data-idx="${i}" class="${pendiente ? 'dp-pending-row' : ''}">
     ${chk}
-    <td class="td-comp">${esc(f.componente_nombre)}<small>${esc(f.componente_codigo)}</small></td>
-    <td class="td-cant">${fmt(f.cantidad_calculada, 4)}<button type="button" class="dp-eye-btn" title="Ver fórmula y valores usados" onclick="verDetalle(${i})"><i class="bi bi-eye"></i></button></td>
-    <td class="td-red"><span class="td-red-pill">${cantRed}</span></td>
+    <td class="td-comp">${esc(f.componente_nombre)}<small>${esc(f.componente_codigo)}</small>${_estadoDiferidoHtml(f)}</td>
+    <td class="td-cant">${cantidadHtml}</td>
+    <td class="td-red">${redHtml}</td>
     <td class="td-und">${esc(f.unidad)}</td>
     <td><div class="prod-selector">
       <input type="text" class="prod-input" placeholder="Buscar producto…" autocomplete="off">
@@ -1172,6 +1236,7 @@ function renderTabla(lineas) {
     ...l,
     _prod: (l.producto_id || l.producto_nombre) ? {
       producto_id:     l.producto_id,
+      // Los siguientes son snapshots del momento del cálculo/guardado
       producto_codigo: l.producto_codigo || '',
       producto_nombre: l.producto_nombre || '',
       precio_unitario: l.precio_unitario,
@@ -1180,6 +1245,7 @@ function renderTabla(lineas) {
       presentacion_nombre: l.presentacion_nombre || '',
       unidad_producto:     l.unidad_producto || '',
       unidad_presentacion: l.unidad_presentacion || '',
+      cantidad_presentacion: l.cantidad_presentacion ?? l.presentacion_snapshot ?? null,
     } : null,
   }));
   _renderBody();
@@ -1327,6 +1393,12 @@ function consolidarSeleccionadas() {
   const indices  = checked.map(cb => parseInt(cb.dataset.idx, 10));
 
   if (indices.length < 2) { showToast('Selecciona al menos 2 líneas para consolidar.', 'err'); return; }
+
+  if (indices.some(i => _esCalculoDiferido(filasCalc[i]) &&
+                        (filasCalc[i].cantidad_calculada === null || filasCalc[i].pendiente_producto))) {
+    showToast('No puedes consolidar líneas pendientes de cálculo por producto.', 'err');
+    return;
+  }
 
   // No mezclar con líneas ya consolidadas
   const { consolidatedSet } = _buildConsolidationMaps();
@@ -1623,6 +1695,17 @@ async function calcular() {
 /* ── Guardar ──────────────────────────────────────────────────────────────── */
 async function guardar() {
   if (!filasCalc.length) return;
+
+  // Corregido: La validación solo debe bloquear si falta producto en una línea que lo requiere directamente.
+  const diferidasSinProducto = filasCalc.filter(f => f.pendiente_producto && !(f._prod && f._prod.producto_id));
+  if (diferidasSinProducto.length) {
+    const nombres = diferidasSinProducto.slice(0, 3)
+      .map(f => f.componente_nombre || f.componente_codigo).join(', ');
+    const extra = diferidasSinProducto.length > 3 ? ` y ${diferidasSinProducto.length - 3} más` : '';
+    showToast(`Selecciona un producto para: ${nombres}${extra}.`, 'err');
+    return;
+  }
+
   setLoading('btnGuardar', 'guardarSpinner', 'guardarIcon', true);
   document.getElementById('guardarText').style.opacity = '.6';
 

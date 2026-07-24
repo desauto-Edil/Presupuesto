@@ -50,6 +50,22 @@ def objeto_bloqueado_por_apu(obj) -> bool:
     return False
 
 
+def lineas_pendientes_producto(ps):
+    """
+    Devuelve lista de DespieceLinea con pendiente_producto=True para el ProyectoSistema.
+    Si ps es None devuelve lista vacía.
+    """
+    if ps is None:
+        return []
+    from apps.presupuestos.models import DespieceLinea
+    return list(
+        DespieceLinea.objects
+        .filter(proyecto_sistema=ps, pendiente_producto=True)
+        .select_related("categoria_producto")
+        .order_by("componente_codigo")
+    )
+
+
 def redirect_si_bloqueado(request, obj, destino, *destino_args, mensaje=None):
     """
     Guard para usar al inicio de un `post()` de escritura.

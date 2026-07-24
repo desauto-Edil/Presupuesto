@@ -80,8 +80,8 @@ class ProyectoSistema(models.Model):
              Los strings no numéricos pasan sin convertir.
         """
         ctx: dict = {
-            "area_m2":      float(self.proyecto.area_total_m2 or 0),
-            "perimetro_ml": float(self.proyecto.perimetro_ml or 0),
+            "area_m2":      float(getattr(self.proyecto, "area_total_m2", 0) or 0),
+            "perimetro_ml": float(getattr(self.proyecto, "perimetro_ml", 0) or 0),
         }
         for k, v in (self.parametros_entrada or {}).items():
             if v is None or v == "":
@@ -193,7 +193,13 @@ class DespieceLinea(models.Model):
         help_text="[LEGADO] Dependencia automática en el flujo anterior.",
     )
     # ─────────────────────────────────────────────────────────────────────────
-    cantidad_calculada = models.DecimalField(max_digits=18, decimal_places=6)
+    cantidad_calculada = models.DecimalField(
+        max_digits=18, decimal_places=6, null=True, blank=True,
+        help_text=(
+            "Cantidad calculada por la fórmula. None cuando el componente requiere "
+            "selección de producto para calcular (ver pendiente_producto)."
+        ),
+    )
     cantidad_ajustada  = models.DecimalField(
         max_digits=18, decimal_places=6, blank=True, null=True,
         help_text="Valor manual que reemplaza al calculado si el usuario lo ajusta.",
@@ -204,6 +210,21 @@ class DespieceLinea(models.Model):
         help_text="Precio unitario capturado al momento de calcular el despiece.",
     )
     es_dependencia_automatica = models.BooleanField(default=False)
+    pendiente_producto = models.BooleanField(
+        default=False,
+        help_text=(
+            "True cuando el componente tiene requiere_presentacion_producto=True "
+            "y aún no se ha seleccionado el producto. "
+            "En este estado cantidad_calculada es None."
+        ),
+    )
+    presentacion_snapshot = models.DecimalField(
+        max_digits=14, decimal_places=4, null=True, blank=True,
+        help_text=(
+            "Valor de Producto.cantidad_presentacion usado en el último cálculo. "
+            "Se guarda para trazabilidad aunque el producto cambie después."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -237,6 +258,8 @@ class DespieceLinea(models.Model):
     @property
     def estado_tecnico(self):
         """Estado de resolución del componente."""
+        if self.pendiente_producto:
+            return "PENDIENTE_PRODUCTO"
         if self.producto:
             return "RESUELTO"
         if self.categoria_producto:

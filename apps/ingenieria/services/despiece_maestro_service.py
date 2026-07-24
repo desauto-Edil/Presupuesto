@@ -18,6 +18,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.core.exceptions import ValidationError
 
 if TYPE_CHECKING:
     from apps.ingenieria.models import DespieceMaestro
@@ -36,15 +37,17 @@ class DespieceMaestroService:
 
     # ── Contexto ─────────────────────────────────────────────────────────────
 
-    def _build_contexto(self) -> dict:
+    def _build_contexto(self, variables_entrada_override: dict | None = None) -> dict:
         """
         Construye el contexto de evaluación combinando:
           1. Defaults de VariableSubsistema (si el usuario no los sobrescribe).
-          2. variables_entrada del despiece (ingresadas por el usuario).
+          2. variables_entrada del despiece (o un override para recálculo).
         """
         from apps.ingenieria.models import VariableSubsistema
 
         ctx: dict = {}
+        # Inyectar funciones matemáticas seguras
+        ctx.update({k: getattr(math, k) for k in _SAFE_NAMES_KEYS})
 
         # Paso 1: valores por defecto de las variables del subsistema
         for var in VariableSubsistema.objects.filter(subsistema=self.subsistema).order_by("orden"):
@@ -54,7 +57,12 @@ class DespieceMaestroService:
                 ctx[var.variable] = 0.0
 
         # Paso 2: sobreescribir con lo que el usuario ingresó
-        for k, v in (self.despiece.variables_entrada or {}).items():
+        variables_a_usar = (
+            variables_entrada_override
+            if variables_entrada_override is not None
+            else self.despiece.variables_entrada
+        )
+        for k, v in (variables_a_usar or {}).items():
             if v is None or v == "":
                 continue
             try:
@@ -114,33 +122,64 @@ class DespieceMaestroService:
         import re as _re
         _token_re = _re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b')
 
+        # Para detectar dependencias pendientes
+        variables_pendientes = set()
+
         for comp in qs:
             # Snapshot de los valores usados por ESTA fórmula (variables + salidas
             # intermedias ya resueltas), tomado del contexto ANTES de evaluar.
             valores_usados = {}
             if comp.formula_texto:
-                for tok in _token_re.findall(comp.formula_texto):
+                # Corregido: extraer tokens de la fórmula, no de valores_usados
+                tokens_formula = set(_token_re.findall(comp.formula_texto or ""))
+                for tok in tokens_formula:
                     if tok in ctx and tok not in _SAFE_NAMES_KEYS:
                         val = ctx[tok]
                         valores_usados[tok] = float(val) if isinstance(val, (int, float)) else val
 
-            try:
-                cantidad_float = comp.evaluar(ctx)
+            cantidad_f = None
+            cantidad = Decimal("0")
+            error = None
+            pendiente_producto = False
+            pendiente_dependencia = False
+
+            if comp.requiere_presentacion_producto:
+                pendiente_producto = True
                 if comp.variable_salida:
-                    ctx[comp.variable_salida] = cantidad_float
-                cantidad = Decimal(str(cantidad_float)).quantize(
-                    Decimal("0.000001"), rounding=ROUND_HALF_UP
-                )
-                error = None
-            except Exception as exc:
-                cantidad = Decimal("0")
-                error = str(exc)
-                logger.warning(
-                    "[DespieceMaestroService] Error en '%s' (subsistema %s): %s",
-                    comp.codigo, self.subsistema.codigo, exc,
+                    variables_pendientes.add(comp.variable_salida)
+                logger.debug(
+                    "[DespieceMaestroService] Componente '%s' pendiente de selección de producto.",
+                    comp.codigo
                 )
 
-            cantidad_f = float(cantidad)
+            # Corregido: la detección de dependencias debe usar los tokens reales de la fórmula
+            elif variables_pendientes.intersection(tokens_formula):
+                pendiente_dependencia = True
+                if comp.variable_salida:
+                    variables_pendientes.add(comp.variable_salida)
+                logger.debug(
+                    "[DespieceMaestroService] Componente '%s' pendiente por dependencia de %s.",
+                    comp.codigo, variables_pendientes.intersection(tokens_formula)
+                )
+
+            else:
+                try:
+                    cantidad_float = comp.evaluar(ctx)
+                    if comp.variable_salida:
+                        ctx[comp.variable_salida] = cantidad_float
+                    cantidad = Decimal(str(cantidad_float)).quantize(
+                        Decimal("0.000001"), rounding=ROUND_HALF_UP
+                    )
+                    cantidad_f = float(cantidad)
+                except Exception as exc:
+                    cantidad = Decimal("0")
+                    cantidad_f = 0.0
+                    error = str(exc)
+                    logger.warning(
+                        "[DespieceMaestroService] Error en '%s' (subsistema %s): %s",
+                        comp.codigo, self.subsistema.codigo, exc,
+                    )
+
             resultados.append({
                 "subconjunto_id":          comp.subconjunto_id,
                 "subconjunto_nombre":      comp.subconjunto.nombre if comp.subconjunto else "General",
@@ -149,13 +188,18 @@ class DespieceMaestroService:
                 "formula_texto":           comp.formula_texto,
                 "valores_usados":          valores_usados,
                 "cantidad_calculada":      cantidad_f,
-                "cantidad_redondeada":     math.ceil(cantidad_f) if not error else 0,
+                "cantidad_redondeada":     math.ceil(cantidad_f) if cantidad_f is not None and not error else None,
                 "unidad":                  comp.unidad,
                 "variable_salida":         comp.variable_salida,
                 "variable_referencia_apu": comp.variable_referencia_apu,
                 "unidad_apu":              comp.unidad_apu,
                 "categoria_nombre":        comp.categoria.nombre if comp.categoria else "",
                 "error":                   error,
+                # Nuevos campos para el frontend
+                "pendiente_producto":      pendiente_producto,
+                "pendiente_dependencia":   pendiente_dependencia,
+                "requiere_presentacion_producto": comp.requiere_presentacion_producto,
+                "variable_presentacion_producto": comp.variable_presentacion_producto,
             })
 
         logger.info(
@@ -164,20 +208,127 @@ class DespieceMaestroService:
         )
         return resultados
 
+    def _calcular_para_guardado(
+        self, variables_entrada: dict, seleccion_productos: dict
+    ) -> list[dict]:
+        """
+        Recalcula el despiece completo desde cero, resolviendo las líneas pendientes
+        con los productos seleccionados. Esta es la fuente de verdad para el guardado.
+
+        Lanza ValidationError si falta un producto o la presentación es inválida.
+        """
+        from apps.ingenieria.models import ComponenteSubsistema
+        from apps.catalogos.models import Producto
+
+        # 1. Cargar todos los productos necesarios en una sola consulta
+        producto_ids = [
+            p["producto_id"] for p in seleccion_productos.values() if p.get("producto_id")
+        ]
+        productos_db = Producto.objects.filter(pk__in=producto_ids)
+        productos_por_id = {p.pk: p for p in productos_db}
+
+        # 2. Construir contexto inicial (reutilizando lógica)
+        # Corregido: Construir contexto inicial sin mutar la instancia
+        ctx = self._build_contexto(variables_entrada_override=variables_entrada)
+
+        # 3. Obtener el mismo queryset ordenado que en `calcular()`
+        sq_ids = list(self.despiece.subconjuntos.values_list("pk", flat=True))
+        if sq_ids:
+            qs = (
+                ComponenteSubsistema.objects.filter(subsistema=self.subsistema, subconjunto__in=sq_ids)
+                .select_related("subconjunto", "categoria")
+                .order_by("subconjunto__orden", "subconjunto__id", "orden")
+            )
+        else:
+            qs = (
+                ComponenteSubsistema.objects
+                .filter(subsistema=self.subsistema)
+                .select_related("subconjunto", "categoria")
+                .order_by("orden")
+            )
+
+        resultados_definitivos = []
+        import re as _re
+        _token_re = _re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b')
+
+        for comp in qs:
+            ctx_componente = dict(ctx)
+
+            if comp.requiere_presentacion_producto:
+                seleccion = seleccion_productos.get(comp.codigo)
+                if not seleccion or not seleccion.get("producto_id"):
+                    raise ValidationError(
+                        f"El componente '{comp.nombre}' requiere seleccionar un producto."
+                    )
+
+                producto = productos_por_id.get(seleccion["producto_id"])
+                if not producto:
+                    raise ValidationError(
+                        f"El producto seleccionado para '{comp.nombre}' no fue encontrado."
+                    )
+
+                if not producto.cantidad_presentacion or producto.cantidad_presentacion <= 0:
+                    raise ValidationError(
+                        f"El producto '{producto.nombre}' no tiene una cantidad por presentación válida."
+                    )
+
+                ctx_componente[comp.variable_presentacion_producto] = float(producto.cantidad_presentacion)
+
+            try:
+                cantidad_float = comp.evaluar(ctx_componente)
+                if comp.variable_salida:
+                    ctx[comp.variable_salida] = cantidad_float
+
+                # Corregido: Snapshot de valores usados, incluyendo la presentación si aplica
+                valores_usados = {}
+                if comp.formula_texto:
+                    for tok in _token_re.findall(comp.formula_texto):
+                        if tok in ctx_componente and tok not in _SAFE_NAMES_KEYS:
+                            val = ctx_componente[tok]
+                            valores_usados[tok] = float(val) if isinstance(val, (int, float, Decimal)) else val
+
+                # Corregido: No usar to_dict(), construir el diccionario explícitamente
+                resultado_comp = dict({
+                    "subconjunto_id":          comp.subconjunto_id,
+                    "subconjunto_nombre":      comp.subconjunto.nombre if comp.subconjunto else "General",
+                    "componente_codigo":       comp.codigo,
+                    "componente_nombre":       comp.nombre,
+                    "formula_texto":           comp.formula_texto,
+                    "unidad":                  comp.unidad,
+                    "variable_salida":         comp.variable_salida,
+                    "variable_referencia_apu": comp.variable_referencia_apu,
+                    "unidad_apu":              comp.unidad_apu,
+                    "categoria_nombre":        comp.categoria.nombre if comp.categoria else "",
+                }, **{
+                    "cantidad_calculada": float(cantidad_float),
+                    "valores_usados": valores_usados,
+                    "error": None,
+                })
+                resultados_definitivos.append(resultado_comp)
+
+            except Exception as exc:
+                logger.error(
+                    "[DespieceMaestroService._calcular_para_guardado] Error en '%s': %s",
+                    comp.codigo, exc
+                )
+                raise ValidationError(
+                    f"Error al recalcular la fórmula para '{comp.nombre}': {exc}"
+                )
+
+        return resultados_definitivos
+
     # ── Guardado ──────────────────────────────────────────────────────────────
 
     @transaction.atomic
-    def guardar(self, resultados: list[dict], variables_entrada: dict,
-                seleccion_productos: dict | None = None) -> None:
+    def guardar(self, variables_entrada: dict, seleccion_productos: dict | None = None) -> None:
         """
         Persiste el cálculo en DespieceMaestroLinea y marca el despiece como GUARDADO.
 
-        Si el despiece ya tenía líneas previas, las elimina y las reemplaza.
+        Recalcula todas las líneas para resolver pendientes y garantizar consistencia.
+        Si el despiece ya tenía líneas previas, las elimina y las reemplaza (idempotente).
         Guarda además un snapshot JSON para mantener la trazabilidad histórica.
 
         Args:
-            resultados:          Salida de calcular()
-            variables_entrada:   Valores ingresados por el usuario (tal cual)
             seleccion_productos: Dict indexado por componente_codigo con datos del
                                  producto seleccionado:
                                  {
@@ -192,10 +343,18 @@ class DespieceMaestroService:
                                  }
         """
         from apps.ingenieria.models import DespieceMaestroLinea
-        from decimal import Decimal
+        from apps.catalogos.models import Producto
 
         dm = self.despiece
         sel = seleccion_productos or {}
+
+        # 1. Recalcular todo desde cero con los datos finales.
+        # Este método lanza ValidationError si algo falla, abortando la transacción.
+        resultados = self._calcular_para_guardado(variables_entrada, sel)
+
+        # 2. Cargar todos los productos en una sola consulta para el snapshot
+        producto_ids = [p["producto_id"] for p in sel.values() if p.get("producto_id")]
+        productos_por_id = {p.pk: p for p in Producto.objects.filter(pk__in=producto_ids)}
 
         # Actualizar variables y snapshot
         dm.variables_entrada  = variables_entrada
@@ -208,22 +367,29 @@ class DespieceMaestroService:
 
         lineas = []
         for idx, r in enumerate(resultados):
-            prod_data = sel.get(r["componente_codigo"], {})
-            cantidad  = Decimal(str(r["cantidad_calculada"]))
-            precio_u  = None
-            precio_t  = None
-            if prod_data.get("precio_unitario") is not None:
+            cantidad = Decimal(str(r["cantidad_calculada"]))
+            precio_u = None
+            precio_t = None
+            fecha_precio = None
+            seleccion_linea = sel.get(r["componente_codigo"], {})
+            producto_db = None
+            producto_id = seleccion_linea.get("producto_id")
+
+            if producto_id:
+                producto_db = productos_por_id.get(producto_id)
+
+            if seleccion_linea.get("precio_unitario") is not None:
                 try:
-                    precio_u = Decimal(str(prod_data["precio_unitario"]))
+                    # Usar el precio del payload, pero validando que sea un número
+                    precio_u = Decimal(str(seleccion_linea.get("precio_unitario")))
                     precio_t = (cantidad * precio_u).quantize(Decimal("0.01"))
-                except Exception:
+                except (ValueError, TypeError, Decimal.InvalidOperation):
+                    # Si el precio del payload no es válido, se ignora.
                     pass
 
-            # Parsear fecha_precio si viene como string ISO
-            fecha_precio = None
-            if prod_data.get("fecha_precio"):
+            if seleccion_linea.get("fecha_precio"):
                 from django.utils.dateparse import parse_datetime
-                fecha_precio = parse_datetime(str(prod_data["fecha_precio"]))
+                fecha_precio = parse_datetime(str(seleccion_linea["fecha_precio"]))
 
             import math as _math
             cant_redondeada = _math.ceil(float(cantidad)) if not r.get("error") else 0
@@ -245,12 +411,12 @@ class DespieceMaestroService:
                 categoria_nombre=r["categoria_nombre"],
                 orden=idx + 1,
                 # Snapshot de producto
-                producto_id=prod_data.get("producto_id") or None,
-                producto_codigo=prod_data.get("producto_codigo", ""),
-                producto_nombre=prod_data.get("producto_nombre", ""),
+                producto_id=producto_id or None,
+                producto_codigo=seleccion_linea.get("producto_codigo", ""),
+                producto_nombre=seleccion_linea.get("producto_nombre", ""),
                 precio_unitario=precio_u,
                 precio_total=precio_t,
-                moneda=prod_data.get("moneda", ""),
+                moneda=seleccion_linea.get("moneda", ""),
                 fecha_precio=fecha_precio,
             ))
 

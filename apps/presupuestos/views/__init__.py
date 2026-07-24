@@ -34,6 +34,7 @@ from apps.common.auth import (
 from apps.common.apu_lock import (
     objeto_bloqueado_por_apu,
     redirect_si_bloqueado,
+    lineas_pendientes_producto,
     MENSAJE_BLOQUEO,
 )
 from apps.ingenieria.models import Sistema, Subsistema
@@ -196,7 +197,7 @@ class DespieceCSVDownloadView(DescargaPDFMixin, View):
             producto = linea.producto.nombre if linea.producto_id else "Sin asignar"
             cantidad = linea.cantidad_final
             precio = linea.precio_snapshot or 0
-            subtotal = round(float(cantidad) * float(precio), 2) if precio else 0
+            subtotal = round(float(cantidad or 0) * float(precio), 2) if precio else 0
 
             writer.writerow([
                 sistema, subsistema, linea.componente_codigo or "—",
@@ -391,9 +392,9 @@ class DespieceLineaAjusteAPIView(GestionPresupuestosMixin, View):
             return JsonResponse({
                 "ok": True,
                 "linea_pk": linea.pk,
-                "cantidad_calculada": str(linea.cantidad_calculada),
+                "cantidad_calculada": str(linea.cantidad_calculada) if linea.cantidad_calculada is not None else None,
                 "cantidad_ajustada": str(linea.cantidad_ajustada),
-                "cantidad_final": str(linea.cantidad_final),
+                "cantidad_final": str(linea.cantidad_final) if linea.cantidad_final is not None else None,
                 "motivo_ajuste": linea.motivo_ajuste or "",
             })
         except Exception as exc:
@@ -417,16 +418,40 @@ class DespieceLineaAjusteView(GestionPresupuestosMixin, UpdateView):
         return super().post(request, *args, **kwargs)
 
 
+def _dl_to_dict(linea) -> dict:
+    """Serializa una DespieceLinea para respuestas JSON de asignación/retiro."""
+    return {
+        "linea_id": linea.pk,
+        "componente_codigo": linea.componente_codigo,
+        "cantidad_calculada": (
+            float(linea.cantidad_calculada) if linea.cantidad_calculada is not None else None
+        ),
+        "pendiente_producto": linea.pendiente_producto,
+    }
+
+
 class AsignarProductoLineaAPIView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/despiece/api/asignar-producto/<linea_pk>/
     Body JSON: {"producto_id": int}
-    Asigna un producto concreto a una línea de despiece y captura el precio.
+    Asigna (o cambia) el producto de una línea de despiece y captura el precio.
+    Si el componente tiene requiere_presentacion_producto=True, delega el cálculo
+    a PresentacionProductoService dentro de una transacción atómica.
+
+    DELETE /presupuestos/despiece/api/asignar-producto/<linea_pk>/
+    Retira el producto de la línea. Para componentes diferidos llama a
+    PresentacionProductoService.limpiar_tras_eliminacion() e invalida dependientes.
     """
+
     def post(self, request, pk):
+        from django.db import transaction
+        from apps.catalogos.models import Producto
+        from apps.presupuestos.services.presentacion_service import PresentacionProductoService
+
         linea = get_object_or_404(DespieceLinea, pk=pk)
         if objeto_bloqueado_por_apu(linea):
             return JsonResponse({"error": MENSAJE_BLOQUEO}, status=403)
+
         try:
             data = json.loads(request.body)
             producto_id = int(data.get("producto_id", 0))
@@ -436,14 +461,30 @@ class AsignarProductoLineaAPIView(GestionPresupuestosMixin, View):
         if not producto_id:
             return JsonResponse({"error": "Debe indicar un producto."}, status=400)
 
-        from apps.catalogos.models import Producto
         producto = get_object_or_404(Producto, pk=producto_id, activo=True)
+        comp = PresentacionProductoService._get_componente(linea)
 
-        linea.producto = producto
-        linea.categoria_producto = producto.categoria
-        linea.save(update_fields=["producto", "categoria_producto"])
-        linea.capturar_precio()
-        linea.refresh_from_db()
+        if comp and comp.requiere_presentacion_producto:
+            try:
+                with transaction.atomic():
+                    linea.producto = producto
+                    linea.categoria_producto = producto.categoria
+                    linea.save(update_fields=["producto", "categoria_producto"])
+                    actualizadas = PresentacionProductoService.recalcular_tras_asignacion(
+                        linea, producto
+                    )
+                    linea.capturar_precio()
+                    linea.refresh_from_db()
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=422)
+            dependientes = [_dl_to_dict(l) for l in actualizadas[1:]]
+        else:
+            linea.producto = producto
+            linea.categoria_producto = producto.categoria
+            linea.save(update_fields=["producto", "categoria_producto"])
+            linea.capturar_precio()
+            linea.refresh_from_db()
+            dependientes = []
 
         moneda = producto.moneda or "COP"
         fecha_act = (
@@ -457,6 +498,49 @@ class AsignarProductoLineaAPIView(GestionPresupuestosMixin, View):
             "moneda": moneda,
             "precio_snapshot": float(linea.precio_snapshot or 0),
             "fecha_actualizacion": fecha_act,
+            "cantidad_calculada": (
+                float(linea.cantidad_calculada) if linea.cantidad_calculada is not None else None
+            ),
+            "pendiente_producto": linea.pendiente_producto,
+            "presentacion_snapshot": (
+                float(linea.presentacion_snapshot) if linea.presentacion_snapshot else None
+            ),
+            "dependientes": dependientes,
+        })
+
+    def delete(self, request, pk):
+        from django.db import transaction
+        from apps.presupuestos.services.presentacion_service import PresentacionProductoService
+
+        linea = get_object_or_404(DespieceLinea, pk=pk)
+        if objeto_bloqueado_por_apu(linea):
+            return JsonResponse({"error": MENSAJE_BLOQUEO}, status=403)
+
+        if not linea.producto_id:
+            return JsonResponse({"error": "La línea no tiene producto asignado."}, status=400)
+
+        comp = PresentacionProductoService._get_componente(linea)
+
+        with transaction.atomic():
+            dependientes = []
+            if comp and comp.requiere_presentacion_producto:
+                actualizadas = PresentacionProductoService.limpiar_tras_eliminacion(linea)
+                dependientes = [_dl_to_dict(l) for l in actualizadas[1:]]
+
+            linea.producto = None
+            linea.precio_snapshot = None
+            linea.save(update_fields=["producto", "precio_snapshot", "updated_at"])
+            linea.refresh_from_db()
+
+        return JsonResponse({
+            "ok": True,
+            "producto_retirado": True,
+            "cantidad_calculada": (
+                float(linea.cantidad_calculada) if linea.cantidad_calculada is not None else None
+            ),
+            "pendiente_producto": linea.pendiente_producto,
+            "presentacion_snapshot": None,
+            "dependientes": dependientes,
         })
 
 
@@ -1319,6 +1403,16 @@ class APUProyectoUpdateView(GestionPresupuestosMixin, UpdateView):
 
 class APUGenerarView(GestionPresupuestosMixin, View):
     """Genera el APU para un ProyectoSistema dado."""
+
+    def get(self, request, pk):
+        from django.shortcuts import render as _render
+        ps = get_object_or_404(ProyectoSistema, pk=pk)
+        pendientes = lineas_pendientes_producto(ps)
+        return _render(request, "presupuestos/despiece_pendientes_producto.html", {
+            "ps": ps,
+            "pendientes": pendientes,
+        })
+
     def post(self, request, pk):
         ps = get_object_or_404(ProyectoSistema, pk=pk)
         blk = redirect_si_bloqueado(
@@ -1327,6 +1421,9 @@ class APUGenerarView(GestionPresupuestosMixin, View):
         )
         if blk:
             return blk
+        pendientes = lineas_pendientes_producto(ps)
+        if pendientes:
+            return redirect(reverse("presupuestos:apu_generar", args=[pk]))
         try:
             from apps.presupuestos.services.apu_service import APUService
             apu = APUService.generar(ps)
@@ -2910,6 +3007,16 @@ class APUEnviarRevisionView(GestionPresupuestosMixin, View):
             )
             return redirect(reverse("presupuestos:apu_detail", args=[pk]))
 
+        pendientes = lineas_pendientes_producto(apu.proyecto_sistema)
+        if pendientes:
+            codigos = ", ".join(l.componente_codigo for l in pendientes)
+            messages.error(
+                request,
+                f"No se puede remitir a revisión: los siguientes componentes requieren que se "
+                f"asigne un producto antes de calcular su cantidad: {codigos}.",
+            )
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
         try:
             revisor_pk = request.POST.get("revisor_id", "").strip()
             revisor = None
@@ -3058,6 +3165,16 @@ class APUAprobarModalidadView(GestionPresupuestosMixin, View):
                 request,
                 "No tiene permiso para aprobar este APU. Solo el aprobador "
                 "asignado puede realizar esta acción.",
+            )
+            return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
+        pendientes = lineas_pendientes_producto(apu.proyecto_sistema)
+        if pendientes:
+            codigos = ", ".join(l.componente_codigo for l in pendientes)
+            messages.error(
+                request,
+                f"No se puede aprobar el APU: los siguientes componentes requieren que se "
+                f"asigne un producto antes de calcular su cantidad: {codigos}.",
             )
             return redirect(reverse("presupuestos:apu_detail", args=[pk]))
 

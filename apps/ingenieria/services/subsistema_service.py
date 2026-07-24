@@ -281,15 +281,17 @@ def guardar_subconjuntos_componentes(subsistema, post):
 
     raw = post.get("subconjuntos_json", "").strip()
     if not raw:
-        return
+        return []
 
     try:
         subconjuntos_data = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
-        return
+        return []
 
     if not isinstance(subconjuntos_data, list):
-        return
+        return []
+
+    errores_validacion: list[str] = []
 
     # Eliminar todos los subconjuntos y componentes existentes (incluye legacy)
     SubconjuntoRecetaTecnica.objects.filter(subsistema=subsistema).delete()
@@ -337,6 +339,22 @@ def guardar_subconjuntos_componentes(subsistema, post):
                 except (CategoriaProducto.DoesNotExist, ValueError, TypeError):
                     pass
 
+            req_pres = bool(comp_data.get("requiere_presentacion_producto", False))
+            var_pres = str(comp_data.get("variable_presentacion_producto", "")).strip()
+
+            import re as _re
+            if req_pres:
+                if not var_pres:
+                    errores_validacion.append(
+                        f"Componente «{nombre}» (cód. {codigo}): se marcó «Calcular tras producto» "
+                        "pero falta la variable de presentación."
+                    )
+                elif not _re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', var_pres):
+                    errores_validacion.append(
+                        f"Componente «{nombre}» (cód. {codigo}): "
+                        f"«{var_pres}» no es un identificador Python válido."
+                    )
+
             ComponenteSubsistema.objects.create(
                 subsistema=subsistema,
                 subconjunto=subconjunto,
@@ -348,8 +366,12 @@ def guardar_subconjuntos_componentes(subsistema, post):
                 unidad=str(comp_data.get("unidad", "")).strip(),
                 variable_referencia_apu=str(comp_data.get("variable_referencia_apu", "")).strip(),
                 unidad_apu=str(comp_data.get("unidad_apu", "")).strip(),
+                requiere_presentacion_producto=req_pres,
+                variable_presentacion_producto=var_pres,
                 orden=comp_idx + 1,
             )
+
+    return errores_validacion
 
 
 # ── Guardado de reglas APU ───────────────────────────────────────────────────

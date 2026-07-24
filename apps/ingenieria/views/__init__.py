@@ -312,6 +312,8 @@ def _build_subconjuntos_json(subconjuntos, componentes_legacy):
                     "unidad": c.unidad,
                     "variable_referencia_apu": c.variable_referencia_apu,
                     "unidad_apu": c.unidad_apu,
+                    "requiere_presentacion_producto": c.requiere_presentacion_producto,
+                    "variable_presentacion_producto": c.variable_presentacion_producto,
                 }
                 for c in sq.componentes.all()
             ],
@@ -330,6 +332,8 @@ def _build_subconjuntos_json(subconjuntos, componentes_legacy):
                     "unidad": c.unidad,
                     "variable_referencia_apu": c.variable_referencia_apu,
                     "unidad_apu": c.unidad_apu,
+                    "requiere_presentacion_producto": c.requiere_presentacion_producto,
+                    "variable_presentacion_producto": c.variable_presentacion_producto,
                 }
                 for c in componentes_legacy
             ],
@@ -418,21 +422,23 @@ class SubsistemaCreateView(GestionIngenieriaMixin, CreateView):
         return kwargs
 
     def form_valid(self, form):
+        errores_comps = []
         errores_dep = []
         with transaction.atomic():
             response = super().form_valid(form)
             guardar_variables(self.object, self.request.POST)
-            guardar_subconjuntos_componentes(self.object, self.request.POST)
+            errores_comps = guardar_subconjuntos_componentes(self.object, self.request.POST)
             guardar_reglas_apu(self.object, self.request.POST)
             # Fase 6L-2: la configuración APU ya no viaja en este POST
             # (vive en el modal #modalConfigApu que tiene su propio form).
             guardar_m2m_consumo(self.object, self.request.POST)
             guardar_productos_tecnicos_componentes_quimicos(self.object, self.request.POST)
             errores_dep = guardar_dependencias_variables(self.object, self.request.POST)
-        if errores_dep:
-            from django.contrib import messages
-            for e in errores_dep:
-                messages.warning(self.request, e)
+        from django.contrib import messages
+        for e in errores_comps:
+            messages.warning(self.request, e)
+        for e in errores_dep:
+            messages.warning(self.request, e)
         return response
 
     def get_success_url(self):
@@ -523,21 +529,23 @@ class SubsistemaUpdateView(GestionIngenieriaMixin, UpdateView):
         return kwargs
 
     def form_valid(self, form):
+        errores_comps = []
         errores_dep = []
         with transaction.atomic():
             response = super().form_valid(form)
             guardar_variables(self.object, self.request.POST)
-            guardar_subconjuntos_componentes(self.object, self.request.POST)
+            errores_comps = guardar_subconjuntos_componentes(self.object, self.request.POST)
             guardar_reglas_apu(self.object, self.request.POST)
             # Fase 6L-2: la configuración APU ya no viaja en este POST
             # (vive en el modal #modalConfigApu).
             guardar_m2m_consumo(self.object, self.request.POST)
             guardar_productos_tecnicos_componentes_quimicos(self.object, self.request.POST)
             errores_dep = guardar_dependencias_variables(self.object, self.request.POST)
-        if errores_dep:
-            from django.contrib import messages
-            for e in errores_dep:
-                messages.warning(self.request, e)
+        from django.contrib import messages
+        for e in errores_comps:
+            messages.warning(self.request, e)
+        for e in errores_dep:
+            messages.warning(self.request, e)
         return response
 
     def get_success_url(self):

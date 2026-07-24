@@ -1487,6 +1487,19 @@ window.CP_SECCIONES = [
       <td style="width:90px;">
         <select class="form-select form-select-sm comp-f-unidad">${unidadesOpts(comp.unidad || '')}</select>
       </td>
+      <td style="width:160px;">
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <label style="font-size:11px;cursor:pointer;white-space:nowrap;margin:0;">
+            <input type="checkbox" class="comp-f-requiere-pres"
+                   ${comp.requiere_presentacion_producto ? 'checked' : ''}>
+            Tras producto
+          </label>
+          <input type="text" class="form-control form-control-sm comp-f-var-pres"
+                 placeholder="var_presentacion"
+                 style="font-family:monospace;font-size:10.5px;${comp.requiere_presentacion_producto ? '' : 'display:none;'}"
+                 value="${esc(comp.variable_presentacion_producto || '')}">
+        </div>
+      </td>
       <td class="apu-col" style="display:none;width:110px;">
         <input type="text" class="form-control form-control-sm comp-f-var_ref_apu"
                style="font-family:monospace;font-size:10.5px;"
@@ -1549,6 +1562,7 @@ window.CP_SECCIONES = [
                 <th style="min-width:180px;">Fórmula *</th>
                 <th style="width:100px;">Var. salida</th>
                 <th style="width:90px;">Unidad</th>
+                <th style="width:160px;">Cálculo diferido</th>
                 <th class="apu-col" style="display:none;width:110px;">Ref. APU</th>
                 <th class="apu-col" style="display:none;width:90px;">Und. APU</th>
                 <th style="width:36px;"></th>
@@ -1607,6 +1621,14 @@ window.CP_SECCIONES = [
       if (tbody.querySelectorAll('.sq-comp-row').length === 0) {
         emptyMsg.style.display = '';
       }
+    });
+
+    // Delegación: mostrar/ocultar campo variable_presentacion_producto
+    tbody.addEventListener('change', e => {
+      const chk = e.target.closest('.comp-f-requiere-pres');
+      if (!chk) return;
+      const inp = chk.closest('td').querySelector('.comp-f-var-pres');
+      if (inp) inp.style.display = chk.checked ? '' : 'none';
     });
 
     // Toggle Configurar APU — muestra/oculta columnas técnicas Ref. APU y Und. APU
@@ -1679,6 +1701,7 @@ window.CP_SECCIONES = [
         const nombre  = tr.querySelector('.comp-f-nombre').value.trim();
         const formula = tr.querySelector('.comp-f-formula').value.trim();
         if (!codigo || !nombre || !formula) return;
+        const chkPres = tr.querySelector('.comp-f-requiere-pres');
         componentes.push({
           codigo,
           nombre,
@@ -1688,6 +1711,8 @@ window.CP_SECCIONES = [
           unidad:                tr.querySelector('.comp-f-unidad').value.trim(),
           variable_referencia_apu: tr.querySelector('.comp-f-var_ref_apu').value.trim(),
           unidad_apu:            tr.querySelector('.comp-f-unidad_apu').value.trim(),
+          requiere_presentacion_producto: chkPres ? chkPres.checked : false,
+          variable_presentacion_producto: tr.querySelector('.comp-f-var-pres').value.trim(),
         });
       });
       data.push({ nombre, descripcion, componentes });

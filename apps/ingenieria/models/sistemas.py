@@ -408,6 +408,25 @@ class ComponenteSubsistema(models.Model):
     unidad = models.CharField(max_length=40, blank=True, default="")
     orden = models.PositiveIntegerField(default=1)
 
+    # ── Cálculo diferido por presentación de producto ─────────────────────────
+    requiere_presentacion_producto = models.BooleanField(
+        default=False,
+        verbose_name="Calcular después de seleccionar producto",
+        help_text=(
+            "Si está activo, la cantidad se calcula después de elegir el producto, "
+            "usando su campo 'cantidad_presentacion'."
+        ),
+    )
+    variable_presentacion_producto = models.CharField(
+        max_length=80, blank=True, default="",
+        verbose_name="Variable de presentación",
+        help_text=(
+            "Nombre de la variable que recibirá el valor de 'cantidad_presentacion'. "
+            "Debe ser un identificador Python válido y estar presente en la fórmula. "
+            "Obligatorio cuando 'requiere_presentacion_producto' está activo."
+        ),
+    )
+
     # ── APU por componente ────────────────────────────────────────────────────
     variable_referencia_apu = models.CharField(
         max_length=80, blank=True, default="",
@@ -433,6 +452,34 @@ class ComponenteSubsistema(models.Model):
 
     def __str__(self):
         return f"{self.subsistema.codigo} / {self.nombre}"
+
+    def clean(self):
+        import re
+        from django.core.exceptions import ValidationError
+        if self.requiere_presentacion_producto:
+            var = (self.variable_presentacion_producto or "").strip()
+            if not var:
+                raise ValidationError({
+                    "variable_presentacion_producto": (
+                        "Debes indicar el nombre de la variable cuando "
+                        "'Calcular después de seleccionar producto' está activo."
+                    )
+                })
+            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', var):
+                raise ValidationError({
+                    "variable_presentacion_producto": (
+                        f"'{var}' no es un identificador Python válido. "
+                        "Usa solo letras, dígitos y guion bajo, sin empezar con dígito."
+                    )
+                })
+            formula = self.formula_texto or ""
+            if var not in re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', formula):
+                raise ValidationError({
+                    "variable_presentacion_producto": (
+                        f"La variable '{var}' no aparece en la fórmula. "
+                        "Agrégala a la fórmula o elige otro nombre."
+                    )
+                })
 
     def evaluar(self, contexto: dict) -> float:
         """
