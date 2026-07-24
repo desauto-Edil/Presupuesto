@@ -772,17 +772,12 @@ function _renderProdWarning(tr, lineaUnidad, prod) {
   span.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i>${esc(text)}`;
 }
 
-/* ── Coherencia presentación técnica ↔ variable OPCION_UNICA ────────────────
- * Validación informativa, no bloqueante. Recorre los tokens de la fórmula del
- * componente, identifica los que corresponden a variables OPCION_UNICA con
- * opciones, y compara `prod.cantidad_presentacion` contra esas opciones con
- * tolerancia 0.01.
- *  - Verde:        match con una opción → "Presentación coherente: 87.96 m² · Label"
- *  - Ámbar fuerte: hay variable OPCION_UNICA pero no hay match → advertencia
- *  - Ámbar suave:  producto sin cantidad_presentacion configurada
- *  - null:         la fórmula no usa ninguna variable OPCION_UNICA → no se pinta
+/* ── Validación presentación técnica ─────────────────────────────────────────
+ * Muestra un chip informativo cuando el producto tiene cantidad_presentacion
+ * configurada y la fórmula del componente referencia alguna variable OPCION_UNICA.
+ *  - Verde: producto con presentación configurada → "Presentación: X m²"
+ *  - null:  fórmula sin variable OPCION_UNICA, o producto sin presentación
  */
-const _COHERENCIA_TOL = 0.01;
 const _TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]*/g;
 
 function _collectVarsOpcionUnica() {
@@ -828,85 +823,26 @@ function _normName(s) {
 }
 
 function _coherenciaChipFor(prod, formula_texto, varsMap) {
-  // Fase 1 — Reglas estrictas:
-  //   1. Solo se valida si la fórmula referencia al menos una variable
-  //      OPCION_UNICA. Sin fallback global sobre el subsistema.
-  //   2. Se compara contra el VALOR SELECCIONADO de esa variable, NO contra
-  //      todas sus opciones.
-  //   3. Si hay varias referenciadas, se desambigua por unidad: la cuya
-  //      unidad coincide con prod.unidad_presentacion gana. Si no se puede
-  //      aislar exactamente una, info suave — nunca verde falso.
-  //   4. Producto sin cantidad_presentacion → info suave, sin búsquedas.
+  // Solo aplica si la fórmula referencia al menos una variable OPCION_UNICA.
   const formula = String(formula_texto || '');
   if (!formula) return null;
   const tokens = formula.match(_TOKEN_RE) || [];
   const varNames = Object.keys(varsMap);
-
-  // Recolectar variables OPCION_UNICA referenciadas por la fórmula (estricto
-  // + tolerante a estilo de identificador).
-  const referenciadas = [];
-  const seen = new Set();
-  tokens.forEach(t => {
-    if (varsMap[t] && !seen.has(t)) {
-      seen.add(t);
-      referenciadas.push({ name: t, ...varsMap[t] });
-      return;
-    }
+  const tieneOpcionUnica = tokens.some(t => {
+    if (varsMap[t]) return true;
     const tn = _normName(t);
-    if (!tn) return;
-    const found = varNames.find(v => _normName(v) === tn);
-    if (found && !seen.has(found)) {
-      seen.add(found);
-      referenciadas.push({ name: found, ...varsMap[found] });
-    }
+    return tn && varNames.some(v => _normName(v) === tn);
   });
-  if (referenciadas.length === 0) return null;  // fórmula no usa OPCION_UNICA
+  if (!tieneOpcionUnica) return null;
 
   const prodUnidad = (prod && prod.unidad_presentacion)
     ? ` ${prod.unidad_presentacion}` : '';
-
-  // Producto sin presentación técnica: no mostrar chip. La validación solo
-  // aplica si el producto tiene cantidad_presentacion configurada.
   const cantNum = _normNum(prod && prod.cantidad_presentacion);
   if (cantNum === null) return null;
 
-  // Desambiguar a UNA sola variable de presentación.
-  let candidata = null;
-  if (referenciadas.length === 1) {
-    candidata = referenciadas[0];
-  } else if (prod && prod.unidad_presentacion) {
-    const uProd = String(prod.unidad_presentacion).trim().toLowerCase();
-    const porUnidad = referenciadas.filter(
-      r => String(r.unidad || '').trim().toLowerCase() === uProd
-    );
-    if (porUnidad.length === 1) candidata = porUnidad[0];
-  }
-  if (!candidata) {
-    return {
-      kind: 'info',
-      text: 'No se pudo validar la presentación técnica contra una variable del cálculo.'
-    };
-  }
-
-  // Comparar contra el valor SELECCIONADO de la variable.
-  const selectedNum = _normNum(candidata.selected);
-  if (selectedNum === null) {
-    return {
-      kind: 'info',
-      text: `Selecciona el valor de ${candidata.label} para validar la presentación.`
-    };
-  }
-
-  if (Math.abs(selectedNum - cantNum) <= _COHERENCIA_TOL) {
-    return {
-      kind: 'ok',
-      text: `Presentación coherente: ${candidata.selected}${prodUnidad} · ${candidata.label}`
-    };
-  }
-
   return {
-    kind: 'warn',
-    text: `El producto seleccionado tiene una presentación de ${cantNum}${prodUnidad}, pero ${candidata.label} está configurada en ${candidata.selected}${prodUnidad}.`
+    kind: 'ok',
+    text: `Presentación: ${cantNum}${prodUnidad}`
   };
 }
 

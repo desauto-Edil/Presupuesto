@@ -365,9 +365,30 @@ class DespieceMaestroService:
         # Recrear líneas (garantiza idempotencia: guardar varias veces no duplica)
         dm.lineas.all().delete()
 
+        _MAX_CANTIDAD = Decimal("999999999999.999999")
         lineas = []
         for idx, r in enumerate(resultados):
-            cantidad = Decimal(str(r["cantidad_calculada"]))
+            nombre_comp = r.get("componente_nombre") or r.get("componente_codigo", "?")
+            cantidad_raw = r["cantidad_calculada"]
+            if cantidad_raw is None or (isinstance(cantidad_raw, float) and not math.isfinite(cantidad_raw)):
+                raise ValidationError(
+                    f"La fórmula de '{nombre_comp}' produjo un resultado inválido "
+                    f"({cantidad_raw}). Revise los valores de entrada."
+                )
+            try:
+                cantidad = Decimal(str(cantidad_raw)).quantize(
+                    Decimal("0.000001"), rounding=ROUND_HALF_UP
+                )
+            except Exception:
+                raise ValidationError(
+                    f"No se pudo convertir el resultado de '{nombre_comp}' a número."
+                )
+            if abs(cantidad) > _MAX_CANTIDAD:
+                raise ValidationError(
+                    f"El resultado de '{nombre_comp}' ({cantidad:,}) supera el rango "
+                    "permitido (máx. 10¹²). Revise la fórmula y los valores de entrada."
+                )
+
             precio_u = None
             precio_t = None
             fecha_precio = None
@@ -380,19 +401,23 @@ class DespieceMaestroService:
 
             if seleccion_linea.get("precio_unitario") is not None:
                 try:
-                    # Usar el precio del payload, pero validando que sea un número
                     precio_u = Decimal(str(seleccion_linea.get("precio_unitario")))
                     precio_t = (cantidad * precio_u).quantize(Decimal("0.01"))
+                    if abs(precio_u) > _MAX_CANTIDAD or abs(precio_t) > _MAX_CANTIDAD:
+                        precio_u = None
+                        precio_t = None
+                        logger.warning(
+                            "[DespieceMaestroService] precio para '%s' excede el rango "
+                            "permitido, se descarta.", nombre_comp
+                        )
                 except (ValueError, TypeError, Decimal.InvalidOperation):
-                    # Si el precio del payload no es válido, se ignora.
                     pass
 
             if seleccion_linea.get("fecha_precio"):
                 from django.utils.dateparse import parse_datetime
                 fecha_precio = parse_datetime(str(seleccion_linea["fecha_precio"]))
 
-            import math as _math
-            cant_redondeada = _math.ceil(float(cantidad)) if not r.get("error") else 0
+            cant_redondeada = math.ceil(float(cantidad)) if not r.get("error") else 0
 
             lineas.append(DespieceMaestroLinea(
                 despiece=dm,
