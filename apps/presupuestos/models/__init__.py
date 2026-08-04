@@ -4,6 +4,7 @@ apps/presupuestos/models — Exportaciones públicas del paquete de modelos de p
 
 from .despiece import ProyectoSistema, DespieceLinea
 from .cotizacion import CotizacionAPU
+from .consumo import CalculoConsumoLinea
 from .apu import (
     ConfiguracionAPU,
     APU,
@@ -14,6 +15,8 @@ from .apu import (
     CuadrillaPresetItem,
     ReglaAPUSubsistema,
     SubsistemaItemAPU,
+    APUDespieceIncluido,
+    APUConsolidadoOrigen,
 )
 
 # Alias de compatibilidad — el modelo se llama APU en el código fuente
@@ -24,7 +27,7 @@ __all__ = [
     "DespieceLinea",
     "ConfiguracionAPU",
     "APU",
-    "APUProyecto",   # alias → APU
+    "APUProyecto",          # alias → APU
     "APULinea",
     "CategoriaItemAPU",
     "ItemCatalogoAPU",
@@ -32,5 +35,8 @@ __all__ = [
     "CuadrillaPresetItem",
     "ReglaAPUSubsistema",
     "CotizacionAPU",
+    "CalculoConsumoLinea",
     "SubsistemaItemAPU",
+    "APUDespieceIncluido",
+    "APUConsolidadoOrigen",
 ]

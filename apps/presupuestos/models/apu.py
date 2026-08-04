@@ -364,6 +364,20 @@ class APUProyecto(models.Model):
     desde las señales post_save / post_delete de APULinea.
     """
 
+    class TipoAPUConsolidacion(models.TextChoices):
+        INDIVIDUAL  = "INDIVIDUAL",  "APU individual"
+        CONSOLIDADO = "CONSOLIDADO", "APU consolidado"
+
+    MODALIDAD_AIU_CHOICES = [
+        ("1", "Modalidad 1 — AIU sobre todos los costos directos"),
+        ("2", "Modalidad 2 — AIU sobre costos directos sin materiales"),
+    ]
+
+    GARANTIA_MODO_CHOICES = [
+        ("TOTAL_MATERIALES",    "Sobre el total de materiales"),
+        ("MATERIAL_ESPECIFICO", "Sobre un material específico"),
+    ]
+
     # -- Identificación --
     nombre = models.CharField(
         max_length=200,
@@ -404,6 +418,138 @@ class APUProyecto(models.Model):
         default=30,
         help_text="Días de duración del proyecto. Se usa para calcular el costo unitario de MO, herramientas, etc.",
     )
+
+    # -- Tipo de APU y proyecto contenedor (Fase 11.5) --
+    tipo_apu = models.CharField(
+        max_length=20,
+        choices=TipoAPUConsolidacion.choices,
+        default=TipoAPUConsolidacion.INDIVIDUAL,
+        db_index=True,
+        help_text="INDIVIDUAL (flujo histórico) o CONSOLIDADO (unión opcional de varios APUs).",
+    )
+    proyecto = models.ForeignKey(
+        "comercial.Proyecto",
+        on_delete=models.CASCADE,
+        blank=True, null=True,
+        related_name="apus_consolidados",
+        help_text="Proyecto contenedor. Sólo se usa en APUs consolidados; los individuales lo derivan de proyecto_sistema.",
+    )
+
+    # -- AIU del proyecto (Fase 11.3) --
+    aiu_proyecto_admin_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("10"),
+        help_text="Administración del proyecto (%). Se aplica sobre los costos directos para la modalidad AIU del proyecto.",
+    )
+    aiu_proyecto_imprevistos_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("5"),
+        help_text="Imprevistos del proyecto (%).",
+    )
+    aiu_proyecto_utilidad_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("8"),
+        help_text="Utilidad del proyecto (%).",
+    )
+
+    # -- AIU final (snapshot aprobado) --
+    aiu_final_admin_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, blank=True, null=True,
+        help_text="Snapshot de Administración (%) aprobado por el revisor. Si NULL usa aiu_proyecto_admin_pct.",
+    )
+    aiu_final_imprevistos_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, blank=True, null=True,
+        help_text="Snapshot de Imprevistos (%) aprobado por el revisor. Si NULL usa aiu_proyecto_imprevistos_pct.",
+    )
+    aiu_final_utilidad_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, blank=True, null=True,
+        help_text="Snapshot de Utilidad (%) aprobado por el revisor. Si NULL usa aiu_proyecto_utilidad_pct.",
+    )
+
+    # -- Modalidad AIU seleccionada --
+    modalidad_aiu_seleccionada = models.CharField(
+        max_length=2,
+        choices=MODALIDAD_AIU_CHOICES,
+        blank=True, null=True,
+        verbose_name="Modalidad AIU seleccionada",
+    )
+
+    # -- Revisión y aprobación --
+    revisor = models.ForeignKey(
+        "configuracion.ConfiguracionSistema",
+        on_delete=models.SET_NULL,
+        blank=True, null=True,
+        related_name="apus_en_revision",
+        verbose_name="Revisor asignado",
+    )
+    fecha_envio_revision = models.DateTimeField(
+        blank=True, null=True,
+        verbose_name="Fecha de envío a revisión",
+    )
+    aprobado_por = models.ForeignKey(
+        "configuracion.ConfiguracionSistema",
+        on_delete=models.SET_NULL,
+        blank=True, null=True,
+        related_name="apus_aprobados",
+        verbose_name="Aprobado por",
+    )
+    fecha_aprobacion = models.DateTimeField(
+        blank=True, null=True,
+        verbose_name="Fecha de aprobación",
+    )
+
+    # -- Garantía (Fase 11.4) --
+    aplica_garantia = models.BooleanField(
+        default=False,
+        help_text="Indica si la propuesta incluye garantía. No afecta el cálculo.",
+    )
+    tipo_garantia = models.ForeignKey(
+        "comercial.TipoGarantia",
+        on_delete=models.PROTECT,
+        blank=True, null=True,
+        related_name="apus",
+        help_text="Tipo de garantía ofrecida en la propuesta (opcional).",
+    )
+    garantia_base_valor = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0"),
+        help_text="Base sobre la que se calculó el recargo.",
+    )
+    garantia_valor_recargo = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0"),
+        help_text="Recargo comercial sumado a total_valor_venta.",
+    )
+    garantia_material_linea = models.ForeignKey(
+        "presupuestos.APULinea",
+        on_delete=models.SET_NULL,
+        blank=True, null=True,
+        related_name="+",
+        help_text="APULinea tipo Materiales sobre la que se aplica el recargo (modo MATERIAL_ESPECIFICO).",
+    )
+    garantia_material_nombre_snapshot = models.CharField(
+        max_length=255, blank=True, default="",
+        help_text="Snapshot textual del material objetivo (para trazabilidad si la línea se elimina).",
+    )
+    garantia_modo_aplicacion = models.CharField(
+        max_length=24,
+        choices=GARANTIA_MODO_CHOICES,
+        blank=True, default="",
+        help_text="Cómo se aplica la garantía: sobre el total de materiales o sobre un material específico.",
+    )
+    garantia_porcentaje_aplicado = models.DecimalField(
+        max_digits=6, decimal_places=2, blank=True, null=True,
+        help_text="Snapshot del % de recargo tomado del catálogo al armar/editar la garantía.",
+    )
+
+    # -- Archivo --
+    archivado = models.BooleanField(
+        default=False, db_index=True,
+        help_text="Si True, el APU está archivado: oculto en listas por defecto, preserva trazabilidad.",
+    )
+    archivado_por = models.ForeignKey(
+        "configuracion.ConfiguracionSistema",
+        on_delete=models.SET_NULL,
+        blank=True, null=True,
+        related_name="apus_archivados",
+    )
+    fecha_archivado = models.DateTimeField(blank=True, null=True)
+    motivo_archivado = models.TextField(blank=True, default="")
 
     # -- Subtotales por categoría (calculados) --
     subtotal_materiales = models.DecimalField(
@@ -568,6 +714,28 @@ class APULinea(models.Model):
         null=True, blank=True,
         related_name="apu_lineas",
         help_text="Ítem del despiece de materiales (solo para tipo MATERIALES).",
+    )
+    despiece_maestro = models.ForeignKey(
+        "ingenieria.DespieceMaestro",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="apu_lineas",
+        help_text="DespieceMaestro de origen (sólo MATERIALES). NULL en líneas legacy.",
+    )
+    sistema_nombre_snapshot = models.CharField(
+        max_length=120, blank=True, default="",
+        help_text="Snapshot textual del sistema asociado a la línea (Fase 11.4).",
+    )
+    subsistema_nombre_snapshot = models.CharField(
+        max_length=120, blank=True, default="",
+        help_text="Snapshot textual del subsistema asociado a la línea (Fase 11.4).",
+    )
+    apu_origen = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="lineas_consolidadas",
+        help_text="APU individual de origen (sólo en APUs consolidados, Fase 11.5).",
     )
 
     # -- Descripción editable (se copia del catálogo pero puede ajustarse) --
@@ -784,6 +952,102 @@ class SubsistemaItemAPU(models.Model):
 
     def __str__(self):
         return f"{self.subsistema} – {self.item_catalogo} ({self.get_tipo_display()})"
+
+
+# ---------------------------------------------------------------------------
+# 7. APUDespieceIncluido (vínculo APU ↔ DespieceMaestro)
+# ---------------------------------------------------------------------------
+
+class APUDespieceIncluido(models.Model):
+    """
+    Vínculo explícito entre un APU y los DespieceMaestro seleccionados para él.
+
+    Fuente de verdad para saber "qué despiece está en qué APU" (Fase 11.4).
+    El campo `activo` permite desactivar sin borrar para preservar histórico.
+    """
+
+    apu = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.CASCADE,
+        related_name="despieces_incluidos",
+        help_text="APU al que pertenece este despiece.",
+    )
+    despiece_maestro = models.ForeignKey(
+        "ingenieria.DespieceMaestro",
+        on_delete=models.PROTECT,
+        related_name="apus_incluidos",
+        help_text="DespieceMaestro seleccionado para el APU.",
+    )
+    sistema_nombre_snapshot = models.CharField(
+        max_length=120, blank=True, default="",
+        help_text="Snapshot textual del sistema en el momento de la inclusión.",
+    )
+    subsistema_nombre_snapshot = models.CharField(
+        max_length=120, blank=True, default="",
+        help_text="Snapshot textual del subsistema en el momento de la inclusión.",
+    )
+    orden = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Orden de presentación dentro del APU.",
+    )
+    activo = models.BooleanField(
+        default=True,
+        help_text="Si False, no se considera incluido (no se borra para preservar histórico).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "apu_despieces_incluidos"
+        ordering = ["apu", "orden", "id"]
+        verbose_name = "Despiece incluido en APU"
+        verbose_name_plural = "Despieces incluidos en APU"
+        unique_together = [("apu", "despiece_maestro")]
+
+    def __str__(self):
+        return f"{self.apu} ← {self.despiece_maestro}"
+
+
+# ---------------------------------------------------------------------------
+# 8. APUConsolidadoOrigen (trazabilidad de APUs consolidados)
+# ---------------------------------------------------------------------------
+
+class APUConsolidadoOrigen(models.Model):
+    """
+    Registro de qué APUs individuales componen un APU consolidado (Fase 11.5).
+    """
+
+    apu_consolidado = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.CASCADE,
+        related_name="origenes_consolidado",
+        help_text="APU consolidado contenedor.",
+    )
+    apu_origen = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.PROTECT,
+        related_name="consolidaciones_destino",
+        help_text="APU individual de origen.",
+    )
+    orden = models.PositiveSmallIntegerField(default=0)
+    incluido_en_pdf_cliente = models.BooleanField(
+        default=True,
+        help_text="Si False, este origen no se lista en el PDF Cliente del consolidado.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "apu_consolidado_origenes"
+        ordering = ["apu_consolidado", "orden", "id"]
+        verbose_name = "Origen de APU consolidado"
+        verbose_name_plural = "Orígenes de APUs consolidados"
+        unique_together = [("apu_consolidado", "apu_origen")]
+
+    def __str__(self):
+        return f"{self.apu_consolidado} ← {self.apu_origen}"
 
 
 from django.db.models.signals import post_delete, post_save
