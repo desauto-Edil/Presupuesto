@@ -341,6 +341,26 @@
   padding: 10px 20px; border-top: 1px solid rgba(0,0,0,.07);
   background: #fffbe6; display: flex; align-items: center; gap: 8px;
 }
+
+/* ── Botón y modal de sugerencias automáticas de consolidación ───────────── */
+.btn-sug-cons {
+  font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1.5px solid #198754; color: #198754;
+  background: rgba(25,135,84,.07); border-radius: 8px;
+  padding: 4px 10px; cursor: pointer; transition: all .15s; white-space: nowrap;
+  line-height: 1.4;
+}
+.btn-sug-cons:hover { background: rgba(25,135,84,.14); }
+.sg-grupo-card {
+  border: 1px solid rgba(25,135,84,.25); border-radius: 10px;
+  overflow: hidden; margin-bottom: 16px;
+}
+.sg-grupo-card:last-child { margin-bottom: 0; }
+.sg-grupo-card__head {
+  background: rgba(25,135,84,.06); padding: 10px 14px;
+  border-bottom: 1px solid rgba(25,135,84,.15);
+}
 </style>
 {% endblock %}
 
@@ -506,6 +526,12 @@
                 onclick="toggleModoConsolidacion()" style="display:none">
           <i class="bi bi-layers"></i> Consolidar materiales
         </button>
+        <button type="button" id="btnSugerenciasConsolidacion"
+                class="btn-sug-cons" onclick="abrirModalSugerenciasConsolidacion()"
+                style="display:none" title="El sistema detectó líneas con el mismo producto que pueden consolidarse">
+          <i class="bi bi-lightbulb-fill"></i>
+          <span id="btnSugerenciasText">Consolidaciones sugeridas (0)</span>
+        </button>
         <!-- Progreso integrado: el partial _checkpoint_panel monta aquí #cpPill -->
         <div id="cpProgressSlot" class="cp-progress-slot"></div>
       </div>
@@ -558,6 +584,7 @@ const DEP_VARS             = {{ dependencias_variables_json|safe }};
 /* ── Estado global ───────────────────────────────────────────────────────── */
 let filasCalc       = [];   // líneas técnicas calculadas (flat)
 let consolidaciones = [];   // [{cid, label, indices, cantidad_total, cantidad_redondeada, unidad, _prod}]
+let sugerenciasConsolidacion = []; // [{key, producto_id, _prod, indices, unidad, cantidad_total, cantidad_redondeada, label}]
 let variablesUsadas = null;
 let modoConsolidacion = false;
 let _nextCid = 0;
@@ -976,6 +1003,7 @@ function initSelector(tr, fila) {
         _updateProdUI(tr, fila._prod);
         _renderProdWarning(tr, lineaUnidad, fila._prod);
         _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
+        _refrescarSugerenciasConsolidacion();
         if (_esCalculoDiferido(fila)) {
           _renderBody();
           showToast('Producto seleccionado. Guarda el despiece para calcular la cantidad.', 'ok');
@@ -991,6 +1019,7 @@ function initSelector(tr, fila) {
       _updateProdUI(tr, fila._prod);
       _renderProdWarning(tr, lineaUnidad, fila._prod);
       _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
+      _refrescarSugerenciasConsolidacion();
       if (_esCalculoDiferido(fila)) {
         _renderBody();
         showToast('Producto seleccionado. Guarda el despiece para calcular la cantidad.', 'ok');
@@ -1014,6 +1043,7 @@ function initSelector(tr, fila) {
       fila.pendiente_producto = true;
       _renderBody();
     }
+    _refrescarSugerenciasConsolidacion();
   });
 }
 
@@ -1185,6 +1215,7 @@ function renderTabla(lineas) {
     } : null,
   }));
   _renderBody();
+  _refrescarSugerenciasConsolidacion();
 }
 
 function _renderBody() {
@@ -1394,10 +1425,11 @@ function consolidarSeleccionadas() {
     _confirmarConsolidacion(indices, cantTotal, cantRed, unidad, label);
   };
 
+  _prepararModalConsolidacion('manual');
   new bootstrap.Modal(document.getElementById('modalConsolidar')).show();
 }
 
-function _confirmarConsolidacion(indices, cantTotal, cantRed, unidad, label) {
+function _confirmarConsolidacion(indices, cantTotal, cantRed, unidad, label, prodObj) {
   consolidaciones.push({
     cid:                _nextCid++,
     label,
@@ -1406,12 +1438,13 @@ function _confirmarConsolidacion(indices, cantTotal, cantRed, unidad, label) {
     cantidad_total:     cantTotal,
     cantidad_redondeada: cantRed,
     unidad,
-    _prod:              null,
+    _prod:              prodObj || null,
   });
   modoConsolidacion = false;
   const btn = document.getElementById('btnModoConsolidar');
   if (btn) { btn.innerHTML = '<i class="bi bi-layers"></i> Consolidar materiales'; btn.className = 'btn btn-sm btn-outline-secondary'; }
   _renderBody();
+  _refrescarSugerenciasConsolidacion();
   document.getElementById('btnGuardar').disabled = false;
   showToast(`✓ "${label}" consolidado`, 'ok');
 }
@@ -1419,7 +1452,283 @@ function _confirmarConsolidacion(indices, cantTotal, cantRed, unidad, label) {
 function deshacerConsolidacion(cid) {
   consolidaciones = consolidaciones.filter(c => c.cid !== cid);
   _renderBody();
+  _refrescarSugerenciasConsolidacion();
   showToast('Consolidación deshecha.', '');
+}
+
+/* ── Sugerencias automáticas de consolidación ────────────────────────────── */
+
+/* Helper para escapar valores en atributos HTML (ej. value="...") */
+function _escAttr(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* Clave de agrupación: mismo producto + misma unidad + mismo precio */
+function _claveSugerencia(fila) {
+  const productoId = fila._prod?.producto_id;
+  const unidad     = String(fila.unidad || '').trim();
+  const precio     = fila._prod?.precio_unitario;
+  const precioKey  = (precio === null || precio === undefined || precio === '')
+    ? '' : String(precio);
+  return `${productoId}::${unidad}::${precioKey}`;
+}
+
+/* Calcula los grupos de sugerencias desde el estado actual de filasCalc */
+function _computarSugerenciasConsolidacion() {
+  const { consolidatedSet } = _buildConsolidationMaps();
+  const grupos = new Map();
+
+  for (let i = 0; i < filasCalc.length; i++) {
+    const f = filasCalc[i];
+    if (f.pendiente_producto)           continue;
+    if (f.pendiente_dependencia)        continue;
+    if (f.error)                        continue;
+    if (f.cantidad_calculada == null)   continue;
+    if (!f._prod?.producto_id)          continue;
+    if (consolidatedSet.has(i))         continue;
+
+    const key = _claveSugerencia(f);
+    if (!grupos.has(key)) {
+      grupos.set(key, { key, _prod: f._prod, indices: [], unidad: String(f.unidad || '').trim() });
+    }
+    grupos.get(key).indices.push(i);
+  }
+
+  const resultado = [];
+  for (const g of grupos.values()) {
+    if (g.indices.length < 2) continue;
+    const cantTotal = g.indices.reduce((s, i) => s + (filasCalc[i].cantidad_calculada || 0), 0);
+    resultado.push({
+      key:                 g.key,
+      producto_id:         g._prod.producto_id,
+      _prod:               g._prod,
+      indices:             g.indices,
+      unidad:              g.unidad,
+      cantidad_total:      cantTotal,
+      cantidad_redondeada: Math.ceil(cantTotal),
+      label:               `Consolidado — ${g._prod?.producto_nombre || 'Material'}`,
+    });
+  }
+  return resultado;
+}
+
+/* Actualiza visibilidad y contador del botón de sugerencias */
+function _actualizarBotonSugerencias() {
+  const btn = document.getElementById('btnSugerenciasConsolidacion');
+  const txt = document.getElementById('btnSugerenciasText');
+  if (!btn) return;
+  const n = sugerenciasConsolidacion.length;
+  if (n === 0) {
+    btn.style.display = 'none';
+  } else {
+    if (txt) txt.textContent = `Consolidaciones sugeridas (${n})`;
+    btn.style.display = '';
+  }
+}
+
+/* Coordinador: recalcula y actualiza el botón */
+function _refrescarSugerenciasConsolidacion() {
+  sugerenciasConsolidacion = _computarSugerenciasConsolidacion();
+  _actualizarBotonSugerencias();
+}
+
+/* Prepara título y footer del modal según el modo ('manual' | 'sugerencias') */
+function _prepararModalConsolidacion(modo) {
+  const labelEl  = document.getElementById('modalConsolidarLabel');
+  const footerBtn = document.getElementById('btnConfirmarConsolidacion');
+  if (modo === 'sugerencias') {
+    if (labelEl)   labelEl.innerHTML = '<i class="bi bi-lightbulb-fill me-2" style="color:#198754"></i>Consolidaciones sugeridas';
+    if (footerBtn) footerBtn.style.display = 'none';
+  } else {
+    if (labelEl)   labelEl.innerHTML = '<i class="bi bi-layers me-2"></i>Consolidar materiales';
+    if (footerBtn) footerBtn.style.display = '';
+  }
+}
+
+/* Actualiza el resumen (totales) de una tarjeta de grupo al cambiar checkboxes */
+function _actualizarResumenGrupo(gi) {
+  const body = document.getElementById('modalConsolidarBody');
+  if (!body) return;
+  const checks = body.querySelectorAll(`.sg-line-check[data-gi="${gi}"]:checked`);
+  const indicesSeleccionados = Array.from(checks).map(cb => parseInt(cb.dataset.idx, 10)).filter(i => !isNaN(i));
+  const cantTotal = indicesSeleccionados.reduce((s, i) => s + (filasCalc[i]?.cantidad_calculada || 0), 0);
+  const cantRed   = indicesSeleccionados.length >= 2 ? Math.ceil(cantTotal) : 0;
+  const n         = indicesSeleccionados.length;
+
+  const resumenRow = body.querySelector(`.sg-resumen-row[data-gi="${gi}"]`);
+  if (resumenRow) {
+    const countEl = resumenRow.querySelector('.sg-lineas-count');
+    const cantEl  = resumenRow.querySelector('.sg-total-cant');
+    const redEl   = resumenRow.querySelector('.sg-total-red');
+    if (countEl) countEl.textContent = `${n} línea${n !== 1 ? 's' : ''} seleccionada${n !== 1 ? 's' : ''}`;
+    if (cantEl)  cantEl.textContent  = n >= 2 ? fmt(cantTotal, 4) : '—';
+    if (redEl)   redEl.textContent   = n >= 2 ? cantRed : '—';
+  }
+  const btnConfirmar = body.querySelector(`.sg-confirmar-btn[data-gi="${gi}"]`);
+  if (btnConfirmar) btnConfirmar.disabled = n < 2;
+}
+
+/* Renderiza el contenido del modal con todos los grupos de sugerencias */
+function _renderContenidoModalSugerencias() {
+  const body = document.getElementById('modalConsolidarBody');
+  if (!body) return;
+
+  if (!sugerenciasConsolidacion.length) {
+    body.innerHTML = `
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-check2-circle" style="font-size:36px;opacity:.45;display:block;margin-bottom:10px;"></i>
+        <div class="fw-semibold">No quedan consolidaciones sugeridas.</div>
+        <div class="small mt-1">Puedes cerrar este panel.</div>
+      </div>`;
+    try {
+      const modalEl = document.getElementById('modalConsolidar');
+      const inst = bootstrap.Modal.getInstance(modalEl);
+      if (inst) setTimeout(() => inst.hide(), 900);
+    } catch (_) {}
+    return;
+  }
+
+  let html = `<p class="small text-muted mb-3">
+    El sistema detectó grupos de líneas con el mismo producto, unidad y precio unitario.
+    Revisa cada grupo y confirma las que desees crear.
+  </p>`;
+
+  sugerenciasConsolidacion.forEach((grupo, gi) => {
+    const prod = grupo._prod || {};
+    const precioHtml = prod.precio_unitario != null
+      ? `$${fmt(prod.precio_unitario)} <span class="text-muted small">${esc(prod.moneda || '')}</span>`
+      : '<span class="text-muted small">Sin precio</span>';
+    const codigoHtml = prod.producto_codigo
+      ? `<span class="text-muted small me-1">${esc(prod.producto_codigo)} ·</span>` : '';
+
+    const lineasHtml = grupo.indices.map((idx, li) => {
+      const f = filasCalc[idx];
+      if (!f) return '';
+      const cantRed = f.cantidad_redondeada ?? Math.ceil(f.cantidad_calculada || 0);
+      return `<tr>
+        <td class="text-center" style="width:36px;vertical-align:middle;">
+          <input type="checkbox" class="form-check-input sg-line-check"
+                 data-gi="${gi}" data-li="${li}" data-idx="${idx}" checked
+                 style="cursor:pointer;border-radius:3px;">
+        </td>
+        <td style="vertical-align:middle;">${esc(f.componente_nombre)}<br>
+          <small class="text-muted">${esc(f.componente_codigo)}</small></td>
+        <td class="text-end" style="vertical-align:middle;font-variant-numeric:tabular-nums;">${fmt(f.cantidad_calculada, 4)}</td>
+        <td class="text-end" style="vertical-align:middle;font-variant-numeric:tabular-nums;">${cantRed}</td>
+        <td style="vertical-align:middle;">${esc(f.unidad)}</td>
+      </tr>`;
+    }).join('');
+
+    html += `
+      <div class="sg-grupo-card">
+        <div class="sg-grupo-card__head">
+          <div class="fw-bold mb-1">${esc(prod.producto_nombre || 'Producto')}</div>
+          <div class="small">${codigoHtml}${esc(grupo.unidad)} · ${precioHtml}</div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-0" style="min-width:380px">
+            <thead><tr>
+              <th style="width:36px"></th>
+              <th>Componente</th>
+              <th class="text-end">Cantidad</th>
+              <th class="text-end">Redondeada</th>
+              <th>Und</th>
+            </tr></thead>
+            <tbody>${lineasHtml}</tbody>
+            <tfoot>
+              <tr class="table-light fw-semibold sg-resumen-row" data-gi="${gi}">
+                <td></td>
+                <td><span class="sg-lineas-count small">${grupo.indices.length} líneas seleccionadas</span></td>
+                <td class="text-end sg-total-cant small">${fmt(grupo.cantidad_total, 4)}</td>
+                <td class="text-end sg-total-red small">${grupo.cantidad_redondeada}</td>
+                <td class="small">${esc(grupo.unidad)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div style="padding:10px 14px;border-top:1px solid rgba(0,0,0,.07);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <input type="text" class="form-control form-control-sm sg-label-input"
+                 data-gi="${gi}"
+                 value="${_escAttr(grupo.label)}"
+                 placeholder="Nombre del consolidado"
+                 style="max-width:340px;">
+          <button type="button" class="btn btn-sm btn-success sg-confirmar-btn"
+                  data-gi="${gi}" onclick="confirmarGrupoSugerido(${gi})">
+            <i class="bi bi-check2"></i> Crear consolidación
+          </button>
+        </div>
+      </div>`;
+  });
+
+  body.innerHTML = html;
+
+  // Suscribir listeners de checkbox para recalcular totales
+  body.querySelectorAll('.sg-line-check').forEach(cb => {
+    cb.addEventListener('change', () => _actualizarResumenGrupo(parseInt(cb.dataset.gi, 10)));
+  });
+}
+
+/* Abre el modal en modo sugerencias */
+function abrirModalSugerenciasConsolidacion() {
+  _refrescarSugerenciasConsolidacion();
+  if (!sugerenciasConsolidacion.length) {
+    showToast('No hay consolidaciones sugeridas en este momento.', '');
+    return;
+  }
+  _prepararModalConsolidacion('sugerencias');
+  _renderContenidoModalSugerencias();
+  const modalEl = document.getElementById('modalConsolidar');
+  let modal = bootstrap.Modal.getInstance(modalEl);
+  if (!modal) modal = new bootstrap.Modal(modalEl);
+  modal.show();
+}
+
+/* Confirma un grupo de sugerencias identificado por su índice actual (gi) */
+function confirmarGrupoSugerido(gi) {
+  const grupo = sugerenciasConsolidacion[gi];
+  if (!grupo) { showToast('Este grupo ya no está disponible.', 'err'); return; }
+
+  // Leer índices actualmente marcados en el modal
+  const body   = document.getElementById('modalConsolidarBody');
+  const checks = body
+    ? body.querySelectorAll(`.sg-line-check[data-gi="${gi}"]:checked`)
+    : [];
+  const indicesSeleccionados = Array.from(checks)
+    .map(cb => parseInt(cb.dataset.idx, 10))
+    .filter(i => !isNaN(i));
+
+  if (indicesSeleccionados.length < 2) {
+    showToast('Selecciona al menos 2 líneas para crear la consolidación.', 'err');
+    return;
+  }
+
+  // Re-verificar que ninguna esté ya consolidada
+  const { consolidatedSet } = _buildConsolidationMaps();
+  if (indicesSeleccionados.some(i => consolidatedSet.has(i))) {
+    showToast('Alguna línea ya fue consolidada. Actualizando sugerencias.', 'err');
+    _refrescarSugerenciasConsolidacion();
+    _renderContenidoModalSugerencias();
+    return;
+  }
+
+  // Obtener nombre editable
+  const labelInput = body ? body.querySelector(`.sg-label-input[data-gi="${gi}"]`) : null;
+  const defaultLabel = grupo.label;
+  const label = (labelInput?.value || '').trim() || defaultLabel;
+
+  // Calcular totales desde las líneas marcadas
+  const cantTotal = indicesSeleccionados.reduce((s, i) => s + (filasCalc[i]?.cantidad_calculada || 0), 0);
+  const cantRed   = Math.ceil(cantTotal);
+
+  // Crear la consolidación heredando _prod del grupo (copia para evitar mutación compartida).
+  // _confirmarConsolidacion emite su propio toast y llama _refrescarSugerenciasConsolidacion.
+  _confirmarConsolidacion(
+    indicesSeleccionados, cantTotal, cantRed, grupo.unidad, label,
+    grupo._prod ? { ...grupo._prod } : null
+  );
+
+  // Re-renderizar el modal con las sugerencias restantes (permanece abierto).
+  _renderContenidoModalSugerencias();
 }
 
 function verOrigen(cid) {

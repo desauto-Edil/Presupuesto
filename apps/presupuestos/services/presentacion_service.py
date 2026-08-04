@@ -66,15 +66,13 @@ class PresentacionProductoService:
                 "'requiere_presentacion_producto' activo."
             )
 
-        pres = producto.cantidad_presentacion
-        if not pres or pres <= 0:
-            raise ValueError(
-                f"El producto '{producto.nombre}' no tiene 'cantidad_presentacion' "
-                "válida (debe ser > 0). Actualiza el catálogo antes de asignarlo."
-            )
+        from apps.ingenieria.helpers.presentacion import obtener_valor_presentacion
+        valor_pres, error_pres = obtener_valor_presentacion(comp, producto)
+        if error_pres:
+            raise ValueError(error_pres)
 
         ctx = cls._build_context_before(ps, comp)
-        ctx[comp.variable_presentacion_producto] = float(pres)
+        ctx[comp.variable_presentacion_producto] = valor_pres
 
         try:
             cantidad_float = comp.evaluar(ctx)
@@ -87,7 +85,7 @@ class PresentacionProductoService:
 
         linea.cantidad_calculada = cantidad_decimal
         linea.pendiente_producto = False
-        linea.presentacion_snapshot = Decimal(str(pres))
+        linea.presentacion_snapshot = Decimal(str(valor_pres))
         linea.save(update_fields=[
             "cantidad_calculada", "pendiente_producto",
             "presentacion_snapshot", "updated_at",
@@ -95,7 +93,7 @@ class PresentacionProductoService:
 
         logger.info(
             "[PresentacionService] PS %s / '%s' → cantidad=%s (pres=%s)",
-            ps.pk, comp.codigo, cantidad_decimal, pres,
+            ps.pk, comp.codigo, cantidad_decimal, valor_pres,
         )
 
         actualizadas: list["DespieceLinea"] = [linea]
@@ -243,10 +241,11 @@ class PresentacionProductoService:
             if comp.requiere_presentacion_producto:
                 if not linea.producto_id:
                     continue
-                pres = linea.producto.cantidad_presentacion
-                if not pres or pres <= 0:
+                from apps.ingenieria.helpers.presentacion import obtener_valor_presentacion
+                valor_pres, error_pres = obtener_valor_presentacion(comp, linea.producto)
+                if error_pres:
                     continue
-                ctx_eval[comp.variable_presentacion_producto] = float(pres)
+                ctx_eval[comp.variable_presentacion_producto] = valor_pres
 
             try:
                 cantidad_float = comp.evaluar(ctx_eval)
@@ -260,7 +259,7 @@ class PresentacionProductoService:
                 "pendiente_producto": False,
             }
             if comp.requiere_presentacion_producto:
-                update_vals["presentacion_snapshot"] = linea.producto.cantidad_presentacion
+                update_vals["presentacion_snapshot"] = Decimal(str(valor_pres))
 
             for field, val in update_vals.items():
                 setattr(linea, field, val)

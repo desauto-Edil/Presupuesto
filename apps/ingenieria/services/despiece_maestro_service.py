@@ -267,12 +267,12 @@ class DespieceMaestroService:
                         f"El producto seleccionado para '{comp.nombre}' no fue encontrado."
                     )
 
-                if not producto.cantidad_presentacion or producto.cantidad_presentacion <= 0:
-                    raise ValidationError(
-                        f"El producto '{producto.nombre}' no tiene una cantidad por presentación válida."
-                    )
+                from apps.ingenieria.helpers.presentacion import obtener_valor_presentacion
+                valor_pres, error_pres = obtener_valor_presentacion(comp, producto)
+                if error_pres:
+                    raise ValidationError(error_pres)
 
-                ctx_componente[comp.variable_presentacion_producto] = float(producto.cantidad_presentacion)
+                ctx_componente[comp.variable_presentacion_producto] = valor_pres
 
             try:
                 cantidad_float = comp.evaluar(ctx_componente)

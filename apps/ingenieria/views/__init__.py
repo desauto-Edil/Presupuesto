@@ -314,6 +314,7 @@ def _build_subconjuntos_json(subconjuntos, componentes_legacy):
                     "unidad_apu": c.unidad_apu,
                     "requiere_presentacion_producto": c.requiere_presentacion_producto,
                     "variable_presentacion_producto": c.variable_presentacion_producto,
+                    "campo_presentacion_producto": c.campo_presentacion_producto or "CANTIDAD",
                 }
                 for c in sq.componentes.all()
             ],
@@ -334,6 +335,7 @@ def _build_subconjuntos_json(subconjuntos, componentes_legacy):
                     "unidad_apu": c.unidad_apu,
                     "requiere_presentacion_producto": c.requiere_presentacion_producto,
                     "variable_presentacion_producto": c.variable_presentacion_producto,
+                    "campo_presentacion_producto": c.campo_presentacion_producto or "CANTIDAD",
                 }
                 for c in componentes_legacy
             ],

@@ -426,6 +426,21 @@ class ComponenteSubsistema(models.Model):
             "Obligatorio cuando 'requiere_presentacion_producto' está activo."
         ),
     )
+    campo_presentacion_producto = models.CharField(
+        max_length=10,
+        choices=[
+            ("CANTIDAD", "Cantidad por presentación"),
+            ("ANCHO", "Ancho"),
+            ("LARGO", "Largo"),
+        ],
+        default="CANTIDAD",
+        blank=True,
+        verbose_name="Campo de presentación",
+        help_text=(
+            "Campo del producto cuyo valor se inyecta en la fórmula. "
+            "Solo aplica cuando 'requiere_presentacion_producto' está activo."
+        ),
+    )
 
     # ── APU por componente ────────────────────────────────────────────────────
     variable_referencia_apu = models.CharField(

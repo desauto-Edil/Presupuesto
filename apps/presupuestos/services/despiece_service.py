@@ -116,9 +116,10 @@ class DespieceService:
                     and linea_exist.producto_id
                     and comp.variable_presentacion_producto
                 ):
-                    pres = getattr(linea_exist.producto, "cantidad_presentacion", None)
-                    if pres and pres > 0:
-                        ctx_tmp = {**contexto, comp.variable_presentacion_producto: float(pres)}
+                    from apps.ingenieria.helpers.presentacion import obtener_valor_presentacion
+                    valor_pres_db, error_pres_db = obtener_valor_presentacion(comp, linea_exist.producto)
+                    if valor_pres_db is not None:
+                        ctx_tmp = {**contexto, comp.variable_presentacion_producto: valor_pres_db}
                         try:
                             cantidad_float_def = comp.evaluar(ctx_tmp)
                         except Exception as exc:
@@ -142,7 +143,7 @@ class DespieceService:
                             "proyecto": ps.proyecto,
                             "cantidad_calculada": cantidad_decimal,
                             "pendiente_producto": False,
-                            "presentacion_snapshot": linea_exist.producto.cantidad_presentacion,
+                            "presentacion_snapshot": Decimal(str(valor_pres_db)),
                             "categoria_producto": categoria,
                             "es_dependencia_automatica": False,
                         },

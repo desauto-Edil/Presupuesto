@@ -242,6 +242,83 @@ html, body { overflow-y: auto !important; height: auto !important; }
   padding: 24px 0 8px;
 }
 
+/* ══ Interruptores compactos para tablas ════════════════════════════════════ */
+.sw-comp-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none; margin: 0;
+}
+.sw-native {
+  /* visualmente oculto pero accesible por teclado */
+  position: absolute;
+  opacity: 0; width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.sw-track {
+  display: inline-block;
+  position: relative;
+  width: 50px; height: 20px; border-radius: 10px;
+  background: #ced4da;
+  transition: background .2s ease;
+  flex-shrink: 0;
+}
+/* Texto OFF (derecha, visible en estado apagado) */
+.sw-track::before {
+  content: "OFF";
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  font-size: 8px; font-weight: 800; color: rgba(255,255,255,.85);
+  letter-spacing: .05em; line-height: 1; pointer-events: none;
+  transition: opacity .15s;
+}
+/* Texto ON (izquierda, oculto en estado apagado) */
+.sw-track::after {
+  content: "ON";
+  position: absolute; left: 5px; top: 50%; transform: translateY(-50%);
+  font-size: 8px; font-weight: 800; color: rgba(255,255,255,.9);
+  letter-spacing: .05em; line-height: 1; pointer-events: none;
+  opacity: 0; transition: opacity .15s;
+}
+.sw-thumb {
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  transition: left .2s ease;
+}
+/* Estado ON */
+.sw-native:checked ~ .sw-track { background: var(--theme-accent, #14b8a6); }
+.sw-native:checked ~ .sw-track .sw-thumb { left: 33px; /* 50-14-3 */ }
+.sw-native:checked ~ .sw-track::before { opacity: 0; }
+.sw-native:checked ~ .sw-track::after  { opacity: 1; }
+/* Estado disabled */
+.sw-native:disabled ~ .sw-track { opacity: .45; }
+.sw-native:disabled ~ .sw-caption { opacity: .45; }
+.sw-comp-label:has(.sw-native:disabled) { cursor: not-allowed; }
+/* Foco visible (accesibilidad) */
+.sw-comp-label:focus-within .sw-track {
+  outline: 2px solid var(--theme-accent, #14b8a6); outline-offset: 2px;
+}
+.sw-caption { font-size: 11px; white-space: nowrap; color: var(--ink); }
+
+/* Selector de campo de presentación — píldora turquesa */
+.rows-table .comp-f-campo-pres {
+  font-size: 10.5px !important;
+  border-radius: 14px !important;
+  border: 1.5px solid var(--theme-accent, #14b8a6) !important;
+  color: var(--theme-accent, #14b8a6) !important;
+  background-color: transparent !important;
+  padding: 2px 22px 2px 8px !important;
+  cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2314b8a6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 7px center !important;
+  min-width: 130px;
+}
+.rows-table .comp-f-campo-pres:focus {
+  outline: 2px solid var(--theme-accent, #14b8a6) !important;
+  outline-offset: 1px;
+}
+
 /* ══ Fase 6L: ocultar pill de progreso y FABs de ayuda/resumen mientras el
    modal de config APU está visible — evita que tapen el contenido del modal.
    Bootstrap añade body.modal-open al mostrar un modal y lo quita al cerrarlo. ══ */
@@ -742,10 +819,13 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                                  {% if v.tipo_entrada != 'OPCION_UNICA' %}style="display:none;"{% endif %}>
                         </td>
                         <td style="text-align:center;">
-                          <input type="hidden" name="var_base_apu[]" value="0">
-                          <input type="checkbox" class="var-base-apu-cb" {% if v.participa_en_base_apu %}checked{% endif %}
-                                 onchange="this.previousElementSibling.value = this.checked ? '1' : '0';"
-                                 title="Si está marcado, el valor ingresado se suma a la base del rendimiento del APU.">
+                          <input type="hidden" name="var_base_apu[]" value="{% if v.participa_en_base_apu %}1{% else %}0{% endif %}">
+                          <label class="sw-comp-label" title="Si está marcado, el valor ingresado se suma a la base del rendimiento del APU.">
+                            <input type="checkbox" class="var-base-apu-cb sw-native" role="switch"
+                                   {% if v.participa_en_base_apu %}checked{% endif %}
+                                   onchange="this.closest('label').previousElementSibling.value = this.checked ? '1' : '0';">
+                            <span class="sw-track" aria-hidden="true"><span class="sw-thumb"></span></span>
+                          </label>
                         </td>
                         <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
                       </tr>
@@ -810,9 +890,13 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                                   data-current="{{ dep.valor_destino }}"></select>
                         </td>
                         <td style="text-align:center;">
-                          <input type="hidden" name="dep_activa[]" value="0">
-                          <input type="checkbox" class="dep-activa-cb" {% if dep.activa %}checked{% endif %}
-                                 onchange="this.previousElementSibling.value = this.checked ? '1' : '0';">
+                          <input type="hidden" name="dep_activa[]" value="{% if dep.activa %}1{% else %}0{% endif %}">
+                          <label class="sw-comp-label" title="Dependencia activa">
+                            <input type="checkbox" class="dep-activa-cb sw-native" role="switch"
+                                   {% if dep.activa %}checked{% endif %}
+                                   onchange="this.closest('label').previousElementSibling.value = this.checked ? '1' : '0';">
+                            <span class="sw-track" aria-hidden="true"><span class="sw-thumb"></span></span>
+                          </label>
                         </td>
                         <td>
                           <button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button>
@@ -1487,13 +1571,21 @@ window.CP_SECCIONES = [
       <td style="width:90px;">
         <select class="form-select form-select-sm comp-f-unidad">${unidadesOpts(comp.unidad || '')}</select>
       </td>
-      <td style="width:160px;">
-        <div style="display:flex;flex-direction:column;gap:3px;">
-          <label style="font-size:11px;cursor:pointer;white-space:nowrap;margin:0;">
-            <input type="checkbox" class="comp-f-requiere-pres"
+      <td style="min-width:160px;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label class="sw-comp-label" title="Calcular después de seleccionar producto">
+            <input type="checkbox" class="comp-f-requiere-pres sw-native" role="switch"
                    ${comp.requiere_presentacion_producto ? 'checked' : ''}>
-            Tras producto
+            <span class="sw-track" aria-hidden="true"><span class="sw-thumb"></span></span>
+            <span class="sw-caption">Tras producto</span>
           </label>
+          <select class="comp-f-campo-pres"
+                  title="Campo del producto a inyectar en la fórmula"
+                  style="${comp.requiere_presentacion_producto ? '' : 'display:none;'}">
+            <option value="CANTIDAD" ${(comp.campo_presentacion_producto||'CANTIDAD')==='CANTIDAD'?'selected':''}>Cantidad por presentación</option>
+            <option value="ANCHO"    ${(comp.campo_presentacion_producto||'')==='ANCHO'   ?'selected':''}>Ancho</option>
+            <option value="LARGO"    ${(comp.campo_presentacion_producto||'')==='LARGO'   ?'selected':''}>Largo</option>
+          </select>
           <input type="text" class="form-control form-control-sm comp-f-var-pres"
                  placeholder="var_presentacion"
                  style="font-family:monospace;font-size:10.5px;${comp.requiere_presentacion_producto ? '' : 'display:none;'}"
@@ -1623,12 +1715,15 @@ window.CP_SECCIONES = [
       }
     });
 
-    // Delegación: mostrar/ocultar campo variable_presentacion_producto
+    // Delegación: mostrar/ocultar selector y variable cuando cambia el interruptor
     tbody.addEventListener('change', e => {
       const chk = e.target.closest('.comp-f-requiere-pres');
       if (!chk) return;
-      const inp = chk.closest('td').querySelector('.comp-f-var-pres');
-      if (inp) inp.style.display = chk.checked ? '' : 'none';
+      const td = chk.closest('td');
+      const variable = td.querySelector('.comp-f-var-pres');
+      const selector = td.querySelector('.comp-f-campo-pres');
+      if (variable) variable.style.display = chk.checked ? '' : 'none';
+      if (selector) selector.style.display = chk.checked ? '' : 'none';
     });
 
     // Toggle Configurar APU — muestra/oculta columnas técnicas Ref. APU y Und. APU
@@ -1713,6 +1808,7 @@ window.CP_SECCIONES = [
           unidad_apu:            tr.querySelector('.comp-f-unidad_apu').value.trim(),
           requiere_presentacion_producto: chkPres ? chkPres.checked : false,
           variable_presentacion_producto: tr.querySelector('.comp-f-var-pres').value.trim(),
+          campo_presentacion_producto: tr.querySelector('.comp-f-campo-pres')?.value || 'CANTIDAD',
         });
       });
       data.push({ nombre, descripcion, componentes });
@@ -1751,9 +1847,11 @@ window.CP_SECCIONES = [
       </td>
       <td style="text-align:center;">
         <input type="hidden" name="var_base_apu[]" value="0">
-        <input type="checkbox" class="var-base-apu-cb"
-               onchange="this.previousElementSibling.value = this.checked ? '1' : '0';"
-               title="Si está marcado, el valor ingresado se suma a la base del rendimiento del APU.">
+        <label class="sw-comp-label" title="Si está marcado, el valor ingresado se suma a la base del rendimiento del APU.">
+          <input type="checkbox" class="var-base-apu-cb sw-native" role="switch"
+                 onchange="this.closest('label').previousElementSibling.value = this.checked ? '1' : '0';">
+          <span class="sw-track" aria-hidden="true"><span class="sw-thumb"></span></span>
+        </label>
       </td>
       <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
     `;
@@ -1985,8 +2083,11 @@ window.CP_SECCIONES = [
       <td><select name="dep_val_destino[]" class="form-select form-select-sm dep-val-destino"></select></td>
       <td style="text-align:center;">
         <input type="hidden" name="dep_activa[]" value="1">
-        <input type="checkbox" class="dep-activa-cb" checked
-               onchange="this.previousElementSibling.value = this.checked ? '1' : '0';">
+        <label class="sw-comp-label" title="Dependencia activa">
+          <input type="checkbox" class="dep-activa-cb sw-native" role="switch" checked
+                 onchange="this.closest('label').previousElementSibling.value = this.checked ? '1' : '0';">
+          <span class="sw-track" aria-hidden="true"><span class="sw-thumb"></span></span>
+        </label>
       </td>
       <td><button type="button" class="btn btn-ghost btn-xs del-row" style="color:rgba(14,17,23,.3);">✕</button></td>
     `;

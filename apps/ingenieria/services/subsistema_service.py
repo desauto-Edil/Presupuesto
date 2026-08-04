@@ -341,6 +341,9 @@ def guardar_subconjuntos_componentes(subsistema, post):
 
             req_pres = bool(comp_data.get("requiere_presentacion_producto", False))
             var_pres = str(comp_data.get("variable_presentacion_producto", "")).strip()
+            campo_pres = str(comp_data.get("campo_presentacion_producto", "CANTIDAD")).strip().upper()
+            if campo_pres not in ("CANTIDAD", "ANCHO", "LARGO"):
+                campo_pres = "CANTIDAD"
 
             import re as _re
             if req_pres:
@@ -368,6 +371,7 @@ def guardar_subconjuntos_componentes(subsistema, post):
                 unidad_apu=str(comp_data.get("unidad_apu", "")).strip(),
                 requiere_presentacion_producto=req_pres,
                 variable_presentacion_producto=var_pres,
+                campo_presentacion_producto=campo_pres,
                 orden=comp_idx + 1,
             )
 

@@ -116,3 +116,9 @@ class InteriorExterior(models.TextChoices):
     INTERIOR = "INTERIOR", "Interior"
     EXTERIOR = "EXTERIOR", "Exterior"
     AMBOS = "AMBOS", "Interior y exterior"
+
+
+class CampoPresentacionProducto(models.TextChoices):
+    CANTIDAD = "CANTIDAD", "Cantidad por presentación"
+    ANCHO = "ANCHO", "Ancho"
+    LARGO = "LARGO", "Largo"
