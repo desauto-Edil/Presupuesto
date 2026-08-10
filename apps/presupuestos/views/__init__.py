@@ -131,6 +131,102 @@ class NuevoDespieceView(GestionPresupuestosMixin, View):
         return redirect("ingenieria:calculador_sistemas")
 
 
+class DespieceXLSXDownloadView(View):
+    """GET /presupuestos/despiece/<pk>/xlsx/ — descarga xlsx de DespieceLineas del proyecto."""
+
+    def get(self, request, pk):
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+
+        unidad = request.session.get("unidad_negocio", "") or ""
+        if unidad and proyecto.creado_por and proyecto.creado_por.unidad_negocio != unidad:
+            messages.error(request, "No tiene acceso a este proyecto.")
+            return redirect("presupuestos:despiece_list")
+
+        from apps.presupuestos.xlsx_exports import build_despiece_xlsx
+        buf = build_despiece_xlsx(proyecto)
+
+        filename = f"despiece_{proyecto.consecutivo}.xlsx"
+        response = HttpResponse(
+            buf.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        registrar_log(
+            request,
+            accion="DESCARGAR_DESPIECE_XLSX",
+            descripcion=f"Excel despiece — {proyecto.consecutivo}",
+            modelo_afectado="Proyecto",
+            objeto_id=proyecto.pk,
+        )
+        return response
+
+
+class DespieceMaestroXLSXDownloadView(View):
+    """GET /presupuestos/despiece-maestro/<pk>/xlsx/ — xlsx de un DespieceMaestro (ingeniería)."""
+
+    def get(self, request, pk):
+        from apps.ingenieria.models.despiece_maestro import DespieceMaestro
+        despiece = get_object_or_404(
+            DespieceMaestro.objects.select_related(
+                "subsistema", "subsistema__sistema", "proyecto", "proyecto__cliente"
+            ),
+            pk=pk,
+        )
+
+        from apps.presupuestos.xlsx_exports import build_despiece_maestro_xlsx
+        buf = build_despiece_maestro_xlsx(despiece)
+
+        safe_name = (despiece.nombre or f"despiece_{pk}").replace("/", "-").replace("\\", "-")
+        filename = f"despiece_{safe_name[:60]}.xlsx"
+        response = HttpResponse(
+            buf.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        registrar_log(
+            request,
+            accion="DESCARGAR_DESPIECE_MAESTRO_XLSX",
+            descripcion=f"Excel DespieceMaestro #{pk} — {despiece.nombre or despiece.subsistema.codigo}",
+            modelo_afectado="DespieceMaestro",
+            objeto_id=pk,
+        )
+        return response
+
+
+class APUXLSXDownloadView(View):
+    """GET /presupuestos/apu/<pk>/xlsx/ — descarga xlsx con hojas Despiece + APU."""
+
+    def get(self, request, pk):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+
+        from apps.presupuestos.xlsx_exports import build_apu_xlsx
+        buf = build_apu_xlsx(apu)
+
+        safe_name = (apu.nombre or f"APU_{pk}").replace("/", "-").replace("\\", "-")
+        filename = f"apu_{safe_name[:60]}.xlsx"
+        response = HttpResponse(
+            buf.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        try:
+            proyecto_id = apu.proyecto_sistema.proyecto_id if apu.proyecto_sistema_id else None
+            registrar_log(
+                request,
+                accion="DESCARGAR_APU_XLSX",
+                descripcion=f"Excel APU — {apu.nombre}",
+                modelo_afectado="APUProyecto",
+                objeto_id=apu.pk,
+            )
+        except Exception:
+            pass
+
+        return response
+
+
 class DespieceCSVDownloadView(View):
     """GET /presupuestos/despiece/<pk>/csv/ — descarga CSV de DespieceLineas del proyecto."""
 

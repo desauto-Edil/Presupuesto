@@ -1468,6 +1468,11 @@
       </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <a href="{% url 'presupuestos:apu_xlsx' apu.pk %}"
+         class="btn btn-ghost btn-sm"
+         title="Descargar Excel con hoja Despiece y hoja APU">
+        <i class="bi bi-file-earmark-excel" style="margin-right:4px;color:#1D6F42;"></i>Excel
+      </a>
       <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
          class="btn btn-ghost btn-sm" target="_blank">
         <i class="bi bi-file-earmark-pdf" style="margin-right:4px;"></i>PDF Interno

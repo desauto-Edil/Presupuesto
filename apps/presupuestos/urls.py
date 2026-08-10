@@ -6,7 +6,8 @@ from apps.presupuestos.views import (
     ProyectoSistemaListView, ProyectoSistemaDetailView,
     ProyectoSistemaCreateView, ProyectoSistemaUpdateView, ProyectoSistemaDeleteView,
     # Despiece — módulo lista
-    DespieceListView, DespieceCSVDownloadView, NuevoDespieceView,
+    DespieceListView, DespieceCSVDownloadView, DespieceXLSXDownloadView,
+    DespieceMaestroXLSXDownloadView, NuevoDespieceView,
     # Despiece
     DespieceProyectoView, DespieceEjecutarView, DespieceLineaAjusteView,
     SubsistemaVariablesView, DespieceLineaAjusteAPIView, CalcularDespiecePSView,
@@ -16,7 +17,7 @@ from apps.presupuestos.views import (
     # Config APU
     ConfiguracionAPUListView, ConfiguracionAPUCreateView, ConfiguracionAPUUpdateView,
     # APU — proyectos
-    APUListView, APUProyectoDetailView, APUProyectoUpdateView, APUGenerarView,
+    APUListView, APUProyectoDetailView, APUProyectoUpdateView, APUGenerarView, APUXLSXDownloadView,
     APUGenerarDesdeDespiece, APUArmarDesdeDespieceView,
     APUSeleccionarDespiecesView,
     APUManoObraView, APUHerramientasView, APUTransporteView, APUAdminView,
@@ -53,7 +54,9 @@ urlpatterns = [
     # ── Despiece — módulo lista ───────────────────────────────────────────────
     path("despiece/",                        DespieceListView.as_view(),           name="despiece_list"),
     path("despiece/nuevo/",                  NuevoDespieceView.as_view(),          name="despiece_nuevo"),
-    path("despiece/<int:pk>/csv/",           DespieceCSVDownloadView.as_view(),    name="despiece_csv"),
+    path("despiece/<int:pk>/csv/",            DespieceCSVDownloadView.as_view(),    name="despiece_csv"),
+    path("despiece/<int:pk>/xlsx/",            DespieceXLSXDownloadView.as_view(),         name="despiece_xlsx"),
+    path("despiece-maestro/<int:pk>/xlsx/",   DespieceMaestroXLSXDownloadView.as_view(),  name="despiece_maestro_xlsx"),
 
     # ── Despiece ─────────────────────────────────────────────────────────────
     path("despiece/proyecto/<int:pk>/",      DespieceProyectoView.as_view(),       name="despiece_proyecto"),
@@ -110,6 +113,7 @@ urlpatterns = [
     path("apu/linea/<int:pk>/eliminar/", APULineaDeleteView.as_view(),    name="apu_linea_delete"),
     path("apu/<int:pk>/archivar/",       APUArchivarView.as_view(),       name="apu_archivar"),
     path("apu/<int:pk>/eliminar/",       APUProyectoEliminarView.as_view(), name="apu_eliminar"),
+    path("apu/<int:pk>/xlsx/",            APUXLSXDownloadView.as_view(),   name="apu_xlsx"),
     path("apu/<int:pk>/pdf-interno/",    APUPDFInternoView.as_view(),     name="apu_pdf_interno"),
     path("apu/<int:pk>/pdf-cliente/",    APUPDFClienteView.as_view(),     name="apu_pdf_cliente"),
     path("apu/<int:pk>/enviar-revision/",    APUEnviarRevisionView.as_view(),    name="apu_enviar_revision"),

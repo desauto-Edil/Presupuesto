@@ -415,7 +415,11 @@ class DespieceMaestroService:
 
             if seleccion_linea.get("fecha_precio"):
                 from django.utils.dateparse import parse_datetime
-                fecha_precio = parse_datetime(str(seleccion_linea["fecha_precio"]))
+                from django.utils.timezone import is_naive, make_aware
+                _fp = parse_datetime(str(seleccion_linea["fecha_precio"]))
+                if _fp is not None and is_naive(_fp):
+                    _fp = make_aware(_fp)
+                fecha_precio = _fp
 
             cant_redondeada = math.ceil(float(cantidad)) if not r.get("error") else 0
 

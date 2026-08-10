@@ -39,6 +39,13 @@
 <span class="badge {% if despiece.esta_guardado %}bg-success{% else %}bg-warning text-dark{% endif %} ms-1">
   {{ despiece.estado }}
 </span>
+{% if despiece.esta_guardado %}
+<a href="{% url 'presupuestos:despiece_maestro_xlsx' despiece.pk %}"
+   class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 ms-1"
+   title="Descargar Excel del despiece">
+  <i class="bi bi-file-earmark-excel" style="color:#1D6F42;"></i> Excel
+</a>
+{% endif %}
 {% if apu_pk %}
 <a href="{% url 'presupuestos:apu_detail' apu_pk %}"
    class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1 ms-1">

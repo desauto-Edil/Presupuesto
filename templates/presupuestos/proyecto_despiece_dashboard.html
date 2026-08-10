@@ -117,8 +117,14 @@
                     <a href="{% url 'presupuestos:despiece_csv' p.pk %}"
                        class="btn btn-ghost btn-xs d-inline-flex align-items-center gap-1"
                        title="Descargar resumen CSV">
-                        <i class="bi bi-download"></i>
+                        <i class="bi bi-filetype-csv"></i>
                         CSV
+                    </a>
+                    <a href="{% url 'presupuestos:despiece_xlsx' p.pk %}"
+                       class="btn btn-ghost btn-xs d-inline-flex align-items-center gap-1"
+                       title="Descargar listado de materiales en Excel">
+                        <i class="bi bi-file-earmark-excel"></i>
+                        Excel
                     </a>
                     {% endif %}
                 </td>
