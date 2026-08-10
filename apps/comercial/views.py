@@ -22,6 +22,7 @@ from .forms import (
 from apps.common.mixins import (
     WithCreateFormMixin, UnidadFilterMixin, UnidadObjectAccessMixin,
     AdminRequiredMixin, AdminGerenteRequiredMixin, GestionComercialMixin,
+    RolRequeridoMixin, ROLES_GESTION_COMERCIAL,
 )
 from apps.common.choices import EstadoSolicitud
 from apps.common.auth import puede_gestionar_unidad as _puede_gestionar_unidad
@@ -397,7 +398,7 @@ class ContactoDeleteView(AdminGerenteRequiredMixin, DeleteView):
 # Solicitudes
 # ---------------------------------------------------------------------------
 
-class SolicitudListView(UnidadFilterMixin, WithCreateFormMixin, ListView):
+class SolicitudListView(GestionComercialMixin, UnidadFilterMixin, WithCreateFormMixin, ListView):
     model = Solicitud
     form_class = SolicitudForm
     template_name = "comercial/solicitud_list.html"
@@ -1322,8 +1323,8 @@ class LogListView(ListView):
 # Tipos de garantía (Fase 9)
 # ---------------------------------------------------------------------------
 
-class TipoGarantiaListView(ListView):
-    """Lista + modal de creación. Patrón Fase 8.1: partial fields-only + wrapper."""
+class TipoGarantiaListView(AdminRequiredMixin, ListView):
+    """Lista + modal de creación. Solo Administrador. Patrón Fase 8.1."""
     model = TipoGarantia
     template_name = "comercial/garantia_list.html"
     context_object_name = "garantias"

@@ -193,6 +193,9 @@
       <span>Dashboard</span>
     </a>
 
+    {# ── Solicitudes: Admin, Gerente, Presupuestos, Asesor | todas las unidades ── #}
+    {% with nav_rol=request.session.rol %}
+    {% if nav_rol == "ADMINISTRADOR" or nav_rol == "GERENTE" or nav_rol == "PRESUPUESTOS" or nav_rol == "ASESOR_COMERCIAL" %}
     <a href="{% url 'comercial:solicitud_list' %}"
        class="nav-item {% block nav_solicitudes %}{% endblock %}"
        data-tip="Solicitudes">
@@ -203,7 +206,10 @@
       </span>
       <span>Solicitudes</span>
     </a>
+    {% endif %}
+    {% endwith %}
 
+    {# ── Clientes: todos los roles, todas las unidades ── #}
     <a href="{% url 'comercial:cliente_list' %}"
        class="nav-item {% block nav_clientes %}{% endblock %}"
        data-tip="Clientes">
@@ -216,6 +222,9 @@
       <span>Clientes</span>
     </a>
 
+    {# ── Calculador: Admin, Gerente, Presupuestos, Asesor | no SOLARANDINA ── #}
+    {% with nav_rol=request.session.rol nav_u=request.session.unidad_negocio %}
+    {% if nav_rol == "ADMINISTRADOR" or nav_rol == "GERENTE" and nav_u != "SOLARANDINA" or nav_rol == "PRESUPUESTOS" and nav_u != "SOLARANDINA" or nav_rol == "ASESOR_COMERCIAL" and nav_u != "SOLARANDINA" %}
     <a href="{% url 'ingenieria:calculador_sistemas' %}"
        class="nav-item {% block nav_despiece %}{% endblock %}"
        data-tip="Calculador de Sistemas">
@@ -224,7 +233,11 @@
       </span>
       <span>Calculador</span>
     </a>
+    {% endif %}
+    {% endwith %}
 
+    {# ── Garantías: solo Administrador ── #}
+    {% if request.session.rol == "ADMINISTRADOR" %}
     <a href="{% url 'comercial:garantia_list' %}"
        class="nav-item {% block nav_garantias %}{% endblock %}"
        data-tip="Garantías">
@@ -233,7 +246,9 @@
       </span>
       <span>Garantías</span>
     </a>
+    {% endif %}
 
+    {# ── Catálogos: todos los roles, todas las unidades ── #}
     <a href="{% url 'catalogos:catalogo' %}"
        class="nav-item {% block nav_catalogos %}{% endblock %}{% block nav_proveedores %}{% endblock %}"
        data-tip="Catálogos">
@@ -246,8 +261,11 @@
       <span>Catálogos</span>
     </a>
 
-    {% with u=request.session.unidad_negocio %}
-    {% if u != "IMPERTIENDA" %}
+    {# ── APU (ítems), Revisiones, Sistemas ── #}
+    {% with nav_rol=request.session.rol nav_u=request.session.unidad_negocio %}
+
+    {# APU ítems: Admin, Gerente, Presupuestos | no SOLARANDINA, no IMPERTIENDA #}
+    {% if nav_rol == "ADMINISTRADOR" or nav_rol == "GERENTE" and nav_u != "SOLARANDINA" and nav_u != "IMPERTIENDA" or nav_rol == "PRESUPUESTOS" and nav_u != "SOLARANDINA" and nav_u != "IMPERTIENDA" %}
     <a href="{% url 'presupuestos:catalogo_apu' %}"
        class="nav-item {% block nav_apu %}{% endblock %}"
        data-tip="APU">
@@ -256,7 +274,9 @@
       </span>
       <span>APU</span>
     </a>
+    {% endif %}
 
+    {# Revisiones: todos los roles, todas las unidades #}
     <a href="{% url 'presupuestos:apu_list' %}?revision=pendiente"
        class="nav-item {% block nav_revisiones %}{% endblock %}"
        data-tip="Revisiones">
@@ -266,6 +286,8 @@
       <span>Revisiones</span>
     </a>
 
+    {# Sistemas: Admin, Gerente, Presupuestos | no SOLARANDINA, no IMPERTIENDA #}
+    {% if nav_rol == "ADMINISTRADOR" or nav_rol == "GERENTE" and nav_u != "SOLARANDINA" and nav_u != "IMPERTIENDA" or nav_rol == "PRESUPUESTOS" and nav_u != "SOLARANDINA" and nav_u != "IMPERTIENDA" %}
     <a href="{% url 'ingenieria:sistema_list' %}"
        class="nav-item {% block nav_ingenieria %}{% endblock %}"
        data-tip="Sistemas">
@@ -275,6 +297,7 @@
       <span>Sistemas</span>
     </a>
     {% endif %}
+
     {% endwith %}
 
     {% if request.session.rol == "ADMINISTRADOR" %}

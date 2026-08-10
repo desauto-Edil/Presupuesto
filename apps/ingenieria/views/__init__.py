@@ -21,7 +21,7 @@ from apps.ingenieria.models import (
     ProductoTecnicoAsociado,
 )
 from apps.ingenieria.forms import SistemaForm, SubsistemaForm
-from apps.common.mixins import WithCreateFormMixin, GestionIngenieriaMixin
+from apps.common.mixins import WithCreateFormMixin, GestionIngenieriaMixin, APUSistemaAccesoMixin
 from apps.ingenieria.services.subsistema_service import (
     guardar_variables,
     guardar_subconjuntos_componentes,
@@ -35,7 +35,7 @@ from apps.ingenieria.services.subsistema_service import (
 
 # ── Sistemas ──────────────────────────────────────────────────────────────────
 
-class SistemaListView(WithCreateFormMixin, ListView):
+class SistemaListView(APUSistemaAccesoMixin, WithCreateFormMixin, ListView):
     model = Sistema
     form_class = SistemaForm
     template_name = "ingenieria/sistema_list.html"
@@ -56,7 +56,7 @@ class SistemaListView(WithCreateFormMixin, ListView):
         return ctx
 
 
-class SistemaDetailView(DetailView):
+class SistemaDetailView(APUSistemaAccesoMixin, DetailView):
     model = Sistema
     template_name = "ingenieria/sistema_detail.html"
     context_object_name = "sistema"
@@ -72,7 +72,7 @@ class SistemaDetailView(DetailView):
         return ctx
 
 
-class SistemaCreateView(GestionIngenieriaMixin, CreateView):
+class SistemaCreateView(APUSistemaAccesoMixin, CreateView):
     model = Sistema
     form_class = SistemaForm
     template_name = "ingenieria/sistema_form.html"
@@ -96,14 +96,14 @@ class SistemaCreateView(GestionIngenieriaMixin, CreateView):
         return response
 
 
-class SistemaUpdateView(GestionIngenieriaMixin, UpdateView):
+class SistemaUpdateView(APUSistemaAccesoMixin, UpdateView):
     model = Sistema
     form_class = SistemaForm
     template_name = "ingenieria/sistema_form.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
-class SistemaDeleteView(GestionIngenieriaMixin, DeleteView):
+class SistemaDeleteView(APUSistemaAccesoMixin, DeleteView):
     model = Sistema
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -111,7 +111,7 @@ class SistemaDeleteView(GestionIngenieriaMixin, DeleteView):
 
 # ── Subsistemas ───────────────────────────────────────────────────────────────
 
-class SubsistemaDetailView(DetailView):
+class SubsistemaDetailView(APUSistemaAccesoMixin, DetailView):
     model = Subsistema
     template_name = "ingenieria/subsistema_detail.html"
     context_object_name = "subsistema"
@@ -367,7 +367,7 @@ def _subconjuntos_context(subsistema):
     return subconjuntos, componentes_legacy
 
 
-class SubsistemaCreateView(GestionIngenieriaMixin, CreateView):
+class SubsistemaCreateView(APUSistemaAccesoMixin, CreateView):
     model = Subsistema
     form_class = SubsistemaForm
     template_name = "ingenieria/subsistema_form.html"
@@ -452,7 +452,7 @@ class SubsistemaCreateView(GestionIngenieriaMixin, CreateView):
         )
 
 
-class SubsistemaUpdateView(GestionIngenieriaMixin, UpdateView):
+class SubsistemaUpdateView(APUSistemaAccesoMixin, UpdateView):
     model = Subsistema
     form_class = SubsistemaForm
     template_name = "ingenieria/subsistema_form.html"
@@ -558,7 +558,7 @@ class SubsistemaUpdateView(GestionIngenieriaMixin, UpdateView):
         )
 
 
-class SubsistemaConfigApuGuardarView(GestionIngenieriaMixin, View):
+class SubsistemaConfigApuGuardarView(APUSistemaAccesoMixin, View):
     """
     Fase 6L-4: vista POST-only que recibe la configuración APU del subsistema
     enviada desde el modal `#modalConfigApu`. Reutiliza el servicio
@@ -578,7 +578,7 @@ class SubsistemaConfigApuGuardarView(GestionIngenieriaMixin, View):
         return redirect("ingenieria:sistema_list")
 
 
-class SubsistemaDeleteView(GestionIngenieriaMixin, DeleteView):
+class SubsistemaDeleteView(APUSistemaAccesoMixin, DeleteView):
     model = Subsistema
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -586,7 +586,7 @@ class SubsistemaDeleteView(GestionIngenieriaMixin, DeleteView):
 
 # ── Catálogos de consumo (FuncionConsumo, ProblemaResuelto, SuperficieCompatible) ─
 
-class FuncionConsumoCreateView(GestionIngenieriaMixin, CreateView):
+class FuncionConsumoCreateView(APUSistemaAccesoMixin, CreateView):
     model = FuncionConsumo
     fields = ["nombre", "descripcion", "activo"]
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -596,13 +596,13 @@ class FuncionConsumoCreateView(GestionIngenieriaMixin, CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class FuncionConsumoDeleteView(GestionIngenieriaMixin, DeleteView):
+class FuncionConsumoDeleteView(APUSistemaAccesoMixin, DeleteView):
     model = FuncionConsumo
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
-class ProblemaResueltoCreateView(GestionIngenieriaMixin, CreateView):
+class ProblemaResueltoCreateView(APUSistemaAccesoMixin, CreateView):
     model = ProblemaResuelto
     fields = ["nombre", "descripcion", "activo"]
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -612,13 +612,13 @@ class ProblemaResueltoCreateView(GestionIngenieriaMixin, CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class ProblemaResueltoDeleteView(GestionIngenieriaMixin, DeleteView):
+class ProblemaResueltoDeleteView(APUSistemaAccesoMixin, DeleteView):
     model = ProblemaResuelto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
-class SuperficieCompatibleCreateView(GestionIngenieriaMixin, CreateView):
+class SuperficieCompatibleCreateView(APUSistemaAccesoMixin, CreateView):
     model = SuperficieCompatible
     fields = ["nombre", "descripcion", "activo"]
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -628,7 +628,7 @@ class SuperficieCompatibleCreateView(GestionIngenieriaMixin, CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class SuperficieCompatibleDeleteView(GestionIngenieriaMixin, DeleteView):
+class SuperficieCompatibleDeleteView(APUSistemaAccesoMixin, DeleteView):
     model = SuperficieCompatible
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")

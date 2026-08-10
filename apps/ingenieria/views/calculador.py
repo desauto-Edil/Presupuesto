@@ -16,6 +16,7 @@ import json
 import logging
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -23,7 +24,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 from apps.common.apu_lock import objeto_bloqueado_por_apu, MENSAJE_BLOQUEO
-from apps.common.mixins import GestionIngenieriaMixin
+from apps.common.mixins import GestionIngenieriaMixin, CalculadorAccesoMixin
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ from apps.common.choices import TipoSistema, LineaNegocio
 
 # ── 1. Catálogo de sistemas ───────────────────────────────────────────────────
 
-class CalculadorSistemaView(TemplateView):
+class CalculadorSistemaView(CalculadorAccesoMixin, TemplateView):
     """
     Vista catálogo: muestra los sistemas constructivos disponibles.
     Permite buscar por nombre/código, filtrar por línea de negocio.
@@ -87,7 +88,7 @@ class CalculadorSistemaView(TemplateView):
 
 # ── 2. Seleccionar subsistema + subconjuntos ──────────────────────────────────
 
-class CalculadorSeleccionarView(View):
+class CalculadorSeleccionarView(CalculadorAccesoMixin, View):
     """
     GET:  Muestra los subsistemas del sistema y los subconjuntos de cada uno.
     POST: Crea un DespieceMaestro en estado BORRADOR y redirige al workbench.
@@ -172,7 +173,7 @@ class CalculadorSeleccionarView(View):
 
 # ── 3. Workbench: Despiece Maestro ────────────────────────────────────────────
 
-class DespieceMaestroView(DetailView):
+class DespieceMaestroView(CalculadorAccesoMixin, DetailView):
     """
     Vista principal del Despiece Maestro.
 
@@ -449,7 +450,7 @@ def _agrupar_lineas(lineas_qs):
 
 # ── 4. Calcular (AJAX, sin guardar) ──────────────────────────────────────────
 
-class CalcularDespieceMaestroView(GestionIngenieriaMixin, View):
+class CalcularDespieceMaestroView(CalculadorAccesoMixin, View):
     """
     POST endpoint AJAX.
 
@@ -531,7 +532,7 @@ def _agrupar_resultados(resultados: list[dict]) -> list[dict]:
 
 # ── 5. Guardar despiece ───────────────────────────────────────────────────────
 
-class GuardarDespieceMaestroView(GestionIngenieriaMixin, View):
+class GuardarDespieceMaestroView(CalculadorAccesoMixin, View):
     """
     POST: Recalcula y guarda el despiece en estado GUARDADO.
 
@@ -569,72 +570,82 @@ class GuardarDespieceMaestroView(GestionIngenieriaMixin, View):
         dm.variables_entrada = variables_entrada
         svc = DespieceMaestroService(dm)
 
+        from django.db import transaction as _db_transaction
+        from decimal import Decimal as _D
+        from django.utils.dateparse import parse_datetime
+
         try:
-            svc.guardar(variables_entrada=variables_entrada, seleccion_productos=seleccion_productos)
+            with _db_transaction.atomic():
+                # 1. Guardar líneas (ya es @transaction.atomic internamente —
+                #    en este contexto actúa como savepoint anidado).
+                svc.guardar(variables_entrada=variables_entrada, seleccion_productos=seleccion_productos)
+
+                # 2. Guardar consolidaciones en la MISMA transacción atómica.
+                #    lineas_guardadas se lee TRAS guardar para obtener los PKs definitivos.
+                lineas_guardadas = list(dm.lineas.order_by("orden"))
+                dm.consolidaciones.all().delete()
+
+                if consolidaciones_data:
+                    nuevas_cons = []
+                    for idx_c, c in enumerate(consolidaciones_data):
+                        indices    = [i for i in (c.get("indices") or []) if isinstance(i, int)]
+                        lineas_pks = [
+                            lineas_guardadas[i].pk
+                            for i in indices
+                            if 0 <= i < len(lineas_guardadas)
+                        ]
+                        prod_data   = c.get("_prod") or {}
+                        precio_u    = None
+                        precio_t    = None
+                        fecha_precio = None
+
+                        if prod_data.get("precio_unitario") is not None:
+                            try:
+                                precio_u = _D(str(prod_data["precio_unitario"]))
+                                cantidad = _D(str(c.get("cantidad_total") or 0))
+                                precio_t = (cantidad * precio_u).quantize(_D("0.01"))
+                            except Exception:
+                                pass
+
+                        if prod_data.get("fecha_precio"):
+                            from django.utils import timezone as _tz
+                            dt = parse_datetime(str(prod_data["fecha_precio"]))
+                            if dt is not None and _tz.is_naive(dt):
+                                dt = _tz.make_aware(dt)
+                            fecha_precio = dt
+
+                        nuevas_cons.append(ConsolidacionDespieceMaestro(
+                            despiece=dm,
+                            label=str(c.get("label") or "Consolidado")[:200],
+                            lineas_ids=lineas_pks,
+                            cantidad_total=_D(str(c.get("cantidad_total") or 0)),
+                            cantidad_redondeada=int(c.get("cantidad_redondeada") or 0),
+                            unidad=str(c.get("unidad") or "")[:40],
+                            orden=idx_c + 1,
+                            producto_id=prod_data.get("producto_id") or None,
+                            producto_codigo=str(prod_data.get("producto_codigo") or "")[:50],
+                            producto_nombre=str(prod_data.get("producto_nombre") or "")[:300],
+                            precio_unitario=precio_u,
+                            precio_total=precio_t,
+                            moneda=str(prod_data.get("moneda") or "")[:3],
+                            fecha_precio=fecha_precio,
+                        ))
+
+                    ConsolidacionDespieceMaestro.objects.bulk_create(nuevas_cons)
+
         except ValidationError as exc:
-            # Corregido: Manejo seguro de mensajes de ValidationError
+            logger.warning(
+                "[GuardarDespieceMaestroView] ValidationError al guardar despiece #%s: %s",
+                pk, exc,
+            )
             if hasattr(exc, "message_dict"):
                 error_payload = exc.message_dict
             else:
-                # exc.message puede no existir, exc.messages es más seguro.
                 error_payload = "; ".join(getattr(exc, 'messages', [str(exc)]))
             return JsonResponse({"ok": False, "error": error_payload}, status=400)
         except Exception as exc:
             logger.exception("[GuardarDespieceMaestroView] Error inesperado al guardar despiece #%s", pk)
             return JsonResponse({"ok": False, "error": "Ocurrió un error inesperado en el servidor."}, status=500)
-
-        # ── Guardar consolidaciones ───────────────────────────────────────────
-        if consolidaciones_data:
-            lineas_guardadas = list(dm.lineas.order_by("orden"))
-            dm.consolidaciones.all().delete()
-            from decimal import Decimal as _D
-            from django.utils.dateparse import parse_datetime
-
-            nuevas_cons = []
-            for idx_c, c in enumerate(consolidaciones_data):
-                indices  = [i for i in (c.get("indices") or []) if isinstance(i, int)]
-                lineas_pks = [
-                    lineas_guardadas[i].pk
-                    for i in indices
-                    if 0 <= i < len(lineas_guardadas)
-                ]
-                prod_data   = c.get("_prod") or {}
-                precio_u    = None
-                precio_t    = None
-                fecha_precio = None
-
-                if prod_data.get("precio_unitario") is not None:
-                    try:
-                        precio_u = _D(str(prod_data["precio_unitario"]))
-                        cantidad = _D(str(c.get("cantidad_total") or 0))
-                        precio_t = (cantidad * precio_u).quantize(_D("0.01"))
-                    except Exception:
-                        pass
-
-                if prod_data.get("fecha_precio"):
-                    fecha_precio = parse_datetime(str(prod_data["fecha_precio"]))
-
-                nuevas_cons.append(ConsolidacionDespieceMaestro(
-                    despiece=dm,
-                    label=str(c.get("label") or "Consolidado")[:200],
-                    lineas_ids=lineas_pks,
-                    cantidad_total=_D(str(c.get("cantidad_total") or 0)),
-                    cantidad_redondeada=int(c.get("cantidad_redondeada") or 0),
-                    unidad=str(c.get("unidad") or "")[:40],
-                    orden=idx_c + 1,
-                    producto_id=prod_data.get("producto_id") or None,
-                    producto_codigo=str(prod_data.get("producto_codigo") or "")[:50],
-                    producto_nombre=str(prod_data.get("producto_nombre") or "")[:300],
-                    precio_unitario=precio_u,
-                    precio_total=precio_t,
-                    moneda=str(prod_data.get("moneda") or "")[:3],
-                    fecha_precio=fecha_precio,
-                ))
-
-            ConsolidacionDespieceMaestro.objects.bulk_create(nuevas_cons)
-        else:
-            # Si no hay consolidaciones, limpiar las anteriores
-            dm.consolidaciones.all().delete()
 
         return JsonResponse({
             "ok": True,
@@ -646,7 +657,7 @@ class GuardarDespieceMaestroView(GestionIngenieriaMixin, View):
 
 # ── 6. Lista de despieces guardados ──────────────────────────────────────────
 
-class DespiecesGuardadosView(ListView):
+class DespiecesGuardadosView(CalculadorAccesoMixin, ListView):
     """Lista todos los despieces (guardados y borradores)."""
     model = DespieceMaestro
     template_name = "ingenieria/despiece_list.html"
@@ -694,7 +705,7 @@ class DespiecesGuardadosView(ListView):
 
 # ── 7. Eliminar despiece ──────────────────────────────────────────────────────
 
-class EliminarDespieceMaestroView(GestionIngenieriaMixin, View):
+class EliminarDespieceMaestroView(CalculadorAccesoMixin, View):
     """POST: elimina un DespieceMaestro."""
 
     def post(self, request, pk):
@@ -726,7 +737,7 @@ class EliminarDespieceMaestroView(GestionIngenieriaMixin, View):
 
 # ── 8. APU desde despiece guardado — redirige a presupuestos:apu_list ────────
 
-class APUDespieceMaestroView(GestionIngenieriaMixin, View):
+class APUDespieceMaestroView(CalculadorAccesoMixin, View):
     """
     Redirige al módulo APU de presupuestos validando que el despiece sea apto.
 

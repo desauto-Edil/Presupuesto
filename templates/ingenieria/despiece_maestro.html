@@ -290,6 +290,7 @@
 .wb-toast.show { transform: translateY(0); opacity: 1; }
 .wb-toast.ok   { background: #198754; }
 .wb-toast.err  { background: #dc3545; }
+.wb-toast.warn { background: #e67c22; }
 
 /* ── Fila separadora de subconjunto ─────────────────────────────────────── */
 .dp-group-row td {
@@ -1915,8 +1916,18 @@ async function calcular() {
       const lineas = [];
       data.subconjuntos.forEach(sq => sq.lineas.forEach(l => lineas.push(l)));
 
-      // Recalcular limpia consolidaciones (cantidades pueden haber cambiado)
-      consolidaciones = [];
+      // Recalcular ACTUALIZA consolidaciones existentes con las nuevas cantidades.
+      // No las borra: si el usuario creó consolidaciones antes de recalcular,
+      // se preservan actualizando cantidad_total con los valores nuevos.
+      // Se descartan solo si sus índices ya no son válidos (< 2 líneas restantes).
+      if (consolidaciones.length > 0) {
+        consolidaciones = consolidaciones.map(c => {
+          const valid = (c.indices || []).filter(i => i >= 0 && i < lineas.length);
+          if (valid.length < 2) return null;
+          const newTotal = valid.reduce((s, i) => s + (lineas[i]?.cantidad_calculada || 0), 0);
+          return { ...c, indices: valid, cantidad_total: newTotal, cantidad_redondeada: Math.ceil(newTotal) };
+        }).filter(Boolean);
+      }
       modoConsolidacion = false;
       variablesUsadas = vars;
       renderTabla(lineas);
@@ -1941,8 +1952,29 @@ async function calcular() {
 async function guardar() {
   if (!filasCalc.length) return;
 
-  // Corregido: La validación solo debe bloquear si falta producto en una línea que lo requiere directamente.
-  const diferidasSinProducto = filasCalc.filter(f => f.pendiente_producto && !(f._prod && f._prod.producto_id));
+  // Mapas de consolidación: necesarios tanto para la validación como para
+  // construir seleccion_productos. Se calculan primero.
+  const { consolidatedSet } = _buildConsolidationMaps();
+
+  // Mapa índice → _prod de la consolidación que absorbe esa línea.
+  const prodPorConsolidacion = new Map();
+  consolidaciones.forEach(c => {
+    if (c._prod && c._prod.producto_id) {
+      (c.indices || []).forEach(i => prodPorConsolidacion.set(i, c._prod));
+    }
+  });
+
+  // Validación: bloquear solo si una línea requiere producto para su fórmula
+  // (pendiente_producto=true) y no hay producto ni en la línea ni en la
+  // consolidación que la absorbe.
+  // Nota: pendiente_producto solo viene del endpoint calcular(); cuando la
+  // página carga desde BD (post-redirect) ese campo es undefined → no bloquea.
+  const diferidasSinProducto = filasCalc.filter((f, i) => {
+    if (!f.pendiente_producto) return false;                         // no requiere producto
+    if (f._prod && f._prod.producto_id) return false;               // tiene producto propio
+    if (consolidatedSet.has(i) && prodPorConsolidacion.has(i)) return false; // consolidación la cubre
+    return true;
+  });
   if (diferidasSinProducto.length) {
     const nombres = diferidasSinProducto.slice(0, 3)
       .map(f => f.componente_nombre || f.componente_codigo).join(', ');
@@ -1954,12 +1986,21 @@ async function guardar() {
   setLoading('btnGuardar', 'guardarSpinner', 'guardarIcon', true);
   document.getElementById('guardarText').style.opacity = '.6';
 
-  // Índices que están en alguna consolidación → no enviar producto individual
-  const { consolidatedSet } = _buildConsolidationMaps();
-
   const seleccion = {};
   filasCalc.forEach((f, i) => {
-    if (!consolidatedSet.has(i) && f._prod) seleccion[f.componente_codigo] = f._prod;
+    if (!consolidatedSet.has(i)) {
+      // Línea no consolidada: incluir su propio producto.
+      if (f._prod) seleccion[f.componente_codigo] = f._prod;
+    } else {
+      // Línea consolidada: incluir producto si existe (necesario cuando el
+      // componente tiene requiere_presentacion_producto=True en la receta;
+      // inofensivo cuando no lo requiere).
+      // Prioridad: producto de la consolidación → producto individual guardado.
+      // Nota: cuando la página carga desde BD, f.requiere_presentacion_producto
+      // no está disponible en LINEAS_INIT, por eso no condicionamos con él.
+      const prod = prodPorConsolidacion.get(i) || f._prod;
+      if (prod) seleccion[f.componente_codigo] = prod;
+    }
   });
 
   // Siempre tomar el estado actual de los inputs al guardar.
@@ -1991,7 +2032,18 @@ async function guardar() {
     const data = await resp.json();
 
     if (data.ok) {
-      showToast('✓ Despiece guardado correctamente', 'ok');
+      // Advertir si hay consolidaciones sin producto (el APU las necesita).
+      const consSinProd = consolidaciones.filter(c => !c._prod?.producto_id);
+      if (consSinProd.length) {
+        const nombres = consSinProd.slice(0, 2).map(c => `"${c.label}"`).join(', ');
+        const extra   = consSinProd.length > 2 ? ` y ${consSinProd.length - 2} más` : '';
+        showToast(
+          `✓ Guardado. Atención: las consolidaciones ${nombres}${extra} no tienen producto asignado — asígnalo antes de armar el APU.`,
+          'warn'
+        );
+      } else {
+        showToast('✓ Despiece guardado correctamente', 'ok');
+      }
       setTimeout(() => window.location.href = data.redirect_url, 900);
     } else {
       showToast('Error al guardar: ' + (data.error || 'desconocido'), 'err');

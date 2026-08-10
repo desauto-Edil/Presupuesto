@@ -19,6 +19,15 @@ ROLES_CATALOGO_PROVEEDORES= {"ADMINISTRADOR", "PRESUPUESTOS", "ASESOR_COMERCIAL"
 ROLES_INGENIERIA          = {"ADMINISTRADOR", "PRESUPUESTOS"}
 ROLES_DESCARGA_PDF        = {"ADMINISTRADOR", "GERENTE", "PRESUPUESTOS", "ASESOR_COMERCIAL"}
 
+# ---------------------------------------------------------------------------
+# Conjuntos de unidades bloqueadas por módulo
+# Valores exactos del enum UnidadNegocio (apps/common/choices.py).
+# ADMINISTRADOR siempre bypasea — no se incluye en estas restricciones.
+# ---------------------------------------------------------------------------
+
+UNIDADES_SIN_CALCULADOR   = {"SOLARANDINA"}
+UNIDADES_SIN_APU_SISTEMAS = {"SOLARANDINA", "IMPERTIENDA"}
+
 
 # ---------------------------------------------------------------------------
 # Mixin base: control por rol
@@ -103,6 +112,58 @@ class DescargaPDFMixin(RolRequeridoMixin):
     """ADMINISTRADOR, GERENTE, PRESUPUESTOS o ASESOR_COMERCIAL."""
     roles_permitidos = ROLES_DESCARGA_PDF
     mensaje_denegacion = "Su perfil no tiene acceso a los documentos PDF."
+
+
+# ---------------------------------------------------------------------------
+# Mixin: bloqueo por unidad de negocio
+# Se combina con un mixin de rol mediante herencia múltiple.
+# El mixin de rol (RolRequeridoMixin) valida el rol primero; si pasa,
+# su super() llega aquí para validar la unidad.
+# ADMINISTRADOR siempre pasa: puede operar en cualquier unidad.
+# ---------------------------------------------------------------------------
+
+class UnidadPermitidaMixin:
+    """
+    Bloquea acceso a usuarios cuya unidad de negocio esté en `unidades_bloqueadas`.
+    ADMINISTRADOR siempre tiene paso libre.
+
+    Se usa como segundo padre en herencia múltiple:
+        class MiMixin(AlgunRolMixin, UnidadPermitidaMixin): ...
+
+    El RolRequeridoMixin valida rol → llama super() → llega aquí → valida unidad.
+    """
+    unidades_bloqueadas: set = set()
+    redirect_url_name: str = "comercial:dashboard"
+
+    def dispatch(self, request, *args, **kwargs):
+        rol = request.session.get("rol", "")
+        if rol != "ADMINISTRADOR" and self.unidades_bloqueadas:
+            unidad = request.session.get("unidad_negocio", "") or ""
+            if unidad in self.unidades_bloqueadas:
+                messages.error(
+                    request,
+                    "Su unidad de negocio no tiene acceso a este módulo.",
+                )
+                return redirect(self.redirect_url_name)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class CalculadorAccesoMixin(GestionComercialMixin, UnidadPermitidaMixin):
+    """
+    Calculador de sistemas: Admin, Gerente, Presupuestos, Asesor.
+    Unidades bloqueadas: SOLARANDINA.
+    """
+    unidades_bloqueadas = UNIDADES_SIN_CALCULADOR
+    mensaje_denegacion = "Su perfil no permite acceder al Calculador de Sistemas."
+
+
+class APUSistemaAccesoMixin(GestionPresupuestosMixin, UnidadPermitidaMixin):
+    """
+    Módulo APU (ítems) y Sistemas de ingeniería: Admin, Gerente, Presupuestos.
+    Unidades bloqueadas: SOLARANDINA e IMPERTIENDA.
+    """
+    unidades_bloqueadas = UNIDADES_SIN_APU_SISTEMAS
+    mensaje_denegacion = "Su perfil no permite acceder a este módulo."
 
 
 # ---------------------------------------------------------------------------
