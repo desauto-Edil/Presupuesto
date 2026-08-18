@@ -121,11 +121,8 @@ def _merge_write(ws, row, col_start, col_end, value, font=None, fill=None,
 # ════════════════════════════════════════════════════════════════════════════
 
 _DESPIECE_COLS = [
-    ("Sistema",              22),
-    ("Subsistema",           22),
-    ("Componente",           24),
-    ("Categoría",            22),
-    ("Producto asignado",    34),
+    ("Producto asignado",    40),
+    ("Proveedor",            28),
     ("Cantidad",             12),
     ("Unidad",               10),
     ("Precio Unit. (COP)",   18),
@@ -136,6 +133,7 @@ _DESPIECE_COLS = [
 def _build_despiece_sheet(ws, proyecto):
     """
     Rellena la hoja `ws` con las líneas de despiece del proyecto.
+    Columnas: Producto, Proveedor, Cantidad, Unidad, Precio Unit., Subtotal.
     """
     # ── Anchos de columna ─────────────────────────────────────────────────
     for idx, (_, width) in enumerate(_DESPIECE_COLS, start=1):
@@ -157,7 +155,7 @@ def _build_despiece_sheet(ws, proyecto):
 
     # ── Fila proyecto ─────────────────────────────────────────────────────
     _merge_write(
-        ws, row, 1, 4,
+        ws, row, 1, 3,
         f"Proyecto: {proyecto.consecutivo}",
         font=_font(bold=True, size=10),
         fill=_fill("FFF0F4FF"),
@@ -165,7 +163,7 @@ def _build_despiece_sheet(ws, proyecto):
         height=20,
     )
     _merge_write(
-        ws, row, 5, num_cols,
+        ws, row, 4, num_cols,
         f"Cliente: {proyecto.cliente.razon_social if proyecto.cliente_id else '—'}",
         font=_font(size=10),
         fill=_fill("FFF0F4FF"),
@@ -194,8 +192,10 @@ def _build_despiece_sheet(ws, proyecto):
         .select_related(
             "proyecto_sistema__sistema",
             "proyecto_sistema__subsistema",
-            "categoria_producto",
             "producto",
+        )
+        .prefetch_related(
+            "producto__proveedores_producto__proveedor",
         )
         .order_by(
             "proyecto_sistema__sistema__nombre",
@@ -208,12 +208,18 @@ def _build_despiece_sheet(ws, proyecto):
     alt = False
 
     for linea in lineas:
-        ps = linea.proyecto_sistema
-        sistema    = ps.sistema.nombre    if ps and ps.sistema_id    else "—"
-        subsistema = ps.subsistema.nombre if ps and ps.subsistema_id else "—"
-        componente = linea.componente_codigo or "—"
-        categoria  = linea.categoria_producto.nombre if linea.categoria_producto_id else "—"
         producto   = linea.producto.nombre if linea.producto_id else "Sin asignar"
+        # Proveedor: el de menor precio activo (mismo que usa capturar_precio)
+        proveedor  = "—"
+        if linea.producto_id:
+            pp = (
+                linea.producto.proveedores_producto
+                .filter(activo=True)
+                .order_by("precio_unitario")
+                .first()
+            )
+            if pp:
+                proveedor = pp.proveedor.nombre
         cantidad   = linea.cantidad_final or Decimal("0")
         precio     = linea.precio_snapshot or Decimal("0")
         subtotal   = Decimal(str(cantidad)) * Decimal(str(precio))
@@ -225,12 +231,11 @@ def _build_despiece_sheet(ws, proyecto):
         num_style = _align("right")
         _write_row(
             ws, row,
-            [sistema, subsistema, componente, categoria, producto,
-             _qty(cantidad), "und", _money(precio), _money(subtotal)],
+            [producto, proveedor, _qty(cantidad), "und", _money(precio), _money(subtotal)],
             fonts=[_font(size=9.5)] * num_cols,
             fills=[row_fill] * num_cols,
             aligns=[
-                _align(), _align(), _align(), _align(), _align(),
+                _align(), _align(),
                 num_style, _align("center"), num_style, num_style,
             ],
             height=16,
@@ -240,14 +245,14 @@ def _build_despiece_sheet(ws, proyecto):
     # ── Fila total ─────────────────────────────────────────────────────────
     total_fill = _fill(_SUBTOTAL_BG)
     _merge_write(
-        ws, row, 1, 8,
+        ws, row, 1, 5,
         "TOTAL GENERAL",
         font=_font(bold=True, size=10),
         fill=total_fill,
         align=_align("right"),
         height=20,
     )
-    cell = ws.cell(row=row, column=9, value=_money(total_general))
+    cell = ws.cell(row=row, column=6, value=_money(total_general))
     cell.font  = _font(bold=True, size=10)
     cell.fill  = total_fill
     cell.alignment = _align("right")
@@ -715,33 +720,65 @@ def build_despiece_maestro_xlsx(despiece) -> io.BytesIO:
     return buf
 
 
-def build_apu_xlsx(apu) -> io.BytesIO:
+_INVALID_SHEET_CHARS = str.maketrans({c: "" for c in r"\/?*[]:"})
+
+
+def _safe_sheet_title(text: str, max_len: int = 28) -> str:
     """
-    Genera un xlsx con dos hojas:
-      - 'Despiece': listado de materiales del proyecto vinculado al APU.
-      - 'APU':      análisis de precios unitarios completo.
+    Sanitiza un string para usarlo como nombre de pestaña Excel.
+    Excel prohíbe los caracteres: \ / ? * [ ] :
+    Limita la longitud a `max_len` caracteres.
+    """
+    return text.translate(_INVALID_SHEET_CHARS)[:max_len].strip() or "APU"
+
+
+def build_apu_xlsx(apu, apus_adicionales=None) -> io.BytesIO:
+    """
+    Genera un xlsx con:
+      - Hoja 'Despiece': listado de materiales del proyecto vinculado al APU.
+      - Hoja 'APU <nombre>': análisis de precios unitarios del APU principal.
+      - (Opcional) Una hoja adicional por cada APU consolidado en
+        `apus_adicionales` (lista de objetos APUProyecto). Ej: cuando hay
+        2 APUs juntos → Despiece + APU Principal + APU Adicional = 3 pestañas.
 
     Retorna un BytesIO listo para HttpResponse.
     """
     wb = Workbook()
 
-    # Hoja 1: Despiece (si hay proyecto_sistema → proyecto)
+    # ── Hoja 1: Despiece ──────────────────────────────────────────────────
     ws_despiece = wb.active
     ws_despiece.title = "Despiece"
     proyecto = None
     if apu.proyecto_sistema_id:
         proyecto = apu.proyecto_sistema.proyecto
-    elif apu.proyecto_id:
-        proyecto = apu.proyecto
 
     if proyecto:
         _build_despiece_sheet(ws_despiece, proyecto)
     else:
         ws_despiece.cell(row=1, column=1, value="Sin proyecto vinculado")
 
-    # Hoja 2: APU
-    ws_apu = wb.create_sheet(title="APU")
+    # ── Hoja APU principal ────────────────────────────────────────────────
+    # Si hay APUs adicionales le ponemos nombre corto al tab para diferenciar.
+    if apus_adicionales:
+        titulo_principal = _safe_sheet_title(apu.nombre or f"APU {apu.pk}")
+        ws_apu = wb.create_sheet(title=titulo_principal)
+    else:
+        ws_apu = wb.create_sheet(title="APU")
     _build_apu_sheet(ws_apu, apu)
+
+    # ── Hojas APUs adicionales (solo cuando hay consolidación) ────────────
+    if apus_adicionales:
+        for idx, otro_apu in enumerate(apus_adicionales, start=2):
+            titulo_base = _safe_sheet_title(otro_apu.nombre or f"APU {otro_apu.pk}")
+            # Evitar nombres de pestaña duplicados
+            existing_titles = [s.title for s in wb.worksheets]
+            titulo_tab = titulo_base
+            if titulo_tab in existing_titles:
+                titulo_tab = _safe_sheet_title(
+                    (otro_apu.nombre or f"APU {otro_apu.pk}"), max_len=24
+                ) + f" ({idx})"
+            ws_extra = wb.create_sheet(title=titulo_tab)
+            _build_apu_sheet(ws_extra, otro_apu)
 
     buf = io.BytesIO()
     wb.save(buf)

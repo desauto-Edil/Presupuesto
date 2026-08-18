@@ -96,11 +96,6 @@ class APUConsolidadoBuilder:
             fecha_aprobacion=None,
             revisor=None,
             fecha_envio_revision=None,
-            # Garantía: el consolidado nace sin garantía Red Shield.
-            aplica_garantia=False,
-            tipo_garantia=None,
-            garantia_base_valor=Decimal("0"),
-            garantia_valor_recargo=Decimal("0"),
         )
 
     # ------------------------------------------------------------------

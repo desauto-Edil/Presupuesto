@@ -12,12 +12,11 @@ from apps.common.apu_lock import objeto_bloqueado_por_apu, MENSAJE_BLOQUEO
 from django.views.generic import (
     ListView, CreateView, UpdateView, DeleteView, DetailView, TemplateView,
 )
-from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto, LogSistema, TipoGarantia
+from .models import Cliente, ContactoCliente, TipoProyecto, Solicitud, SolicitudArchivo, Proyecto, LogSistema
 from .forms import (
     ClienteConContactoForm, ContactoClienteForm,
     TipoProyectoForm, SolicitudForm, SolicitudArchivoForm,
     ProyectoForm, ProyectoFromSolicitudForm,
-    TipoGarantiaForm,
 )
 from apps.common.mixins import (
     WithCreateFormMixin, UnidadFilterMixin, UnidadObjectAccessMixin,
@@ -520,7 +519,7 @@ def build_solicitud_detail_context(request, solicitud):
                 inc = (
                     APUDespieceIncluido.objects
                     .filter(despiece_maestro=dm, activo=True)
-                    .select_related("apu", "apu__tipo_garantia", "apu__aprobado_por")
+                    .select_related("apu", "apu__aprobado_por")
                     .first()
                 )
                 if inc and inc.apu:
@@ -538,7 +537,7 @@ def build_solicitud_detail_context(request, solicitud):
                         existing_apus = list(
                             APUProyecto.objects
                             .filter(proyecto_sistema=ps)
-                            .select_related("tipo_garantia", "aprobado_por")
+                            .select_related("aprobado_por")
                         )
                         if len(existing_apus) == 1 and not APUDespieceIncluido.objects.filter(apu=existing_apus[0]).exists():
                             apu = existing_apus[0]
@@ -597,9 +596,13 @@ def build_solicitud_detail_context(request, solicitud):
         .select_related("configuracion")
         .order_by("-created_at")[:100]
     )
-    ctx["proyecto_form"] = ProyectoFromSolicitudForm(
-        initial={"nombre": solicitud.nombre, "descripcion": solicitud.descripcion}
-    )
+    _proyecto_initial = {"nombre": solicitud.nombre, "descripcion": solicitud.descripcion}
+    try:
+        from apps.common.trm_service import obtener_trm_vigente
+        _proyecto_initial["trm"] = obtener_trm_vigente()
+    except Exception:
+        pass  # TRM no disponible; el usuario la ingresa manualmente en el modal
+    ctx["proyecto_form"] = ProyectoFromSolicitudForm(initial=_proyecto_initial)
     ultima = solicitud.proyectos.order_by("-version").first()
     ctx["proxima_version"] = (ultima.version + 1) if ultima else 1
     ctx["puede_devolver"] = puede_devolver_solicitud(request, solicitud)
@@ -975,7 +978,7 @@ class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
                     inc = (
                         APUDespieceIncluido.objects
                         .filter(despiece_maestro=dm, activo=True)
-                        .select_related("apu", "apu__tipo_garantia", "apu__aprobado_por")
+                        .select_related("apu", "apu__aprobado_por")
                         .first()
                     )
                     if inc and inc.apu:
@@ -991,7 +994,7 @@ class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
                             existing_apus = list(
                                 APUProyecto.objects
                                 .filter(proyecto_sistema=ps_legacy)
-                                .select_related("tipo_garantia", "aprobado_por")
+                                .select_related("aprobado_por")
                             )
                             if len(existing_apus) == 1 and not APUDespieceIncluido.objects.filter(apu=existing_apus[0]).exists():
                                 apu = existing_apus[0]
@@ -1019,6 +1022,15 @@ class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
             ctx["puede_consolidar"] = (
                 despieces_guardados_count >= 2 or len(apus_map) >= 2
             )
+            # APUs guardados para el presupuesto del proyecto
+            try:
+                ctx["n_apus_guardados"] = APUProyecto.objects.filter(
+                    proyecto_sistema__proyecto=proyecto,
+                    cantidad_base_apu__isnull=False,
+                    archivado=False,
+                ).count()
+            except Exception:
+                ctx["n_apus_guardados"] = 0
         except Exception:
             ctx["apus_data"] = []
             ctx["despieces_sin_apu"] = []
@@ -1042,6 +1054,15 @@ class ProyectoCreateView(GestionComercialMixin, CreateView):
     model = Proyecto
     form_class = ProyectoForm
     template_name = "comercial/proyecto_form.html"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        try:
+            from apps.common.trm_service import obtener_trm_vigente
+            initial["trm"] = obtener_trm_vigente()
+        except Exception:
+            pass  # TRM no disponible; el usuario debe ingresar el valor manualmente
+        return initial
 
     def get_success_url(self):
         if self.object.solicitud_id:
@@ -1209,7 +1230,13 @@ class CrearProyectoDesdeSolicitudView(GestionComercialMixin, CreateView):
 
     def get_initial(self):
         solicitud = self._get_solicitud()
-        return {"nombre": solicitud.nombre, "descripcion": solicitud.descripcion}
+        initial = {"nombre": solicitud.nombre, "descripcion": solicitud.descripcion}
+        try:
+            from apps.common.trm_service import obtener_trm_vigente
+            initial["trm"] = obtener_trm_vigente()
+        except Exception:
+            pass  # TRM no disponible; el usuario debe ingresar el valor manualmente
+        return initial
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -1319,59 +1346,3 @@ class LogListView(ListView):
         return qs
 
 
-# ---------------------------------------------------------------------------
-# Tipos de garantía (Fase 9)
-# ---------------------------------------------------------------------------
-
-class TipoGarantiaListView(AdminRequiredMixin, ListView):
-    """Lista + modal de creación. Solo Administrador. Patrón Fase 8.1."""
-    model = TipoGarantia
-    template_name = "comercial/garantia_list.html"
-    context_object_name = "garantias"
-    ordering = ["orden", "nombre"]
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx["modal_garantia_form"] = TipoGarantiaForm(initial={"activo": True, "duracion_meses": 12})
-        ctx["total_activas"] = TipoGarantia.objects.filter(activo=True).count()
-        ctx["total_inactivas"] = TipoGarantia.objects.filter(activo=False).count()
-        return ctx
-
-
-class TipoGarantiaCreateView(AdminRequiredMixin, CreateView):
-    model = TipoGarantia
-    form_class = TipoGarantiaForm
-    template_name = "comercial/garantia_form.html"
-    success_url = reverse_lazy("comercial:garantia_list")
-
-    def form_valid(self, form):
-        messages.success(self.request, "Tipo de garantía creado correctamente.")
-        return super().form_valid(form)
-
-
-class TipoGarantiaUpdateView(AdminRequiredMixin, UpdateView):
-    model = TipoGarantia
-    form_class = TipoGarantiaForm
-    template_name = "comercial/garantia_form.html"
-    success_url = reverse_lazy("comercial:garantia_list")
-
-    def form_valid(self, form):
-        messages.success(self.request, "Tipo de garantía actualizado correctamente.")
-        return super().form_valid(form)
-
-
-class TipoGarantiaDeleteView(AdminRequiredMixin, DeleteView):
-    model = TipoGarantia
-    template_name = "confirm_delete.html"
-    success_url = reverse_lazy("comercial:garantia_list")
-
-    def form_valid(self, form):
-        try:
-            return super().form_valid(form)
-        except ProtectedError:
-            messages.error(
-                self.request,
-                "No se puede eliminar esta garantía porque ya está asociada "
-                "a uno o más APU. Puede desactivarla.",
-            )
-            return redirect("comercial:garantia_list")

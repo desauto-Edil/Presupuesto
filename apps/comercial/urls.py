@@ -57,12 +57,6 @@ urlpatterns = [
     path("proyectos/<int:pk>/anular/", views.ProyectoAnularView.as_view(), name="proyecto_anular"),
     path("proyectos/<int:pk>/clonar/", views.ClonarProyectoComoVersionView.as_view(), name="proyecto_clonar"),
 
-    # ── Garantías (Fase 9) ────────────────────────────────────────────────────
-    path("garantias/", views.TipoGarantiaListView.as_view(), name="garantia_list"),
-    path("garantias/nueva/", views.TipoGarantiaCreateView.as_view(), name="garantia_create"),
-    path("garantias/<int:pk>/editar/", views.TipoGarantiaUpdateView.as_view(), name="garantia_update"),
-    path("garantias/<int:pk>/eliminar/", views.TipoGarantiaDeleteView.as_view(), name="garantia_delete"),
-
     # ── Logs ──────────────────────────────────────────────────────────────────
     path("logs/", views.LogListView.as_view(), name="log_list"),
 

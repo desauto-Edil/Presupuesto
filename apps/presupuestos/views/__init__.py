@@ -19,7 +19,7 @@ from django.template.loader import render_to_string
 from apps.presupuestos.models import (
     ProyectoSistema, DespieceLinea,
     ConfiguracionAPU,
-    APU, APUProyecto, APULinea,
+    APU, APUProyecto, APULinea, APUPoliza,
     CategoriaItemAPU, CuadrillaPreset, CuadrillaPresetItem, ItemCatalogoAPU,
 )
 from apps.comercial.models import Proyecto
@@ -54,6 +54,21 @@ from apps.common.mixins import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _apu_unidad(apu) -> str:
+    """Devuelve la unidad de negocio del APU (del cliente del proyecto, o '' si no tiene)."""
+    try:
+        proyecto = apu.get_proyecto()
+        if proyecto:
+            cliente = getattr(proyecto, "cliente", None)
+            if cliente:
+                return getattr(cliente, "unidad_negocio", "") or ""
+    except Exception:
+        pass
+    return ""
 
 
 # ── ProyectoSistema ───────────────────────────────────────────────────────────
@@ -165,6 +180,8 @@ class DespieceXLSXDownloadView(View):
 class DespieceMaestroXLSXDownloadView(View):
     """GET /presupuestos/despiece-maestro/<pk>/xlsx/ — xlsx de un DespieceMaestro (ingeniería)."""
 
+    _log = logging.getLogger("apps.presupuestos.views")
+
     def get(self, request, pk):
         from apps.ingenieria.models.despiece_maestro import DespieceMaestro
         despiece = get_object_or_404(
@@ -174,8 +191,16 @@ class DespieceMaestroXLSXDownloadView(View):
             pk=pk,
         )
 
-        from apps.presupuestos.xlsx_exports import build_despiece_maestro_xlsx
-        buf = build_despiece_maestro_xlsx(despiece)
+        try:
+            from apps.presupuestos.xlsx_exports import build_despiece_maestro_xlsx
+            buf = build_despiece_maestro_xlsx(despiece)
+        except Exception:
+            self._log.exception(
+                "Error generando xlsx para DespieceMaestro #%s (subsistema=%s)",
+                pk,
+                getattr(getattr(despiece, "subsistema", None), "codigo", "?"),
+            )
+            raise
 
         safe_name = (despiece.nombre or f"despiece_{pk}").replace("/", "-").replace("\\", "-")
         filename = f"despiece_{safe_name[:60]}.xlsx"
@@ -196,13 +221,23 @@ class DespieceMaestroXLSXDownloadView(View):
 
 
 class APUXLSXDownloadView(View):
-    """GET /presupuestos/apu/<pk>/xlsx/ — descarga xlsx con hojas Despiece + APU."""
+    """GET /presupuestos/apu/<pk>/xlsx/ — descarga xlsx con hojas Despiece + APU(s)."""
 
     def get(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
 
+        # Si el APU tiene APUs consolidados, los cargamos para generar una pestaña por cada uno.
+        apus_adicionales = None
+        if apu.apus_presupuesto_ids:
+            apus_adicionales = list(
+                APUProyecto.objects.filter(
+                    pk__in=apu.apus_presupuesto_ids,
+                    archivado=False,
+                ).select_related("proyecto_sistema__proyecto", "proyecto_sistema__sistema")
+            )
+
         from apps.presupuestos.xlsx_exports import build_apu_xlsx
-        buf = build_apu_xlsx(apu)
+        buf = build_apu_xlsx(apu, apus_adicionales=apus_adicionales)
 
         safe_name = (apu.nombre or f"APU_{pk}").replace("/", "-").replace("\\", "-")
         filename = f"apu_{safe_name[:60]}.xlsx"
@@ -911,11 +946,124 @@ class APUProyectoDetailView(DetailView):
             .select_related("categoria").order_by("categoria__nombre", "nombre")
         )
         # PKs de ítems ya usados en este APU (para pre-marcar checkboxes)
+        # APULinea no tiene campo 'cantidad' — el valor se integra en rendimiento.
+        # Los modales muestran siempre 1 como punto de partida editable.
         ctx["lineas_item_ids"] = set(
             self.object.lineas
             .exclude(item_catalogo=None)
             .values_list("item_catalogo_id", flat=True)
         )
+        ctx["lineas_cantidades"] = {}  # vacío; el default en template es 1
+        # Panel modalidades AIU (Fase 11.3) — necesario para que el panel
+        # muestre valores en lugar de guiones en apu_detail.html.
+        try:
+            ctx["modalidades_aiu"] = self.object.calcular_modalidades_aiu()
+            # Valores enteros para JS: los Decimal con locale es-CO se renderizan
+            # con coma decimal (ej: "454454552,1990") → SyntaxError en <script>.
+            # Pasamos int para evitar el problema de localización completamente.
+            ctx["js_base_m1"] = int(ctx["modalidades_aiu"]["modalidad1"]["gran_total"] or 0)
+            ctx["js_base_m2"] = int(ctx["modalidades_aiu"]["modalidad2"]["gran_total"] or 0)
+        except Exception:
+            ctx["modalidades_aiu"] = None
+            ctx["js_base_m1"] = 0
+            ctx["js_base_m2"] = 0
+
+        # Autorizadores disponibles para el modal "Calcular Presupuesto"
+        from apps.configuracion.models import ConfiguracionSistema
+        from apps.common.choices import RolSistema
+        ctx["autorizadores"] = ConfiguracionSistema.objects.filter(
+            activo=True,
+            rol__in=[RolSistema.ADMINISTRADOR, RolSistema.GERENTE, RolSistema.PRESUPUESTOS],
+        ).order_by("nombre_completo")
+
+        # Otros APUs del mismo proyecto (para combinar en presupuesto final)
+        apus_mismo_proyecto = []
+        if self.object.proyecto_sistema_id:
+            try:
+                proyecto = self.object.proyecto_sistema.proyecto
+                apus_mismo_proyecto = list(
+                    APUProyecto.objects
+                    .filter(proyecto_sistema__proyecto=proyecto)
+                    .exclude(pk=self.object.pk)
+                    .exclude(archivado=True)
+                    .values("pk", "nombre", "total_valor_venta", "subtotal_materiales")
+                    .order_by("pk")
+                )
+            except Exception:
+                apus_mismo_proyecto = []
+        ctx["apus_mismo_proyecto"] = apus_mismo_proyecto
+
+        # Opciones de base para el modal de pólizas
+        ctx["poliza_base_choices"] = APUPoliza.BASE_CHOICES
+
+        # ── Revisión y permisos (Issue 2 + 4) ─────────────────────────────────
+        from apps.common.auth import puede_aprobar_apu as _puede_aprobar, get_usuario_actual as _get_usuario
+        _usuario_actual = _get_usuario(self.request)
+        ctx["ya_en_revision"] = bool(self.object.fecha_envio_revision)
+        ctx["puede_aprobar"] = _puede_aprobar(self.request, self.object)
+        # Es el "emisor": puede ver estado pero no aprobar (no es el revisor asignado)
+        _proyecto = self.object.get_proyecto()
+        _creado_por_id = getattr(_proyecto, "creado_por_id", None) if _proyecto else None
+        ctx["es_emisor_revision"] = bool(
+            _usuario_actual is not None
+            and _creado_por_id is not None
+            and _usuario_actual.pk == _creado_por_id
+            and not ctx["puede_aprobar"]
+        )
+
+        # ── Cotización vigente (Fase 12) ───────────────────────────────────────
+        try:
+            from apps.presupuestos.services import CotizacionSnapshotService
+            from apps.presupuestos.models.cotizacion import CotizacionAPU
+            ctx["cotizacion_vigente"] = CotizacionSnapshotService.obtener_snapshot_vigente(self.object)
+            # Histórico de versiones anteriores (estado=REEMPLAZADA)
+            ctx["cotizaciones_historico"] = list(
+                CotizacionAPU.objects
+                .filter(apu=self.object, estado=CotizacionAPU.Estado.REEMPLAZADA)
+                .order_by("-version")
+            )
+        except Exception:
+            ctx["cotizacion_vigente"] = None
+            ctx["cotizaciones_historico"] = []
+
+        # ── Modo revisión (solo lectura cuando viene desde vista de revisor) ──────
+        ctx["modo_revision"] = bool(self.request.GET.get("revisor"))
+
+        # ── Admin modal: días, SIA items (Issue 5) ────────────────────────────
+        ctx["apu_dias_duracion"] = self.object.dias_duracion or 0
+        # Ítems configurados en SubsistemaItemAPU para el subsistema de este APU
+        sia_item_ids: set = set()
+        sia_admin: dict = {}
+        if self.object.proyecto_sistema_id and self.object.proyecto_sistema.subsistema_id:
+            try:
+                from apps.ingenieria.models import SubsistemaItemAPU
+                sia_qs = SubsistemaItemAPU.objects.filter(
+                    subsistema=self.object.proyecto_sistema.subsistema,
+                    activo=True,
+                ).select_related("item_catalogo")
+                for sia in sia_qs:
+                    sia_item_ids.add(sia.item_catalogo_id)
+                    if sia.item_catalogo.categoria.tipo_apu == "ADMINISTRACION":
+                        sia_admin[str(sia.item_catalogo_id)] = {
+                            "porcentaje": 100,  # default; se sobreescribe desde APULineas
+                        }
+            except Exception:
+                pass
+
+        # Sobreescribir con porcentajes ya guardados en APULineas del APU.
+        # Las líneas de detalle de admin almacenan rendimiento = porcentaje (fracción).
+        from apps.common.choices import TipoAPU as _TipoAPU
+        for linea in self.object.lineas.filter(
+            tipo=_TipoAPU.ADMINISTRACION,
+        ).exclude(item_catalogo=None):
+            sia_admin[str(linea.item_catalogo_id)] = {
+                "porcentaje": round(float(linea.rendimiento) * 100, 2),
+            }
+
+        import json as _json
+        ctx["sia_item_ids"] = sia_item_ids
+        ctx["sia_admin_json"] = _json.dumps(sia_admin)
+
         return ctx
 
 
@@ -1003,6 +1151,76 @@ class APUProyectoUpdateView(UpdateView):
             pass
 
         return response
+
+
+class APUGuardarView(GestionPresupuestosMixin, View):
+    """
+    POST /presupuestos/apu/<pk>/guardar/
+
+    Guarda nombre, descripción del APU y además calcula y persiste la cantidad
+    de referencia (cantidad_base_apu / unidad_base_apu) desde los parámetros del
+    ProyectoSistema. Esto permite que la vista de presupuesto por proyecto pueda
+    mostrar: valor_unitario (total_valor_venta) × cantidad_base_apu = valor_total.
+    """
+    def post(self, request, pk):
+        from decimal import Decimal as _D
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        nombre = request.POST.get("nombre", "").strip()
+        descripcion = request.POST.get("descripcion", "").strip()
+        campos = ["updated_at"]
+        if nombre:
+            apu.nombre = nombre
+            campos.append("nombre")
+        apu.descripcion = descripcion
+        campos.append("descripcion")
+
+        # Calcular cantidad_base_apu desde los parámetros del ProyectoSistema.
+        # Esto consolida el «valor unitario del APU» con la cantidad total del proyecto.
+        _cantidad_base = None
+        _unidad_base = ""
+        if apu.proyecto_sistema_id:
+            try:
+                params = apu.proyecto_sistema.parametros_entrada or {}
+                _cb_raw = params.get("cantidad_base")
+                _ub_raw = params.get("unidad_base", "")
+                if _cb_raw not in (None, "", "0"):
+                    _cantidad_base = _D(str(_cb_raw))
+                    _unidad_base = str(_ub_raw or "")
+            except Exception:
+                pass
+            if _cantidad_base is None:
+                # Fallback: usar APUService._get_total_unidades()
+                try:
+                    from apps.presupuestos.services.apu_service import APUService
+                    svc = APUService.for_apu(apu)
+                    _total = svc._get_total_unidades()
+                    if _total and _total > 1:
+                        _cantidad_base = _D(str(_total))
+                except Exception:
+                    pass
+
+        if _cantidad_base is not None:
+            apu.cantidad_base_apu = _cantidad_base
+            apu.unidad_base_apu = _unidad_base
+            campos += ["cantidad_base_apu", "unidad_base_apu"]
+
+        apu.save(update_fields=campos)
+        msg_base = f" (base: {_cantidad_base} {_unidad_base})" if _cantidad_base else ""
+        messages.success(request, f"APU «{apu.nombre}» guardado correctamente{msg_base}.")
+
+        # Si el proyecto tiene ≥1 APU guardado, redirigir al presupuesto del proyecto.
+        proyecto = apu.get_proyecto()
+        if proyecto:
+            n_apus_guardados = APUProyecto.objects.filter(
+                proyecto_sistema__proyecto=proyecto,
+                cantidad_base_apu__isnull=False,
+                archivado=False,
+            ).count()
+            if n_apus_guardados >= 1:
+                return redirect(
+                    reverse("presupuestos:proyecto_presupuesto", args=[proyecto.pk])
+                )
+        return redirect(reverse("presupuestos:apu_detail", args=[pk]))
 
 
 class APUGenerarView(View):
@@ -2246,15 +2464,6 @@ class APUArmarDesdeDespieceView(GestionPresupuestosMixin, View):
                     subsistema_nombre_snapshot=subsistema_nombre,
                 )
 
-                # ── Fase 9R · Garantía como recargo comercial ──────────────
-                # La garantía afecta el total comercial (suma a total_valor_venta)
-                # pero NO modifica cantidades, rendimientos, costos técnicos ni
-                # valor_total de APULinea.
-                if "aplica_garantia" in request.POST:
-                    _aplicar_garantia_desde_post(
-                        apu, request.POST, ps=ps, durante_armado=True,
-                    )
-
         except Exception as exc:
             messages.error(request, f"Error al armar APU: {exc}")
             return redirect("ingenieria:despiece_maestro", pk=dm.pk)
@@ -2770,6 +2979,99 @@ class APUAdminView(GestionPresupuestosMixin, View):
         except Exception as exc:
             messages.error(request, f"Error al registrar administrativo: {exc}")
             logger.exception("[APUAdminView] Error APU %s", pk)
+
+        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PÓLIZAS APU
+# ══════════════════════════════════════════════════════════════════════════════
+
+class APUPolizasView(GestionPresupuestosMixin, View):
+    """
+    POST /presupuestos/apu/<pk>/polizas/
+
+    Recibe la tabla de pólizas en formato de filas indexadas (row-indexed):
+      nombre_0, porcentaje_0, base_calculo_0, activa_0
+      nombre_1, porcentaje_1, base_calculo_1, activa_1
+      ...
+      polizas_count — número total de filas enviadas
+
+    Reemplaza completamente el conjunto de pólizas del APU:
+      - Elimina las pólizas existentes
+      - Crea las nuevas con los valores enviados
+      - Llama apu.recalcular() para actualizar subtotal_polizas
+    """
+
+    def post(self, request, pk):
+        from django.db import transaction
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        blk = redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
+        if blk:
+            return blk
+
+        try:
+            count_str = request.POST.get("polizas_count", "0")
+            count = max(int(count_str or 0), 0)
+
+            polizas_data = []
+            bases_validas = {c[0] for c in APUPoliza.BASE_CHOICES}
+            for i in range(count):
+                nombre     = request.POST.get(f"nombre_{i}", "").strip()
+                pct_str    = request.POST.get(f"porcentaje_{i}", "0").strip()
+                # Issue 6: múltiples bases por póliza (checkboxes: bases_calculo_i[])
+                bases_raw  = request.POST.getlist(f"bases_calculo_{i}[]")
+                if not bases_raw:
+                    # Compatibilidad: intentar base única legada
+                    base_single = request.POST.get(f"base_calculo_{i}", "total_directo").strip()
+                    bases_raw = [base_single] if base_single else ["total_directo"]
+                activa_raw = request.POST.get(f"activa_{i}", "")
+
+                if not nombre:
+                    continue  # Fila vacía — omitir
+
+                try:
+                    porcentaje = Decimal(pct_str or "0")
+                except Exception:
+                    porcentaje = Decimal("0")
+                if porcentaje < 0:
+                    porcentaje = Decimal("0")
+
+                # Filtrar solo bases válidas
+                bases_list = [b for b in bases_raw if b in bases_validas]
+                if not bases_list:
+                    bases_list = ["total_directo"]
+                # Base legada (primera seleccionada, para compatibilidad)
+                base_legacy = bases_list[0]
+
+                # El checkbox activa_N solo aparece en POST cuando está tildado.
+                activa = bool(activa_raw)
+
+                polizas_data.append(dict(
+                    nombre=nombre,
+                    porcentaje=porcentaje,
+                    base_calculo=base_legacy,
+                    bases_calculo=bases_list,
+                    activa=activa,
+                    orden=i,
+                ))
+
+            with transaction.atomic():
+                apu.polizas.all().delete()
+                nuevas = [APUPoliza(apu=apu, **d) for d in polizas_data]
+                APUPoliza.objects.bulk_create(nuevas)
+                # recalcular() llama _recalcular_polizas() internamente
+                apu.recalcular()
+
+            messages.success(
+                request,
+                f"{len(polizas_data)} póliza(s) guardadas. "
+                f"Subtotal: ${apu.subtotal_polizas:,.2f}",
+            )
+
+        except Exception as exc:
+            messages.error(request, f"Error al guardar pólizas: {exc}")
+            logger.exception("[APUPolizasView] Error APU %s", pk)
 
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
@@ -3309,11 +3611,31 @@ class APUEnviarRevisionView(GestionPresupuestosMixin, View):
             if revisor_pk:
                 revisor = ConfiguracionSistema.objects.filter(pk=revisor_pk).first()
 
+            # Guardar descripción si viene del modal "Calcular Presupuesto"
+            descripcion_modal = request.POST.get("descripcion_modal", "").strip()
+            if descripcion_modal:
+                apu.descripcion = descripcion_modal
+
             update_fields = ["fecha_envio_revision", "updated_at"]
             apu.fecha_envio_revision = tz.now()
             if revisor:
                 apu.revisor = revisor
                 update_fields.append("revisor")
+            if descripcion_modal:
+                update_fields.append("descripcion")
+
+            # Guardar APUs incluidos en el presupuesto final
+            apus_incluidos_raw = request.POST.getlist("apus_incluidos")
+            apus_incluidos_ids = []
+            for v in apus_incluidos_raw:
+                try:
+                    apus_incluidos_ids.append(int(v))
+                except (ValueError, TypeError):
+                    pass
+            apu.apus_presupuesto_ids = apus_incluidos_ids
+            update_fields.append("apus_presupuesto_ids")
+
+            # Un solo save con todos los campos acumulados
             apu.save(update_fields=update_fields)
 
             if apu.proyecto_sistema:
@@ -3326,10 +3648,17 @@ class APUEnviarRevisionView(GestionPresupuestosMixin, View):
                     proyecto.solicitud.estado = EstadoSolicitud.EN_REVISION
                     proyecto.solicitud.save(update_fields=["estado"])
 
-            revisor_txt = f" Revisor: {revisor}." if revisor else ""
+            apus_txt = ""
+            if apus_incluidos_ids:
+                apus_txt = f" APUs incluidos en presupuesto: {', '.join(str(x) for x in apus_incluidos_ids)}."
+
+            revisor_txt = f" Autorizador: {revisor}." if revisor else ""
             registrar_log(
                 request, accion="ENVIAR_REVISION",
-                descripcion=f"APU {apu.pk} ({apu.nombre}) enviado a revisión.{revisor_txt}",
+                descripcion=(
+                    f"APU {apu.pk} ({apu.nombre}) enviado a cálculo de presupuesto."
+                    f"{revisor_txt}{apus_txt}"
+                ),
                 modelo_afectado="APUProyecto", objeto_id=apu.pk,
             )
             messages.success(
@@ -3346,19 +3675,22 @@ class APUEnviarRevisionView(GestionPresupuestosMixin, View):
 class APURevisarView(GestionPresupuestosMixin, View):
     """
     GET /presupuestos/apu/<pk>/revisar/
-    Vista del revisor asignado: muestra el APU y permite seleccionar la modalidad AIU oficial.
-    Solo accesible si el APU tiene fecha_envio_revision asignada.
+    Redirige a la nueva vista de revisión por proyecto (ProyectoRevisarView).
+    Se conserva el URL para compatibilidad con links existentes.
     """
-    template_name = "presupuestos/apu_revisar.html"
 
     def get(self, request, pk):
-        return self._render(request, pk)
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        proyecto = apu.get_proyecto()
+        if proyecto:
+            return redirect(reverse("presupuestos:proyecto_revisar", args=[proyecto.pk]))
+        return redirect(reverse("presupuestos:apu_detail", args=[pk]))
 
     def post(self, request, pk):
-        """Preview con porcentajes A/I/U ajustados sin persistir."""
-        return self._render(request, pk, preview=True)
+        return self.get(request, pk)
 
-    def _render(self, request, pk, preview: bool = False):
+    # ── Código legado preservado por si se necesita rollback ──────────────────
+    def _render_legado(self, request, pk, preview: bool = False):
         from decimal import Decimal, InvalidOperation
         from apps.configuracion.models import ConfiguracionSistema
         apu = get_object_or_404(APUProyecto, pk=pk)
@@ -3372,12 +3704,19 @@ class APURevisarView(GestionPresupuestosMixin, View):
             and _creado_por_id is not None
             and _usuario.pk == _creado_por_id
         )
-        if not _es_creador and not puede_gestionar_unidad(request, _apu_unidad(apu)):
+        # El revisor asignado siempre puede acceder aunque no sea creador ni su unidad.
+        _es_revisor_asignado = puede_aprobar_apu(request, apu)
+        if not _es_creador and not _es_revisor_asignado and not puede_gestionar_unidad(request, _apu_unidad(apu)):
             messages.error(request, "No tiene permiso para acceder a información de otra unidad.")
             return redirect("comercial:dashboard")
         if not apu.fecha_envio_revision:
             messages.warning(request, "Este APU aún no ha sido enviado a revisión.")
             return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
+        # Issue 2 — Determinar si el usuario puede ver el detalle de revisión.
+        # Solo el revisor asignado y el administrador ven el formulario de aprobación.
+        # El creador (emisor) y otros usuarios ven solo el resumen de estado.
+        _puede_ver_detalle = puede_aprobar_apu(request, apu)
 
         efectivos = apu.get_aiu_pct_efectivos()
         pct_form = {
@@ -3412,9 +3751,142 @@ class APURevisarView(GestionPresupuestosMixin, View):
         )
         es_administrador = es_admin(request)
 
+        modalidades_aiu_actual = apu.calcular_modalidades_aiu(pct_override=pct_override)
+
+        # Fase 13 — Otros APUs incluidos en el presupuesto consolidado
+        apus_incluidos_lista = []
+        total_m1_combinado = None
+        total_m2_combinado = None
+        if apu.apus_presupuesto_ids:
+            apus_incluidos_qs = APUProyecto.objects.filter(
+                pk__in=apu.apus_presupuesto_ids
+            ).only("pk", "nombre", "total_valor_venta", "modalidad_aiu_seleccionada",
+                   "subtotal_materiales")
+            for otro_apu in apus_incluidos_qs:
+                try:
+                    otro_m = otro_apu.calcular_modalidades_aiu()
+                    apus_incluidos_lista.append({
+                        "apu": otro_apu,
+                        "modalidades": otro_m,
+                    })
+                except Exception:
+                    apus_incluidos_lista.append({
+                        "apu": otro_apu,
+                        "modalidades": None,
+                    })
+
+        # ── Cálculo consolidado: sumar subtotales de TODOS los APUs incluidos ──────
+        # Si hay APUs incluidos, calcular UNA sola modalidad unificada en lugar
+        # de mostrar cuadros separados. Los porcentajes I y U son los del APU principal.
+        modalidades_consolidadas = None
+        if apus_incluidos_lista:
+            from decimal import Decimal as _D
+            from collections import OrderedDict as _OD
+            try:
+                # Subtotales del APU principal
+                _ms = modalidades_aiu_actual["subtotales"]
+                c_mat    = _D(str(_ms.get("materiales", 0) or 0))
+                c_herr   = _D(str(_ms.get("herramientas", 0) or 0))
+                c_transp = _D(str(_ms.get("transporte", 0) or 0))
+                c_mo     = _D(str(_ms.get("mano_de_obra", 0) or 0))
+                c_admin  = _D(str(_ms.get("administracion", 0) or 0))
+                c_pol    = _D(str(_ms.get("polizas", 0) or 0))
+
+                # Sumar subtotales de cada APU incluido
+                for entry in apus_incluidos_lista:
+                    em = entry.get("modalidades")
+                    if not em:
+                        continue
+                    ems = em.get("subtotales", {})
+                    c_mat    += _D(str(ems.get("materiales", 0) or 0))
+                    c_herr   += _D(str(ems.get("herramientas", 0) or 0))
+                    c_transp += _D(str(ems.get("transporte", 0) or 0))
+                    c_mo     += _D(str(ems.get("mano_de_obra", 0) or 0))
+                    c_admin  += _D(str(ems.get("administracion", 0) or 0))
+                    c_pol    += _D(str(ems.get("polizas", 0) or 0))
+
+                # Porcentajes I y U del APU principal (pueden ser overrideados por el revisor)
+                _pct_I = _D(str(pct_form.get("imprevistos", efectivos["imprevistos"])))
+                _pct_U = _D(str(pct_form.get("utilidad", efectivos["utilidad"])))
+                _Q = _D("0.01")
+
+                c_admin_total = c_admin + c_pol
+
+                # Modalidad 1: base = mat + herr + transp + mo
+                _base_m1 = c_mat + c_herr + c_transp + c_mo
+                _pct_admin_m1 = (c_admin_total / _base_m1 * 100).quantize(_Q) if _base_m1 else _D("0")
+                _I_m1  = (_base_m1 * _pct_I / 100).quantize(_Q)
+                _U_m1  = (_base_m1 * _pct_U / 100).quantize(_Q)
+                _sub1  = _base_m1 + c_admin_total + _I_m1 + _U_m1
+                _iva1  = (_sub1 * _D(str(apu.iva_pct or 0)) / 100).quantize(_Q) if apu.aplica_iva else _D("0")
+                _tot1  = _sub1 + _iva1
+
+                # Modalidad 2: base = herr + transp + mo (mat a precio venta)
+                _base_m2 = c_herr + c_transp + c_mo
+                _pct_admin_m2 = (c_admin_total / _base_m2 * 100).quantize(_Q) if _base_m2 else _D("0")
+                _I_m2  = (_base_m2 * _pct_I / 100).quantize(_Q)
+                _U_m2  = (_base_m2 * _pct_U / 100).quantize(_Q)
+                _sub2  = c_mat + _base_m2 + c_admin_total + _I_m2 + _U_m2
+                _iva2  = (_sub2 * _D(str(apu.iva_pct or 0)) / 100).quantize(_Q) if apu.aplica_iva else _D("0")
+                _tot2  = _sub2 + _iva2
+
+                _subs_comb = _OD([
+                    ("materiales",    c_mat),
+                    ("herramientas",  c_herr),
+                    ("mano_de_obra",  c_mo),
+                    ("mano_obra",     c_mo),
+                    ("transporte",    c_transp),
+                    ("administracion", c_admin),
+                    ("polizas",       c_pol),
+                    ("total",         c_mat + c_herr + c_transp + c_mo + c_admin_total),
+                ])
+                modalidades_consolidadas = {
+                    "porcentajes": {
+                        "admin": _pct_admin_m1,
+                        "imprevistos": _pct_I,
+                        "utilidad": _pct_U,
+                        "es_final": efectivos["es_final"],
+                    },
+                    "subtotales": _subs_comb,
+                    "modalidad1": {
+                        "label": "AIU sobre todos los costos directos",
+                        "base": _base_m1,
+                        "admin": c_admin,
+                        "polizas": c_pol,
+                        "admin_total": c_admin_total,
+                        "admin_pct": _pct_admin_m1,
+                        "imprevistos": _I_m1,
+                        "utilidad": _U_m1,
+                        "subtotal_con_aiu": _sub1,
+                        "iva_valor": _iva1,
+                        "total_con_iva": _tot1,
+                        "gran_total": _tot1,
+                        "valor_total_mat": c_mat,
+                    },
+                    "modalidad2": {
+                        "label": "AIU sobre costos directos sin materiales",
+                        "base": _base_m2,
+                        "admin": c_admin,
+                        "polizas": c_pol,
+                        "admin_total": c_admin_total,
+                        "admin_pct": _pct_admin_m2,
+                        "imprevistos": _I_m2,
+                        "utilidad": _U_m2,
+                        "subtotal_con_aiu": _sub2,
+                        "iva_valor": _iva2,
+                        "total_con_iva": _tot2,
+                        "gran_total": _tot2,
+                        "valor_total_mat": c_mat,
+                    },
+                    "n_apus": 1 + len(apus_incluidos_lista),
+                }
+            except Exception:
+                pass
+
         ctx = {
             "apu": apu,
-            "modalidades_aiu": apu.calcular_modalidades_aiu(pct_override=pct_override),
+            "modalidades_aiu": modalidades_aiu_actual,
+            "modalidades_consolidadas": modalidades_consolidadas,
             "pct_form": pct_form,
             "pct_efectivos": efectivos,
             "es_preview": preview and pct_override is not None,
@@ -3424,6 +3896,11 @@ class APURevisarView(GestionPresupuestosMixin, View):
             "es_aprobador_asignado": es_aprobador_asignado,
             "es_administrador": es_administrador,
             "usuario_actual": usuario_actual,
+            # Issue 2 — Solo_vista: el emisor/otros ven estado sin formulario de aprobación
+            "solo_vista": not _puede_ver_detalle,
+            "es_emisor": _es_creador and not _puede_ver_detalle,
+            # Fase 13 — presupuesto consolidado
+            "apus_incluidos_lista": apus_incluidos_lista,
         }
         return render(request, self.template_name, ctx)
 
@@ -3775,142 +4252,6 @@ class ProductosPorCategoriaConsumoAPIView(View):
         return JsonResponse({"productos": list(productos)})
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Fase 9R — Helper compartido + edición de garantía del APU desde el detalle
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _aplicar_garantia_desde_post(apu, POST, *, ps=None, durante_armado=False):
-    """
-    Aplica la sección Garantía del POST sobre el APUProyecto y guarda snapshot.
-
-    - durante_armado=True: las líneas APULinea acaban de crearse vía
-      APUService.generar(); el material objetivo viene como
-      `garantia_material_despiece_id` (DespieceLinea) y se resuelve a APULinea
-      por despiece_linea_id.
-    - durante_armado=False: edición desde apu_detail; el material objetivo
-      viene como `garantia_material_linea_id` (APULinea del APU).
-
-    Hace recalcular() al final para refrescar base/recargo y total_valor_venta.
-    """
-    from apps.comercial.models import TipoGarantia
-    from decimal import Decimal
-
-    aplica_g = POST.get("aplica_garantia") == "1"
-    apu.aplica_garantia = aplica_g
-
-    if not aplica_g:
-        apu.tipo_garantia = None
-        apu.garantia_porcentaje_aplicado = None
-        apu.garantia_modo_aplicacion = ""
-        apu.garantia_material_linea = None
-        apu.garantia_material_nombre_snapshot = ""
-        apu.garantia_base_valor = Decimal("0")
-        apu.garantia_valor_recargo = Decimal("0")
-        apu.save(update_fields=[
-            "aplica_garantia", "tipo_garantia",
-            "garantia_porcentaje_aplicado", "garantia_modo_aplicacion",
-            "garantia_material_linea", "garantia_material_nombre_snapshot",
-            "garantia_base_valor", "garantia_valor_recargo",
-            "updated_at",
-        ])
-        apu.recalcular()
-        return
-
-    # aplica_g == True → tipo obligatorio y activo
-    try:
-        tg_id = int(POST.get("tipo_garantia_id") or 0)
-    except (TypeError, ValueError):
-        tg_id = 0
-    tg = (
-        TipoGarantia.objects.filter(pk=tg_id, activo=True).first()
-        if tg_id else None
-    )
-    if tg is None:
-        raise ValueError(
-            "Debe seleccionar un tipo de garantía activo cuando 'Sí aplica' está marcado."
-        )
-
-    pct = tg.porcentaje_recargo or Decimal("0")
-    if pct < 0:
-        raise ValueError("El porcentaje de la garantía no puede ser negativo.")
-
-    modo = POST.get("garantia_modo_aplicacion") or APUProyecto.GARANTIA_MODO_TOTAL
-    if modo not in (APUProyecto.GARANTIA_MODO_TOTAL, APUProyecto.GARANTIA_MODO_ESPECIFICO):
-        raise ValueError("Modo de aplicación de garantía inválido.")
-
-    material_linea = None
-    material_nombre = ""
-
-    if modo == APUProyecto.GARANTIA_MODO_ESPECIFICO:
-        if durante_armado:
-            # Selector en modal "Armar mi APU" emite el ID de DespieceLinea
-            try:
-                dl_id = int(POST.get("garantia_material_despiece_id") or 0)
-            except (TypeError, ValueError):
-                dl_id = 0
-            if not dl_id:
-                raise ValueError(
-                    "Debe seleccionar el material sobre el que aplica la garantía."
-                )
-            material_linea = apu.lineas.filter(
-                tipo=TipoAPU.MATERIALES, despiece_linea_id=dl_id,
-            ).first()
-            if material_linea is None:
-                # Fallback: snapshot textual desde el POST (puede no haberse generado APULinea)
-                material_nombre = POST.get("garantia_material_nombre_snapshot") or ""
-                if not material_nombre:
-                    raise ValueError(
-                        "El material seleccionado no se encuentra en las líneas del APU."
-                    )
-        else:
-            # Edición desde apu_detail — selector emite APULinea.pk del propio APU
-            try:
-                al_id = int(POST.get("garantia_material_linea_id") or 0)
-            except (TypeError, ValueError):
-                al_id = 0
-            if not al_id:
-                raise ValueError(
-                    "Debe seleccionar el material sobre el que aplica la garantía."
-                )
-            material_linea = apu.lineas.filter(
-                pk=al_id, tipo=TipoAPU.MATERIALES,
-            ).first()
-            if material_linea is None:
-                raise ValueError(
-                    "El material seleccionado no pertenece a este APU o no es de tipo Materiales."
-                )
-        if material_linea is not None:
-            material_nombre = material_linea.descripcion or ""
-
-    apu.tipo_garantia = tg
-    apu.garantia_porcentaje_aplicado = pct
-    apu.garantia_modo_aplicacion = modo
-    apu.garantia_material_linea = material_linea
-    apu.garantia_material_nombre_snapshot = material_nombre
-    apu.save(update_fields=[
-        "aplica_garantia", "tipo_garantia",
-        "garantia_porcentaje_aplicado", "garantia_modo_aplicacion",
-        "garantia_material_linea", "garantia_material_nombre_snapshot",
-        "updated_at",
-    ])
-    apu.recalcular()
-
-
-class APUEditarGarantiaView(GestionPresupuestosMixin, View):
-    """POST: actualiza garantía del APU. Recalcula recargo y total comercial."""
-
-    def post(self, request, pk):
-        apu = get_object_or_404(APUProyecto, pk=pk)
-        blk = redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
-        if blk:
-            return blk
-        try:
-            _aplicar_garantia_desde_post(apu, request.POST, durante_armado=False)
-        except ValueError as exc:
-            messages.error(request, str(exc))
-            return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
-        messages.success(request, "Garantía del APU actualizada correctamente.")
-        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
 
 class APUCotizacionFinalView(GestionPresupuestosMixin, View):
@@ -3981,8 +4322,7 @@ class APUConsolidarSeleccionarView(GestionPresupuestosMixin, View):
         return (
             APUProyecto.objects
             .filter(pk__in=ids)
-            .select_related("proyecto_sistema__subsistema__sistema",
-                            "tipo_garantia")
+            .select_related("proyecto_sistema__subsistema__sistema")
             .order_by("tipo_apu", "pk")
         )
 
@@ -4053,3 +4393,556 @@ class APUConsolidarConfirmarView(GestionPresupuestosMixin, View):
             objeto_id=proyecto.pk,
         )
         return redirect("presupuestos:apu_detail", pk=apu_consolidado.pk)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PRESUPUESTO PROYECTO — Vista consolidada de todos los APUs guardados
+# ══════════════════════════════════════════════════════════════════════════════
+
+class ProyectoPresupuestoView(GestionPresupuestosMixin, View):
+    """
+    GET  /presupuestos/proyecto/<pk>/presupuesto/
+    POST /presupuestos/proyecto/<pk>/presupuesto/  — Guardar configuración AIU + confirmar
+
+    Muestra la tabla consolidada de todos los APUs "guardados" (con cantidad_base_apu)
+    del proyecto. Permite:
+      1. Editar descripción de cada APU (col. Descripción en la tabla del PDF).
+      2. Definir porcentajes de Imprevistos (I%) y Utilidad (U%).
+      3. Seleccionar si aplica IVA final y su %.
+      4. Elegir a quién se envía para revisión/aprobación.
+      5. Confirmar el presupuesto → marca APU principal como "en revisión".
+
+    Fórmula AIU:
+        base_total      = Σ (apu.total_valor_venta × apu.cantidad_base_apu)
+        admin_total     = Σ (apu.subtotal_administracion × apu.cantidad_base_apu)
+        imprevistos     = base_total × I% / 100
+        utilidad        = base_total × U% / 100
+        subtotal_aiu    = base_total + admin_total + imprevistos + utilidad
+        iva_valor       = subtotal_aiu × IVA% / 100  (si aplica)
+        total_final     = subtotal_aiu + iva_valor
+    """
+
+    template_name = "presupuestos/presupuesto_proyecto.html"
+
+    def _get_apus_guardados(self, proyecto):
+        """APUs del proyecto con cantidad_base_apu definida, ordenados por pk."""
+        return (
+            APUProyecto.objects
+            .filter(
+                proyecto_sistema__proyecto=proyecto,
+                cantidad_base_apu__isnull=False,
+                archivado=False,
+            )
+            .select_related(
+                "proyecto_sistema__subsistema__sistema",
+                "proyecto_sistema__proyecto",
+            )
+            .order_by("pk")
+        )
+
+    def _build_filas(self, apus_qs):
+        """Construye la lista de filas para la tabla del presupuesto.
+
+        Modalidad 1 (default): P.U. = mat + MO + herr + transp
+        Modalidad 2:           P.U. = MO + herr + transp
+                               (materiales se muestran aparte en el resumen AIU)
+        En ambas modalidades la administración queda fuera del P.U.
+        """
+        from decimal import Decimal as _D
+        filas = []
+        for apu in apus_qs:
+            cant = _D(str(apu.cantidad_base_apu or 0))
+            total_venta   = _D(str(apu.total_valor_venta or 0))
+            admin_costo   = _D(str(apu.subtotal_administracion or 0))
+            mat_valor_u   = _D(str(apu.valor_materiales or 0))  # ya es valor_total (con margen+iva)
+            fv            = _D("1") + _D(str(apu.factor_venta_pct or 0)) / _D("100")
+            admin_valor_u = admin_costo * fv          # admin expresado en valor venta
+            # P.U. base: sin admin
+            vu_m1 = total_venta - admin_valor_u       # Modalidad 1: mat+MO+herr+transp
+            vu_m2 = vu_m1 - mat_valor_u               # Modalidad 2: MO+herr+transp
+            modalidad = apu.modalidad_aiu_seleccionada or "1"
+            vu = vu_m2 if modalidad == "2" else vu_m1
+            vt = cant * vu
+            ps = apu.proyecto_sistema
+            nombre_subsistema = ""
+            if ps and ps.subsistema_id:
+                nombre_subsistema = ps.subsistema.nombre
+            elif ps and ps.sistema_id:
+                nombre_subsistema = ps.sistema.nombre
+            if not nombre_subsistema:
+                nombre_subsistema = apu.nombre
+
+            filas.append({
+                "apu": apu,
+                "nombre": nombre_subsistema,
+                "descripcion": apu.descripcion or "",
+                "cantidad": cant,
+                "unidad": apu.unidad_base_apu or "",
+                "valor_unitario": vu,
+                "valor_total": vt,
+                "admin_unitario": admin_valor_u,
+                "admin_total": cant * admin_valor_u,
+                "mat_unitario": mat_valor_u,
+                "mat_total": cant * mat_valor_u,
+                "modalidad": modalidad,
+            })
+        return filas
+
+    def _calcular_aiu(self, filas, pct_imprevistos, pct_utilidad, aplica_iva, iva_pct):
+        """Calcula el AIU consolidado a partir de las filas del presupuesto.
+
+        Modalidad 1: base = mat+MO+herr+transp; mat incluida en valor_total de cada fila.
+        Modalidad 2: base = MO+herr+transp; materiales se suman por separado (mat_total).
+        Filas de distinta modalidad se mezclan correctamente porque cada fila
+        ya trae su P.U. ajustado según su propia modalidad.
+        """
+        from decimal import Decimal as _D, ROUND_HALF_UP
+
+        base_total  = sum(f["valor_total"] for f in filas) if filas else _D("0")
+        admin_total = sum(f["admin_total"] for f in filas) if filas else _D("0")
+        # Materiales separados: solo de filas con Modalidad 2
+        mat_total   = sum(f["mat_total"] for f in filas if f.get("modalidad") == "2") if filas else _D("0")
+        tiene_m2    = any(f.get("modalidad") == "2" for f in filas)
+
+        _Q = _D("0.01")
+        pct_i = _D(str(pct_imprevistos))
+        pct_u = _D(str(pct_utilidad))
+
+        # I y U se aplican sobre la base de costos directos (sin mat en M2)
+        imprevistos = (base_total * pct_i / 100).quantize(_Q, rounding=ROUND_HALF_UP)
+        utilidad    = (base_total * pct_u / 100).quantize(_Q, rounding=ROUND_HALF_UP)
+        # En M2 los materiales se suman al subtotal, no son base de I/U
+        subtotal_aiu = mat_total + base_total + admin_total + imprevistos + utilidad
+
+        iva_valor = _D("0")
+        if aplica_iva:
+            iva_valor = (subtotal_aiu * _D(str(iva_pct)) / 100).quantize(_Q, rounding=ROUND_HALF_UP)
+
+        total_final = subtotal_aiu + iva_valor
+
+        pct_admin_derivado = (
+            (admin_total / base_total * 100).quantize(_Q)
+            if base_total else _D("0")
+        )
+
+        return {
+            "base_total": base_total,
+            "mat_total": mat_total,
+            "tiene_m2": tiene_m2,
+            "admin_total": admin_total,
+            "pct_admin_derivado": pct_admin_derivado,
+            "pct_imprevistos": pct_i,
+            "pct_utilidad": pct_u,
+            "imprevistos": imprevistos,
+            "utilidad": utilidad,
+            "subtotal_aiu": subtotal_aiu,
+            "aplica_iva": aplica_iva,
+            "iva_pct": _D(str(iva_pct)),
+            "iva_valor": iva_valor,
+            "total_final": total_final,
+        }
+
+    def get(self, request, pk):
+        from apps.configuracion.models import ConfiguracionSistema
+        from apps.common.choices import RolSistema
+
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        apus = self._get_apus_guardados(proyecto)
+        filas = self._build_filas(apus)
+
+        # Porcentajes: prioridad query-string (redirect POST) > APU guardado > defecto
+        def _qp(name, default):
+            raw = request.GET.get(name, "")
+            try:
+                return max(float(raw.replace(",", ".")), 0)
+            except (ValueError, TypeError):
+                return default
+
+        pct_i = 3
+        pct_u = 5
+        aplica_iva = True
+        iva_pct = 19
+        if apus:
+            primer = apus.first()
+            pct_i   = float(primer.aiu_proyecto_imprevistos_pct or 3)
+            pct_u   = float(primer.aiu_proyecto_utilidad_pct or 5)
+            aplica_iva = primer.aplica_iva
+            iva_pct = float(primer.iva_pct or 19)
+
+        # Query-string override (después del POST de preview)
+        pct_i = _qp("pct_i", pct_i)
+        pct_u = _qp("pct_u", pct_u)
+        _aplica_iva_qs = request.GET.get("aplica_iva")
+        if _aplica_iva_qs is not None:
+            aplica_iva = _aplica_iva_qs == "1"
+        iva_pct = _qp("iva_pct", iva_pct)
+
+        aiu = self._calcular_aiu(filas, pct_i, pct_u, aplica_iva, iva_pct)
+
+        autorizadores = ConfiguracionSistema.objects.filter(
+            activo=True,
+            rol__in=[RolSistema.ADMINISTRADOR, RolSistema.GERENTE, RolSistema.PRESUPUESTOS],
+        ).order_by("nombre_completo")
+
+        return render(request, self.template_name, {
+            "proyecto": proyecto,
+            "filas": filas,
+            "aiu": aiu,
+            "pct_imprevistos": pct_i,
+            "pct_utilidad": pct_u,
+            "aplica_iva": aplica_iva,
+            "iva_pct": iva_pct,
+            "autorizadores": autorizadores,
+            "n_apus": len(filas),
+        })
+
+    def post(self, request, pk):
+        """
+        Guarda las descripciones de los APUs y redirige de vuelta (preview).
+        Si se confirma, guarda el APU principal como "enviado a revisión".
+        """
+        from decimal import Decimal as _D, InvalidOperation
+        from apps.configuracion.models import ConfiguracionSistema
+        from apps.common.choices import RolSistema
+        from django.utils import timezone
+
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        apus = self._get_apus_guardados(proyecto)
+
+        # 1. Guardar descripciones por APU
+        for apu in apus:
+            desc_key = f"descripcion_{apu.pk}"
+            nueva_desc = request.POST.get(desc_key, "").strip()
+            if nueva_desc != apu.descripcion:
+                apu.descripcion = nueva_desc
+                apu.save(update_fields=["descripcion", "updated_at"])
+
+        # 2. Leer porcentajes AIU
+        def _pct(name, default):
+            raw = request.POST.get(name, "").strip()
+            try:
+                return max(float(raw.replace(",", ".")), 0)
+            except (ValueError, TypeError):
+                return default
+
+        pct_i = _pct("pct_imprevistos", 3)
+        pct_u = _pct("pct_utilidad", 5)
+        aplica_iva = request.POST.get("aplica_iva") == "1"
+        iva_pct = _pct("iva_pct", 19)
+
+        # 3. Acción: "solo preview" vs "confirmar"
+        accion = request.POST.get("accion", "preview")
+
+        if accion == "confirmar":
+            from apps.common.choices import EstadoProyecto
+            # Persistir porcentajes en todos los APUs del proyecto
+            revisor_id_str = request.POST.get("revisor_id", "")
+            revisor_obj = None
+            if revisor_id_str.isdigit():
+                try:
+                    revisor_obj = ConfiguracionSistema.objects.get(pk=int(revisor_id_str))
+                except ConfiguracionSistema.DoesNotExist:
+                    pass
+
+            n_confirmados = 0
+            for apu in apus:
+                apu.aiu_proyecto_imprevistos_pct = _D(str(pct_i))
+                apu.aiu_proyecto_utilidad_pct    = _D(str(pct_u))
+                apu.aplica_iva = aplica_iva
+                apu.iva_pct    = _D(str(iva_pct))
+                if revisor_obj:
+                    apu.revisor = revisor_obj
+                if not apu.fecha_envio_revision:
+                    apu.fecha_envio_revision = timezone.now()
+                apu.save(update_fields=[
+                    "aiu_proyecto_imprevistos_pct", "aiu_proyecto_utilidad_pct",
+                    "aplica_iva", "iva_pct", "revisor", "fecha_envio_revision",
+                    "updated_at",
+                ])
+                n_confirmados += 1
+
+            # Avanzar estado del proyecto a "APU enviado a revisión"
+            proyecto.estado = EstadoProyecto.APU_GENERADO
+            proyecto.save(update_fields=["estado", "updated_at"])
+
+            messages.success(
+                request,
+                f"Presupuesto de {n_confirmados} APU(s) confirmado y enviado a revisión."
+            )
+        else:
+            messages.success(request, "Porcentajes actualizados. Revisa el resumen abajo.")
+
+        # Redirigir de vuelta a la vista con los nuevos valores
+        from urllib.parse import urlencode
+        params = urlencode({
+            "pct_i": pct_i,
+            "pct_u": pct_u,
+            "aplica_iva": "1" if aplica_iva else "0",
+            "iva_pct": iva_pct,
+        })
+        # Redirigir a revisión si el proyecto ya fue enviado a revisión
+        if accion == "confirmar":
+            return redirect(reverse("presupuestos:proyecto_revisar", args=[pk]))
+
+        return redirect(
+            reverse("presupuestos:proyecto_presupuesto", args=[pk]) + f"?{params}"
+        )
+
+
+class ProyectoRevisarView(GestionPresupuestosMixin, View):
+    """
+    GET  /presupuestos/proyectos/<pk>/revisar/
+    POST /presupuestos/proyectos/<pk>/revisar/  — Aprobar / Devolver / Modificar
+
+    Vista del aprobador: muestra la tabla consolidada de APUs del proyecto (igual
+    que ProyectoPresupuestoView pero en modo solo-lectura) con una columna adicional
+    "Acciones" que enlaza al APU y al despiece de cada ítem.
+
+    Botones:
+      aprobar  → Proyecto.estado = APROBADO + modalidad_aiu_seleccionada = "M1" en cada APU
+      devolver → Proyecto.estado = APU + limpia fecha_envio_revision + guarda motivo
+      modificar → redirige a ProyectoPresupuestoView (edición)
+    """
+
+    template_name = "presupuestos/proyecto_revisar.html"
+
+    # Reutiliza los helpers de ProyectoPresupuestoView ─────────────────────────
+
+    def _get_apus_guardados(self, proyecto):
+        return (
+            APUProyecto.objects
+            .filter(
+                proyecto_sistema__proyecto=proyecto,
+                cantidad_base_apu__isnull=False,
+                archivado=False,
+            )
+            .select_related(
+                "proyecto_sistema__subsistema__sistema",
+                "proyecto_sistema__proyecto",
+            )
+            .order_by("pk")
+        )
+
+    def _build_filas(self, apus_qs):
+        """
+        Modalidad 1 (default): P.U. = mat + MO + herr + transp
+        Modalidad 2:           P.U. = MO + herr + transp
+                               (materiales se muestran aparte en el resumen AIU)
+        En ambas modalidades la administración queda fuera del P.U.
+        """
+        from decimal import Decimal as _D
+        filas = []
+        for apu in apus_qs:
+            cant = _D(str(apu.cantidad_base_apu or 0))
+            total_venta   = _D(str(apu.total_valor_venta or 0))
+            admin_costo   = _D(str(apu.subtotal_administracion or 0))
+            mat_valor_u   = _D(str(apu.valor_materiales or 0))  # ya es valor_total (con margen+iva)
+            fv            = _D("1") + _D(str(apu.factor_venta_pct or 0)) / _D("100")
+            admin_valor_u = admin_costo * fv          # admin expresado en valor venta
+            vu_m1 = total_venta - admin_valor_u       # Modalidad 1: mat+MO+herr+transp
+            vu_m2 = vu_m1 - mat_valor_u               # Modalidad 2: MO+herr+transp
+            modalidad = apu.modalidad_aiu_seleccionada or "1"
+            vu = vu_m2 if modalidad == "2" else vu_m1
+            vt = cant * vu
+            ps = apu.proyecto_sistema
+            nombre_subsistema = ""
+            if ps and ps.subsistema_id:
+                nombre_subsistema = ps.subsistema.nombre
+            elif ps and ps.sistema_id:
+                nombre_subsistema = ps.sistema.nombre
+            if not nombre_subsistema:
+                nombre_subsistema = apu.nombre
+
+            # Obtener PK del despiece vinculado (si existe)
+            despiece_pk = None
+            try:
+                if ps and ps.despiece_linea and ps.despiece_linea.despiece:
+                    despiece_pk = ps.despiece_linea.despiece.pk
+                elif ps:
+                    from apps.presupuestos.models import DespieceLinea as _DL
+                    dl = _DL.objects.filter(proyecto_sistema=ps).first()
+                    if dl and dl.despiece_id:
+                        despiece_pk = dl.despiece_id
+            except Exception:
+                despiece_pk = None
+
+            filas.append({
+                "apu": apu,
+                "nombre": nombre_subsistema,
+                "descripcion": apu.descripcion or "",
+                "cantidad": cant,
+                "unidad": apu.unidad_base_apu or "",
+                "valor_unitario": vu,
+                "valor_total": vt,
+                "admin_unitario": admin_valor_u,
+                "admin_total": cant * admin_valor_u,
+                "mat_unitario": mat_valor_u,
+                "mat_total": cant * mat_valor_u,
+                "modalidad": modalidad,
+                "despiece_pk": despiece_pk,
+            })
+        return filas
+
+    def _calcular_aiu(self, filas, pct_imprevistos, pct_utilidad, aplica_iva, iva_pct):
+        """Modalidad 1: base = mat+MO+herr+transp. Modalidad 2: base = MO+herr+transp; mat aparte."""
+        from decimal import Decimal as _D, ROUND_HALF_UP
+        base_total  = sum(f["valor_total"] for f in filas) if filas else _D("0")
+        admin_total = sum(f["admin_total"] for f in filas) if filas else _D("0")
+        mat_total   = sum(f["mat_total"] for f in filas if f.get("modalidad") == "2") if filas else _D("0")
+        tiene_m2    = any(f.get("modalidad") == "2" for f in filas)
+        _Q = _D("0.01")
+        pct_i = _D(str(pct_imprevistos))
+        pct_u = _D(str(pct_utilidad))
+        imprevistos = (base_total * pct_i / 100).quantize(_Q, rounding=ROUND_HALF_UP)
+        utilidad    = (base_total * pct_u / 100).quantize(_Q, rounding=ROUND_HALF_UP)
+        subtotal_aiu = mat_total + base_total + admin_total + imprevistos + utilidad
+        iva_valor = _D("0")
+        if aplica_iva:
+            iva_valor = (subtotal_aiu * _D(str(iva_pct)) / 100).quantize(_Q, rounding=ROUND_HALF_UP)
+        total_final = subtotal_aiu + iva_valor
+        pct_admin_derivado = (
+            (admin_total / base_total * 100).quantize(_Q) if base_total else _D("0")
+        )
+        return {
+            "base_total": base_total,
+            "mat_total": mat_total,
+            "tiene_m2": tiene_m2,
+            "admin_total": admin_total,
+            "pct_admin_derivado": pct_admin_derivado,
+            "pct_imprevistos": pct_i,
+            "pct_utilidad": pct_u,
+            "imprevistos": imprevistos,
+            "utilidad": utilidad,
+            "subtotal_aiu": subtotal_aiu,
+            "aplica_iva": aplica_iva,
+            "iva_pct": _D(str(iva_pct)),
+            "iva_valor": iva_valor,
+            "total_final": total_final,
+        }
+
+    # ── GET ───────────────────────────────────────────────────────────────────
+
+    def get(self, request, pk):
+        from apps.common.choices import EstadoProyecto
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        apus = self._get_apus_guardados(proyecto)
+        filas = self._build_filas(apus)
+
+        # Porcentajes desde los APUs guardados (solo lectura)
+        pct_i, pct_u, aplica_iva, iva_pct = 3, 5, True, 19
+        if apus.exists():
+            primer = apus.first()
+            pct_i     = float(primer.aiu_proyecto_imprevistos_pct or 3)
+            pct_u     = float(primer.aiu_proyecto_utilidad_pct or 5)
+            aplica_iva = primer.aplica_iva
+            iva_pct   = float(primer.iva_pct or 19)
+
+        aiu = self._calcular_aiu(filas, pct_i, pct_u, aplica_iva, iva_pct)
+        aprobado = (proyecto.estado == EstadoProyecto.APROBADO)
+
+        return render(request, self.template_name, {
+            "proyecto": proyecto,
+            "filas": filas,
+            "aiu": aiu,
+            "pct_imprevistos": pct_i,
+            "pct_utilidad": pct_u,
+            "aplica_iva": aplica_iva,
+            "iva_pct": iva_pct,
+            "n_apus": len(filas),
+            "aprobado": aprobado,
+            "motivo_devolucion": proyecto.motivo_devolucion or "",
+        })
+
+    # ── POST ──────────────────────────────────────────────────────────────────
+
+    def post(self, request, pk):
+        from apps.common.choices import EstadoProyecto
+        from django.utils import timezone
+
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        apus = self._get_apus_guardados(proyecto)
+        accion = request.POST.get("accion", "")
+
+        if accion == "aprobar":
+            for apu in apus:
+                # Si el APU ya tiene modalidad seleccionada, respetarla; si no, usar "1" por defecto
+                if not apu.modalidad_aiu_seleccionada:
+                    apu.modalidad_aiu_seleccionada = "1"
+                    apu.save(update_fields=["modalidad_aiu_seleccionada", "updated_at"])
+            proyecto.estado = EstadoProyecto.APROBADO
+            proyecto.motivo_devolucion = ""
+            proyecto.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
+            messages.success(request, "Presupuesto aprobado. Ya puede descargar PDF y Excel.")
+
+        elif accion == "devolver":
+            motivo = request.POST.get("motivo_devolucion", "").strip()
+            for apu in apus:
+                apu.fecha_envio_revision = None
+                apu.modalidad_aiu_seleccionada = None
+                apu.save(update_fields=["fecha_envio_revision", "modalidad_aiu_seleccionada", "updated_at"])
+            proyecto.estado = EstadoProyecto.APU
+            proyecto.motivo_devolucion = motivo
+            proyecto.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
+            messages.warning(
+                request,
+                "Presupuesto devuelto para ajustes." + (f" Motivo: {motivo}" if motivo else "")
+            )
+            return redirect(reverse("presupuestos:proyecto_presupuesto", args=[pk]))
+
+        elif accion == "modificar":
+            return redirect(reverse("presupuestos:proyecto_presupuesto", args=[pk]))
+
+        return redirect(reverse("presupuestos:proyecto_revisar", args=[pk]))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PDF de proyecto aprobado — cotización cliente consolidada
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ProyectoPDFClienteView(DescargaPDFMixin, View):
+    """
+    GET /presupuestos/proyectos/<pk>/pdf-cliente/
+
+    Genera un PDF vertical (A4 portrait) con la tabla consolidada del proyecto:
+    todos los APUs con cantidad, P.U. y P.Total, más el resumen AIU al final.
+    Solo disponible cuando el proyecto está APROBADO.
+    """
+
+    def get(self, request, pk):
+        from weasyprint import HTML
+        from apps.common.choices import EstadoProyecto
+        from decimal import Decimal
+
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+
+        # Reutiliza los mismos helpers de ProyectoRevisarView
+        revisar_view = ProyectoRevisarView()
+        apus = revisar_view._get_apus_guardados(proyecto)
+        filas = revisar_view._build_filas(apus)
+
+        pct_i, pct_u, aplica_iva, iva_pct = 3, 5, True, 19
+        if apus.exists():
+            primer = apus.first()
+            pct_i      = float(primer.aiu_proyecto_imprevistos_pct or 3)
+            pct_u      = float(primer.aiu_proyecto_utilidad_pct or 5)
+            aplica_iva = primer.aplica_iva
+            iva_pct    = float(primer.iva_pct or 19)
+
+        aiu = revisar_view._calcular_aiu(filas, pct_i, pct_u, aplica_iva, iva_pct)
+        aprobado = (proyecto.estado == EstadoProyecto.APROBADO)
+
+        ctx = {
+            "proyecto": proyecto,
+            "filas": filas,
+            "aiu": aiu,
+            "aprobado": aprobado,
+            "fecha_generacion": date.today().strftime("%d/%m/%Y"),
+        }
+
+        html_str = render_to_string("presupuestos/pdf/proyecto_pdf_cliente.html", ctx)
+        pdf_bytes = HTML(string=html_str, base_url=request.build_absolute_uri("/")).write_pdf()
+        consecutivo = getattr(proyecto, "consecutivo", None) or proyecto.pk
+        filename = f"Cotizacion_Proyecto_{consecutivo}.pdf"
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response

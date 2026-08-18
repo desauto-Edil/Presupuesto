@@ -61,8 +61,6 @@ class CotizacionSnapshotService:
         proyecto = apu.get_proyecto()
         solicitud = resumen.get("solicitud")
         cliente = resumen.get("cliente")
-        garantia = resumen.get("garantia") or {}
-
         snapshot = CotizacionAPU.objects.create(
             apu=apu,
             proyecto=proyecto,
@@ -97,14 +95,6 @@ class CotizacionSnapshotService:
             aiu_imprevistos_valor=_D(resumen.get("valor_imprevistos")),
             aiu_utilidad_valor=_D(resumen.get("valor_utilidad")),
             total_aiu=_D(resumen.get("total_aiu")),
-            # Garantía
-            garantia_aplica=bool(garantia.get("aplica")),
-            garantia_nombre_snapshot=garantia.get("tipo_nombre") or "",
-            garantia_porcentaje_snapshot=garantia.get("porcentaje_aplicado"),
-            garantia_modo_snapshot=garantia.get("modo_aplicacion") or "",
-            garantia_material_snapshot=garantia.get("material_snapshot") or "",
-            garantia_base_valor=_D(garantia.get("base_valor")),
-            garantia_valor_recargo=_D(garantia.get("valor_recargo")),
             # IVA
             aplica_iva=bool(resumen.get("aplica_iva")),
             iva_pct=_D(resumen.get("iva_pct")),
@@ -143,8 +133,6 @@ class CotizacionSnapshotService:
             "modalidad_oficial_label": cls._label_modalidad(snapshot.modalidad_aiu_snapshot),
             "modalidades_disponibles": None,
             "subtotal_materiales": snapshot.subtotal_materiales,
-            "garantia_valor_recargo": snapshot.garantia_valor_recargo,
-            "subtotal_materiales_ajustado": (snapshot.subtotal_materiales or Decimal("0")) + (snapshot.garantia_valor_recargo or Decimal("0")),
             "subtotal_herramientas": snapshot.subtotal_herramientas,
             "subtotal_transporte": snapshot.subtotal_transporte,
             "subtotal_mano_obra": snapshot.subtotal_mano_obra,
@@ -158,11 +146,10 @@ class CotizacionSnapshotService:
             "valor_utilidad": snapshot.aiu_utilidad_valor,
             "total_aiu": snapshot.total_aiu,
             # Derivado desde total_final para que sea correcto en cualquier
-            # modalidad (M1/M2) y en snapshots históricos con la fórmula previa.
-            # total_final = subtotal_con_aiu + garantia + iva_valor
+            # modalidad (M1/M2) y en snapshots históricos.
+            # total_final = subtotal_con_aiu + iva_valor
             "subtotal_con_aiu": (
                 (snapshot.total_final or Decimal("0"))
-                - (snapshot.garantia_valor_recargo or Decimal("0"))
                 - (snapshot.iva_valor or Decimal("0"))
             ),
             "aiu_es_final": True,
@@ -172,17 +159,6 @@ class CotizacionSnapshotService:
             "iva_valor": snapshot.iva_valor,
             "iva_label": snapshot.iva_label,
             "total_final": snapshot.total_final,
-            "garantia": {
-                "aplica": snapshot.garantia_aplica,
-                "tipo": None,
-                "tipo_nombre": snapshot.garantia_nombre_snapshot,
-                "porcentaje_aplicado": snapshot.garantia_porcentaje_snapshot,
-                "modo_aplicacion": snapshot.garantia_modo_snapshot,
-                "material_snapshot": snapshot.garantia_material_snapshot,
-                "base_valor": snapshot.garantia_base_valor,
-                "valor_recargo": snapshot.garantia_valor_recargo,
-                "condiciones": (snapshot.data_snapshot or {}).get("garantia_condiciones", ""),
-            },
             "cliente": snapshot.cliente,
             "contacto": None,
             "proyecto": snapshot.proyecto,
@@ -234,9 +210,6 @@ class CotizacionSnapshotService:
 
         bloque = {
             "lineas": lineas_serializables,
-            "garantia_condiciones": (
-                apu.tipo_garantia.condiciones if apu.tipo_garantia_id else ""
-            ),
             "factor_venta_pct": str(apu.factor_venta_pct or 0),
             "dias_duracion": apu.dias_duracion,
             "descripcion": apu.descripcion or "",

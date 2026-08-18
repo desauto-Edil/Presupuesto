@@ -136,14 +136,6 @@
           <td class="ps-3">Materiales</td>
           <td class="text-end pe-3">{{ resumen.subtotal_materiales|currency_nodec }}</td>
         </tr>
-        {% if resumen.garantia.aplica %}
-        <tr class="table-warning">
-          <td class="ps-3">
-            <i class="bi bi-shield-check me-1"></i>Garantía Red Shield (recargo sobre Materiales)
-          </td>
-          <td class="text-end pe-3">{{ resumen.garantia_valor_recargo|currency_nodec }}</td>
-        </tr>
-        {% endif %}
         <tr>
           <td class="ps-3">Herramientas</td>
           <td class="text-end pe-3">{{ resumen.subtotal_herramientas|currency_nodec }}</td>
@@ -244,56 +236,6 @@
   </div>
 </div>
 {% endif %}
-
-<!-- ───────────────────────── Garantía Red Shield ───────────────────────── -->
-<div class="card shadow-sm border-0 mb-3">
-  <div class="card-header bg-light fw-semibold">
-    <i class="bi bi-shield-check me-1"></i>Garantía
-  </div>
-  <div class="card-body">
-    {% if resumen.garantia.aplica %}
-      <div class="row g-2">
-        <div class="col-12 col-md-6">
-          <div class="small text-muted">Tipo de garantía</div>
-          <div class="fw-semibold">{{ resumen.garantia.tipo_nombre|default:"Garantía Red Shield" }}</div>
-        </div>
-        <div class="col-6 col-md-3">
-          <div class="small text-muted">% aplicado</div>
-          <div class="fw-semibold">{{ resumen.garantia.porcentaje_aplicado|default:"—" }}%</div>
-        </div>
-        <div class="col-6 col-md-3">
-          <div class="small text-muted">Modo</div>
-          <div class="fw-semibold">{{ resumen.garantia.modo_aplicacion|default:"—" }}</div>
-        </div>
-        {% if resumen.garantia.material_snapshot %}
-        <div class="col-12">
-          <div class="small text-muted">Material específico</div>
-          <div>{{ resumen.garantia.material_snapshot }}</div>
-        </div>
-        {% endif %}
-        <div class="col-12 col-md-6">
-          <div class="small text-muted">Base del recargo</div>
-          <div>{{ resumen.garantia.base_valor|default:0|currency_nodec }}</div>
-        </div>
-        <div class="col-12 col-md-6">
-          <div class="small text-muted">Recargo comercial</div>
-          <div class="fw-bold text-warning-emphasis">{{ resumen.garantia.valor_recargo|currency_nodec }}</div>
-        </div>
-        {% if resumen.garantia.condiciones %}
-        <div class="col-12">
-          <div class="small text-muted mt-2">Condiciones</div>
-          <div class="small">{{ resumen.garantia.condiciones|linebreaksbr }}</div>
-        </div>
-        {% endif %}
-      </div>
-      <div class="alert alert-info small mt-3 mb-0">
-        El recargo de garantía Red Shield se aplica sobre Materiales y se suma al total como concepto independiente. No entra en la base AIU ni en la base IVA.
-      </div>
-    {% else %}
-      <div class="text-muted">Esta cotización <strong>no incluye</strong> garantía Red Shield.</div>
-    {% endif %}
-  </div>
-</div>
 
 <!-- ───────────────────────── Condiciones comerciales ───────────────────────── -->
 <div class="card shadow-sm border-0 mb-3">

@@ -184,7 +184,12 @@ class Producto(models.Model):
         """Precio de referencia a mostrar en catálogo."""
         from decimal import Decimal
         if self.precio_en_dolares and self.moneda == "COP":
-            trm = Decimal("4200")
+            try:
+                from apps.common.trm_service import obtener_trm_vigente
+                trm = obtener_trm_vigente()
+            except Exception:
+                # TRM no disponible: devolver precio en COP sin conversión
+                return self.precio_actual
             return (self.precio_actual / trm).quantize(Decimal("0.01"))
         return self.precio_actual
 

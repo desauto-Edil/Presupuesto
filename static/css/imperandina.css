@@ -340,6 +340,39 @@ body {
 .breadcrumb-text { font-size: 12.5px; color: rgba(14,17,23,0.40); }
 .topbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 
+/* ── TRM pill ── */
+.trm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: rgba(14,17,23,.05);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-family: 'Lato', sans-serif;
+  white-space: nowrap;
+  cursor: default;
+  flex-shrink: 0;
+}
+.trm-pill-label {
+  font-weight: 700;
+  color: var(--ink-soft);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  font-size: 9px;
+}
+.trm-pill-value {
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-color-scheme: dark) {
+  .trm-pill { background: rgba(255,255,255,.07); }
+}
+:root[data-theme="dark"] .trm-pill { background: rgba(255,255,255,.07); }
+:root[data-theme="light"] .trm-pill { background: rgba(14,17,23,.05); }
+
 /* ── CONTENT ── */
 .content { padding: 24px 28px; flex: 1; }
 

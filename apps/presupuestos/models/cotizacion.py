@@ -102,17 +102,6 @@ class CotizacionAPU(models.Model):
     aiu_utilidad_valor = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal("0"))
     total_aiu = models.DecimalField(max_digits=18, decimal_places=4, default=Decimal("0"))
 
-    # ── Garantía Red Shield ──────────────────────────────────────────────────
-    garantia_aplica = models.BooleanField(default=False)
-    garantia_nombre_snapshot = models.CharField(max_length=200, blank=True, default="")
-    garantia_porcentaje_snapshot = models.DecimalField(
-        max_digits=6, decimal_places=2, null=True, blank=True,
-    )
-    garantia_modo_snapshot = models.CharField(max_length=24, blank=True, default="")
-    garantia_material_snapshot = models.CharField(max_length=255, blank=True, default="")
-    garantia_base_valor = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"))
-    garantia_valor_recargo = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"))
-
     # ── IVA ──────────────────────────────────────────────────────────────────
     aplica_iva = models.BooleanField(default=True)
     iva_pct = models.DecimalField(max_digits=8, decimal_places=4, default=Decimal("0"))

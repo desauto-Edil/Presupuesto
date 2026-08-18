@@ -239,7 +239,11 @@ class Proyecto(models.Model):
     )
 
     # ── Parámetros financieros ───────────────────────────────────────────────
-    trm = models.DecimalField(max_digits=14, decimal_places=4, default=4200)
+    trm = models.DecimalField(
+        max_digits=14, decimal_places=4, null=True, blank=True,
+        help_text="TRM contractual del proyecto. Se precarga con la TRM global al crear; "
+                  "queda congelada para este proyecto.",
+    )
     margen_comercial_pct = models.DecimalField(max_digits=8, decimal_places=4, default=130)
     iva_pct = models.DecimalField(max_digits=8, decimal_places=4, default=19)
     aiu_pct = models.DecimalField(max_digits=8, decimal_places=4, default=130)
@@ -376,64 +380,3 @@ class LogSistema(models.Model):
         return f"[{self.unidad_negocio}] {self.accion} — {self.configuracion} ({self.created_at:%d/%m/%Y %H:%M})"
 
 
-# ---------------------------------------------------------------------------
-# TIPO DE GARANTÍA (Fase 9)
-# ---------------------------------------------------------------------------
-
-class TipoGarantia(models.Model):
-    """
-    Catálogo de tipos de garantía ofrecidos en la propuesta comercial.
-
-    No afecta el cálculo de materiales, rendimiento ni AIU; es parte del
-    documento técnico-comercial (APU). Cada APUProyecto puede tener una
-    garantía asociada (FK opcional).
-    """
-    nombre = models.CharField(
-        max_length=120,
-        help_text="Nombre comercial. Ej: 'Garantía 10 años — Membrana TPO'.",
-    )
-    porcentaje_recargo = models.DecimalField(
-        max_digits=6, decimal_places=2, default=Decimal("0"),
-        help_text="Porcentaje de recargo comercial aplicado sobre Materiales. Ej: 5.00 = 5%.",
-    )
-    duracion_meses = models.PositiveIntegerField(
-        null=True, blank=True,
-        help_text="(Legacy Fase 9) Duración en meses. Oculto en el formulario actual.",
-    )
-    descripcion = models.CharField(
-        max_length=300, blank=True, default="",
-        help_text="Descripción corta visible junto al nombre.",
-    )
-    condiciones = models.TextField(
-        blank=True, default="",
-        help_text="Condiciones y exclusiones detalladas (texto largo).",
-    )
-    orden = models.PositiveIntegerField(default=0)
-    activo = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        app_label = "comercial"
-        db_table = "tipos_garantia"
-        ordering = ["orden", "nombre"]
-        verbose_name = "Tipo de garantía"
-        verbose_name_plural = "Tipos de garantía"
-
-    def __str__(self):
-        pct = self.porcentaje_recargo or Decimal("0")
-        return f"{self.nombre} ({pct}%)"
-
-    @property
-    def duracion_label(self) -> str:
-        """Legacy: tolerante si duracion_meses está vacío."""
-        if not self.duracion_meses:
-            return ""
-        if self.duracion_meses % 12 == 0:
-            return f"{self.duracion_meses // 12} años"
-        return f"{self.duracion_meses} meses"
-
-    @property
-    def porcentaje_label(self) -> str:
-        pct = self.porcentaje_recargo or Decimal("0")
-        return f"{pct}%"

@@ -20,15 +20,19 @@ from apps.presupuestos.views import (
     APUListView, APUProyectoDetailView, APUProyectoUpdateView, APUGenerarView, APUXLSXDownloadView,
     APUGenerarDesdeDespiece, APUArmarDesdeDespieceView,
     APUSeleccionarDespiecesView,
-    APUManoObraView, APUHerramientasView, APUTransporteView, APUAdminView,
+    APUManoObraView, APUHerramientasView, APUTransporteView, APUAdminView, APUPolizasView,
     APULineaUpdateView, APULineaDeleteView, APUArchivarView, APUProyectoEliminarView,
+    APUGuardarView,
     APUPDFInternoView, APUPDFClienteView, APUEnviarRevisionView,
     CotizacionPDFInternoView, CotizacionPDFClienteView,
     APURevisarView, APUAprobarModalidadView, APUResetModalidadView,
-    APUEditarGarantiaView,
     APUCotizacionFinalView,
     # APU consolidado (Fase 11.5)
     APUConsolidarSeleccionarView, APUConsolidarPreviewView, APUConsolidarConfirmarView,
+    # Presupuesto por proyecto (nueva vista consolidada)
+    ProyectoPresupuestoView,
+    ProyectoRevisarView,
+    ProyectoPDFClienteView,
     # Catálogo APU
     CatalogoAPUView,
     CategoriaItemAPUCreateView, CategoriaItemAPUUpdateView, CategoriaItemAPUDeleteView,
@@ -101,6 +105,7 @@ urlpatterns = [
     path("apu/",                         APUListView.as_view(),           name="apu_list"),
     path("apu/<int:pk>/",                APUProyectoDetailView.as_view(), name="apu_detail"),
     path("apu/<int:pk>/editar/",         APUProyectoUpdateView.as_view(), name="apu_update"),
+    path("apu/<int:pk>/guardar/",        APUGuardarView.as_view(),        name="apu_guardar"),
     path("apu/generar/<int:pk>/",              APUGenerarView.as_view(),          name="apu_generar"),
     path("apu/generar-despiece/<int:pk>/",     APUGenerarDesdeDespiece.as_view(), name="apu_generar_despiece"),
     path("apu/seleccionar-despieces/<int:pk>/", APUSeleccionarDespiecesView.as_view(), name="apu_seleccionar_despieces"),
@@ -109,6 +114,7 @@ urlpatterns = [
     path("apu/<int:pk>/herramientas/",   APUHerramientasView.as_view(),   name="apu_herramientas"),
     path("apu/<int:pk>/transporte/",     APUTransporteView.as_view(),     name="apu_transporte"),
     path("apu/<int:pk>/administrativo/", APUAdminView.as_view(),          name="apu_admin"),
+    path("apu/<int:pk>/polizas/",        APUPolizasView.as_view(),        name="apu_polizas"),
     path("apu/linea/<int:pk>/editar/",   APULineaUpdateView.as_view(),    name="apu_linea_update"),
     path("apu/linea/<int:pk>/eliminar/", APULineaDeleteView.as_view(),    name="apu_linea_delete"),
     path("apu/<int:pk>/archivar/",       APUArchivarView.as_view(),       name="apu_archivar"),
@@ -120,8 +126,6 @@ urlpatterns = [
     path("apu/<int:pk>/revisar/",             APURevisarView.as_view(),           name="apu_revisar"),
     path("apu/<int:pk>/aprobar-modalidad/",   APUAprobarModalidadView.as_view(),  name="apu_aprobar_modalidad"),
     path("apu/<int:pk>/reset-modalidad/",     APUResetModalidadView.as_view(),    name="apu_reset_modalidad"),
-    # Fase 9E — editar garantía del APU desde el detalle
-    path("apu/<int:pk>/editar-garantia/",     APUEditarGarantiaView.as_view(),    name="apu_editar_garantia"),
     # Fase 11 — cotización final en pantalla
     path("apu/<int:pk>/cotizacion/",          APUCotizacionFinalView.as_view(),   name="apu_cotizacion_final"),
 
@@ -133,4 +137,10 @@ urlpatterns = [
     path("proyectos/<int:pk>/apu/consolidar/",          APUConsolidarSeleccionarView.as_view(), name="apu_consolidar_seleccionar"),
     path("proyectos/<int:pk>/apu/consolidar/preview/",  APUConsolidarPreviewView.as_view(),     name="apu_consolidar_preview"),
     path("proyectos/<int:pk>/apu/consolidar/confirmar/", APUConsolidarConfirmarView.as_view(),  name="apu_consolidar_confirmar"),
+    # Presupuesto por proyecto (vista consolidada AIU)
+    path("proyectos/<int:pk>/presupuesto/",             ProyectoPresupuestoView.as_view(),      name="proyecto_presupuesto"),
+    # Vista del revisor/aprobador
+    path("proyectos/<int:pk>/revisar/",                 ProyectoRevisarView.as_view(),          name="proyecto_revisar"),
+    # PDF consolidado cliente (una vez aprobado)
+    path("proyectos/<int:pk>/pdf-cliente/",             ProyectoPDFClienteView.as_view(),       name="proyecto_pdf_cliente"),
 ]

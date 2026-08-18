@@ -9,8 +9,8 @@ los APUs y cotizaciones asociados.
 Reglas:
     - Sin uso de `_meta.related_objects`.
     - Solo se borra lo declarado.
-    - Los catálogos (Cliente, Contacto, TipoProyecto, Sistema, Subsistema,
-      TipoGarantia) NO se tocan.
+    - Los catálogos (Cliente, Contacto, TipoProyecto, Sistema, Subsistema)
+      NO se tocan.
     - `transaction.atomic` en todos los servicios.
     - La autorización (rol ADMINISTRADOR) la valida la vista llamadora.
 """

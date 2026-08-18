@@ -78,6 +78,8 @@ class ProyectoSistema(models.Model):
           1. Variables base del proyecto (area_m2, perimetro_ml).
           2. Todos los campos de parametros_entrada convertidos a float.
              Los strings no numéricos pasan sin convertir.
+          3. trm — TRM contractual del proyecto (si está definida), o la TRM
+             global vigente del día. Disponible en todas las fórmulas.
         """
         ctx: dict = {
             "area_m2":      float(getattr(self.proyecto, "area_total_m2", 0) or 0),
@@ -90,6 +92,18 @@ class ProyectoSistema(models.Model):
                 ctx[k] = float(v)
             except (ValueError, TypeError):
                 ctx[k] = v
+
+        # TRM: preferir la contractual del proyecto; fallback a la global.
+        proyecto_trm = getattr(self.proyecto, "trm", None)
+        if proyecto_trm is not None and float(proyecto_trm) > 0:
+            ctx["trm"] = float(proyecto_trm)
+        else:
+            try:
+                from apps.common.trm_service import obtener_trm_vigente
+                ctx["trm"] = float(obtener_trm_vigente())
+            except Exception:
+                ctx["trm"] = 0.0
+
         return ctx
 
     def get_variables_requeridas(self) -> list[dict]:
@@ -294,9 +308,19 @@ class DespieceLinea(models.Model):
             precio = Decimal(str(precio_base)) / divisor
 
             # Si el precio está en USD, convertir a COP con la TRM del proyecto
+            # (o la TRM global si el despiece no tiene proyecto asociado).
             if self.producto.precio_en_dolares:
                 try:
-                    trm = Decimal(str(self.proyecto_sistema.proyecto.trm or 4200))
+                    proyecto_trm = None
+                    try:
+                        proyecto_trm = self.proyecto_sistema.proyecto.trm
+                    except Exception:
+                        pass
+                    if proyecto_trm and float(proyecto_trm) > 0:
+                        trm = Decimal(str(proyecto_trm))
+                    else:
+                        from apps.common.trm_service import obtener_trm_vigente
+                        trm = obtener_trm_vigente()
                     precio = precio / trm
                 except Exception:
                     pass  # Si no hay TRM disponible, dejar el precio sin convertir

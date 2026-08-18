@@ -328,11 +328,6 @@ class DespieceMaestroView(CalculadorAccesoMixin, DetailView):
         # aparece y no hace falta validar más.
         ctx["armar_apu_validacion"] = None
         ctx["armar_apu_productos_opciones"] = []
-        # Fase 9D — Tipos de garantía activos para el selector del modal.
-        from apps.comercial.models import TipoGarantia as _TipoGarantia
-        ctx["tipos_garantia_activos"] = list(
-            _TipoGarantia.objects.filter(activo=True).order_by("orden", "nombre")
-        )
         if ctx["puede_generar_apu"]:
             from apps.ingenieria.services.lineas_finales_apu import (
                 validar_despiece_listo_para_apu,

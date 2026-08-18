@@ -447,6 +447,19 @@
     border-color: rgba(23,168,94,0.35);
     font-weight: 700;
   }
+  /* Issue 7 — bloqueo visual de sección confirmada */
+  .apu-tab-pane.section-locked .apu-tab-body {
+    pointer-events: none;
+    user-select: none;
+  }
+  .apu-tab-pane.section-locked .apu-tab-body button,
+  .apu-tab-pane.section-locked .apu-tab-body input,
+  .apu-tab-pane.section-locked .apu-tab-body select,
+  .apu-tab-pane.section-locked .apu-tab-body textarea,
+  .apu-tab-pane.section-locked .apu-tab-body a.btn {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
   /* Indicador "confirmado" en el encabezado de la sección */
   .apu-section__confirmado-badge {
     display: none;
@@ -508,6 +521,24 @@
 
 
 {% block content %}
+
+{# ── Banner modo revisión (solo lectura, viene desde vista del revisor) ── #}
+{% if modo_revision %}
+<div style="background:rgba(234,179,8,.08);border:1px solid rgba(234,179,8,.3);
+            border-left:4px solid #b45309;border-radius:8px;padding:12px 16px;
+            margin-bottom:14px;display:flex;align-items:center;gap:12px;font-size:13px;">
+  <i class="bi bi-eye" style="font-size:18px;color:#b45309;flex-shrink:0;"></i>
+  <div>
+    <strong style="color:#92400e;">Vista de revisión — solo lectura.</strong>
+    <span style="color:var(--ink-soft);margin-left:6px;">
+      Estás revisando este APU como aprobador. Los cambios no están permitidos desde este modo.
+    </span>
+    <a href="javascript:history.back()" style="margin-left:10px;color:#b45309;font-weight:600;text-decoration:underline;">
+      ← Volver al presupuesto
+    </a>
+  </div>
+</div>
+{% endif %}
 
 {# Fase 11.5.3 — Banners contextuales #}
 {% if apu.archivado %}
@@ -575,6 +606,12 @@
         <span><i class="bi bi-briefcase" style="color:#64748b;margin-right:4px;font-size:10px;"></i>Administración</span>
         <strong style="color:#5b72e8;">{{ apu.subtotal_administracion|currency:"COP" }}</strong>
       </div>
+      {% if apu.subtotal_polizas %}
+      <div class="apu-param-row">
+        <span><i class="bi bi-shield-check" style="color:#0ea5e9;margin-right:4px;font-size:10px;"></i>Pólizas</span>
+        <strong style="color:#5b72e8;">{{ apu.subtotal_polizas|currency:"COP" }}</strong>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -589,16 +626,6 @@
         <strong style="color:#17a85e;">{{ cat.subtotal_valor|currency:"COP" }}</strong>
       </div>
       {% endfor %}
-      {% if apu.aplica_garantia and apu.garantia_valor_recargo %}
-      <div class="apu-param-row" style="border-top:1px dashed rgba(0,0,0,.1);padding-top:6px;margin-top:4px;">
-        <span><i class="bi bi-shield-check" style="color:#1470e6;margin-right:4px;font-size:10px;"></i>Recargo garantía</span>
-        <strong style="color:#1470e6;">{{ apu.garantia_valor_recargo|currency:"COP" }}</strong>
-      </div>
-      <div class="apu-param-row">
-        <span style="color:var(--ink-soft);">Materiales ajustado</span>
-        <strong style="color:#138a4a;">{{ apu.subtotal_materiales_ajustado|currency:"COP" }}</strong>
-      </div>
-      {% endif %}
     </div>
   </div>
 
@@ -611,220 +638,14 @@
          style="font-size:10px;font-weight:600;color:var(--theme-accent);margin-left:6px;">Editar</a>
       {% endif %}
     </div>
-    <div class="apu-param-row"><span>Factor venta</span><strong>{{ apu.factor_venta_pct }}%</strong></div>
-    <div class="apu-param-row"><span>IVA</span><strong>{% if apu.aplica_iva %}{{ apu.iva_pct }}%{% else %}—{% endif %}</strong></div>
-    <div class="apu-param-row"><span>AIU contratista</span><strong>{{ apu.aiu_contratista_pct }}%</strong></div>
-    <div class="apu-param-row"><span>Margen ganancia</span><strong>{{ apu.margen_ganancia_pct }}%</strong></div>
+    <div class="apu-param-row"><span>Factor venta</span><strong>{{ apu.factor_venta_pct|floatformat:"-2" }}%</strong></div>
+    <div class="apu-param-row"><span>IVA</span><strong>{% if apu.aplica_iva %}{{ apu.iva_pct|floatformat:"-2" }}%{% else %}—{% endif %}</strong></div>
+    <div class="apu-param-row"><span>AIU contratista</span><strong>{{ apu.aiu_contratista_pct|floatformat:"-2" }}%</strong></div>
+    <div class="apu-param-row"><span>Margen ganancia</span><strong>{{ apu.margen_ganancia_pct|floatformat:"-2" }}%</strong></div>
     <div class="apu-param-row"><span>Días duración</span><strong>{{ apu.dias_duracion }} días</strong></div>
   </div>
 
 </div><!-- /.apu-kpi-row -->
-
-<!-- ── Fase 9E · Garantía (no afecta cálculo) ───────────────────────────── -->
-<div class="panel fade-up-1" style="margin-bottom:14px;">
-  <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;">
-    <span class="panel-title">
-      <i class="bi bi-shield-check" style="color:var(--theme-accent);margin-right:6px;"></i>
-      Garantía
-    </span>
-    {% if not apu.esta_aprobado %}
-    <button type="button" class="btn btn-ghost btn-xs"
-            data-bs-toggle="modal" data-bs-target="#modalEditarGarantia">
-      Editar
-    </button>
-    {% endif %}
-  </div>
-  <div class="panel-body" style="padding:14px 18px;">
-    {% if apu.aplica_garantia and apu.tipo_garantia %}
-      {% if apu.garantia_legacy_sin_snapshot %}
-      <div style="background:#fff8e6;border:1px solid #ffc107;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#7a5a00;">
-        <i class="bi bi-exclamation-triangle me-1"></i>
-        Esta garantía fue creada antes del recargo porcentual.
-        <strong>Reedite la garantía para aplicar el porcentaje.</strong>
-      </div>
-      {% endif %}
-      <div style="display:grid;grid-template-columns:repeat(4,auto);gap:18px;align-items:start;">
-        <div>
-          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Aplica</div>
-          <div style="font-weight:700;color:#138a4a;">Sí</div>
-        </div>
-        <div>
-          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Tipo</div>
-          <div style="font-weight:700;">{{ apu.tipo_garantia.nombre }}</div>
-        </div>
-        <div>
-          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">% Aplicado</div>
-          <div style="font-weight:700;">
-            {% if apu.garantia_porcentaje_aplicado is not None %}{{ apu.garantia_porcentaje_aplicado }}%{% else %}—{% endif %}
-          </div>
-        </div>
-        <div>
-          <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Modo</div>
-          <div style="font-weight:700;">
-            {% if apu.garantia_modo_aplicacion == "MATERIAL_ESPECIFICO" %}Material específico
-            {% elif apu.garantia_modo_aplicacion == "TOTAL_MATERIALES" %}Total materiales
-            {% else %}—{% endif %}
-          </div>
-        </div>
-      </div>
-
-      {% if apu.garantia_modo_aplicacion == "MATERIAL_ESPECIFICO" %}
-      <div style="margin-top:10px;font-size:12.5px;">
-        <span style="color:var(--ink-soft);">Material objetivo:</span>
-        {% if apu.garantia_material_linea_id %}
-          <strong>{{ apu.garantia_material_nombre_snapshot|default:apu.garantia_material_linea.descripcion }}</strong>
-        {% elif apu.garantia_material_nombre_snapshot %}
-          <strong>{{ apu.garantia_material_nombre_snapshot }}</strong>
-          <span class="text-warning small" style="margin-left:6px;">
-            <i class="bi bi-exclamation-triangle"></i>
-            Material objetivo no disponible. Reedite la garantía para recalcular el recargo.
-          </span>
-        {% else %}
-          <span class="text-warning">No disponible</span>
-        {% endif %}
-      </div>
-      {% endif %}
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;font-size:12.5px;">
-        <div>
-          <div style="color:var(--ink-soft);">Base garantía</div>
-          <div style="font-family:monospace;font-weight:700;">{{ apu.garantia_base_valor|currency:"COP" }}</div>
-        </div>
-        <div>
-          <div style="color:var(--ink-soft);">Recargo garantía</div>
-          <div style="font-family:monospace;font-weight:700;color:#1470e6;">{{ apu.garantia_valor_recargo|currency:"COP" }}</div>
-        </div>
-      </div>
-
-      {% if apu.tipo_garantia.descripcion %}
-      <div style="margin-top:10px;font-size:13px;color:var(--ink-soft);">
-        {{ apu.tipo_garantia.descripcion }}
-      </div>
-      {% endif %}
-      {% if apu.tipo_garantia.condiciones %}
-      <details style="margin-top:8px;">
-        <summary style="cursor:pointer;font-size:12px;color:var(--theme-accent);font-weight:600;">
-          Ver condiciones y exclusiones
-        </summary>
-        <div style="margin-top:8px;padding:10px 12px;background:rgba(0,0,0,.03);border-radius:8px;font-size:12.5px;white-space:pre-wrap;">{{ apu.tipo_garantia.condiciones }}</div>
-      </details>
-      {% endif %}
-    {% else %}
-      <div style="display:flex;align-items:center;gap:10px;color:var(--ink-soft);font-size:13px;">
-        <i class="bi bi-dash-circle"></i>
-        <span>Esta propuesta <strong>no incluye garantía</strong>.</span>
-      </div>
-    {% endif %}
-  </div>
-</div>
-
-<!-- Modal editar garantía -->
-<div class="modal fade" id="modalEditarGarantia" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Editar garantía del APU</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-      </div>
-      <form method="post" action="{% url 'presupuestos:apu_editar_garantia' apu.pk %}">
-        {% csrf_token %}
-        <div class="modal-body">
-          <div class="d-flex gap-3 mb-3">
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="aplica_garantia"
-                     id="editGarSi" value="1"
-                     {% if apu.aplica_garantia %}checked{% endif %}
-                     onchange="editGarOnAplica(true)">
-              <label class="form-check-label" for="editGarSi">Sí aplica</label>
-            </div>
-            <div class="form-check">
-              <input class="form-check-input" type="radio" name="aplica_garantia"
-                     id="editGarNo" value="0"
-                     {% if not apu.aplica_garantia %}checked{% endif %}
-                     onchange="editGarOnAplica(false)">
-              <label class="form-check-label" for="editGarNo">No aplica</label>
-            </div>
-          </div>
-          <div id="editGarSelector" style="display:{% if apu.aplica_garantia %}block{% else %}none{% endif %};">
-            <label class="form-label small">Tipo de garantía</label>
-            <select name="tipo_garantia_id" id="editGarTipo" class="form-select form-select-sm"
-                    onchange="editGarOnTipo(this)">
-              <option value="" data-pct="0">— Seleccione una garantía —</option>
-              {% for g in tipos_garantia_activos %}
-              <option value="{{ g.pk }}" data-pct="{{ g.porcentaje_recargo }}"
-                      {% if apu.tipo_garantia_id == g.pk %}selected{% endif %}>
-                {{ g.nombre }} — {{ g.porcentaje_recargo }}%
-              </option>
-              {% endfor %}
-            </select>
-            {% if not tipos_garantia_activos %}
-            <div class="form-text small text-warning">
-              No hay tipos de garantía activos. Crea uno en
-              <a href="{% url 'comercial:garantia_list' %}">Comercial → Garantías</a>.
-            </div>
-            {% endif %}
-            <div id="editGarPctInfo" class="form-text small mt-1"
-                 style="display:{% if apu.tipo_garantia_id %}block{% else %}none{% endif %};">
-              Porcentaje aplicado: <strong id="editGarPctValue">{{ apu.tipo_garantia.porcentaje_recargo|default:0 }}</strong>%
-            </div>
-
-            <div class="mt-3">
-              <label class="form-label small mb-1">¿Cómo aplicar la garantía?</label>
-              <div class="d-flex gap-3 flex-wrap">
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="garantia_modo_aplicacion"
-                         id="editGarModoTotal" value="TOTAL_MATERIALES"
-                         {% if apu.garantia_modo_aplicacion != "MATERIAL_ESPECIFICO" %}checked{% endif %}
-                         onchange="editGarOnModo('TOTAL_MATERIALES')">
-                  <label class="form-check-label small" for="editGarModoTotal">
-                    Sobre el total de materiales
-                  </label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="garantia_modo_aplicacion"
-                         id="editGarModoEsp" value="MATERIAL_ESPECIFICO"
-                         {% if apu.garantia_modo_aplicacion == "MATERIAL_ESPECIFICO" %}checked{% endif %}
-                         onchange="editGarOnModo('MATERIAL_ESPECIFICO')">
-                  <label class="form-check-label small" for="editGarModoEsp">
-                    Sobre un material específico
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div id="editGarMaterialBlock" class="mt-2"
-                 style="display:{% if apu.garantia_modo_aplicacion == 'MATERIAL_ESPECIFICO' %}block{% else %}none{% endif %};">
-              <label class="form-label small">Material objetivo</label>
-              <select name="garantia_material_linea_id" class="form-select form-select-sm">
-                <option value="">— Seleccione un material —</option>
-                {% for l in lineas_materiales_apu %}
-                <option value="{{ l.pk }}"
-                        {% if apu.garantia_material_linea_id == l.pk %}selected{% endif %}>
-                  {{ l.descripcion }}
-                </option>
-                {% endfor %}
-              </select>
-              {% if not lineas_materiales_apu %}
-              <div class="form-text small text-warning">
-                Este APU no tiene líneas de Materiales todavía.
-              </div>
-              {% endif %}
-            </div>
-
-            <div class="form-text small mt-2">
-              El recargo solo afecta el total comercial — no modifica cantidades,
-              rendimientos ni costos técnicos.
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
 
 <!-- ── Barra de búsqueda APU ──────────────────────────────────────────── -->
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -1037,7 +858,7 @@
           <div style="font-size:12px;color:#3730a3;text-align:right;">
             <div>{{ bloque.total_lineas }} línea{{ bloque.total_lineas|pluralize }}</div>
             <div style="font-variant-numeric:tabular-nums;font-weight:600;">
-              ${{ bloque.subtotal_valor|floatformat:0 }}
+              {{ bloque.subtotal_valor|currency:"COP" }}
             </div>
           </div>
         </summary>
@@ -1070,19 +891,19 @@
                 <td>{{ linea.descripcion }}</td>
                 <td class="text-end">{{ linea.rendimiento|floatformat:2 }}</td>
                 <td>{{ linea.unidad }}</td>
-                <td class="text-end">${{ linea.costo_unitario|floatformat:0 }}</td>
-                <td class="td-costo text-end">${{ linea.costo_total|floatformat:0 }}</td>
-                <td class="text-end">${{ linea.valor_unitario|floatformat:0 }}</td>
-                <td class="td-valor text-end">${{ linea.valor_total|floatformat:0 }}</td>
+                <td class="text-end">{{ linea.costo_unitario|currency:"COP" }}</td>
+                <td class="td-costo text-end">{{ linea.costo_total|currency:"COP" }}</td>
+                <td class="text-end">{{ linea.valor_unitario|currency:"COP" }}</td>
+                <td class="td-valor text-end">{{ linea.valor_total|currency:"COP" }}</td>
               </tr>
               {% endfor %}
               <tr style="background:#fafafa;">
                 <td colspan="4" class="text-end" style="font-size:11px;color:var(--ink-soft);">
                   Subtotal subsistema
                 </td>
-                <td class="td-costo text-end" style="font-weight:600;">${{ g.subtotal_costo|floatformat:0 }}</td>
+                <td class="td-costo text-end" style="font-weight:600;">{{ g.subtotal_costo|currency:"COP" }}</td>
                 <td></td>
-                <td class="td-valor text-end" style="font-weight:600;">${{ g.subtotal_valor|floatformat:0 }}</td>
+                <td class="td-valor text-end" style="font-weight:600;">{{ g.subtotal_valor|currency:"COP" }}</td>
               </tr>
             </tbody>
           </table>
@@ -1091,7 +912,7 @@
       </details>
       {% endfor %}
       <div class="mt-2" style="font-size:13px;text-align:right;">
-        <strong>Total Materiales consolidado: ${{ apu.subtotal_materiales|floatformat:0 }}</strong>
+        <strong>Total Materiales consolidado: {{ apu.subtotal_materiales|currency:"COP" }}</strong>
       </div>
       {% elif materiales_multi_despiece and materiales_por_subsistema %}
       {% comment %}Fase 11.4 — vista agrupada por subsistema/despiece cuando el APU contiene materiales de varios DespieceMaestro.{% endcomment %}
@@ -1123,25 +944,25 @@
             <td class="apu-desc">{{ linea.descripcion }}{% if linea.iva_aplicado %}<span class="badge-iva">+IVA</span>{% endif %}</td>
             <td class="text-end font-monospace">{{ linea.rendimiento|floatformat:4 }}</td>
             <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
-            <td class="text-end font-monospace">${{ linea.costo_unitario|floatformat:2 }}</td>
-            <td class="apu-costo-total text-end">${{ linea.costo_total|floatformat:2 }}</td>
-            <td class="text-end font-monospace">${{ linea.valor_unitario|floatformat:2 }}</td>
-            <td class="apu-valor-total text-end">${{ linea.valor_total|floatformat:2 }}</td>
+            <td class="text-end font-monospace">{{ linea.costo_unitario|currency:"COP" }}</td>
+            <td class="apu-costo-total text-end">{{ linea.costo_total|currency:"COP" }}</td>
+            <td class="text-end font-monospace">{{ linea.valor_unitario|currency:"COP" }}</td>
+            <td class="apu-valor-total text-end">{{ linea.valor_total|currency:"COP" }}</td>
           </tr>
           {% endfor %}
         </tbody>
         <tfoot>
           <tr>
             <td colspan="4">Subtotal sección</td>
-            <td class="tf-costo text-end">${{ g.subtotal_costo|floatformat:2 }}</td>
+            <td class="tf-costo text-end">{{ g.subtotal_costo|currency:"COP" }}</td>
             <td></td>
-            <td class="tf-valor text-end">${{ g.subtotal_valor|floatformat:2 }}</td>
+            <td class="tf-valor text-end">{{ g.subtotal_valor|currency:"COP" }}</td>
           </tr>
         </tfoot>
       </table>
       {% endfor %}
       <div class="mt-2" style="font-size:13px;font-weight:600;text-align:right;">
-        Total Materiales: <span class="text-success">${{ cat.subtotal_valor|floatformat:2 }}</span>
+        Total Materiales: <span class="text-success">{{ cat.subtotal_valor|currency:"COP" }}</span>
       </div>
       {% else %}
       <table class="apu-table">
@@ -1165,13 +986,6 @@
           <tr id="apu-linea-{{ linea.pk }}">
             <td class="apu-desc">
               {{ linea.componente_nombre }}
-              {% if apu.garantia_material_linea_id == linea.pk %}
-              <span class="badge bg-info-subtle text-info-emphasis ms-1"
-                    style="font-size:10px;font-weight:600;"
-                    title="La garantía se aplica sobre esta línea.">
-                Garantía aplicada
-              </span>
-              {% endif %}
             </td>
             <td>
               {{ linea.producto_nombre }}
@@ -1182,10 +996,10 @@
             </td>
             <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
             <td class="text-end font-monospace">{{ linea.rendimiento|floatformat:6 }}</td>
-            <td class="text-end font-monospace">${{ linea.costo_unitario|floatformat:2 }}</td>
-            <td class="apu-costo-total text-end">${{ linea.costo_total|floatformat:2 }}</td>
-            <td class="text-end font-monospace">${{ linea.valor_unitario|floatformat:2 }}</td>
-            <td class="apu-valor-total text-end">${{ linea.valor_total|floatformat:2 }}</td>
+            <td class="text-end font-monospace">{{ linea.costo_unitario|currency:"COP" }}</td>
+            <td class="apu-costo-total text-end">{{ linea.costo_total|currency:"COP" }}</td>
+            <td class="text-end font-monospace">{{ linea.valor_unitario|currency:"COP" }}</td>
+            <td class="apu-valor-total text-end">{{ linea.valor_total|currency:"COP" }}</td>
             <td>
               {% if linea.editable and not apu.esta_aprobado %}
               <button class="btn btn-ghost btn-xs"
@@ -1203,9 +1017,9 @@
         <tfoot>
           <tr>
             <td colspan="6">Subtotal {{ cat.label|lower }}</td>
-            <td class="tf-costo text-end">${{ cat.subtotal_costo|floatformat:2 }}</td>
+            <td class="tf-costo text-end">{{ cat.subtotal_costo|currency:"COP" }}</td>
             <td></td>
-            <td class="tf-valor text-end">${{ cat.subtotal_valor|floatformat:2 }}</td>
+            <td class="tf-valor text-end">{{ cat.subtotal_valor|currency:"COP" }}</td>
             <td></td>
           </tr>
         </tfoot>
@@ -1214,67 +1028,32 @@
       {% else %}
       {# ── Categorías NO-MATERIALES ──────────────────────────────────── #}
       {% if cat.tipo == "ADMINISTRACION" %}
-      {# ── Tabla especial Administración: Concepto/Valor base/Cantidad/Nº meses/%/Valor final #}
+      {# ── Tabla Administración: Concepto / % aplicado / Valor final ── #}
       <table class="apu-table">
         <thead>
           <tr>
             <th>Concepto</th>
-            <th class="text-end">Valor base</th>
-            <th class="text-end">Cantidad</th>
-            <th class="text-end">Nº meses</th>
-            <th class="text-end">%</th>
+            <th class="text-end">Fórmula base</th>
+            <th class="text-end">% aplicado</th>
             <th class="th-valor text-end">Valor final</th>
           </tr>
         </thead>
         <tbody>
           {% for grupo in cat.grupos %}
           {% if grupo.linea_resumen %}
-          <tr id="apu-linea-{{ grupo.linea_resumen.pk }}" class="apu-cat-row {% if grupo.lineas_detalle %}has-detail{% endif %}"
-              {% if grupo.lineas_detalle %}onclick="toggleCatRows(this)"{% endif %}>
-            <td>
-              {% if grupo.lineas_detalle %}
-              <i class="cat-chevron bi bi-chevron-right" style="margin-right:6px;font-size:10px;"></i>
-              {% endif %}
-              {{ grupo.linea_resumen.descripcion }}
-              {% if grupo.lineas_detalle %}
-              <span style="color:rgba(14,17,23,.30);font-size:10px;font-weight:400;margin-left:6px;">
-                {{ grupo.lineas_detalle|length }} ítem{{ grupo.lineas_detalle|length|pluralize }}
-              </span>
-              {% endif %}
-            </td>
+          {# Solo mostramos la línea resumen — sin expandir ítems de referencia #}
+          <tr id="apu-linea-{{ grupo.linea_resumen.pk }}" class="apu-cat-row">
+            <td>{{ grupo.linea_resumen.descripcion }}</td>
             <td class="text-end font-monospace" style="background:var(--surface);">{{ grupo.linea_resumen.precio_referencia|currency:"COP" }}</td>
-            <td class="text-end font-monospace" style="background:var(--surface);">{{ grupo.linea_resumen.admin_cantidad|floatformat:0 }}</td>
-            <td class="text-end font-monospace" style="background:var(--surface);">{{ grupo.linea_resumen.admin_numero_meses|floatformat:2 }}</td>
-            <td class="text-end font-monospace" style="background:var(--surface);">{{ grupo.linea_resumen.admin_porcentaje_aplicado|floatformat:1 }}%</td>
+            <td class="text-end font-monospace" style="background:var(--surface);">{{ grupo.linea_resumen.rendimiento|multiply:100|floatformat:1 }}%</td>
             <td class="apu-cat-valor text-end" style="background:var(--surface);">{{ grupo.linea_resumen.valor_total|currency:"COP" }}</td>
           </tr>
-          {% for linea in grupo.lineas_detalle %}
-          <tr id="apu-linea-{{ linea.pk }}" class="apu-cat-detail" style="display:none;">
-            <td class="apu-desc" style="padding-left:32px;color:rgba(14,17,23,0.7);">{{ linea.descripcion }}</td>
-            <td class="text-end font-monospace" style="color:rgba(14,17,23,0.6);font-size:12px;">{{ linea.precio_referencia|currency:"COP" }}</td>
-            <td class="text-end font-monospace" style="color:rgba(14,17,23,0.6);font-size:12px;">{{ linea.admin_cantidad|floatformat:0 }}</td>
-            <td class="text-end font-monospace" style="color:rgba(14,17,23,0.6);font-size:12px;">{{ linea.admin_numero_meses|floatformat:2 }}</td>
-            <td class="text-end font-monospace" style="color:rgba(14,17,23,0.6);font-size:12px;">{{ linea.admin_porcentaje_aplicado|floatformat:1 }}%</td>
-            <td class="text-end" style="color:rgba(14,17,23,0.55);font-size:12px;font-weight:600;">{{ linea.valor_total|currency:"COP" }}</td>
-          </tr>
-          {% endfor %}
-          {% else %}
-          {% for linea in grupo.lineas_detalle %}
-          <tr id="apu-linea-{{ linea.pk }}">
-            <td class="apu-desc">{{ linea.descripcion }}</td>
-            <td class="text-end font-monospace">{{ linea.precio_referencia|currency:"COP" }}</td>
-            <td class="text-end font-monospace">{{ linea.admin_cantidad|floatformat:0 }}</td>
-            <td class="text-end font-monospace">{{ linea.admin_numero_meses|floatformat:2 }}</td>
-            <td class="text-end font-monospace">{{ linea.admin_porcentaje_aplicado|floatformat:1 }}%</td>
-            <td class="apu-valor-total text-end">{{ linea.valor_total|currency:"COP" }}</td>
-          </tr>
-          {% endfor %}
           {% endif %}
           {% endfor %}{# /grupo #}
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="5">Subtotal administración</td>
+            <td colspan="3">Subtotal administración</td>
             <td class="tf-valor">{{ cat.subtotal_valor|currency:"COP" }}</td>
           </tr>
         </tfoot>
@@ -1310,10 +1089,10 @@
             </td>
             <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">{{ grupo.linea_resumen.rendimiento|floatformat:2 }}</td>
             <td style="background:var(--surface);color:var(--ink-soft);font-size:11px;">{{ grupo.linea_resumen.get_unidad_display }}</td>
-            <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">${{ grupo.linea_resumen.costo_unitario|floatformat:2 }}</td>
-            <td class="apu-cat-costo" style="background:var(--surface);">${{ grupo.linea_resumen.costo_total|floatformat:2 }}</td>
-            <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">${{ grupo.linea_resumen.valor_unitario|floatformat:2 }}</td>
-            <td class="apu-cat-valor" style="background:var(--surface);">${{ grupo.linea_resumen.valor_total|floatformat:2 }}</td>
+            <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">{{ grupo.linea_resumen.costo_unitario|currency:"COP" }}</td>
+            <td class="apu-cat-costo" style="background:var(--surface);">{{ grupo.linea_resumen.costo_total|currency:"COP" }}</td>
+            <td style="background:var(--surface);text-align:right;font-variant-numeric:tabular-nums;">{{ grupo.linea_resumen.valor_unitario|currency:"COP" }}</td>
+            <td class="apu-cat-valor" style="background:var(--surface);">{{ grupo.linea_resumen.valor_total|currency:"COP" }}</td>
             <td style="background:var(--surface);white-space:nowrap;">
               {% if grupo.linea_resumen.editable and not apu.esta_aprobado %}
               <button class="btn btn-ghost btn-xs"
@@ -1335,8 +1114,8 @@
             </td>
             <td style="color:rgba(14,17,23,0.6);font-size:12px;">{{ linea.rendimiento|floatformat:0 }}</td>
             <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
-            <td style="color:rgba(14,17,23,0.6);font-size:12px;">${{ linea.precio_referencia|floatformat:0 }}</td>
-            <td style="color:rgba(14,17,23,0.55);font-size:12px;font-weight:600;">${{ linea.precio_referencia|multiply:linea.rendimiento|floatformat:0 }}</td>
+            <td style="color:rgba(14,17,23,0.6);font-size:12px;">{{ linea.precio_referencia|currency:"COP" }}</td>
+            <td style="color:rgba(14,17,23,0.55);font-size:12px;font-weight:600;">{{ linea.precio_referencia|multiply:linea.rendimiento|currency:"COP" }}</td>
             <td style="color:var(--ink-soft);">—</td>
             <td style="color:var(--ink-soft);">—</td>
             <td></td>
@@ -1353,10 +1132,10 @@
             </td>
             <td>{{ linea.rendimiento|floatformat:5 }}</td>
             <td style="color:var(--ink-soft);font-size:11px;">{{ linea.get_unidad_display }}</td>
-            <td>${{ linea.costo_unitario|floatformat:2 }}</td>
-            <td class="apu-costo-total">${{ linea.costo_total|floatformat:2 }}</td>
-            <td>${{ linea.valor_unitario|floatformat:2 }}</td>
-            <td class="apu-valor-total">${{ linea.valor_total|floatformat:2 }}</td>
+            <td>{{ linea.costo_unitario|currency:"COP" }}</td>
+            <td class="apu-costo-total">{{ linea.costo_total|currency:"COP" }}</td>
+            <td>{{ linea.valor_unitario|currency:"COP" }}</td>
+            <td class="apu-valor-total">{{ linea.valor_total|currency:"COP" }}</td>
             <td>
               {% if linea.editable and not apu.esta_aprobado %}
               <button class="btn btn-ghost btn-xs"
@@ -1376,9 +1155,9 @@
         <tfoot>
           <tr>
             <td colspan="4">Subtotal {{ cat.label|lower }}</td>
-            <td class="tf-costo">${{ cat.subtotal_costo|floatformat:2 }}</td>
+            <td class="tf-costo">{{ cat.subtotal_costo|currency:"COP" }}</td>
             <td></td>
-            <td class="tf-valor">${{ cat.subtotal_valor|floatformat:2 }}</td>
+            <td class="tf-valor">{{ cat.subtotal_valor|currency:"COP" }}</td>
             <td></td>
           </tr>
         </tfoot>
@@ -1417,15 +1196,20 @@
               onclick="toggleconfirmado(this)">
         <i class="bi bi-check2-circle" style="margin-right:4px;"></i>Confirmado
       </button>
+      {# Issue 7 — botón "Editar" para desbloquear sección confirmada #}
+      <button type="button" class="btn btn-outline-primary btn-sm apu-editar-btn" style="display:none;"
+              onclick="editarSeccion(this)">
+        <i class="bi bi-pencil" style="margin-right:4px;"></i>Editar
+      </button>
       {% if not apu.esta_aprobado %}
       {% if cat.tipo == "HERRAMIENTAS_EQUIPOS" %}
-      <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalHerramientas"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar herramientas</button>
+      <button class="btn btn-ghost btn-sm apu-config-btn" data-bs-toggle="modal" data-bs-target="#modalHerramientas"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar herramientas</button>
       {% elif cat.tipo == "TRANSPORTE" %}
-      <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalTransporte"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar transporte</button>
+      <button class="btn btn-ghost btn-sm apu-config-btn" data-bs-toggle="modal" data-bs-target="#modalTransporte"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar transporte</button>
       {% elif cat.tipo == "MANO_DE_OBRA" %}
-      <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalManoObra"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar mano de obra</button>
+      <button class="btn btn-ghost btn-sm apu-config-btn" data-bs-toggle="modal" data-bs-target="#modalManoObra"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar mano de obra</button>
       {% elif cat.tipo == "ADMINISTRACION" %}
-      <button class="btn btn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#modalAdmin"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar administración</button>
+      <button class="btn btn-ghost btn-sm apu-config-btn" data-bs-toggle="modal" data-bs-target="#modalAdmin"><i class="bi bi-plus-lg" style="margin-right:4px;"></i>Configurar administración</button>
       {% endif %}
       {% endif %}
     </div>
@@ -1436,6 +1220,69 @@
 
 </div><!-- /.apu-tabs-wrap -->
 
+
+{# ── Panel Pólizas ──────────────────────────────────────────────── #}
+<div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <i class="bi bi-shield-check" style="font-size:16px;color:#0ea5e9;"></i>
+      <span style="font-size:13px;font-weight:700;color:var(--ink);">Pólizas de cumplimiento y seguros</span>
+      {% if apu.subtotal_polizas %}
+      <span style="font-size:11px;font-weight:600;color:#0ea5e9;background:rgba(14,165,233,.10);padding:2px 8px;border-radius:20px;">
+        {{ apu.subtotal_polizas|currency:"COP" }}
+      </span>
+      {% endif %}
+    </div>
+    {% if not apu.esta_aprobado %}
+    <button class="btn btn-ghost btn-sm"
+            data-bs-toggle="modal" data-bs-target="#modalPolizas">
+      <i class="bi bi-pencil-square" style="margin-right:4px;"></i>Editar pólizas
+    </button>
+    {% endif %}
+  </div>
+
+  {% with polizas=apu.polizas.all %}
+  {% if polizas %}
+  <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead>
+      <tr style="background:var(--surface-raised,rgba(0,0,0,.03));color:var(--ink-soft);">
+        <th style="padding:8px 20px;text-align:left;font-weight:600;">Nombre</th>
+        <th style="padding:8px 12px;text-align:left;font-weight:600;">Base de cálculo</th>
+        <th style="padding:8px 12px;text-align:right;font-weight:600;">%</th>
+        <th style="padding:8px 12px;text-align:right;font-weight:600;">Base calculada</th>
+        <th style="padding:8px 20px;text-align:right;font-weight:600;">Valor póliza</th>
+        <th style="padding:8px 12px;text-align:center;font-weight:600;">Activa</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in polizas %}
+      <tr style="border-top:1px solid var(--border);{% if not p.activa %}opacity:.45;{% endif %}">
+        <td style="padding:8px 20px;color:var(--ink);">{{ p.nombre }}</td>
+        <td style="padding:8px 12px;color:var(--ink-soft);">{{ p.get_base_calculo_display }}</td>
+        <td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums;">{{ p.porcentaje|floatformat:"-4" }}%</td>
+        <td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-soft);">{{ p.base_calculada|currency:"COP" }}</td>
+        <td style="padding:8px 20px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:#0ea5e9;">{{ p.valor_calculado|currency:"COP" }}</td>
+        <td style="padding:8px 12px;text-align:center;">
+          {% if p.activa %}<i class="bi bi-check-circle-fill" style="color:#17a85e;"></i>{% else %}<i class="bi bi-dash-circle" style="color:var(--ink-soft);"></i>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="border-top:2px solid var(--border);font-weight:700;">
+        <td colspan="4" style="padding:8px 20px;color:var(--ink-soft);font-size:11.5px;">Total pólizas activas</td>
+        <td style="padding:8px 20px;text-align:right;color:#0ea5e9;font-variant-numeric:tabular-nums;">{{ apu.subtotal_polizas|currency:"COP" }}</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+  {% else %}
+  <div style="padding:20px 20px;font-size:12.5px;color:var(--ink-soft);">
+    Sin pólizas configuradas. Las pólizas son opcionales.
+  </div>
+  {% endif %}
+  {% endwith %}
+</div>
 
 
 <div id="apuFinalActions" style="display:none;margin-top:16px;">
@@ -1467,78 +1314,43 @@
         </div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-      <a href="{% url 'presupuestos:apu_xlsx' apu.pk %}"
-         class="btn btn-ghost btn-sm"
-         title="Descargar Excel con hoja Despiece y hoja APU">
-        <i class="bi bi-file-earmark-excel" style="margin-right:4px;color:#1D6F42;"></i>Excel
-      </a>
-      <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
-         class="btn btn-ghost btn-sm" target="_blank">
-        <i class="bi bi-file-earmark-pdf" style="margin-right:4px;"></i>PDF Interno
-      </a>
-      <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
-         class="btn btn-ghost btn-sm" target="_blank">
-        <i class="bi bi-file-earmark-person" style="margin-right:4px;"></i>PDF Cliente
-      </a>
-      {% comment %}Sub-fase C — bloque "En revisión" con info completa (estado, enviado por inferido del LogSistema, fecha y hora, revisor).{% endcomment %}
-      {% if ya_en_revision %}
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-                      color:#17a85e;padding:4px 10px;background:rgba(23,168,94,.12);border-radius:8px;">
-            ● En revisión
-          </div>
-          {% if puede_aprobar %}
-          <a href="{% url 'presupuestos:apu_revisar' apu.pk %}"
-             class="btn btn-sm btn-success d-flex align-items-center gap-1" style="margin-left:auto;">
-            <i class="bi bi-check2-circle"></i> Ir a revisión
-          </a>
-          {% endif %}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;
-                    background:var(--card);border:1px solid var(--border);border-radius:10px;
-                    padding:10px 14px;font-size:12px;">
-          <div>
-            <div style="font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);">Enviado por</div>
-            <div style="color:var(--ink);font-weight:600;">
-              {% if enviado_revision_por_log %}{{ enviado_revision_por_log }}{% else %}No disponible{% endif %}
-            </div>
-          </div>
-          <div>
-            <div style="font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);">Fecha y hora</div>
-            <div style="color:var(--ink);font-weight:600;">
-              {% if enviado_revision_at_log %}{{ enviado_revision_at_log|date:"d/m/Y H:i" }}{% elif apu.fecha_envio_revision %}{{ apu.fecha_envio_revision|date:"d/m/Y H:i" }}{% else %}No disponible{% endif %}
-            </div>
-          </div>
-          <div>
-            <div style="font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);">Revisor</div>
-            <div style="color:var(--ink);font-weight:600;">
-              {% if apu.revisor %}{{ apu.revisor.nombre_completo|default:apu.revisor.email }}{% else %}— sin asignar —{% endif %}
-            </div>
-          </div>
-        </div>
-        {% if not puede_aprobar %}
-        <div style="font-size:11.5px;color:var(--ink-soft);">
-          <i class="bi bi-lock me-1"></i>Pendiente de aprobación por:
-          <strong>{% if apu.revisor %}{{ apu.revisor.nombre_completo|default:apu.revisor.email }}{% else %}— sin asignar —{% endif %}</strong>.
-        </div>
-        {% endif %}
+    {# ── Acciones del APU confirmado ──────────────────────────────── #}
+    <div style="display:flex;flex-direction:column;gap:12px;align-items:flex-end;">
+      {# Campo descripción inline — requerido para el PDF final del cliente #}
+      <div style="width:100%;max-width:380px;">
+        <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+                      color:var(--ink-soft);display:block;margin-bottom:4px;">
+          Descripción del APU <span style="color:#b91c1c;">*</span>
+          <span style="font-weight:400;font-style:italic;">(aparece en el PDF del cliente)</span>
+        </label>
+        <textarea id="apuDescripcionInline" rows="2"
+                  class="form-control form-control-sm"
+                  placeholder="Ej: Instalación de cubierta en Zona A — 350 m²"
+                  style="font-size:12px;resize:vertical;">{{ apu.descripcion }}</textarea>
       </div>
-      {% endif %}
-      {% comment %}Sub-fase B — Botón que abre el modal formal de envío a revisión. puede_enviar_revision ya incorpora estado de archivado y aprobación.{% endcomment %}
-      {% if puede_enviar_revision %}
-      <div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="{% url 'presupuestos:apu_xlsx' apu.pk %}"
+           class="btn btn-ghost btn-sm"
+           title="Descargar Excel con hoja Despiece y hoja APU">
+          <i class="bi bi-file-earmark-excel" style="margin-right:4px;color:#1D6F42;"></i>Excel
+        </a>
+        {# «Guardar APU» consolida el valor unitario × cantidad base y redirige al presupuesto #}
         <button type="button" class="btn btn-primary btn-sm"
-                data-bs-toggle="modal" data-bs-target="#modalEnviarRevision">
-          <i class="bi bi-send-check" style="margin-right:4px;"></i>
-          {% if ya_en_revision %}Reenviar a revisión{% else %}Enviar a revisión{% endif %}
+                onclick="apuGuardarDesdePanel()"
+                title="Guarda el APU y calcula el valor total para el presupuesto del proyecto">
+          <i class="bi bi-floppy" style="margin-right:4px;"></i>Guardar APU
         </button>
       </div>
-      {% endif %}
     </div>
   </div>
 </div>
+
+{# Formulario oculto para guardar APU (nombre + descripcion via POST) #}
+<form id="formGuardarAPU" method="post" action="{% url 'presupuestos:apu_guardar' apu.pk %}" style="display:none;">
+  {% csrf_token %}
+  <input type="hidden" name="nombre" id="fgapu_nombre" value="{{ apu.nombre }}">
+  <input type="hidden" name="descripcion" id="fgapu_descripcion" value="">
+</form>
 
 <!-- ── Fase 12 — Cotización aprobada (snapshot inmutable) ────────────────── -->
 <div style="margin-top:18px;">
@@ -1566,7 +1378,7 @@
             · Modalidad {{ cotizacion_vigente.modalidad_aiu_snapshot|default:"—" }}
           </div>
           <div style="font-size:18px;font-weight:800;color:#1c7a3a;margin-top:6px;">
-            Total aprobado: ${{ cotizacion_vigente.total_final|floatformat:0 }}
+            Total aprobado: {{ cotizacion_vigente.total_final|currency:"COP" }}
             <span style="font-size:11px;font-weight:600;color:var(--ink-soft);">
               {{ cotizacion_vigente.moneda_snapshot }}
             </span>
@@ -1574,10 +1386,6 @@
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <a href="{% url 'presupuestos:cotizacion_pdf_interno' cotizacion_vigente.pk %}"
-           class="btn btn-success btn-sm" target="_blank">
-          <i class="bi bi-file-earmark-pdf" style="margin-right:4px;"></i>PDF Interno aprobado
-        </a>
         <a href="{% url 'presupuestos:cotizacion_pdf_cliente' cotizacion_vigente.pk %}"
            class="btn btn-success btn-sm" target="_blank">
           <i class="bi bi-file-earmark-person" style="margin-right:4px;"></i>PDF Cliente aprobado
@@ -1595,13 +1403,9 @@
         <div style="background:rgba(14,17,23,.04);border:1px solid rgba(14,17,23,.08);
                     border-radius:8px;padding:6px 12px;font-size:11px;color:var(--ink-soft);">
           v{{ h.version }} · {{ h.fecha_aprobacion_snapshot|date:"d/m/Y" }}
-          · ${{ h.total_final|floatformat:0 }}
-          <a href="{% url 'presupuestos:cotizacion_pdf_interno' h.pk %}" target="_blank"
-             style="margin-left:6px;color:#28a745;text-decoration:none;" title="PDF Interno v{{ h.version }}">
-            <i class="bi bi-file-earmark-pdf"></i>
-          </a>
+          · {{ h.total_final|currency:"COP" }}
           <a href="{% url 'presupuestos:cotizacion_pdf_cliente' h.pk %}" target="_blank"
-             style="color:#28a745;text-decoration:none;" title="PDF Cliente v{{ h.version }}">
+             style="margin-left:6px;color:#28a745;text-decoration:none;" title="PDF Cliente v{{ h.version }}">
             <i class="bi bi-file-earmark-person"></i>
           </a>
         </div>
@@ -1623,247 +1427,6 @@
     el snapshot inmutable de la cotización.
   </div>
   {% endif %}
-</div>
-
-<!-- ── Panel Modalidades AIU del proyecto ───────────────────────────────── -->
-<div id="panelModalidadesAIU" style="display:none;margin-top:20px;">
-{% with m=modalidades_aiu %}
-
-{# Fase 10A-9: estado de aprobación AIU #}
-{% if apu.modalidad_aiu_seleccionada %}
-{% with mAprob=m.modalidad1 %}
-<div style="background:var(--card);border:1px solid #28a745;border-left:4px solid #28a745;border-radius:14px;padding:16px 22px;margin-bottom:14px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-    <div>
-      <span class="badge bg-success" style="font-size:11.5px;padding:5px 12px;">
-        <i class="bi bi-check-circle-fill me-1"></i>Modalidad AIU aprobada
-      </span>
-      <span style="font-size:13px;font-weight:700;color:var(--ink);margin-left:10px;">
-        Modalidad {{ apu.modalidad_aiu_seleccionada }}
-      </span>
-      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">
-        A {{ m.porcentajes.admin|floatformat:2 }}% · I {{ m.porcentajes.imprevistos|floatformat:2 }}% · U {{ m.porcentajes.utilidad|floatformat:2 }}%
-        {% if m.porcentajes.es_final %}<span class="badge bg-primary" style="font-size:9.5px;font-weight:600;margin-left:4px;">snapshot revisor</span>{% endif %}
-        {% if apu.aprobado_por %} · Aprobado por {{ apu.aprobado_por.nombre_completo }}{% endif %}
-        {% if apu.fecha_aprobacion %} · {{ apu.fecha_aprobacion|date:"d/m/Y H:i" }}{% endif %}
-      </div>
-    </div>
-    <div style="text-align:right;">
-      {% if apu.modalidad_aiu_seleccionada == "1" %}
-        {% with mApr=m.modalidad1 %}
-          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.06em;">Gran total aprobado</div>
-          <div style="font-size:20px;font-weight:800;color:#17a85e;font-variant-numeric:tabular-nums;">{{ mApr.gran_total|currency:"COP" }}</div>
-          <div style="font-size:11px;color:var(--ink-soft);">Total AIU {{ mApr.total_aiu|currency:"COP" }}{% if m.garantia_recargo %} + Garantía {{ m.garantia_recargo|currency:"COP" }}{% endif %}</div>
-        {% endwith %}
-      {% else %}
-        {% with mApr=m.modalidad2 %}
-          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.06em;">Gran total aprobado</div>
-          <div style="font-size:20px;font-weight:800;color:#17a85e;font-variant-numeric:tabular-nums;">{{ mApr.gran_total|currency:"COP" }}</div>
-          <div style="font-size:11px;color:var(--ink-soft);">Total AIU {{ mApr.total_aiu|currency:"COP" }}{% if m.garantia_recargo %} + Garantía {{ m.garantia_recargo|currency:"COP" }}{% endif %}</div>
-        {% endwith %}
-      {% endif %}
-    </div>
-  </div>
-</div>
-{% endwith %}
-{% else %}
-<div style="background:var(--card);border:1px solid var(--border);border-left:4px solid #f0ad4e;border-radius:14px;padding:14px 20px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">
-  <span class="badge bg-warning text-dark" style="font-size:11.5px;padding:5px 12px;">
-    <i class="bi bi-hourglass-split me-1"></i>Pendiente de revisión
-  </span>
-  <span style="font-size:12.5px;color:var(--ink-soft);">
-    El revisor aún no ha aprobado la modalidad AIU oficial. Modalidades mostradas debajo son informativas.
-  </span>
-</div>
-{% endif %}
-
-<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;">
-  <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
-    <div>
-      <div style="font-size:14px;font-weight:700;color:var(--ink);">Modalidades AIU del proyecto</div>
-      <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">
-        A={{ m.porcentajes.admin|floatformat:2 }}% · I={{ m.porcentajes.imprevistos|floatformat:2 }}% · U={{ m.porcentajes.utilidad|floatformat:2 }}%
-        {% if m.porcentajes.es_final %}<span class="badge bg-primary" style="font-size:9.5px;font-weight:600;margin-left:4px;">snapshot revisor</span>{% endif %}
-        {% if m.garantia_recargo %} · Garantía Red Shield {{ m.garantia_recargo|currency:"COP" }} (fuera de base AIU){% endif %}
-        {% if not apu.esta_aprobado %}
-        &nbsp;—&nbsp;
-        <a href="{% url 'presupuestos:apu_update' apu.pk %}" style="color:var(--theme-accent);font-size:11px;">Editar porcentajes base</a>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <!-- Subtotales de costos directos -->
-  <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;">
-    {% for label, val in m.subtotales.items %}
-    <div style="background:var(--surface);border-radius:8px;padding:10px 12px;">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:3px;">
-        {{ label|capfirst|cut:"_" }}
-      </div>
-      <div style="font-size:13px;font-weight:700;color:{% if label == 'total' %}var(--theme-accent){% else %}var(--ink){% endif %};">
-        {{ val|currency:"COP" }}
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-
-  <!-- Cards verticales de modalidades -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;padding:16px 20px 20px;">
-
-    {# ── Card Modalidad 1 ──────────────────────────────────────────── #}
-    {% with md=m.modalidad1 %}
-    <div style="
-      border:{% if apu.modalidad_aiu_seleccionada == '1' %}2px solid #28a745{% else %}1px solid var(--border){% endif %};
-      border-radius:12px;overflow:hidden;
-      background:{% if apu.modalidad_aiu_seleccionada == '1' %}rgba(40,167,69,0.04){% else %}var(--card){% endif %};
-    ">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <div>
-          <span style="font-size:13px;font-weight:700;color:var(--ink);">Modalidad 1</span>
-          {% if apu.modalidad_aiu_seleccionada == "1" %}<span class="badge bg-success ms-2" style="font-size:10px;">Aprobada</span>{% endif %}
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">{{ md.label }}</div>
-        </div>
-      </div>
-      <div style="padding:14px 16px;">
-        {# Base #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
-          <span style="font-size:12px;color:var(--ink-soft);">Base AIU</span>
-          <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;">{{ md.base|currency:"COP" }}</span>
-        </div>
-        {# A #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0 2px;">
-          <span style="font-size:12px;color:var(--ink);">A — Administración
-            <span style="font-size:11px;color:var(--ink-soft);">{{ md.admin_pct|floatformat:2 }}%</span>
-          </span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.admin|currency:"COP" }}</span>
-        </div>
-        {# I #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 2px;">
-          <span style="font-size:12px;color:var(--ink);">I — Imprevistos
-            <span style="font-size:11px;color:var(--ink-soft);">{{ m.porcentajes.imprevistos|floatformat:2 }}%</span>
-          </span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.imprevistos|currency:"COP" }}</span>
-        </div>
-        {# U #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
-          <span style="font-size:12px;color:var(--ink);">U — Utilidad
-            <span style="font-size:11px;color:var(--ink-soft);">{{ m.porcentajes.utilidad|floatformat:2 }}%</span>
-          </span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.utilidad|currency:"COP" }}</span>
-        </div>
-        {# Subtotal con AIU #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;">
-          <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Subtotal con AIU</span>
-          <span style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;">{{ md.subtotal_con_aiu|currency:"COP" }}</span>
-        </div>
-        {# Garantía, si aplica #}
-        {% if m.garantia_recargo %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 4px;">
-          <span style="font-size:12px;color:var(--ink-soft);">Garantía Red Shield</span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ m.garantia_recargo|currency:"COP" }}</span>
-        </div>
-        {% endif %}
-        {# IVA #}
-        {% if apu.aplica_iva and md.iva_valor %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
-          <span style="font-size:12px;color:var(--ink-soft);">IVA final sobre subtotal con AIU
-            <span style="font-size:11px;">({{ apu.iva_pct|floatformat:0 }}%)</span>
-          </span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.iva_valor|currency:"COP" }}</span>
-        </div>
-        {% else %}
-        <div style="height:1px;background:var(--border);margin:6px 0;"></div>
-        {% endif %}
-        {# Gran total #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 0;">
-          <span style="font-size:13px;font-weight:700;color:var(--ink);">Gran total</span>
-          <span style="font-size:18px;font-weight:800;color:#17a85e;font-variant-numeric:tabular-nums;">{{ md.total_con_iva|currency:"COP" }}</span>
-        </div>
-      </div>
-    </div>
-    {% endwith %}
-
-    {# ── Card Modalidad 2 ──────────────────────────────────────────── #}
-    {% with md=m.modalidad2 %}
-    <div style="
-      border:{% if apu.modalidad_aiu_seleccionada == '2' %}2px solid #28a745{% else %}1px solid var(--border){% endif %};
-      border-radius:12px;overflow:hidden;
-      background:{% if apu.modalidad_aiu_seleccionada == '2' %}rgba(40,167,69,0.04){% else %}var(--card){% endif %};
-    ">
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <div>
-          <span style="font-size:13px;font-weight:700;color:var(--ink);">Modalidad 2</span>
-          {% if apu.modalidad_aiu_seleccionada == "2" %}<span class="badge bg-success ms-2" style="font-size:10px;">Aprobada</span>{% endif %}
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">{{ md.label }}</div>
-        </div>
-      </div>
-      <div style="padding:14px 16px;">
-        {# Materiales (precio venta) — sólo M2 #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0 4px;">
-          <span style="font-size:12px;color:var(--ink-soft);">Materiales (precio venta)</span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.valor_total_mat|currency:"COP" }}</span>
-        </div>
-        {# Base #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
-          <span style="font-size:12px;color:var(--ink-soft);">Base AIU <span style="font-size:10.5px;">(sin mat. ni adm.)</span></span>
-          <span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;">{{ md.base|currency:"COP" }}</span>
-        </div>
-        {# A #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0 2px;">
-          <span style="font-size:12px;color:var(--ink);">A — Administración
-            <span style="font-size:11px;color:var(--ink-soft);">{{ md.admin_pct|floatformat:2 }}%</span>
-          </span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.admin|currency:"COP" }}</span>
-        </div>
-        {# I #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 2px;">
-          <span style="font-size:12px;color:var(--ink);">I — Imprevistos
-            <span style="font-size:11px;color:var(--ink-soft);">{{ m.porcentajes.imprevistos|floatformat:2 }}%</span>
-          </span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.imprevistos|currency:"COP" }}</span>
-        </div>
-        {# U #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
-          <span style="font-size:12px;color:var(--ink);">U — Utilidad
-            <span style="font-size:11px;color:var(--ink-soft);">{{ m.porcentajes.utilidad|floatformat:2 }}%</span>
-          </span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.utilidad|currency:"COP" }}</span>
-        </div>
-        {# Subtotal con AIU #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;">
-          <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Subtotal con AIU</span>
-          <span style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;">{{ md.subtotal_con_aiu|currency:"COP" }}</span>
-        </div>
-        {# Garantía, si aplica #}
-        {% if m.garantia_recargo %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 4px;">
-          <span style="font-size:12px;color:var(--ink-soft);">Garantía Red Shield</span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ m.garantia_recargo|currency:"COP" }}</span>
-        </div>
-        {% endif %}
-        {# IVA #}
-        {% if apu.aplica_iva and md.iva_valor %}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0 6px;border-bottom:1px solid var(--border);">
-          <span style="font-size:12px;color:var(--ink-soft);">IVA final sobre subtotal con AIU
-            <span style="font-size:11px;">({{ apu.iva_pct|floatformat:0 }}%)</span>
-          </span>
-          <span style="font-size:13px;font-variant-numeric:tabular-nums;">{{ md.iva_valor|currency:"COP" }}</span>
-        </div>
-        {% else %}
-        <div style="height:1px;background:var(--border);margin:6px 0;"></div>
-        {% endif %}
-        {# Gran total #}
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 0;">
-          <span style="font-size:13px;font-weight:700;color:var(--ink);">Gran total</span>
-          <span style="font-size:18px;font-weight:800;color:#17a85e;font-variant-numeric:tabular-nums;">{{ md.total_con_iva|currency:"COP" }}</span>
-        </div>
-      </div>
-    </div>
-    {% endwith %}
-
-  </div>{# /grid cards #}
-</div>
-{% endwith %}
 </div>
 
 
@@ -1951,11 +1514,11 @@
                 {% if item.vida_util_dias %}
                   ${{ item.costo_por_dia|floatformat:2 }}/día
                 {% else %}
-                  ${{ item.precio_base|floatformat:0 }}
+                  {{ item.precio_base|currency:"COP" }}
                 {% endif %}
               </span>
               <div style="width:80px;">
-                <input type="number" name="cantidad[]" value="{{ proyecto_num_personas|default:1 }}" min="1"
+                <input type="number" name="cantidad[]" value="{% if item.pk in lineas_item_ids %}{{ lineas_cantidades|get_item:item.pk|default:1 }}{% else %}1{% endif %}" min="1"
                        class="form-control form-control-sm" style="text-align:center;">
               </div>
             </div>
@@ -2117,14 +1680,14 @@
                 {{ item.nombre }}
                 {% if item.pk in lineas_item_ids %}<span class="apu-badge apu-badge-en-apu">Ya en APU</span>{% elif item.pk in sia_item_ids %}<span class="apu-badge apu-badge-predet">Predeterminado</span>{% endif %}
                 {% if item.salario_base %}
-                  <span style="font-size:10px;color:var(--muted);">— sal. ${{ item.salario_base|floatformat:0 }}/mes</span>
+                  <span style="font-size:10px;color:var(--muted);">— sal. {{ item.salario_base|currency:"COP" }}/mes</span>
                 {% endif %}
               </label>
               <span style="font-size:11.5px;color:var(--muted);width:120px;text-align:right;">
-                ${{ item.precio_base|floatformat:0 }}/{{ item.unidad }}
+                {{ item.precio_base|currency:"COP" }}/{{ item.unidad }}
               </span>
               <div style="width:80px;">
-                <input type="number" name="cantidad[]" value="{{ proyecto_num_personas|default:1 }}" min="1"
+                <input type="number" name="cantidad[]" value="{% if item.pk in lineas_item_ids %}{{ lineas_cantidades|get_item:item.pk|default:1 }}{% else %}1{% endif %}" min="1"
                        class="form-control form-control-sm" style="text-align:center;">
               </div>
             </div>
@@ -2157,7 +1720,9 @@
         <div class="modal-header cat-modal-header">
           <h5 class="modal-title">
             <i class="bi bi-briefcase" style="margin-right:8px;color:#64748b;"></i>Administración
-            <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:10px;">{{ apu_dias_duracion }} días · valor_total = valor_día × días × cant × %</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:10px;">
+              Selecciona los ítems e indica el % a aplicar sobre la fórmula del subsistema
+            </span>
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
@@ -2170,17 +1735,14 @@
                    oninput="apuModalFilter(this)">
           </div>
 
-          {# Cabecera de columnas #}
-          <div style="display:grid;grid-template-columns:24px 1fr 110px 64px 70px 100px;gap:8px;
+          {# Cabecera de columnas — solo Concepto y % #}
+          <div style="display:grid;grid-template-columns:24px 1fr 80px;gap:8px;
                       padding:5px 4px;font-size:10.5px;font-weight:700;text-transform:uppercase;
                       letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--border);
                       margin-bottom:6px;">
             <span></span>
             <span>Concepto</span>
-            <span style="text-align:right;">Valor/día</span>
-            <span style="text-align:center;">Cant.</span>
             <span style="text-align:center;">%</span>
-            <span style="text-align:right;">Total calc.</span>
           </div>
 
           {% regroup items_admin by categoria as admin_por_cat %}
@@ -2192,14 +1754,9 @@
             </div>
             {% for item in cat_group.list %}
             <div class="apu-modal-item-row admin-item-row"
-                 data-search="{{ item.nombre|lower }} {{ item.codigo|default:''|lower }} {{ cat_group.grouper.nombre|lower }} {{ item.unidad|lower }}"
+                 data-search="{{ item.nombre|lower }} {{ item.codigo|default:''|lower }} {{ cat_group.grouper.nombre|lower }}"
                  data-item-id="{{ item.pk }}"
-                 data-precio-base="{{ item.precio_base }}"
-                 data-unidad="{{ item.unidad }}"
-                 data-salario-base="{{ item.salario_base }}"
-                 data-prestaciones="{{ item.prestaciones }}"
-                 data-vida-util-dias="{{ item.vida_util_dias|default:0 }}"
-                 style="display:grid;grid-template-columns:24px 1fr 110px 64px 70px 100px;gap:8px;
+                 style="display:grid;grid-template-columns:24px 1fr 80px;gap:8px;
                         align-items:center;padding:6px 4px;border-bottom:1px solid var(--border);">
               <input type="checkbox" class="admin-check"
                      style="width:16px;height:16px;cursor:pointer;margin:0;"
@@ -2207,29 +1764,15 @@
               <span style="font-size:12.5px;">
                 {{ item.nombre }}
                 {% if item.pk in lineas_item_ids %}<span class="apu-badge apu-badge-en-apu">Ya en APU</span>{% elif item.pk in sia_item_ids %}<span class="apu-badge apu-badge-predet">Predeterminado</span>{% endif %}
-                {% if item.unidad == "hora" %}<span style="font-size:10px;color:var(--muted);"> (precio/hora — fallback)</span>{% endif %}
               </span>
-              <span class="admin-valor-dia"
-                    style="text-align:right;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;">—</span>
-              <input type="number" class="form-control form-control-sm admin-cantidad"
-                     min="1" value="1" step="1"
-                     style="text-align:center;padding:2px 4px;">
               <input type="number" class="form-control form-control-sm admin-porcentaje"
                      min="0" max="200" value="100" step="1"
-                     style="text-align:center;padding:2px 4px;">
-              <span class="admin-total"
-                    style="text-align:right;font-size:12px;font-weight:600;
-                           font-variant-numeric:tabular-nums;">—</span>
+                     style="text-align:center;padding:2px 4px;"
+                     title="% a aplicar sobre la fórmula del subsistema (100 = valor completo)">
             </div>
             {% endfor %}
           </div>
           {% endfor %}
-
-          <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);
-                      display:flex;justify-content:flex-end;align-items:center;gap:16px;font-size:13px;">
-            <span style="color:var(--muted);">Total estimado:</span>
-            <strong id="adminGrandTotal" style="font-variant-numeric:tabular-nums;">—</strong>
-          </div>
 
           {% else %}
           <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
@@ -2250,62 +1793,16 @@
 <script>
 (function () {
   "use strict";
-  const ADMIN_DIAS = {{ apu_dias_duracion|default:0 }};
-  const SIA_ADMIN  = {{ sia_admin_json|safe }};
-
-  function fmtCOP(n) {
-    return "$ " + Math.round(n).toLocaleString("es-CO");
-  }
-
-  function calcValorDia(row) {
-    const sb  = parseFloat(row.dataset.salarioBase)   || 0;
-    const pr  = parseFloat(row.dataset.prestaciones)  || 0;
-    const vu  = parseInt(row.dataset.vidaUtilDias)    || 0;
-    const pb  = parseFloat(row.dataset.precioBase)    || 0;
-    const un  = row.dataset.unidad;
-    if (sb > 0 || pr > 0) return (sb + pr) / 30;
-    if (vu > 0)           return pb / vu;
-    if (un === "mes")     return pb / 30;
-    return pb;  /* "dia", "hora" (fallback), "und", "global" */
-  }
-
-  function updateRow(row) {
-    const vd   = calcValorDia(row);
-    const cant = Math.max(parseInt(row.querySelector(".admin-cantidad").value)   || 1, 1);
-    const pct  = (parseFloat(row.querySelector(".admin-porcentaje").value) || 0) / 100;
-    const tot  = vd * ADMIN_DIAS * cant * pct;
-    row.querySelector(".admin-valor-dia").textContent = fmtCOP(vd);
-    row.querySelector(".admin-total").textContent     = fmtCOP(tot);
-    return tot;
-  }
-
-  function updateGrandTotal() {
-    let grand = 0;
-    document.querySelectorAll(".admin-item-row").forEach(row => {
-      if (row.querySelector(".admin-check").checked) {
-        grand += parseFloat(row.dataset.lastTotal || 0);
-      }
-    });
-    const el = document.getElementById("adminGrandTotal");
-    if (el) el.textContent = fmtCOP(grand);
-  }
+  const SIA_ADMIN = {{ sia_admin_json|safe }};
 
   function initAdminModal() {
     document.querySelectorAll(".admin-item-row").forEach(row => {
       const itemId = row.dataset.itemId;
-      /* Pre-llenar desde SubsistemaItemAPU si existe */
+      /* Pre-llenar porcentaje desde APULinea existente o SubsistemaItemAPU */
       if (SIA_ADMIN[itemId]) {
-        row.querySelector(".admin-cantidad").value   = SIA_ADMIN[itemId].cantidad;
-        row.querySelector(".admin-porcentaje").value = parseFloat(SIA_ADMIN[itemId].porcentaje).toFixed(0);
+        row.querySelector(".admin-porcentaje").value =
+          parseFloat(SIA_ADMIN[itemId].porcentaje).toFixed(0);
       }
-      function onUpdate() {
-        row.dataset.lastTotal = updateRow(row);
-        updateGrandTotal();
-      }
-      row.querySelector(".admin-cantidad").addEventListener("input",  onUpdate);
-      row.querySelector(".admin-porcentaje").addEventListener("input", onUpdate);
-      row.querySelector(".admin-check").addEventListener("change",    onUpdate);
-      onUpdate();
     });
   }
 
@@ -2314,12 +1811,11 @@
     modalEl.addEventListener("shown.bs.modal", initAdminModal);
   }
 
-  /* Al enviar: serializar solo ítems marcados como campos hidden */
+  /* Al enviar: serializar solo ítems marcados (item_id[], cantidad[]=1, porcentaje[]) */
   const formAdmin = document.getElementById("formAdmin");
   if (formAdmin) {
     formAdmin.addEventListener("submit", function (e) {
       e.preventDefault();
-      /* Limpiar hidden anteriores */
       formAdmin.querySelectorAll(".admin-hidden").forEach(el => el.remove());
 
       let count = 0;
@@ -2331,8 +1827,8 @@
           inp.className = "admin-hidden";
           formAdmin.appendChild(inp);
         };
-        add("item_id[]",   row.dataset.itemId);
-        add("cantidad[]",  row.querySelector(".admin-cantidad").value);
+        add("item_id[]",    row.dataset.itemId);
+        add("cantidad[]",   "1");   /* cantidad fija — la fórmula opera a nivel categoría */
         add("porcentaje[]", row.querySelector(".admin-porcentaje").value);
         count++;
       });
@@ -2346,6 +1842,217 @@
   }
 })();
 </script>
+
+{# ── Modal: Pólizas ─────────────────────────────────────────────── #}
+{% if not apu.esta_aprobado %}
+<div class="modal fade" id="modalPolizas" tabindex="-1" aria-labelledby="modalPolizasLabel">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="post" action="{% url 'presupuestos:apu_polizas' apu.pk %}" id="formPolizas">
+        {% csrf_token %}
+        <input type="hidden" name="polizas_count" id="polizasCount" value="0">
+
+        <div class="modal-header cat-modal-header">
+          <h5 class="modal-title" id="modalPolizasLabel">
+            <i class="bi bi-shield-check" style="margin-right:8px;color:#0ea5e9;"></i>Pólizas de cumplimiento y seguros
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body" style="padding:20px;">
+          <p style="font-size:12.5px;color:var(--ink-soft);margin-bottom:16px;">
+            Define las pólizas como porcentaje sobre una base de costo.
+            El valor se calcula automáticamente al guardar.
+          </p>
+
+          <p style="font-size:11.5px;color:#0ea5e9;margin-bottom:8px;background:rgba(14,165,233,.07);padding:6px 10px;border-radius:6px;">
+            <i class="bi bi-info-circle" style="margin-right:4px;"></i>
+            <strong>Bases de cálculo:</strong> puede seleccionar varias simultáneamente.
+            El valor de la póliza se aplica sobre la <strong>suma</strong> de las bases seleccionadas.
+          </p>
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;" id="polizasTable">
+            <thead>
+              <tr style="color:var(--ink-soft);font-weight:600;">
+                <th style="padding:6px 8px;text-align:left;">Nombre de la póliza</th>
+                <th style="padding:6px 8px;text-align:left;">Bases de cálculo (multiselecc.)</th>
+                <th style="padding:6px 8px;text-align:right;width:90px;">% aplicar</th>
+                <th style="padding:6px 8px;text-align:center;width:60px;">Activa</th>
+                <th style="padding:6px 8px;width:36px;"></th>
+              </tr>
+            </thead>
+            <tbody id="polizasTbody">
+              {# Filas pre-cargadas con las pólizas existentes #}
+              {% for p in apu.polizas.all %}
+              {% with idx=forloop.counter0 %}
+              <tr class="poliza-row" data-idx="{{ idx }}">
+                <td style="padding:4px 8px;">
+                  <input type="text" name="nombre_{{ idx }}"
+                         value="{{ p.nombre }}"
+                         class="form-control form-control-sm"
+                         placeholder="Ej: Póliza de cumplimiento" required>
+                </td>
+                <td style="padding:4px 8px;">
+                  <div class="poliza-bases-wrap" style="display:flex;flex-wrap:wrap;gap:4px;">
+                    {% for val, label in poliza_base_choices %}
+                    <label style="display:flex;align-items:center;gap:3px;font-size:11.5px;
+                                  cursor:pointer;white-space:nowrap;
+                                  background:var(--surface-raised,rgba(0,0,0,.03));
+                                  border:1px solid var(--border);border-radius:4px;
+                                  padding:2px 6px;">
+                      <input type="checkbox"
+                             name="bases_calculo_{{ idx }}[]"
+                             value="{{ val }}"
+                             class="poliza-base-check"
+                             {% if p.bases_calculo and val in p.bases_calculo %}checked
+                             {% elif not p.bases_calculo and val == p.base_calculo %}checked
+                             {% endif %}>
+                      {{ label|truncatechars:22 }}
+                    </label>
+                    {% endfor %}
+                  </div>
+                </td>
+                <td style="padding:4px 8px;">
+                  <input type="number" name="porcentaje_{{ idx }}"
+                         value="{{ p.porcentaje|floatformat:'-4' }}"
+                         step="0.0001" min="0"
+                         class="form-control form-control-sm text-end"
+                         placeholder="0.0000" required>
+                </td>
+                <td style="padding:4px 8px;text-align:center;">
+                  <input type="checkbox" name="activa_{{ idx }}"
+                         class="form-check-input" {% if p.activa %}checked{% endif %}>
+                </td>
+                <td style="padding:4px 8px;text-align:center;">
+                  <button type="button" class="btn btn-ghost btn-sm poliza-remove-btn"
+                          style="color:var(--danger,#b91c1c);padding:2px 6px;"
+                          title="Eliminar fila">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </td>
+              </tr>
+              {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+
+          <div style="margin-top:12px;">
+            <button type="button" id="polizaAddBtn" class="btn btn-ghost btn-sm">
+              <i class="bi bi-plus-lg" style="margin-right:4px;"></i>Agregar póliza
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm" id="polizasSaveBtn">
+            <i class="bi bi-floppy" style="margin-right:4px;"></i>Guardar pólizas
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Base choices para nuevas filas (multi-selección) ─────────────
+  const BASE_CHOICES = [
+    {% for val, label in poliza_base_choices %}
+    { value: "{{ val }}", label: "{{ label }}" },
+    {% endfor %}
+  ];
+
+  function buildBasesHtml(idx) {
+    return BASE_CHOICES.map(c => `
+      <label style="display:flex;align-items:center;gap:3px;font-size:11.5px;
+                    cursor:pointer;white-space:nowrap;
+                    background:var(--surface-raised,rgba(0,0,0,.03));
+                    border:1px solid var(--border);border-radius:4px;
+                    padding:2px 6px;">
+        <input type="checkbox" name="bases_calculo_${idx}[]" value="${c.value}"
+               class="poliza-base-check">
+        ${c.label.length > 22 ? c.label.substring(0,22)+'…' : c.label}
+      </label>`).join("");
+  }
+
+  // ── Contador de filas ────────────────────────────────────────────
+  let rowCount = document.querySelectorAll("#polizasTbody .poliza-row").length;
+
+  function updateCount() {
+    document.getElementById("polizasCount").value = rowCount;
+  }
+  updateCount();
+
+  // ── Reindexar todos los names tras eliminar ───────────────────────
+  // Para checkboxes bases_calculo_N[], el name tiene el patrón _N[]
+  function reindex() {
+    rowCount = 0;
+    document.querySelectorAll("#polizasTbody .poliza-row").forEach(row => {
+      const oldIdx = parseInt(row.dataset.idx);
+      const newIdx = rowCount++;
+      row.dataset.idx = newIdx;
+      // Reindexar inputs/selects normales (name termina en _N)
+      row.querySelectorAll("[name]:not(.poliza-base-check)").forEach(el => {
+        el.name = el.name.replace(/_\d+$/, `_${newIdx}`);
+      });
+      // Reindexar checkboxes de bases (name = bases_calculo_N[])
+      row.querySelectorAll(".poliza-base-check").forEach(el => {
+        el.name = `bases_calculo_${newIdx}[]`;
+      });
+    });
+    updateCount();
+  }
+
+  // ── Eliminar fila ─────────────────────────────────────────────────
+  document.getElementById("polizasTbody").addEventListener("click", e => {
+    const btn = e.target.closest(".poliza-remove-btn");
+    if (!btn) return;
+    btn.closest("tr").remove();
+    reindex();
+  });
+
+  // ── Agregar fila ──────────────────────────────────────────────────
+  document.getElementById("polizaAddBtn").addEventListener("click", () => {
+    const idx = rowCount;
+    const tr = document.createElement("tr");
+    tr.className = "poliza-row";
+    tr.dataset.idx = idx;
+    tr.innerHTML = `
+      <td style="padding:4px 8px;">
+        <input type="text" name="nombre_${idx}" class="form-control form-control-sm"
+               placeholder="Ej: Póliza de cumplimiento" required>
+      </td>
+      <td style="padding:4px 8px;">
+        <div class="poliza-bases-wrap" style="display:flex;flex-wrap:wrap;gap:4px;">
+          ${buildBasesHtml(idx)}
+        </div>
+      </td>
+      <td style="padding:4px 8px;">
+        <input type="number" name="porcentaje_${idx}" step="0.0001" min="0"
+               class="form-control form-control-sm text-end" placeholder="0.0000" required>
+      </td>
+      <td style="padding:4px 8px;text-align:center;">
+        <input type="checkbox" name="activa_${idx}" class="form-check-input" checked>
+      </td>
+      <td style="padding:4px 8px;text-align:center;">
+        <button type="button" class="btn btn-ghost btn-sm poliza-remove-btn"
+                style="color:var(--danger,#b91c1c);padding:2px 6px;" title="Eliminar fila">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>`;
+    document.getElementById("polizasTbody").appendChild(tr);
+    rowCount++;
+    updateCount();
+    tr.querySelector("input[type=text]").focus();
+  });
+
+  // ── Prevenir submit si count=0 y no hay filas ─────────────────────
+  document.getElementById("formPolizas").addEventListener("submit", () => {
+    updateCount();
+  });
+})();
+</script>
+{% endif %}
 
 {% if es_admin_flag %}
 {# ── Modal: Eliminar APU (admin global) ─────────────────────────── #}
@@ -2377,94 +2084,6 @@
 </div>
 {% endif %}
 
-{# ── Sub-fase B — Modal: Enviar APU a revisión ───────────────────── #}
-{% if puede_enviar_revision %}
-<div class="modal fade" id="modalEnviarRevision" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="post" action="{% url 'presupuestos:apu_enviar_revision' apu.pk %}">
-        {% csrf_token %}
-        <div class="modal-header" style="border-bottom:1px solid var(--border);">
-          <h5 class="modal-title" style="font-size:14px;">
-            <i class="bi bi-send-check" style="margin-right:6px;color:var(--theme-accent);"></i>
-            Enviar APU a revisión
-          </h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-        </div>
-        <div class="modal-body" style="font-size:13px;">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;
-                      padding:12px 14px;margin-bottom:14px;">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
-              {% if apu.proyecto_sistema %}
-              <div>
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Proyecto</div>
-                <div style="color:var(--ink);font-weight:600;">
-                  {% if apu.proyecto_sistema.proyecto %}{{ apu.proyecto_sistema.proyecto.consecutivo }}{% else %}—{% endif %}
-                </div>
-              </div>
-              <div>
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Sistema / Subsistema</div>
-                <div style="color:var(--ink);font-weight:600;">
-                  {{ apu.proyecto_sistema.sistema.nombre }}
-                  {% if apu.proyecto_sistema.subsistema %} · {{ apu.proyecto_sistema.subsistema.nombre }}{% endif %}
-                </div>
-              </div>
-              {% endif %}
-              <div>
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">APU</div>
-                <div style="color:var(--ink);font-weight:600;">{{ apu.nombre }}</div>
-              </div>
-              <div>
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Líneas</div>
-                <div style="color:var(--ink);font-weight:600;">{{ apu.total_lineas|default:"0" }}</div>
-              </div>
-              {% if apu.total_general_venta %}
-              <div>
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Total estimado</div>
-                <div style="color:var(--ink);font-weight:600;">${{ apu.total_general_venta|floatformat:"0g" }}</div>
-              </div>
-              {% endif %}
-            </div>
-          </div>
-
-          {% if revisores %}
-          <div style="margin-bottom:14px;">
-            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
-                          color:var(--ink-soft);display:block;margin-bottom:6px;">
-              Revisor asignado
-            </label>
-            <select name="revisor_id" class="form-select form-select-sm" required>
-              <option value="">— Selecciona un revisor —</option>
-              {% for r in revisores %}
-              <option value="{{ r.pk }}" {% if apu.revisor_id == r.pk %}selected{% endif %}>
-                {{ r.nombre_completo|default:r.email }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-          {% endif %}
-
-          <div style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;
-                      padding:10px 12px;background:rgba(20,112,230,.06);
-                      border-left:3px solid var(--theme-accent);border-radius:6px;">
-            Al enviar este APU a revisión, el revisor podrá validar los costos,
-            la estructura técnica, el AIU y la cotización antes de aprobar.
-            Mientras esté en revisión, el APU queda bloqueado para modificaciones
-            de presupuesto.
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary btn-sm">
-            <i class="bi bi-send-check" style="margin-right:4px;"></i>
-            {% if ya_en_revision %}Reenviar a revisión{% else %}Enviar a revisión{% endif %}
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-{% endif %}
 
 {# ── Modal: Archivar APU (Fase 11.5.3) ─────────────────────────── #}
 <div class="modal fade" id="modalArchivarAPU" tabindex="-1">
@@ -2566,16 +2185,31 @@ function toggleCatRows(catRow) {
 
 /* ── Herramientas/MO: sincronizar cantidad[] con checkboxes ───────────
    Cuando un checkbox no está marcado, su input cantidad[] se deshabilita
-   para que no se envíe, manteniendo el zip item_id[] ↔ cantidad[] en sync. */
-document.querySelectorAll('#modalHerramientas input[type=checkbox], #modalManoObra input[type=checkbox]')
-  .forEach(function(cb) {
-    const row    = cb.closest('div[style]');
-    const qty    = row && row.querySelector('input[name="cantidad[]"]');
-    if (qty) qty.disabled = !cb.checked;
+   para que no se envíe, manteniendo el zip item_id[] ↔ cantidad[] en sync.
+   Se usa .apu-modal-item-row (clase explícita) en lugar de div[style]
+   para evitar que closest() suba a contenedores padre incorrectos. */
+function initModalQtySync(modalId) {
+  const modal = document.getElementById(modalId);
+  if (!modal) return;
+  modal.querySelectorAll('input[type=checkbox][name="item_id[]"]').forEach(function(cb) {
+    const row = cb.closest('.apu-modal-item-row');
+    const qty = row && row.querySelector('input[name="cantidad[]"]');
+    if (!qty) return;
+    // Estado inicial: habilitar solo si está marcado
+    qty.disabled = !cb.checked;
     cb.addEventListener('change', function() {
-      if (qty) qty.disabled = !this.checked;
+      qty.disabled = !this.checked;
+      // Si se acaba de marcar y la cantidad es 1 pero estaba deshabilitada, dejarla en 1
+      if (this.checked && parseInt(qty.value) < 1) qty.value = 1;
     });
   });
+}
+/* Inicializar al cargar (para ítems pre-marcados) y al abrir el modal */
+['modalHerramientas', 'modalManoObra'].forEach(function(mid) {
+  initModalQtySync(mid);
+  const el = document.getElementById(mid);
+  if (el) el.addEventListener('show.bs.modal', function() { initModalQtySync(mid); });
+});
 
 /* ── Transporte: añadir fila adicional ───────────────────────────── */
 function addTranspRow() {
@@ -2634,15 +2268,38 @@ function _apuId() {
 function checkAllConfirmed() {
   const apuId = _apuId();
   const panel = document.getElementById('apuFinalActions');
-  const panelAIU = document.getElementById('panelModalidadesAIU');
   if (!apuId) return;
   /* Guardia: si no hay botones de confirmación en pantalla, no exigir
      confirmaciones inexistentes — desbloquear el panel directamente. */
   const allOk = (APU_SECTIONS.length === 0) || APU_SECTIONS.every(function(s) {
     return localStorage.getItem('apu_' + apuId + '_' + s + '_confirmado') === '1';
   });
-  if (panel)    panel.style.display    = allOk ? 'block' : 'none';
-  if (panelAIU) panelAIU.style.display = allOk ? 'block' : 'none';
+  if (panel) panel.style.display = allOk ? 'block' : 'none';
+}
+
+/* Issue 7 — aplicar/quitar bloqueo visual en la sección */
+function applyLock(pane, locked) {
+  if (!pane) return;
+  const editarBtn = pane.querySelector('.apu-editar-btn');
+  const configBtn = pane.querySelector('.apu-config-btn');
+  if (locked) {
+    pane.classList.add('section-locked');
+    if (editarBtn) editarBtn.style.display = 'inline-flex';
+    if (configBtn) configBtn.style.display = 'none';
+  } else {
+    pane.classList.remove('section-locked');
+    if (editarBtn) editarBtn.style.display = 'none';
+    if (configBtn) configBtn.style.display = '';
+  }
+}
+
+/* Desbloquear sección desde el botón "Editar" */
+function editarSeccion(editarBtn) {
+  const pane = editarBtn.closest('.apu-tab-pane');
+  const confirmBtn = pane ? pane.querySelector('.apu-confirmado-btn') : null;
+  if (confirmBtn && confirmBtn.classList.contains('confirmado')) {
+    toggleconfirmado(confirmBtn);
+  }
 }
 
 function toggleconfirmado(btn) {
@@ -2660,6 +2317,7 @@ function toggleconfirmado(btn) {
       const tabBtn = document.querySelector('[onclick*="' + tabId + '"]');
       if (tabBtn) tabBtn.closest('.apu-tab-navitem').classList.add('confirmado');
     }
+    applyLock(pane, true);
   } else {
     localStorage.removeItem(key);
     btn.classList.remove('confirmado');
@@ -2668,6 +2326,7 @@ function toggleconfirmado(btn) {
       const tabBtn = document.querySelector('[onclick*="' + tabId + '"]');
       if (tabBtn) tabBtn.closest('.apu-tab-navitem').classList.remove('confirmado');
     }
+    applyLock(pane, false);
   }
   checkAllConfirmed();
 }
@@ -2683,6 +2342,7 @@ document.querySelectorAll('.apu-confirmado-btn').forEach(function(btn) {
       const tabBtn = document.querySelector('[onclick*="' + tabId + '"]');
       if (tabBtn) tabBtn.closest('.apu-tab-navitem').classList.add('confirmado');
     }
+    applyLock(pane, true);
   }
 });
 checkAllConfirmed();
@@ -2750,5 +2410,22 @@ function editGarOnModo(modo) {
   const block = document.getElementById('editGarMaterialBlock');
   if (block) block.style.display = (modo === 'MATERIAL_ESPECIFICO') ? 'block' : 'none';
 }
+
+/* ── Guardar APU y Calcular Presupuesto ───────────────────────────── */
+
+/**
+ * Toma la descripción del textarea inline y la envía vía el form oculto #formGuardarAPU.
+ * No abre ningún modal — es un POST directo.
+ */
+function apuGuardarDesdePanel() {
+  const desc = document.getElementById('apuDescripcionInline');
+  const fDesc = document.getElementById('fgapu_descripcion');
+  if (desc && fDesc) fDesc.value = desc.value;
+  const form = document.getElementById('formGuardarAPU');
+  if (form) form.submit();
+}
+
+/* apuAbrirCalcular eliminado: el presupuesto ahora se gestiona
+   en la vista de presupuesto del proyecto (/proyectos/<pk>/presupuesto/) */
 </script>
 {% endblock %}

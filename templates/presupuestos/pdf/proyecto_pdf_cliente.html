@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Cotización — {{ apu.nombre }}</title>
+<title>Cotización — {{ proyecto.consecutivo }}</title>
 <style>
   :root {
     --yellow:     #F4D000;
@@ -14,8 +14,8 @@
   }
 
   @page {
-    size: A4 landscape;
-    margin: 14mm 18mm;
+    size: A4 portrait;
+    margin: 16mm 18mm 14mm;
     @bottom-center {
       content: "Pág. " counter(page) " / " counter(pages);
       font-size: 7pt;
@@ -32,7 +32,7 @@
     background: var(--white);
   }
 
-  /* ── Barra de acciones (pantalla, no imprime) ── */
+  /* ── Barra de impresión (solo pantalla) ── */
   .print-bar {
     position: fixed; top: 0; left: 0; right: 0; z-index: 100;
     background: var(--black); color: var(--white);
@@ -40,7 +40,7 @@
     display: flex; align-items: center; justify-content: space-between;
     font-size: 12px;
   }
-  .print-bar a { color: var(--gray-mid); text-decoration: none; }
+  .print-bar a { color: #aaa; text-decoration: none; }
   .print-bar a:hover { color: var(--white); }
   .btn-print {
     background: var(--yellow); color: var(--black);
@@ -53,7 +53,7 @@
     .page { padding: 0; margin-top: 0; }
   }
 
-  .page { max-width: 1050px; margin: 0 auto; padding: 28px 36px; margin-top: 50px; }
+  .page { max-width: 780px; margin: 0 auto; padding: 28px 24px; margin-top: 52px; }
 
   /* ── Cabecera ── */
   .header {
@@ -61,14 +61,14 @@
     border-bottom: 3px solid var(--yellow);
     padding-bottom: 10px; margin-bottom: 12px;
   }
-  .header__logo { max-height: 52px; width: auto; }
+  .header__logo { max-height: 48px; width: auto; }
   .header__right { text-align: right; }
   .header__right .titulo-doc {
-    font-size: 10pt; font-weight: 800; color: var(--black);
+    font-size: 9.5pt; font-weight: 800; color: var(--black);
     text-transform: uppercase; letter-spacing: .05em;
   }
   .header__right .subtitulo-doc {
-    font-size: 7.5pt; color: var(--gray-dark); margin-top: 4px;
+    font-size: 7.5pt; color: var(--gray-dark); margin-top: 3px;
   }
 
   /* ── Bloque de datos ── */
@@ -87,7 +87,7 @@
     padding: 3px 10px;
     font-weight: 700;
     color: var(--gray-dark);
-    width: 130px;
+    width: 120px;
     flex-shrink: 0;
     text-transform: uppercase;
     font-size: 7.5pt;
@@ -103,35 +103,17 @@
   .banda-proyecto {
     background: var(--yellow);
     padding: 6px 12px;
-    font-weight: 800; font-size: 10.5pt;
+    font-weight: 800; font-size: 10pt;
     color: var(--black);
     text-transform: uppercase; letter-spacing: .04em;
-    margin-bottom: 2px;
-  }
-  .banda-sistema {
-    background: var(--gray-light);
-    padding: 4px 12px;
-    font-size: 8pt; font-weight: 600;
-    color: var(--gray-dark);
     margin-bottom: 12px;
-    border-left: 3px solid var(--yellow);
-  }
-
-  /* ── Nota preliminar ── */
-  .nota-preliminar {
-    border: 1px solid var(--gray-mid);
-    background: var(--gray-light);
-    padding: 5px 12px;
-    font-size: 8pt; color: var(--gray-dark);
-    margin-bottom: 10px;
-    font-style: italic;
   }
 
   /* ── Tabla principal ── */
   table.main-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 14px;
+    margin-bottom: 16px;
     page-break-inside: auto;
   }
   table.main-table thead { display: table-header-group; }
@@ -147,14 +129,18 @@
   }
   table.main-table th.td-desc { text-align: left; }
   table.main-table td {
-    padding: 7px 8px;
+    padding: 6px 8px;
     border: 1px solid var(--gray-light);
     font-size: 8.5pt;
     text-align: center;
     vertical-align: top;
   }
   table.main-table td.td-desc { text-align: left; }
-  table.main-table td.td-num  { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+  table.main-table td.td-num  {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+  }
   table.main-table tbody tr:nth-child(even) { background: #FAFAFA; }
   table.main-table tbody tr:nth-child(odd)  { background: var(--white); }
   table.main-table tbody tr td { page-break-inside: avoid; }
@@ -162,7 +148,8 @@
   /* ── Resumen AIU ── */
   .resumen-wrap { display: flex; justify-content: flex-end; margin-bottom: 14px; }
   table.resumen-table {
-    width: 400px;
+    width: 100%;
+    max-width: 380px;
     border-collapse: collapse;
     font-size: 8.5pt;
   }
@@ -192,8 +179,7 @@
     font-weight: 800;
     font-size: 9.5pt;
     color: var(--black);
-    border-top: 2px solid var(--black);
-    border-color: var(--gray-dark);
+    border-top: 2px solid var(--gray-dark);
   }
   table.resumen-table tr.row-iva td {
     font-style: italic;
@@ -212,7 +198,7 @@
 
   /* ── Firmas ── */
   .firma-row {
-    display: flex; gap: 48px; margin: 20px 0 10px;
+    display: flex; gap: 32px; margin: 20px 0 10px;
   }
   .firma-box {
     flex: 1;
@@ -237,11 +223,11 @@
 <!-- Barra de impresión (solo pantalla) -->
 <div class="print-bar">
   <div>
-    <strong>Cotización Cliente</strong>
-    <span style="margin-left:12px;color:#aaa;">{{ apu.nombre }}</span>
+    <strong>Cotización de Proyecto</strong>
+    <span style="margin-left:12px;color:#aaa;">{{ proyecto.consecutivo }} — {{ proyecto.nombre }}</span>
   </div>
   <div style="display:flex;gap:12px;align-items:center;">
-    <a href="/presupuestos/apu/{{ apu.pk }}/">← Volver al APU</a>
+    <a href="{% url 'presupuestos:proyecto_revisar' proyecto.pk %}">← Volver</a>
     <button class="btn-print" onclick="window.print()">⎙ Imprimir / Guardar PDF</button>
   </div>
 </div>
@@ -266,9 +252,7 @@
 <div class="datos-block">
   <div class="datos-row">
     <div class="datos-lbl">Obra / Proyecto</div>
-    <div class="datos-val">
-      {% if proyecto %}{{ proyecto.nombre }}{% elif ps %}{{ ps.sistema.nombre }}{% else %}{{ apu.nombre }}{% endif %}
-    </div>
+    <div class="datos-val">{{ proyecto.nombre }}</div>
   </div>
   <div class="datos-row">
     <div class="datos-lbl">Proponente</div>
@@ -278,12 +262,7 @@
     <div class="datos-lbl">NIT</div>
     <div class="datos-val">805.015.703-5</div>
   </div>
-  {% if resumen.cliente %}
-  <div class="datos-row">
-    <div class="datos-lbl">Cliente</div>
-    <div class="datos-val">{{ resumen.cliente.razon_social }}</div>
-  </div>
-  {% elif proyecto and proyecto.cliente %}
+  {% if proyecto.cliente %}
   <div class="datos-row">
     <div class="datos-lbl">Cliente</div>
     <div class="datos-val">{{ proyecto.cliente.razon_social }}</div>
@@ -293,58 +272,53 @@
     <div class="datos-lbl">Fecha</div>
     <div class="datos-val">{{ fecha_generacion }}</div>
   </div>
-  {% if proyecto and proyecto.consecutivo %}
+  {% if proyecto.consecutivo %}
   <div class="datos-row">
     <div class="datos-lbl">Referencia</div>
     <div class="datos-val">{{ proyecto.consecutivo }}</div>
   </div>
   {% endif %}
-</div>
-
-{% if resumen.es_preliminar %}
-<div class="nota-preliminar">
-  Oferta preliminar sujeta a revisión y aprobación comercial.
-</div>
-{% endif %}
-
-<!-- Banda nombre proyecto -->
-<div class="banda-proyecto">
-  {% if proyecto %}{{ proyecto.nombre|upper }}{% else %}{{ apu.nombre|upper }}{% endif %}
-</div>
-<div class="banda-sistema">
-  {% if ps %}
-    {{ ps.sistema.nombre }}{% if ps.subsistema %} &nbsp;/&nbsp; {{ ps.subsistema.nombre }}{% endif %}
-  {% elif apu.es_consolidado %}
-    Alcance consolidado — {{ apu.nombre }}
+  {% if not aprobado %}
+  <div class="datos-row">
+    <div class="datos-lbl">Estado</div>
+    <div class="datos-val" style="font-style:italic;color:#b45309;">
+      Oferta preliminar — sujeta a revisión y aprobación comercial.
+    </div>
+  </div>
   {% endif %}
 </div>
 
-<!-- Tabla de ítems comerciales -->
+<!-- Banda nombre proyecto -->
+<div class="banda-proyecto">
+  {{ proyecto.nombre|upper }}
+</div>
+
+<!-- Tabla de ítems -->
 <table class="main-table">
   <thead>
     <tr>
-      <th style="width:48px;">Ítem</th>
+      <th style="width:36px;">Ítem</th>
       <th class="td-desc">Descripción</th>
-      <th style="width:64px;">Unidad</th>
-      <th style="width:90px;">Cantidad</th>
-      <th style="width:130px;">Vr. Unitario</th>
-      <th style="width:140px;">Subtotal</th>
+      <th style="width:52px;">Und.</th>
+      <th style="width:72px;">Cantidad</th>
+      <th style="width:110px;">Vr. Unitario</th>
+      <th style="width:120px;">Subtotal</th>
     </tr>
   </thead>
   <tbody>
-  {% for item in items_cliente %}
+  {% for fila in filas %}
   <tr>
-    <td>{{ item.item }}</td>
+    <td>{{ forloop.counter }}</td>
     <td class="td-desc">
-      <strong>{{ item.descripcion }}</strong>
-      <br><span style="font-size:7.5pt;color:#555;">
-        Suministro, instalación y puesta en marcha del sistema conforme a especificaciones técnicas.
-      </span>
+      <strong>{{ fila.nombre }}</strong>
+      {% if fila.descripcion %}
+      <br><span style="font-size:7.5pt;color:#555;">{{ fila.descripcion }}</span>
+      {% endif %}
     </td>
-    <td>{{ item.unidad }}</td>
-    <td class="td-num">{{ item.cantidad|floatformat:2 }}</td>
-    <td class="td-num">{{ item.valor_unitario|currency_nodec }}</td>
-    <td class="td-num"><strong>{{ item.subtotal|currency_nodec }}</strong></td>
+    <td>{{ fila.unidad|default:"und" }}</td>
+    <td class="td-num">{{ fila.cantidad|floatformat:2 }}</td>
+    <td class="td-num">{{ fila.valor_unitario|currency_nodec }}</td>
+    <td class="td-num"><strong>{{ fila.valor_total|currency_nodec }}</strong></td>
   </tr>
   {% empty %}
   <tr>
@@ -364,33 +338,44 @@
       </tr>
     </thead>
     <tbody>
+      {% if aiu.tiene_m2 %}
+      <tr>
+        <td>Materiales (suministro cliente)</td>
+        <td>{{ aiu.mat_total|currency_nodec }}</td>
+      </tr>
+      <tr>
+        <td>Costos directos (MO + Herr + Transp)</td>
+        <td>{{ aiu.base_total|currency_nodec }}</td>
+      </tr>
+      {% else %}
       <tr>
         <td>Costos directos</td>
-        <td>{{ resumen.subtotal_directos_tecnico|currency_nodec }}</td>
+        <td>{{ aiu.base_total|currency_nodec }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td>A — Administración ({{ aiu.pct_admin_derivado|floatformat:2 }}%)</td>
+        <td>{{ aiu.admin_total|currency_nodec }}</td>
       </tr>
       <tr>
-        <td>A — Administración ({{ resumen.porcentaje_admin|floatformat:2 }}%)</td>
-        <td>{{ resumen.valor_admin|currency_nodec }}</td>
+        <td>I — Imprevistos ({{ aiu.pct_imprevistos|floatformat:2 }}%)</td>
+        <td>{{ aiu.imprevistos|currency_nodec }}</td>
       </tr>
       <tr>
-        <td>I — Imprevistos ({{ resumen.porcentaje_imprevistos|floatformat:2 }}%)</td>
-        <td>{{ resumen.valor_imprevistos|currency_nodec }}</td>
-      </tr>
-      <tr>
-        <td>U — Utilidad ({{ resumen.porcentaje_utilidad|floatformat:2 }}%)</td>
-        <td>{{ resumen.valor_utilidad|currency_nodec }}</td>
+        <td>U — Utilidad ({{ aiu.pct_utilidad|floatformat:2 }}%)</td>
+        <td>{{ aiu.utilidad|currency_nodec }}</td>
       </tr>
       <tr class="row-sub">
         <td>Subtotal con AIU</td>
-        <td>{{ resumen.subtotal_con_aiu|currency_nodec }}</td>
+        <td>{{ aiu.subtotal_aiu|currency_nodec }}</td>
       </tr>
       <tr class="row-iva">
-        <td>{{ resumen.iva_label }}</td>
-        <td>{% if resumen.aplica_iva %}{{ resumen.iva_valor|currency_nodec }}{% else %}$ 0{% endif %}</td>
+        <td>IVA {% if aiu.aplica_iva %}({{ aiu.iva_pct|floatformat:0 }}%){% endif %}</td>
+        <td>{% if aiu.aplica_iva %}{{ aiu.iva_valor|currency_nodec }}{% else %}$ 0{% endif %}</td>
       </tr>
       <tr class="row-total">
-        <td>Total con IVA</td>
-        <td>{{ resumen.total_final|currency_nodec }}</td>
+        <td>TOTAL OFERTA</td>
+        <td>{{ aiu.total_final|currency_nodec }}</td>
       </tr>
     </tbody>
   </table>
@@ -399,7 +384,7 @@
 <!-- Nota comercial -->
 <div class="nota">
   <strong>Condiciones generales:</strong>
-  {% if proyecto and proyecto.observaciones %}
+  {% if proyecto.observaciones %}
     {{ proyecto.observaciones }}
   {% else %}
     Vigencia de la oferta: 30 días calendario desde la fecha de generación.
@@ -412,15 +397,15 @@
 <!-- Firmas -->
 <div class="firma-row">
   <div class="firma-box">
-    <div style="margin-top:40px;"></div>
+    <div style="margin-top:38px;"></div>
     Elaborado por: _________________________
   </div>
   <div class="firma-box">
-    <div style="margin-top:40px;"></div>
+    <div style="margin-top:38px;"></div>
     Revisado por: _________________________
   </div>
   <div class="firma-box">
-    <div style="margin-top:40px;"></div>
+    <div style="margin-top:38px;"></div>
     Aceptación del cliente: _________________________
   </div>
 </div>

@@ -373,11 +373,6 @@ class APUProyecto(models.Model):
         ("2", "Modalidad 2 — AIU sobre costos directos sin materiales"),
     ]
 
-    GARANTIA_MODO_CHOICES = [
-        ("TOTAL_MATERIALES",    "Sobre el total de materiales"),
-        ("MATERIAL_ESPECIFICO", "Sobre un material específico"),
-    ]
-
     # -- Identificación --
     nombre = models.CharField(
         max_length=200,
@@ -495,46 +490,27 @@ class APUProyecto(models.Model):
         verbose_name="Fecha de aprobación",
     )
 
-    # -- Garantía (Fase 11.4) --
-    aplica_garantia = models.BooleanField(
-        default=False,
-        help_text="Indica si la propuesta incluye garantía. No afecta el cálculo.",
+    # -- APUs incluidos en el presupuesto final (Fase 13) --
+    apus_presupuesto_ids = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "Lista de PKs de otros APUProyecto del mismo proyecto que se incluyen "
+            "en el cálculo del presupuesto final consolidado. Se guarda al enviar a revisión."
+        ),
     )
-    tipo_garantia = models.ForeignKey(
-        "comercial.TipoGarantia",
-        on_delete=models.PROTECT,
-        blank=True, null=True,
-        related_name="apus",
-        help_text="Tipo de garantía ofrecida en la propuesta (opcional).",
+
+    # -- Base APU (cantidad de referencia para el presupuesto por proyecto) --
+    cantidad_base_apu = models.DecimalField(
+        max_digits=18, decimal_places=4, null=True, blank=True,
+        help_text=(
+            "Cantidad de referencia del APU (p. ej. m², ml). "
+            "Se calcula automáticamente al ejecutar «Guardar APU» desde el panel confirmado. "
+            "valor_total_proyecto = cantidad_base_apu × total_valor_venta."
+        ),
     )
-    garantia_base_valor = models.DecimalField(
-        max_digits=14, decimal_places=2, default=Decimal("0"),
-        help_text="Base sobre la que se calculó el recargo.",
-    )
-    garantia_valor_recargo = models.DecimalField(
-        max_digits=14, decimal_places=2, default=Decimal("0"),
-        help_text="Recargo comercial sumado a total_valor_venta.",
-    )
-    garantia_material_linea = models.ForeignKey(
-        "presupuestos.APULinea",
-        on_delete=models.SET_NULL,
-        blank=True, null=True,
-        related_name="+",
-        help_text="APULinea tipo Materiales sobre la que se aplica el recargo (modo MATERIAL_ESPECIFICO).",
-    )
-    garantia_material_nombre_snapshot = models.CharField(
-        max_length=255, blank=True, default="",
-        help_text="Snapshot textual del material objetivo (para trazabilidad si la línea se elimina).",
-    )
-    garantia_modo_aplicacion = models.CharField(
-        max_length=24,
-        choices=GARANTIA_MODO_CHOICES,
-        blank=True, default="",
-        help_text="Cómo se aplica la garantía: sobre el total de materiales o sobre un material específico.",
-    )
-    garantia_porcentaje_aplicado = models.DecimalField(
-        max_digits=6, decimal_places=2, blank=True, null=True,
-        help_text="Snapshot del % de recargo tomado del catálogo al armar/editar la garantía.",
+    unidad_base_apu = models.CharField(
+        max_length=30, blank=True, default="",
+        help_text="Unidad de medida de la base APU (m², ml, und, …).",
     )
 
     # -- Archivo --
@@ -556,6 +532,10 @@ class APUProyecto(models.Model):
         max_digits=18, decimal_places=4, default=Decimal("0"),
         help_text="Suma de costo_total de todas las líneas de MATERIALES.",
     )
+    valor_materiales = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="Suma de valor_total de todas las líneas de MATERIALES (con margen de venta e IVA).",
+    )
     subtotal_herramientas = models.DecimalField(
         max_digits=18, decimal_places=4, default=Decimal("0"),
         help_text="Suma de costo_total de todas las líneas de HERRAMIENTAS_EQUIPOS.",
@@ -568,6 +548,10 @@ class APUProyecto(models.Model):
     )
     subtotal_administracion = models.DecimalField(
         max_digits=18, decimal_places=4, default=Decimal("0"),
+    )
+    subtotal_polizas = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="Suma de valor_calculado de las pólizas activas del APU. Calculado automáticamente.",
     )
 
     # -- Totales generales (calculados) --
@@ -635,18 +619,352 @@ class APUProyecto(models.Model):
             costo = Decimal(str(agg["costo"] or 0))
             valor = Decimal(str(agg["valor"] or 0))
             setattr(self, campo, costo)
+            if tipo == TipoAPU.MATERIALES:
+                self.valor_materiales = valor   # guardar valor de materiales por separado
             total_costo += costo
             total_valor += valor
 
         self.total_costo = total_costo
         self.total_valor_venta = total_valor
 
+        # Recalcular pólizas usando los subtotales recién calculados.
+        # _recalcular_polizas actualiza self.subtotal_polizas (sin hacer save)
+        # y persiste los valores de cada APUPoliza con bulk_update.
+        _recalcular_polizas(self)
+
         self.save(update_fields=[
-            "subtotal_materiales", "subtotal_herramientas",
+            "subtotal_materiales", "valor_materiales",
+            "subtotal_herramientas",
             "subtotal_transporte", "subtotal_mano_obra",
-            "subtotal_administracion",
+            "subtotal_administracion", "subtotal_polizas",
             "total_costo", "total_valor_venta", "updated_at",
         ])
+
+    # ------------------------------------------------------------------
+    # Propiedades de estado
+    # ------------------------------------------------------------------
+
+    @property
+    def es_consolidado(self) -> bool:
+        """True si este APU es de tipo CONSOLIDADO (une varios APUs individuales)."""
+        return self.tipo_apu == self.TipoAPUConsolidacion.CONSOLIDADO
+
+    @property
+    def esta_aprobado(self) -> bool:
+        """True si ya se seleccionó una modalidad AIU oficial."""
+        return bool(self.modalidad_aiu_seleccionada)
+
+    # ------------------------------------------------------------------
+    # Navegación de relaciones
+    # ------------------------------------------------------------------
+
+    def get_proyecto(self):
+        """
+        Devuelve el Proyecto comercial contenedor.
+        - APU individual: lo deriva desde proyecto_sistema.proyecto.
+        - APU consolidado: usa el FK directo a proyecto.
+        """
+        if self.proyecto_id:
+            return self.proyecto
+        if self.proyecto_sistema_id:
+            ps = self.proyecto_sistema
+            return getattr(ps, "proyecto", None)
+        return None
+
+    def get_apus_origen(self):
+        """
+        Queryset de APUs individuales que componen este APU consolidado
+        (vía APUConsolidadoOrigen). Vacío si no es consolidado.
+        """
+        return (
+            APUProyecto.objects
+            .filter(consolidaciones_destino__apu_consolidado=self)
+            .order_by("consolidaciones_destino__orden", "pk")
+        )
+
+    # ------------------------------------------------------------------
+    # Cálculo AIU
+    # ------------------------------------------------------------------
+
+    def get_aiu_pct_efectivos(self) -> dict:
+        """
+        Devuelve los porcentajes A/I/U efectivos del APU.
+        Usa el snapshot final (aiu_final_*) si fue aprobado; de lo contrario
+        los porcentajes base configurados en el proyecto.
+
+        Retorna:
+            {
+              "admin":        Decimal,
+              "imprevistos":  Decimal,
+              "utilidad":     Decimal,
+              "es_final":     bool,   # True si provienen del snapshot aprobado
+            }
+        """
+        tiene_final = (
+            self.aiu_final_admin_pct is not None
+            or self.aiu_final_imprevistos_pct is not None
+            or self.aiu_final_utilidad_pct is not None
+        )
+        return {
+            "admin": (
+                self.aiu_final_admin_pct
+                if self.aiu_final_admin_pct is not None
+                else self.aiu_proyecto_admin_pct
+            ),
+            "imprevistos": (
+                self.aiu_final_imprevistos_pct
+                if self.aiu_final_imprevistos_pct is not None
+                else self.aiu_proyecto_imprevistos_pct
+            ),
+            "utilidad": (
+                self.aiu_final_utilidad_pct
+                if self.aiu_final_utilidad_pct is not None
+                else self.aiu_proyecto_utilidad_pct
+            ),
+            "es_final": tiene_final,
+        }
+
+    def calcular_modalidades_aiu(self, pct_override=None) -> dict:  # pct_override: Optional[dict]
+        """
+        Calcula las dos modalidades de AIU del proyecto.
+
+        Modalidad 1 — base = todos los costos directos (mat + herr + transp + MO).
+        Modalidad 2 — base = costos directos sin materiales (herr + transp + MO);
+                       materiales se suman al precio de venta.
+
+        La Administración (A) es el subtotal_administracion real de las líneas APU,
+        no un porcentaje configurado. admin_pct se DERIVA de él para display.
+        Imprevistos (I) y Utilidad (U) se aplican como % sobre la base.
+
+        Args:
+            pct_override: dict opcional con claves "imprevistos" y "utilidad"
+                          (Decimal) para el preview del revisor.
+
+        Retorna:
+            {
+              "porcentajes": {"admin": Decimal, "imprevistos": Decimal,
+                              "utilidad": Decimal, "es_final": bool},
+              "subtotales": OrderedDict (label → valor),
+              "modalidad1": {...},
+              "modalidad2": {...},
+            }
+        """
+        from collections import OrderedDict
+
+        _Q = Decimal("0.01")   # cuantificación para display
+
+        efectivos = self.get_aiu_pct_efectivos()
+        pct_imprevistos = Decimal(str(
+            pct_override.get("imprevistos", efectivos["imprevistos"])
+            if pct_override else efectivos["imprevistos"]
+        ))
+        pct_utilidad = Decimal(str(
+            pct_override.get("utilidad", efectivos["utilidad"])
+            if pct_override else efectivos["utilidad"]
+        ))
+
+        # Issue 3+6 fix: usar Valores Totales (valor_total con margen de venta)
+        # en lugar de los subtotales de costo (subtotal_materiales, etc.).
+        from django.db.models import Sum as _Sum
+        def _valor(tipo_filter):
+            return Decimal(str(
+                self.lineas.filter(tipo=tipo_filter)
+                .aggregate(v=_Sum("valor_total"))["v"] or 0
+            ))
+        mat    = _valor(TipoAPU.MATERIALES)
+        herr   = _valor(TipoAPU.HERRAMIENTAS_EQUIPOS)
+        transp = _valor(TipoAPU.TRANSPORTE)
+        mo     = _valor(TipoAPU.MANO_DE_OBRA)
+        admin  = _valor(TipoAPU.ADMINISTRACION)
+        polizas = Decimal(str(self.subtotal_polizas or 0))  # ya calculado con valores
+
+        # admin_total agrupa administración y pólizas como overhead conjunto
+        admin_total = admin + polizas
+
+        # Valor de venta de materiales para Modalidad 2 (mismo que mat, ya es valor)
+        mat_valor_venta = mat
+
+        # ── Modalidad 1 ─────────────────────────────────────────────────
+        base_m1 = mat + herr + transp + mo       # sin admin ni pólizas
+        pct_admin_m1 = (
+            (admin_total / base_m1 * 100).quantize(_Q)
+            if base_m1 else Decimal("0")
+        )
+        I_m1 = (base_m1 * pct_imprevistos / 100).quantize(_Q)
+        U_m1 = (base_m1 * pct_utilidad    / 100).quantize(_Q)
+        sub_aiu_m1 = base_m1 + admin_total + I_m1 + U_m1
+
+        iva_factor_m1 = Decimal("0")
+        if self.aplica_iva:
+            iva_pct = Decimal(str(self.iva_pct or 0))
+            iva_factor_m1 = (sub_aiu_m1 * iva_pct / 100).quantize(_Q)
+
+        total_m1 = sub_aiu_m1 + iva_factor_m1
+
+        # ── Modalidad 2 ─────────────────────────────────────────────────
+        base_m2 = herr + transp + mo             # sin mat ni admin ni pólizas
+        pct_admin_m2 = (
+            (admin_total / base_m2 * 100).quantize(_Q)
+            if base_m2 else Decimal("0")
+        )
+        I_m2 = (base_m2 * pct_imprevistos / 100).quantize(_Q)
+        U_m2 = (base_m2 * pct_utilidad    / 100).quantize(_Q)
+        sub_aiu_m2 = mat_valor_venta + base_m2 + admin_total + I_m2 + U_m2
+
+        iva_factor_m2 = Decimal("0")
+        if self.aplica_iva:
+            iva_pct = Decimal(str(self.iva_pct or 0))
+            iva_factor_m2 = (sub_aiu_m2 * iva_pct / 100).quantize(_Q)
+
+        total_m2 = sub_aiu_m2 + iva_factor_m2
+
+        subtotales = OrderedDict([
+            ("materiales",    mat),
+            ("herramientas",  herr),
+            ("mano_de_obra",  mo),   # guión bajo para compatibilidad con dot-notation en templates
+            ("transporte",    transp),
+            ("administracion", admin),
+            ("polizas",        polizas),
+            ("total",          mat + herr + transp + mo + admin_total),
+        ])
+        # Alias para templates que usan mano_obra (sin de) — compatibilidad
+        subtotales["mano_obra"] = mo
+
+        return {
+            "porcentajes": {
+                "admin":       pct_admin_m1,  # % derivado de admin_total sobre base M1 (referencia)
+                "imprevistos": pct_imprevistos,
+                "utilidad":    pct_utilidad,
+                "es_final":    efectivos["es_final"],
+            },
+            "subtotales": subtotales,
+            "modalidad1": {
+                "label":          "AIU sobre todos los costos directos",
+                "base":           base_m1,
+                "admin":          admin,
+                "polizas":        polizas,
+                "admin_total":    admin_total,
+                "admin_pct":      pct_admin_m1,
+                "imprevistos":    I_m1,
+                "utilidad":       U_m1,
+                "total_aiu":      admin_total + I_m1 + U_m1,
+                "subtotal_con_aiu": sub_aiu_m1,
+                "iva_valor":      iva_factor_m1,
+                "total_con_iva":  total_m1,
+                "gran_total":     total_m1,
+                "valor_total_mat": mat,
+            },
+            "modalidad2": {
+                "label":          "AIU sobre costos directos sin materiales",
+                "base":           base_m2,
+                "admin":          admin,
+                "polizas":        polizas,
+                "admin_total":    admin_total,
+                "admin_pct":      pct_admin_m2,
+                "imprevistos":    I_m2,
+                "utilidad":       U_m2,
+                "total_aiu":      admin_total + I_m2 + U_m2,
+                "subtotal_con_aiu": sub_aiu_m2,
+                "iva_valor":      iva_factor_m2,
+                "total_con_iva":  total_m2,
+                "gran_total":     total_m2,
+                "valor_total_mat": mat_valor_venta,
+            },
+        }
+
+    def get_resumen_cotizacion(self) -> dict:
+        """
+        Calcula el resumen de cotización del APU usando la modalidad AIU aprobada
+        (o la Modalidad 1 si aún no hay aprobación).
+
+        La forma del dict que devuelve coincide con lo que
+        CotizacionSnapshotService.construir_contexto_pdf() rehidrata,
+        para que las plantillas WeasyPrint puedan reutilizarse tal cual.
+        """
+        modalidad = self.modalidad_aiu_seleccionada or "1"
+        modalidades = self.calcular_modalidades_aiu()
+        md = modalidades["modalidad1" if modalidad == "1" else "modalidad2"]
+        porcentajes = modalidades["porcentajes"]
+
+        # Subtotales de costo
+        mat    = Decimal(str(self.subtotal_materiales    or 0))
+        herr   = Decimal(str(self.subtotal_herramientas  or 0))
+        transp = Decimal(str(self.subtotal_transporte    or 0))
+        mo     = Decimal(str(self.subtotal_mano_obra     or 0))
+        admin  = Decimal(str(self.subtotal_administracion or 0))
+        polizas = Decimal(str(self.subtotal_polizas      or 0))
+
+        # Base directa sin admin → subtotal_directos_tecnico
+        if modalidad == "2":
+            base_tecnico = herr + transp + mo
+        else:
+            base_tecnico = mat + herr + transp + mo
+
+        sub_con_aiu = md["subtotal_con_aiu"]
+        iva_pct     = Decimal(str(self.iva_pct or 0))
+        iva_valor   = md["iva_valor"]
+        total_final = md["gran_total"]
+
+        # Proyecto, cliente, solicitud
+        proyecto  = self.get_proyecto()
+        solicitud = getattr(proyecto, "solicitud", None) if proyecto else None
+        cliente   = getattr(proyecto, "cliente",   None) if proyecto else None
+        ps        = self.proyecto_sistema if self.proyecto_sistema_id else None
+        sistema   = getattr(ps, "sistema",    None) if ps else None
+        subsistema= getattr(ps, "subsistema", None) if ps else None
+        contacto  = None
+        if cliente:
+            contacto = (
+                getattr(cliente, "contactos", None)
+                and cliente.contactos.order_by("pk").first()
+            )
+
+        _label_modal = {
+            "1": "AIU sobre todos los costos directos",
+            "2": "AIU sobre costos directos sin materiales",
+        }
+
+        return {
+            "es_preliminar":           not self.esta_aprobado,
+            "modalidad_oficial":       self.modalidad_aiu_seleccionada,
+            "modalidad_oficial_label": _label_modal.get(modalidad, ""),
+            "modalidades_disponibles": modalidades,
+            # Subtotales
+            "subtotal_materiales":       mat,
+            "subtotal_herramientas":     herr,
+            "subtotal_transporte":       transp,
+            "subtotal_mano_obra":        mo,
+            "subtotal_administracion":   admin,
+            "subtotal_polizas":          polizas,
+            "subtotal_directos_tecnico": base_tecnico,
+            # AIU
+            "porcentaje_admin":          porcentajes["admin"],
+            "porcentaje_imprevistos":    porcentajes["imprevistos"],
+            "porcentaje_utilidad":       porcentajes["utilidad"],
+            "valor_admin":               md["admin"],
+            "valor_imprevistos":         md["imprevistos"],
+            "valor_utilidad":            md["utilidad"],
+            "total_aiu":                 md["total_aiu"],
+            "subtotal_con_aiu":          sub_con_aiu,
+            "aiu_es_final":              porcentajes["es_final"],
+            # IVA
+            "aplica_iva":  self.aplica_iva,
+            "iva_pct":     iva_pct,
+            "iva_base":    sub_con_aiu,
+            "iva_valor":   iva_valor,
+            "iva_label":   f"IVA ({iva_pct:.0f}%) sobre subtotal con AIU" if self.aplica_iva else "IVA (no aplica)",
+            # Totales
+            "total_final": total_final,
+            # Relaciones
+            "cliente":          cliente,
+            "contacto":         contacto,
+            "proyecto":         proyecto,
+            "solicitud":        solicitud,
+            "sistema":          sistema,
+            "subsistema":       subsistema,
+            "aprobado_por":     self.aprobado_por if self.aprobado_por_id else None,
+            "fecha_aprobacion": self.fecha_aprobacion,
+        }
 
 
 # backward compatibility alias
@@ -1048,6 +1366,135 @@ class APUConsolidadoOrigen(models.Model):
 
     def __str__(self):
         return f"{self.apu_consolidado} ← {self.apu_origen}"
+
+
+# ---------------------------------------------------------------------------
+# 7. APUPoliza — pólizas de cumplimiento y seguros
+# ---------------------------------------------------------------------------
+
+class APUPoliza(models.Model):
+    """
+    Póliza de cumplimiento o seguro asociada a un APU.
+
+    El backend calcula base_calculada y valor_calculado durante recalcular();
+    el frontend NUNCA envía valores calculados — solo nombre, porcentaje,
+    base_calculo y activa.  La persistencia masiva se hace con bulk_update
+    para evitar disparar signals de APULinea.
+    """
+
+    BASE_CHOICES = [
+        ("total_directo", "Total costos directos (mat + herr + transp + MO)"),
+        ("mano_obra",     "Mano de obra"),
+        ("materiales",    "Materiales"),
+        ("transporte",    "Transporte"),
+        ("herramientas",  "Herramientas y equipos"),
+    ]
+
+    apu = models.ForeignKey(
+        "presupuestos.APUProyecto",
+        on_delete=models.CASCADE,
+        related_name="polizas",
+    )
+    nombre = models.CharField(max_length=200, verbose_name="Nombre de la póliza")
+    porcentaje = models.DecimalField(
+        max_digits=8, decimal_places=4,
+        verbose_name="Porcentaje (%)",
+        help_text="Porcentaje sobre la base seleccionada. Ej: 1.5 → 1.5 %.",
+    )
+    base_calculo = models.CharField(
+        max_length=40,
+        choices=BASE_CHOICES,
+        default="total_directo",
+        verbose_name="Base de cálculo (legacy, una sola)",
+        help_text="Campo heredado. Usar bases_calculo para selección múltiple.",
+    )
+    bases_calculo = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Bases de cálculo",
+        help_text=(
+            "Lista de bases seleccionadas. Ej: ['materiales', 'mano_obra']. "
+            "Si está vacía, se usa base_calculo (compatibilidad). "
+            "Valores válidos: total_directo, mano_obra, materiales, transporte, herramientas."
+        ),
+    )
+    # Campos calculados — solo escritura del backend
+    base_calculada = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="Valor de la base en el último recálculo. Actualizado automáticamente.",
+    )
+    valor_calculado = models.DecimalField(
+        max_digits=18, decimal_places=4, default=Decimal("0"),
+        help_text="base_calculada × porcentaje / 100. Actualizado automáticamente.",
+    )
+    activa = models.BooleanField(default=True)
+    orden = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "apu_polizas"
+        ordering = ["orden", "id"]
+        verbose_name = "Póliza APU"
+        verbose_name_plural = "Pólizas APU"
+
+    def __str__(self):
+        return f"{self.nombre} ({self.porcentaje} %) → APU #{self.apu_id}"
+
+
+def _recalcular_polizas(apu: "APUProyecto") -> None:
+    """
+    Recalcula base_calculada y valor_calculado de todas las pólizas activas
+    del APU y actualiza apu.subtotal_polizas en memoria (sin hacer save;
+    el caller incluye 'subtotal_polizas' en su update_fields).
+
+    Usa bulk_update para persistir los cambios en APUPoliza sin disparar
+    signals de APULinea que causarían recursión.
+    """
+    polizas = list(apu.polizas.filter(activa=True))
+    if not polizas:
+        apu.subtotal_polizas = Decimal("0")
+        return
+
+    # Issue 6 fix: usar Valores Totales (valor_total con margen) como base.
+    from django.db.models import Sum as _SumP
+    def _vt(tipo):
+        return Decimal(str(
+            apu.lineas.filter(tipo=tipo).aggregate(v=_SumP("valor_total"))["v"] or 0
+        ))
+    _vt_mat  = _vt("MATERIALES")
+    _vt_herr = _vt("HERRAMIENTAS_EQUIPOS")
+    _vt_transp = _vt("TRANSPORTE")
+    _vt_mo   = _vt("MANO_DE_OBRA")
+
+    _BASE_MAP = {
+        "total_directo": _vt_mat + _vt_herr + _vt_transp + _vt_mo,
+        "mano_obra":     _vt_mo,
+        "materiales":    _vt_mat,
+        "transporte":    _vt_transp,
+        "herramientas":  _vt_herr,
+    }
+
+    total = Decimal("0")
+    for p in polizas:
+        # Issue 6: soportar múltiples bases (JSONField bases_calculo).
+        # Si bases_calculo es lista no vacía, sumar cada base; si no, usar base_calculo legacy.
+        bases_lista = []
+        if isinstance(getattr(p, "bases_calculo", None), list) and p.bases_calculo:
+            bases_lista = p.bases_calculo
+        elif p.base_calculo:
+            bases_lista = [p.base_calculo]
+
+        base_total = sum(_BASE_MAP.get(b, Decimal("0")) for b in bases_lista)
+        p.base_calculada  = base_total
+        p.valor_calculado = (base_total * Decimal(str(p.porcentaje)) / 100).quantize(
+            Decimal("0.0001"), rounding=ROUND_HALF_UP
+        )
+        total += p.valor_calculado
+
+    APUPoliza.objects.bulk_update(polizas, ["base_calculada", "valor_calculado"])
+    apu.subtotal_polizas = total
 
 
 from django.db.models.signals import post_delete, post_save

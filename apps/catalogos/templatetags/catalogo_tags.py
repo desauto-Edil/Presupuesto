@@ -93,6 +93,28 @@ def multiply(value, arg):
         return ""
 
 
+@register.filter(name="get_item")
+def get_item(dictionary, key):
+    """Accede a un dict con clave variable en templates.
+
+    {{ lineas_cantidades|get_item:item.pk }}
+    Prueba la clave tal cual, luego como int y luego como str.
+    """
+    if not isinstance(dictionary, dict):
+        return None
+    val = dictionary.get(key)
+    if val is not None:
+        return val
+    # Intentar conversión int → por si la clave viene como str
+    try:
+        val = dictionary.get(int(key))
+        if val is not None:
+            return val
+    except (TypeError, ValueError):
+        pass
+    return dictionary.get(str(key))
+
+
 @register.filter(name="currency_nodec")
 def currency_nodec(value, moneda_code="COP"):
     """Same as currency but always 0 decimal places (for totals)."""

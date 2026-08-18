@@ -6,6 +6,7 @@ No usa django.contrib.auth; es un modelo propio mientras el sistema
 escale hacia auth completo.
 """
 
+from decimal import Decimal
 from django.db import models
 from apps.common.choices import UnidadNegocio, RolSistema
 
@@ -139,3 +140,48 @@ class ConfiguracionSistema(models.Model):
 
     def __str__(self):
         return f"{self.nombre_completo} ({self.unidad_negocio})"
+
+
+# ---------------------------------------------------------------------------
+# TRM VIGENTE
+# ---------------------------------------------------------------------------
+
+class TRMVigente(models.Model):
+    """
+    Historial de TRM (Tasa Representativa del Mercado) almacenadas en BD.
+
+    Reglas de integridad:
+    - Solo UNO puede tener vigente=True en cualquier momento.
+    - Cuando se actualiza la TRM diariamente, el registro anterior queda
+      vigente=False y se crea uno nuevo con vigente=True.
+    - Si la actualización falla, el registro más reciente con vigente=True
+      permanece intacto → el sistema usa la última TRM válida sin inventar un
+      valor numérico.
+    """
+    valor = models.DecimalField(
+        max_digits=14, decimal_places=4,
+        help_text="Valor de la TRM en COP/USD.",
+    )
+    fecha = models.DateField(
+        help_text="Fecha oficial de vigencia de esta TRM (publicada por SuperFinanciera).",
+    )
+    fuente = models.CharField(
+        max_length=120, default="Superintendencia Financiera de Colombia",
+    )
+    vigente = models.BooleanField(
+        default=True, db_index=True,
+        help_text="True → es la TRM actualmente activa. Solo uno por vez.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "configuracion"
+        db_table = "configuracion_trm_vigente"
+        ordering = ["-fecha", "-created_at"]
+        get_latest_by = "fecha"
+        verbose_name = "TRM vigente"
+        verbose_name_plural = "Historial de TRM"
+
+    def __str__(self):
+        estado = "✓" if self.vigente else "–"
+        return f"[{estado}] TRM {self.fecha} = {self.valor}"

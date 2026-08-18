@@ -366,12 +366,6 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
                       display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
             {% if apu.fecha_aprobacion %}<span>Aprobado {{ apu.fecha_aprobacion|date:"d/m/Y" }}</span>{% endif %}
             {% if apu.aprobado_por %}<span>· por {{ apu.aprobado_por }}</span>{% endif %}
-            {% if apu.aplica_garantia and apu.tipo_garantia %}
-            <span style="background:rgba(255,166,0,.15);color:#a86b00;
-                         padding:2px 8px;border-radius:4px;font-weight:600;">
-              Garantía {{ apu.tipo_garantia.nombre }}
-            </span>
-            {% endif %}
           </div>
 
           <ul style="margin:8px 0 0 60px;padding:0;list-style:disc;font-size:12px;color:var(--ink);">
@@ -404,10 +398,11 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
             <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
                class="btn btn-xs" style="background:var(--theme-accent);color:#fff;">Ver APU</a>
             {% endif %}
-            <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
-               class="btn btn-ghost btn-xs" target="_blank">PDF Interno (vivo)</a>
-            <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
-               class="btn btn-ghost btn-xs" target="_blank">PDF Cliente (vivo)</a>
+            {# PDF Interno eliminado — se usa Excel. Solo PDF Cliente cuando hay cotización aprobada. #}
+            <a href="{% url 'presupuestos:apu_xlsx' apu.pk %}"
+               class="btn btn-ghost btn-xs" target="_blank">
+              <i class="bi bi-file-earmark-excel" style="margin-right:3px;"></i>Excel
+            </a>
             {% with cot=apu.cotizacion_vigente %}
             {% if cot %}
             <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
@@ -416,10 +411,6 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
               <i class="bi bi-file-earmark-check-fill"></i>
               Cotización aprobada v{{ cot.version }}
             </span>
-            <a href="{% url 'presupuestos:cotizacion_pdf_interno' cot.pk %}"
-               class="btn btn-xs" style="background:#1c7a3a;color:#fff;" target="_blank">
-              PDF Interno aprobado
-            </a>
             <a href="{% url 'presupuestos:cotizacion_pdf_cliente' cot.pk %}"
                class="btn btn-xs" style="background:#1c7a3a;color:#fff;" target="_blank">
               PDF Cliente aprobado
@@ -469,6 +460,64 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
         </div>
         {% endif %}
         </form>
+
+        {# ── Botón «Ir al presupuesto» / «Revisar» — según estado y APUs guardados ── #}
+        {% if n_apus_guardados %}
+          {% if proyecto.estado == "APU_GENERADO" %}
+          {# Enviado a revisión: mostrar acceso a vista de revisión #}
+          <div style="padding:14px 18px;background:rgba(234,179,8,.06);
+                      border-top:1px solid rgba(234,179,8,.25);display:flex;
+                      justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="font-size:12px;color:var(--ink);line-height:1.5;">
+              <i class="bi bi-clock-history" style="color:#b45309;margin-right:5px;"></i>
+              <strong>Presupuesto enviado a revisión</strong>
+              — {{ n_apus_guardados }} APU{{ n_apus_guardados|pluralize }} esperando aprobación.
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <a href="{% url 'presupuestos:proyecto_presupuesto' proyecto.pk %}"
+                 class="btn btn-ghost btn-sm" style="font-size:12px;">
+                <i class="bi bi-pencil" style="margin-right:4px;"></i>Editar
+              </a>
+              <a href="{% url 'presupuestos:proyecto_revisar' proyecto.pk %}"
+                 class="btn btn-sm"
+                 style="background:#b45309;color:#fff;white-space:nowrap;font-weight:600;">
+                <i class="bi bi-shield-check" style="margin-right:5px;"></i>Revisar presupuesto
+              </a>
+            </div>
+          </div>
+          {% elif proyecto.estado == "APROBADO" %}
+          {# Aprobado: botón ver revisión aprobada #}
+          <div style="padding:14px 18px;background:rgba(23,168,94,.06);
+                      border-top:1px solid rgba(23,168,94,.2);display:flex;
+                      justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="font-size:12px;color:var(--ink);line-height:1.5;">
+              <i class="bi bi-check-circle-fill" style="color:#17a85e;margin-right:5px;"></i>
+              <strong>Presupuesto aprobado</strong>
+              — Descargue Excel y PDF desde la vista de revisión.
+            </div>
+            <a href="{% url 'presupuestos:proyecto_revisar' proyecto.pk %}"
+               class="btn btn-sm"
+               style="background:#17a85e;color:#fff;white-space:nowrap;font-weight:600;">
+              <i class="bi bi-award" style="margin-right:5px;"></i>Ver presupuesto aprobado
+            </a>
+          </div>
+          {% else %}
+          {# Estado normal (editando): botón para ir al presupuesto #}
+          <div style="padding:14px 18px;background:rgba(23,168,94,.06);
+                      border-top:1px solid rgba(23,168,94,.2);display:flex;
+                      justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="font-size:12px;color:var(--ink);line-height:1.5;">
+              <strong>{{ n_apus_guardados }} APU{{ n_apus_guardados|pluralize }} guardado{{ n_apus_guardados|pluralize }}</strong>
+              — Consolida todos los APUs, define el AIU del proyecto y genera el presupuesto final.
+            </div>
+            <a href="{% url 'presupuestos:proyecto_presupuesto' proyecto.pk %}"
+               class="btn btn-sm"
+               style="background:#17a85e;color:#fff;white-space:nowrap;font-weight:600;">
+              <i class="bi bi-calculator" style="margin-right:5px;"></i>Ir al presupuesto
+            </a>
+          </div>
+          {% endif %}
+        {% endif %}
 
         {% if puede_consolidar %}
         <div style="padding:14px 18px;background:var(--surface-2);
@@ -520,10 +569,11 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
             <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
               <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
                  class="btn btn-xs" style="background:#4f46e5;color:#fff;">Ver APU consolidado</a>
-              <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
-                 class="btn btn-ghost btn-xs" target="_blank">PDF Interno (vivo)</a>
-              <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
-                 class="btn btn-ghost btn-xs" target="_blank">PDF Cliente (vivo)</a>
+              {# PDF Interno eliminado — se usa Excel. Solo PDF Cliente cuando hay cotización aprobada. #}
+              <a href="{% url 'presupuestos:apu_xlsx' apu.pk %}"
+                 class="btn btn-ghost btn-xs" target="_blank">
+                <i class="bi bi-file-earmark-excel" style="margin-right:3px;"></i>Excel
+              </a>
               {% with cot=apu.cotizacion_vigente %}
               {% if cot %}
               <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
@@ -532,10 +582,6 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
                 <i class="bi bi-file-earmark-check-fill"></i>
                 Cotización aprobada v{{ cot.version }}
               </span>
-              <a href="{% url 'presupuestos:cotizacion_pdf_interno' cot.pk %}"
-                 class="btn btn-xs" style="background:#1c7a3a;color:#fff;" target="_blank">
-                PDF Interno aprobado
-              </a>
               <a href="{% url 'presupuestos:cotizacion_pdf_cliente' cot.pk %}"
                  class="btn btn-xs" style="background:#1c7a3a;color:#fff;" target="_blank">
                 PDF Cliente aprobado

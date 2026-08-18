@@ -582,9 +582,6 @@
     </thead>
     <tbody>
       <tr><td>Subtotal materiales</td><td>{{ resumen.subtotal_materiales|currency_nodec }}</td></tr>
-      {% if resumen.garantia.aplica %}
-      <tr><td>Garantía Red Shield (recargo sobre materiales)</td><td>{{ resumen.garantia_valor_recargo|currency_nodec }}</td></tr>
-      {% endif %}
       <tr><td>Herramientas</td><td>{{ resumen.subtotal_herramientas|currency_nodec }}</td></tr>
       <tr><td>Transporte</td><td>{{ resumen.subtotal_transporte|currency_nodec }}</td></tr>
       <tr><td>Mano de obra / Personal</td><td>{{ resumen.subtotal_mano_obra|currency_nodec }}</td></tr>
@@ -616,15 +613,6 @@
       {% if resumen.fecha_aprobacion %}el {{ resumen.fecha_aprobacion|date:"d/m/Y H:i" }}{% endif %}
     {% endif %}
   </div>
-  {% if resumen.garantia.aplica %}
-  <div style="margin-top:4px;font-size:8pt;color:var(--gray-dark);">
-    <strong>Garantía:</strong>
-    {{ resumen.garantia.tipo_nombre|default:"Red Shield" }}
-    · {{ resumen.garantia.porcentaje_aplicado|default:"—" }}%
-    sobre {{ resumen.garantia.modo_aplicacion|default:"—" }}
-    (base {{ resumen.garantia.base_valor|default:0|currency_nodec }})
-  </div>
-  {% endif %}
 </div>
 
 <div class="footer-note">

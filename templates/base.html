@@ -236,18 +236,6 @@
     {% endif %}
     {% endwith %}
 
-    {# ── Garantías: solo Administrador ── #}
-    {% if request.session.rol == "ADMINISTRADOR" %}
-    <a href="{% url 'comercial:garantia_list' %}"
-       class="nav-item {% block nav_garantias %}{% endblock %}"
-       data-tip="Garantías">
-      <span class="nav-icon">
-        <i class="bi bi-shield-check" style="font-size:18px;line-height:1;"></i>
-      </span>
-      <span>Garantías</span>
-    </a>
-    {% endif %}
-
     {# ── Catálogos: todos los roles, todas las unidades ── #}
     <a href="{% url 'catalogos:catalogo' %}"
        class="nav-item {% block nav_catalogos %}{% endblock %}{% block nav_proveedores %}{% endblock %}"
@@ -358,6 +346,18 @@
   <div class="topbar-actions">{% block topbar_actions %}{% endblock %}</div>
 
   <!-- Configuración activa + Cerrar sesión -->
+  {# ── TRM pill ── #}
+  <div class="trm-pill" title="{% if trm_fecha %}TRM al {{ trm_fecha|date:'d/m/Y' }}{% else %}TRM no disponible{% endif %}">
+    <span class="trm-pill-label">TRM</span>
+    <span class="trm-pill-value">
+      {% if trm_global %}
+        ${{ trm_global|floatformat:"0" }}
+      {% else %}
+        No disponible
+      {% endif %}
+    </span>
+  </div>
+
   <div class="user-pill-btn">
     <div class="user-avatar">
       <i class="bi bi-person-fill"></i>

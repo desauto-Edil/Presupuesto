@@ -9,6 +9,7 @@ from .apu import (
     ConfiguracionAPU,
     APU,
     APULinea,
+    APUPoliza,
     CategoriaItemAPU,
     ItemCatalogoAPU,
     CuadrillaPreset,
@@ -39,4 +40,5 @@ __all__ = [
     "SubsistemaItemAPU",
     "APUDespieceIncluido",
     "APUConsolidadoOrigen",
+    "APUPoliza",
 ]

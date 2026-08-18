@@ -75,6 +75,100 @@ _CLAVES_UNIDAD_REFERENCIA = (
     "area_m2",
 )
 
+# ---------------------------------------------------------------------------
+# Contexto canónico para el motor de fórmulas
+# ---------------------------------------------------------------------------
+
+def build_formula_context(
+    suma: float,
+    dias: float,
+    aiu: float,
+    mg: float,
+    tp,
+    num_personas: int = 1,
+    factor_venta_pct=None,
+    proyecto=None,
+    ps=None,
+) -> dict:
+    """
+    Construye el diccionario de variables disponibles para evaluar cualquier
+    fórmula del sistema (ReglaAPUSubsistema, componentes de garantía, etc.).
+
+    Esta es la función pública canónica. El resto del sistema (APUService,
+    calculadores, previews) debe llamar siempre a esta función — nunca construir
+    el diccionario de forma ad-hoc.
+
+    Variables inyectadas:
+        suma        — suma de costos de todos los ítems de la categoría
+        aiu         — factor AIU (e.g. 1.30 si AIU=30%)
+        margen      — factor margen (e.g. 1.20 si margen=20%)
+        dias        — días efectivos
+        tp          — total_powergrip (unidades del producto base, denominador)
+        personas    — número de personas en cuadrilla
+        factor_venta — factor de venta (e.g. 1.21 si factor_venta=21%)
+        trm         — TRM vigente (COP/USD). Si el proyecto tiene trm guardada,
+                      se usa esa; si no, se obtiene la TRM global.
+        <var_ref>   — variable de referencia del subsistema (ej: "total_powergrip")
+                      si difiere de "tp"; inyectada con el mismo valor que tp.
+        <param_*>   — parámetros de entrada del ProyectoSistema (ps).
+
+    Args:
+        suma:           suma de costos de la categoría
+        dias:           días efectivos
+        aiu:            factor AIU
+        mg:             factor margen/ganancia
+        tp:             total unidades del producto base
+        num_personas:   personas en cuadrilla
+        factor_venta_pct: porcentaje de factor de venta (None=0)
+        proyecto:       instancia de Proyecto (opcional; para leer proyecto.trm)
+        ps:             instancia de ProyectoSistema (opcional; para var_ref y params)
+    """
+    from apps.common.trm_service import obtener_trm_vigente, TRMNoDisponibleError
+
+    tp_float = float(tp) if tp is not None else 0.0
+    fv_pct = float(factor_venta_pct) if factor_venta_pct is not None else 0.0
+
+    # TRM: preferir la del proyecto (contractual); fallback a la global.
+    trm_val: float
+    proyecto_trm = getattr(proyecto, "trm", None) if proyecto else None
+    if proyecto_trm is not None and float(proyecto_trm) > 0:
+        trm_val = float(proyecto_trm)
+    else:
+        try:
+            trm_val = float(obtener_trm_vigente())
+        except TRMNoDisponibleError:
+            trm_val = 0.0  # Sin TRM disponible; la fórmula fallará explícitamente
+            logger.warning("TRM no disponible al evaluar fórmula; trm=0.0")
+
+    ctx: dict = {
+        "suma":         float(suma),
+        "aiu":          float(aiu),
+        "margen":       float(mg),
+        "dias":         float(dias),
+        "tp":           tp_float,
+        "personas":     int(num_personas),
+        "factor_venta": 1.0 + fv_pct / 100.0,
+        "trm":          trm_val,
+    }
+
+    # Variable de referencia del subsistema (si difiere de "tp")
+    if ps is not None:
+        sub = getattr(ps, "subsistema", None)
+        var_ref = (getattr(sub, "variable_referencia_apu", None) or "tp") if sub else "tp"
+        if var_ref and var_ref != "tp":
+            ctx[var_ref] = tp_float
+
+        # Parámetros de entrada del ProyectoSistema
+        for k, v in (getattr(ps, "parametros_entrada", None) or {}).items():
+            if k not in ctx:
+                try:
+                    ctx[k] = float(v)
+                except (TypeError, ValueError):
+                    pass
+
+    return ctx
+
+
 class APUService:
     """Motor de APU automático."""
 
@@ -472,45 +566,26 @@ class APUService:
         num_personas: int = 1,
     ) -> dict:
         """
-        Construye el diccionario de variables para evaluar ReglaAPUSubsistema.formula_costo_unitario.
-
-        Variables:
-          suma        — suma de costos de todos los ítems de la categoría
-          aiu         — factor AIU, e.g. 1.30 si AIU=30%
-          margen      — factor margen, e.g. 1.20 si margen=20%
-          dias        — días efectivos (ya ajustados si aplica_dias_mensuales)
-          tp          — total_powergrip (denominador)
-          personas    — número de personas en cuadrilla
-          factor_venta — factor de venta, e.g. 1.21 si factor_venta=121%
+        Delegado a build_formula_context() — mantiene la interfaz interna
+        para no romper llamadas existentes dentro de APUService.
         """
-        tp_float = float(tp)
-        # El denominador se expone como "tp" Y como el nombre real de la variable
-        # definida en el subsistema (ej: "total_powergrip"), para que las fórmulas
-        # puedan usar el nombre natural que el usuario escribe en el subsistema.
-        sub = self.ps.subsistema if self.ps else None
-        var_ref = (sub.variable_referencia_apu or "tp") if sub else "tp"
-        ctx = {
-            "suma":         float(suma),
-            "aiu":          float(aiu),
-            "margen":       float(mg),
-            "dias":         float(dias_efectivos),
-            "tp":           tp_float,
-            "personas":     int(num_personas),
-            "factor_venta": 1.0 + float(self.apu.factor_venta_pct) / 100.0,
-        }
-        # Inyectar el valor bajo el nombre de la variable de referencia del subsistema
-        # (ej: total_powergrip=2883) para que la fórmula pueda escribirlo directamente.
-        if var_ref and var_ref != "tp":
-            ctx[var_ref] = tp_float
-        # También inyectar cualquier parámetro de entrada del proyecto para máxima flexibilidad
+        proyecto = None
         if self.ps:
-            for k, v in (self.ps.parametros_entrada or {}).items():
-                if k not in ctx:
-                    try:
-                        ctx[k] = float(v)
-                    except (TypeError, ValueError):
-                        pass
-        return ctx
+            try:
+                proyecto = self.ps.proyecto_sistema.proyecto if self.ps.proyecto_sistema_id else None
+            except Exception:
+                pass
+        return build_formula_context(
+            suma=suma,
+            dias=dias_efectivos,
+            aiu=aiu,
+            mg=mg,
+            tp=tp,
+            num_personas=num_personas,
+            factor_venta_pct=self.apu.factor_venta_pct,
+            proyecto=proyecto,
+            ps=self.ps,
+        )
 
     # ── Generador unificado por categoría (no-MATERIALES) ────────────────────
 
@@ -604,6 +679,7 @@ class APUService:
             # Evaluar fórmula → costo unitario de la categoría
             ctx = self._build_regla_context(suma, dias_efectivos, aiu, mg, tp, num_personas)
             costo_unitario_cat = regla.evaluar(ctx)
+
             logger.debug(
                 "[APUService] %s cat='%s' | suma=%.2f | dias_ef=%.2f | ctx=%s | cu=%.6f",
                 tipo_apu, categoria.nombre, suma, dias_efectivos, ctx, costo_unitario_cat,
@@ -873,15 +949,176 @@ class APUService:
         return creadas
 
     @transaction.atomic
-    def generar_administracion_desde_catalogo(self, items_data: List[Dict]) -> List[dict]:
-        """Genera APULineas ADMINISTRACION usando ReglaAPUSubsistema del subsistema."""
+    def _generar_administracion_con_regla(self, items_data: List[Dict]) -> List[dict]:
+        """
+        Genera APULineas ADMINISTRACION usando ReglaAPUSubsistema × porcentaje.
+
+        Por cada CategoriaItemAPU crea:
+          - N líneas detalle (item_catalogo set, costo_total=0, rendimiento=porcentaje)
+            → sirven para pre-marcar el modal al reabrirlo
+          - 1 línea resumen (item_catalogo=None):
+              precio_referencia = resultado bruto de la fórmula del subsistema
+              rendimiento       = porcentaje promedio de la categoría (fracción 0–2)
+              costo_total       = precio_referencia × rendimiento   (via calcular())
+
+        Esto permite que admin_porcentaje_aplicado = rendimiento × 100 muestre
+        el porcentaje real aplicado (no 100 %).
+        """
+        from apps.presupuestos.models import APULinea, ItemCatalogoAPU, ReglaAPUSubsistema
+        from collections import defaultdict
         from apps.common.choices import TipoAPU
 
-        # Usar el nuevo flujo detallado para Administración
-        creadas = self._generar_administracion_detallada(items_data)
+        if not items_data:
+            return []
+
+        dias_duracion = float(self.apu.dias_duracion or 0)
+        if dias_duracion <= 0:
+            raise ValueError("El parámetro 'Días de duración' del APU debe ser mayor que cero.")
+
+        tp  = self._get_total_powergrip()
+        aiu = 1 + float(self.apu.aiu_contratista_pct) / 100
+        mg  = 1 + float(self.apu.margen_ganancia_pct) / 100
+
+        try:
+            regla = ReglaAPUSubsistema.objects.get(
+                subsistema=self.ps.subsistema,
+                tipo_apu=TipoAPU.ADMINISTRACION,
+            )
+        except ReglaAPUSubsistema.DoesNotExist:
+            raise ValueError(
+                f"No existe ReglaAPUSubsistema para subsistema='{self.ps.subsistema}' "
+                f"y tipo_apu='ADMINISTRACION'. Defínala en la edición del Subsistema."
+            )
+
+        # Cargar ítems con categoría y porcentaje
+        items_cargados = []
+        for d in items_data:
+            item      = ItemCatalogoAPU.objects.select_related("categoria").get(pk=d["item_id"])
+            cantidad  = max(int(d.get("cantidad", 1)), 1)
+            porcentaje = float(d.get("porcentaje", 1.0) or 1.0)
+            items_cargados.append((item, cantidad, porcentaje))
+
+        # Eliminar líneas ADMINISTRACION existentes
+        self.apu.lineas.filter(tipo=TipoAPU.ADMINISTRACION).delete()
+
+        # Agrupar por categoría
+        por_categoria: dict = defaultdict(list)
+        for item, cantidad, porcentaje in items_cargados:
+            por_categoria[item.categoria_id].append((item, cantidad, porcentaje))
+
+        creadas = []
+        for cat_id, items_en_cat in por_categoria.items():
+            categoria = items_en_cat[0][0].categoria
+
+            # Días efectivos
+            dias_efectivos = dias_duracion / 30.0 if categoria.aplica_dias_mensuales else dias_duracion
+
+            # Suma de costos para la fórmula
+            suma = 0.0
+            for item, cantidad, _ in items_en_cat:
+                if (item.salario_base and item.salario_base > 0) or (item.prestaciones and item.prestaciones > 0):
+                    precio_efectivo = float(item.salario_base + item.prestaciones)
+                elif item.vida_util_dias:
+                    precio_efectivo = float(item.precio_base) / float(item.vida_util_dias)
+                else:
+                    precio_efectivo = float(item.precio_base)
+                suma += precio_efectivo * cantidad
+
+            # Número de personas (para la regla)
+            items_personal = [{"cantidad": cant} for item, cant, _ in items_en_cat
+                              if item.salario_base or item.prestaciones]
+            num_personas = self._get_num_personas(items_personal)
+
+            # Evaluar fórmula del subsistema → resultado BRUTO (sin porcentaje)
+            ctx        = self._build_regla_context(suma, dias_efectivos, aiu, mg, tp, num_personas)
+            costo_bruto = regla.evaluar(ctx)
+
+            # Porcentaje promedio de la categoría
+            pcts_cat = [pct for _, _, pct in items_en_cat]
+            escala   = sum(pcts_cat) / len(pcts_cat) if pcts_cat else 1.0
+
+            # ── Líneas detalle (referencia visual + re-marcado de modal) ─────
+            for item, cantidad, porcentaje in items_en_cat:
+                es_personal = bool(
+                    (item.salario_base and item.salario_base > 0)
+                    or (item.prestaciones and item.prestaciones > 0)
+                )
+                precio_ref_det = (
+                    Decimal(str(item.salario_base + item.prestaciones))
+                    if es_personal
+                    else (
+                        (Decimal(str(item.precio_base)) / Decimal(str(item.vida_util_dias))).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        ) if item.vida_util_dias
+                        else Decimal(str(item.precio_base))
+                    )
+                )
+                APULinea.objects.create(
+                    apu=self.apu,
+                    tipo=TipoAPU.ADMINISTRACION,
+                    item_catalogo=item,
+                    descripcion=item.nombre,
+                    rendimiento=Decimal(str(round(porcentaje, 6))),   # porcentaje individual (fracción)
+                    unidad=item.unidad,
+                    precio_referencia=precio_ref_det,
+                    costo_unitario=Decimal("0"),
+                    costo_total=Decimal("0"),
+                    valor_unitario=Decimal("0"),
+                    valor_total=Decimal("0"),
+                    salario_base=item.salario_base if es_personal else Decimal("0"),
+                    prestaciones=item.prestaciones if es_personal else Decimal("0"),
+                    iva_aplicado=False,
+                    editable=False,
+                )
+
+            # ── Línea resumen ─────────────────────────────────────────────────
+            # precio_referencia = costo bruto de la fórmula (sin porcentaje)
+            # rendimiento       = escala (porcentaje promedio de la categoría)
+            # calcular()        → costo_total = precio_referencia × rendimiento
+            precio_ref = Decimal(str(costo_bruto)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+            linea_resumen = APULinea.objects.create(
+                apu=self.apu,
+                tipo=TipoAPU.ADMINISTRACION,
+                item_catalogo=None,
+                despiece_linea=None,
+                descripcion=categoria.nombre,
+                rendimiento=Decimal(str(round(escala, 6))),
+                unidad="global",
+                precio_referencia=precio_ref,
+                iva_aplicado=False,
+                editable=True,
+            )
+            linea_resumen.calcular()
+
+            creadas.append({
+                "descripcion": categoria.nombre,
+                "suma_items":  suma,
+                "costo_bruto": costo_bruto,
+                "escala":      escala,
+                "costo_total": float(linea_resumen.costo_total),
+            })
+            logger.info(
+                "[APUService] Admin cat='%s' | bruto=%.2f | escala=%.4f | total=%.2f",
+                categoria.nombre, costo_bruto, escala, float(linea_resumen.costo_total),
+            )
+
+        return creadas
+
+    @transaction.atomic
+    def generar_administracion_desde_catalogo(self, items_data: List[Dict]) -> List[dict]:
+        """Genera APULineas ADMINISTRACION usando ReglaAPUSubsistema × porcentaje.
+
+        Fórmula:
+            costo = regla_subsistema(ítems_categoría) × porcentaje_usuario
+
+        El porcentaje (0.0–1.0, fracción) se promedia por categoría y se almacena
+        en `rendimiento` de la línea resumen. La línea detalle guarda el porcentaje
+        individual por ítem para pre-llenar el modal al reabrirlo.
+        """
+        creadas = self._generar_administracion_con_regla(items_data)
         logger.info(
-            "[APUService] %d líneas de administración (detallado) para APU %s.",
-            len(creadas), self.apu.pk
+            "[APUService] %d categoría(s) de administración (regla × porcentaje) para APU %s.",
+            len(creadas), self.apu.pk,
         )
         return creadas
 

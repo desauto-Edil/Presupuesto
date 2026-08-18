@@ -365,12 +365,6 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
                         {% if apu.fecha_aprobacion %}
                         <span style="font-size:10px;color:var(--ink-soft);">{{ apu.fecha_aprobacion|date:"d/m/Y" }}</span>
                         {% endif %}
-                        {% if apu.aplica_garantia and apu.tipo_garantia %}
-                        <span style="font-size:10px;background:rgba(255,166,0,.15);color:#a86b00;
-                                     padding:2px 7px;border-radius:3px;font-weight:600;">
-                            {{ apu.tipo_garantia.nombre }}
-                        </span>
-                        {% endif %}
                         {% else %}
                         <span style="font-size:10px;background:rgba(255,166,0,.15);color:#a86b00;
                                      padding:2px 7px;border-radius:3px;font-weight:600;">
@@ -410,10 +404,7 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
                         <a href="{% url 'presupuestos:apu_detail' apu.pk %}"
                            class="btn btn-xs" style="background:var(--theme-accent);color:#fff;font-size:10px;">Ver APU</a>
                         {% endif %}
-                        <a href="{% url 'presupuestos:apu_pdf_interno' apu.pk %}"
-                           class="btn btn-ghost btn-xs" style="font-size:10px;" target="_blank">PDF Int. (vivo)</a>
-                        <a href="{% url 'presupuestos:apu_pdf_cliente' apu.pk %}"
-                           class="btn btn-ghost btn-xs" style="font-size:10px;" target="_blank">PDF Cli. (vivo)</a>
+                        {# PDF Interno eliminado — reemplazado por Excel. Solo se muestra PDF Cliente cuando hay cotización aprobada. #}
                         {% with cot=apu.cotizacion_vigente %}
                         {% if cot %}
                         <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;
@@ -422,13 +413,9 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
                             <i class="bi bi-file-earmark-check-fill"></i>
                             Cotización aprobada v{{ cot.version }}
                         </span>
-                        <a href="{% url 'presupuestos:cotizacion_pdf_interno' cot.pk %}"
-                           class="btn btn-xs" style="background:#1c7a3a;color:#fff;font-size:10px;" target="_blank">
-                            PDF Int. aprobado
-                        </a>
                         <a href="{% url 'presupuestos:cotizacion_pdf_cliente' cot.pk %}"
                            class="btn btn-xs" style="background:#1c7a3a;color:#fff;font-size:10px;" target="_blank">
-                            PDF Cli. aprobado
+                            PDF Cliente aprobado
                         </a>
                         {% endif %}
                         {% endwith %}

@@ -42,6 +42,7 @@ class DespieceMaestroService:
         Construye el contexto de evaluación combinando:
           1. Defaults de VariableSubsistema (si el usuario no los sobrescribe).
           2. variables_entrada del despiece (o un override para recálculo).
+          3. Variables globales del sistema (trm, etc.).
         """
         from apps.ingenieria.models import VariableSubsistema
 
@@ -69,6 +70,20 @@ class DespieceMaestroService:
                 ctx[k] = float(v)
             except (TypeError, ValueError):
                 ctx[k] = v  # dejar como string si no es numérico
+
+        # Paso 3: TRM vigente — disponible en todas las fórmulas como `trm`.
+        # Las fórmulas no la sobrescriben porque el usuario no puede ingresarla
+        # como variable de entrada.
+        if "trm" not in ctx:
+            try:
+                from apps.common.trm_service import obtener_trm_vigente, TRMNoDisponibleError
+                ctx["trm"] = float(obtener_trm_vigente())
+            except Exception:
+                ctx["trm"] = 0.0
+                logger.warning(
+                    "[DespieceMaestroService] TRM no disponible; trm=0.0 en contexto. "
+                    "Ejecute `python manage.py actualizar_trm`."
+                )
 
         return ctx
 
