@@ -1,10 +1,35 @@
-asgiref==3.11.1
+# Imperandina — dependencias de producción
+# Python 3.9 (los pines están fijados a versiones compatibles con 3.9)
+# Instalar:  pip install -r requirements.txt
+
+# ── Núcleo ───────────────────────────────────────────────────────────────
 Django==4.2.29
-gunicorn==21.2.0
-psycopg2-binary==2.9.11
-python-decouple==3.8
+asgiref==3.11.1
 sqlparse==0.5.5
 typing_extensions==4.15.0
-openpyxl==3.1.5
-pillow==12.3.0
-redis==8.0.1
+
+# ── Base de datos ────────────────────────────────────────────────────────
+psycopg2-binary==2.9.11
+
+# ── Configuración por .env (imperandina/settings.py) ──────────────────────
+python-decouple==3.8
+
+# ── Servidor WSGI ────────────────────────────────────────────────────────
+gunicorn==23.0.0
+
+# ── Estáticos: requerido por MIDDLEWARE y STORAGES en settings.py.
+#    Sin esto Django no arranca. El extra [brotli] habilita la compresión
+#    de CompressedManifestStaticFilesStorage.
+whitenoise[brotli]==6.11.0
+
+# ── Exportaciones ────────────────────────────────────────────────────────
+openpyxl==3.1.5          # Excel: despiece y APU (apps/presupuestos/xlsx_exports.py)
+weasyprint==66.0         # PDF: presupuestos y APU (apps/presupuestos/views)
+                         # Requiere librerías del sistema: pango, cairo, gdk-pixbuf
+                         # Debian/Ubuntu: apt-get install libpango-1.0-0 libpangoft2-1.0-0
+
+# ── Imágenes (ImageField: Subsistema.imagen_tecnica, logos) ───────────────
+pillow==11.3.0
+
+# ── Caché opcional: solo si CACHE_BACKEND=redis en .env ───────────────────
+redis==7.0.1
