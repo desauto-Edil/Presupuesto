@@ -451,8 +451,15 @@
       Si devuelve, el equipo recibirá el presupuesto con su comentario para ajustes.<br>
       Si modifica, puede editar porcentajes y descripciones antes de aprobar.
     </div>
+    {# Trazabilidad del flujo de autorización #}
+    <div style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;padding-top:8px;
+                border-top:1px solid var(--border);">
+      Enviado por <strong>{{ apu_enviado_por|default:"— sin registro —" }}</strong>
+      · Autorizador: <strong>{{ apu_revisor|default:"— sin asignar —" }}</strong>
+    </div>
   </div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    {% if puede_aprobar %}
     {# Aprobar #}
     <form method="post" style="margin:0;" onsubmit="return confirm('¿Confirma la aprobación del presupuesto?')">
       {% csrf_token %}
@@ -466,6 +473,7 @@
     <button type="button" class="btn-devolver" onclick="document.getElementById('modalDevolver').classList.add('open')">
       <i class="bi bi-arrow-return-left"></i> Devolver
     </button>
+    {% endif %}
 
     {# Modificar — redirige a vista de edición #}
     <form method="post" style="margin:0;">
@@ -475,8 +483,28 @@
         <i class="bi bi-pencil-square"></i> Modificar
       </button>
     </form>
+
+    {% if puede_reasignar %}
+    <button type="button" class="btn-modificar"
+            onclick="document.getElementById('modalReasignar').classList.add('open')">
+      <i class="bi bi-person-gear"></i> Reasignar autorizador
+    </button>
+    {% endif %}
   </div>
 </div>
+
+{% if not puede_aprobar %}
+{# Motivo por el que este usuario no puede autorizar (segregación de funciones) #}
+<div style="display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:12px 14px;
+            background:rgba(224,125,16,.07);border:1px solid rgba(224,125,16,.22);
+            border-radius:10px;">
+  <i class="bi bi-shield-exclamation" style="font-size:16px;color:#e07d10;flex-shrink:0;"></i>
+  <div style="font-size:12px;color:var(--ink);line-height:1.6;">
+    <strong>No puede autorizar este presupuesto.</strong><br>
+    {{ motivo_no_aprobar }}
+  </div>
+</div>
+{% endif %}
 
 {% else %}
 {# Estado aprobado: botón PDF proyecto + regreso #}
@@ -531,6 +559,57 @@
   </div>
 </div>
 
+{# ── Modal reasignar autorizador ──────────────────────────────────── #}
+{% if puede_reasignar %}
+<div class="modal-overlay" id="modalReasignar" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <h5 style="margin:0 0 6px 0;font-size:15px;font-weight:800;color:var(--ink);">
+      <i class="bi bi-person-gear" style="margin-right:6px;color:var(--theme-accent);"></i>Reasignar autorizador
+    </h5>
+    <p style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">
+      Cambia a quién le corresponde autorizar este presupuesto. Aplica a todos
+      los APU del proyecto. No aprueba nada por sí solo.
+    </p>
+
+    <div style="font-size:11.5px;color:var(--ink-soft);margin-bottom:12px;
+                padding:8px 10px;background:var(--surface-2);border-radius:8px;">
+      Enviado por <strong>{{ apu_enviado_por|default:"— sin registro —" }}</strong><br>
+      Autorizador actual: <strong>{{ apu_revisor|default:"— sin asignar —" }}</strong>
+    </div>
+
+    <form method="post" action="{% url 'presupuestos:proyecto_reasignar_autorizador' proyecto.pk %}">
+      {% csrf_token %}
+      <label style="font-size:12px;font-weight:700;color:var(--ink);display:block;margin-bottom:4px;">
+        Nuevo autorizador
+      </label>
+      <select name="revisor_id" class="form-select form-select-sm" required>
+        <option value="">— Seleccione —</option>
+        {% for u in autorizadores %}
+          {% if u != apu_enviado_por %}
+          <option value="{{ u.pk }}" {% if u == apu_revisor %}selected{% endif %}>
+            {{ u.nombre_completo|default:u.email }}{% if u.rol %} — {{ u.get_rol_display }}{% endif %}
+          </option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <div style="font-size:11px;color:var(--ink-soft);margin-top:6px;">
+        Quien envió el presupuesto no aparece en la lista: no puede autorizar
+        su propio envío.
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">
+        <button type="button" class="btn btn-ghost btn-sm"
+                onclick="document.getElementById('modalReasignar').classList.remove('open')">
+          Cancelar
+        </button>
+        <button type="submit" class="btn-modificar" style="padding:7px 18px;font-size:12px;">
+          <i class="bi bi-check2"></i> Reasignar
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -539,10 +618,14 @@
 document.getElementById('modalDevolver')?.addEventListener('click', function(e) {
   if (e.target === this) this.classList.remove('open');
 });
+document.getElementById('modalReasignar')?.addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
 // Cerrar con Escape
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     document.getElementById('modalDevolver')?.classList.remove('open');
+    document.getElementById('modalReasignar')?.classList.remove('open');
   }
 });
 </script>

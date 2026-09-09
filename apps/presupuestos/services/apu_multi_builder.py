@@ -132,6 +132,8 @@ class APUMultiDespieceBuilder:
         """
         from apps.presupuestos.models import DespieceLinea
 
+        from apps.ingenieria.services.lineas_finales_apu import _redondear_comercial
+
         consolidado: dict = {}
         pks_consolidados: set = set()
         for c in dm.consolidaciones.all():
@@ -148,11 +150,16 @@ class APUMultiDespieceBuilder:
                 if dml.producto_id and dml.producto
                 else dml.precio_unitario
             )
+            redondeada = _redondear_comercial(
+                dml.cantidad_redondeada, dml.cantidad_calculada
+            )
             if clave in consolidado:
                 consolidado[clave]["cantidad"] += (dml.cantidad_calculada or 0)
+                consolidado[clave]["cantidad_redondeada"] += redondeada
             else:
                 consolidado[clave] = {
                     "cantidad": dml.cantidad_calculada or 0,
+                    "cantidad_redondeada": redondeada,
                     "precio_snapshot": precio_snapshot,
                     "producto": dml.producto,
                 }
@@ -165,11 +172,14 @@ class APUMultiDespieceBuilder:
                 c.precio_unitario
                 or (c.producto.precio_unitario_real if c.producto else None)
             )
+            redondeada = _redondear_comercial(c.cantidad_redondeada, c.cantidad_total)
             if clave in consolidado:
                 consolidado[clave]["cantidad"] += (c.cantidad_total or 0)
+                consolidado[clave]["cantidad_redondeada"] += redondeada
             else:
                 consolidado[clave] = {
                     "cantidad": c.cantidad_total or 0,
+                    "cantidad_redondeada": redondeada,
                     "precio_snapshot": precio_snapshot,
                     "producto": c.producto,
                 }
@@ -181,6 +191,9 @@ class APUMultiDespieceBuilder:
                 defaults={
                     "proyecto": dm.proyecto,
                     "cantidad_calculada": datos["cantidad"],
+                    # Se arrastra el redondeo del despiece para que el APU
+                    # valorice con la cantidad comercial, no con la exacta.
+                    "cantidad_redondeada": datos["cantidad_redondeada"],
                     "precio_snapshot": datos["precio_snapshot"],
                     "producto": datos["producto"],
                 },
@@ -193,7 +206,8 @@ class APUMultiDespieceBuilder:
     def _materiales_secundarios(self, dm) -> int:
         """
         Crea APULinea(MATERIALES) para cada producto de un DM secundario:
-          • cantidad bruta como rendimiento (decisión Fase 11.4A);
+          • cantidad comercial (redondeada) como rendimiento — misma regla
+            que los materiales del despiece raíz (decisión Fase 11.4A);
           • rendimiento=1 si la cantidad no se pudo determinar;
           • precio_referencia = precio snapshot del producto;
           • snapshots de sistema/subsistema y FK a despiece_maestro.
@@ -213,17 +227,27 @@ class APUMultiDespieceBuilder:
         for c in dm.consolidaciones.all():
             pks_consolidados.update(c.lineas_ids or [])
 
+        from apps.ingenieria.services.lineas_finales_apu import _redondear_comercial
+
         for dml in dm.lineas.select_related("producto", "producto__unidad"):
             if dml.pk in pks_consolidados:
                 continue
             if dml.producto_id is None:
                 continue
-            self._acumular_producto(productos_data, dml.producto, dml.cantidad_calculada, dml.precio_unitario)
+            self._acumular_producto(
+                productos_data, dml.producto,
+                _redondear_comercial(dml.cantidad_redondeada, dml.cantidad_calculada),
+                dml.precio_unitario,
+            )
 
         for c in dm.consolidaciones.select_related("producto", "producto__unidad"):
             if c.producto_id is None:
                 continue
-            self._acumular_producto(productos_data, c.producto, c.cantidad_total, c.precio_unitario)
+            self._acumular_producto(
+                productos_data, c.producto,
+                _redondear_comercial(c.cantidad_redondeada, c.cantidad_total),
+                c.precio_unitario,
+            )
 
         creadas = 0
         for producto_id, data in productos_data.items():

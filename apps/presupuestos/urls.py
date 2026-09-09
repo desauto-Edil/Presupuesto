@@ -32,6 +32,7 @@ from apps.presupuestos.views import (
     # Presupuesto por proyecto (nueva vista consolidada)
     ProyectoPresupuestoView,
     ProyectoRevisarView,
+    ProyectoReasignarRevisorView,
     ProyectoPDFClienteView,
     # Catálogo APU
     CatalogoAPUView,
@@ -141,6 +142,8 @@ urlpatterns = [
     path("proyectos/<int:pk>/presupuesto/",             ProyectoPresupuestoView.as_view(),      name="proyecto_presupuesto"),
     # Vista del revisor/aprobador
     path("proyectos/<int:pk>/revisar/",                 ProyectoRevisarView.as_view(),          name="proyecto_revisar"),
+    # Segregación de funciones: cambiar a quién le toca autorizar
+    path("proyectos/<int:pk>/reasignar-autorizador/",   ProyectoReasignarRevisorView.as_view(), name="proyecto_reasignar_autorizador"),
     # PDF consolidado cliente (una vez aprobado)
     path("proyectos/<int:pk>/pdf-cliente/",             ProyectoPDFClienteView.as_view(),       name="proyecto_pdf_cliente"),
 ]

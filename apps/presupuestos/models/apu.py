@@ -478,6 +478,29 @@ class APUProyecto(models.Model):
         blank=True, null=True,
         verbose_name="Fecha de envío a revisión",
     )
+    enviado_por = models.ForeignKey(
+        "configuracion.ConfiguracionSistema",
+        on_delete=models.SET_NULL,
+        blank=True, null=True,
+        related_name="apus_enviados",
+        verbose_name="Enviado a revisión por",
+        help_text=(
+            "Usuario que remitió el APU a revisión. Se usa para la segregación "
+            "de funciones: quien envía no puede autorizar su propio envío."
+        ),
+    )
+    reasignado_por = models.ForeignKey(
+        "configuracion.ConfiguracionSistema",
+        on_delete=models.SET_NULL,
+        blank=True, null=True,
+        related_name="apus_reasignados",
+        verbose_name="Revisor reasignado por",
+        help_text="Usuario que cambió el revisor asignado, si hubo reasignación.",
+    )
+    fecha_reasignacion = models.DateTimeField(
+        blank=True, null=True,
+        verbose_name="Fecha de reasignación del revisor",
+    )
     aprobado_por = models.ForeignKey(
         "configuracion.ConfiguracionSistema",
         on_delete=models.SET_NULL,

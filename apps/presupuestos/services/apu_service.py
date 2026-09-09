@@ -65,6 +65,48 @@ def calcular_rendimiento_por_producto_principal(cantidad_linea, cantidad_base) -
     return (linea / base).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
 
+def precio_efectivo_item(item, precio_override=None) -> Decimal:
+    """
+    Precio unitario efectivo de un ItemCatalogoAPU para el cálculo del APU.
+
+    Derivación por defecto (según el tipo de ítem):
+        personal      → salario_base + prestaciones   (tarifa del periodo)
+        herramienta   → precio_base / vida_util_dias  (depreciación diaria)
+        resto         → precio_base
+
+    Si `precio_override` viene informado y es >= 0, ese valor manda y se usa
+    tal cual: es el precio que el usuario escribió en el modal "Configurar…"
+    para ESTE APU. No modifica el catálogo — el override vive solo en las
+    APULineas generadas.
+
+    Devuelve Decimal siempre, para que el llamador decida si lo pasa a float
+    (fórmulas) o lo persiste (precio_referencia).
+    """
+    if precio_override is not None:
+        try:
+            precio = Decimal(str(precio_override))
+        except (TypeError, ValueError, ArithmeticError):
+            precio = None
+        if precio is not None and precio >= 0:
+            return precio.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+
+    if (item.salario_base and item.salario_base > 0) or (item.prestaciones and item.prestaciones > 0):
+        return Decimal(str(item.salario_base + item.prestaciones))
+    if item.vida_util_dias:
+        return (
+            Decimal(str(item.precio_base)) / Decimal(str(item.vida_util_dias))
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return Decimal(str(item.precio_base))
+
+
+def _es_personal(item) -> bool:
+    """True si el ítem representa personal (tiene salario o prestaciones)."""
+    return bool(
+        (item.salario_base and item.salario_base > 0)
+        or (item.prestaciones and item.prestaciones > 0)
+    )
+
+
 _CLAVES_UNIDAD_REFERENCIA = (
     "total_powergrip",
     "total_unidades",
@@ -603,7 +645,11 @@ class APUService:
           - N líneas detalle (item_catalogo set, costo_total=0) — referencia visual
           - 1 línea resumen (item_catalogo=None) — contiene el costo real
 
-        items_data: [{"item_id": int, "cantidad": int}]
+        items_data: [{"item_id": int, "cantidad": int, "precio_override": num|None}]
+
+        `precio_override` es opcional: cuando viene informado sustituye al
+        precio derivado del catálogo SOLO para este APU (ver
+        `precio_efectivo_item`). El catálogo nunca se modifica.
 
         La fórmula se busca en ReglaAPUSubsistema filtrada por:
             subsistema = self.ps.subsistema
@@ -633,17 +679,19 @@ class APUService:
                 f"y tipo_apu='{tipo_apu}'. Defínala en la edición del Subsistema."
             )
 
-        # Cargar ítems
+        # Cargar ítems. `precio` ya viene resuelto: override del usuario si lo
+        # hay, derivación del catálogo si no.
         items_cargados = []
         for d in items_data:
             item     = ItemCatalogoAPU.objects.select_related("categoria").get(pk=d["item_id"])
             cantidad = max(int(d.get("cantidad", 1)), 1)
-            items_cargados.append((item, cantidad))
+            precio   = precio_efectivo_item(item, d.get("precio_override"))
+            items_cargados.append((item, cantidad, precio))
 
         # Número de personas (relevante para MO)
         items_personal_data = [
             {"cantidad": cant}
-            for item, cant in items_cargados
+            for item, cant, _ in items_cargados
             if item.salario_base or item.prestaciones
         ]
         num_personas = self._get_num_personas(items_personal_data)
@@ -653,8 +701,8 @@ class APUService:
 
         # Agrupar por categoría
         por_categoria: dict = defaultdict(list)
-        for item, cantidad in items_cargados:
-            por_categoria[item.categoria_id].append((item, cantidad))
+        for item, cantidad, precio in items_cargados:
+            por_categoria[item.categoria_id].append((item, cantidad, precio))
 
         creadas = []
         for cat_id, items_en_cat in por_categoria.items():
@@ -663,18 +711,12 @@ class APUService:
             # Días efectivos: si la categoría tiene aplica_dias_mensuales → dias/30
             dias_efectivos = dias_duracion / 30.0 if categoria.aplica_dias_mensuales else dias_duracion
 
-            # Suma del costo de los ítems de la categoría
-            # No-personal: precio/día = precio_base / vida_util_dias
-            # Personal (salario): salario_base + prestaciones (tarifa mensual/periodo)
+            # Suma del costo de los ítems de la categoría.
+            # `precio` es el precio efectivo ya resuelto por item (override del
+            # usuario o derivación del catálogo — ver precio_efectivo_item).
             suma = 0.0
-            for item, cantidad in items_en_cat:
-                if (item.salario_base and item.salario_base > 0) or (item.prestaciones and item.prestaciones > 0):
-                    precio_efectivo = float(item.salario_base + item.prestaciones)
-                elif item.vida_util_dias:
-                    precio_efectivo = float(item.precio_base) / float(item.vida_util_dias)
-                else:
-                    precio_efectivo = float(item.precio_base)
-                suma += precio_efectivo * cantidad
+            for item, cantidad, precio in items_en_cat:
+                suma += float(precio) * cantidad
 
             # Evaluar fórmula → costo unitario de la categoría
             ctx = self._build_regla_context(suma, dias_efectivos, aiu, mg, tp, num_personas)
@@ -685,20 +727,11 @@ class APUService:
                 tipo_apu, categoria.nombre, suma, dias_efectivos, ctx, costo_unitario_cat,
             )
 
-            # Líneas detalle (referencia visual, costo_total=0)
-            for item, cantidad in items_en_cat:
-                es_personal = bool(
-                    (item.salario_base and item.salario_base > 0)
-                    or (item.prestaciones and item.prestaciones > 0)
-                )
-                if es_personal:
-                    precio_ref_detalle = Decimal(str(item.salario_base + item.prestaciones))
-                elif item.vida_util_dias:
-                    precio_ref_detalle = (
-                        Decimal(str(item.precio_base)) / Decimal(str(item.vida_util_dias))
-                    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                else:
-                    precio_ref_detalle = Decimal(str(item.precio_base))
+            # Líneas detalle (referencia visual, costo_total=0).
+            # precio_referencia guarda el precio efectivo usado en la suma, así
+            # que al reabrir el modal se relee el override que el usuario fijó.
+            for item, cantidad, precio_ref_detalle in items_en_cat:
+                es_personal = _es_personal(item)
                 APULinea.objects.create(
                     apu=self.apu,
                     tipo=tipo_apu,
@@ -784,8 +817,14 @@ class APUService:
     def generar_materiales(self) -> List[dict]:
         """
         Genera APULineas tipo MATERIALES desde las DespieceLineas resueltas.
-        rendimiento = total_unidades / cantidad_final
+        rendimiento = cantidad_comercial / base   (ver `cantidad_final_apu`)
         Omite líneas pendientes_seleccion o sin producto.
+
+        Redondeo: se usa la cantidad COMERCIAL redondeada de cada línea
+        (la que el usuario vio en el Despiece Maestro), no el resultado
+        exacto de la fórmula. En modo PRODUCTO_PRINCIPAL la base también es
+        comercial, de modo que la línea del producto principal mantiene
+        rendimiento = 1 exacto.
 
         Tarea 10: elimina automáticamente las líneas de materiales generadas
         desde despiece (despiece_linea IS NOT NULL) antes de regenerar, para
@@ -863,7 +902,9 @@ class APUService:
 
             nombre   = dl.producto.nombre
             precio   = float(dl.precio_snapshot or 0)
-            cantidad = float(dl.cantidad_final)
+            # Cantidad COMERCIAL (redondeada), no la exacta del cálculo: el APU
+            # debe valorizar lo que realmente se compra, igual que el despiece.
+            cantidad = float(dl.cantidad_final_apu or 0)
 
             # ── Cálculo de rendimiento ───────────────────────────────────────
             if _usar_producto_principal:
@@ -990,21 +1031,23 @@ class APUService:
                 f"y tipo_apu='ADMINISTRACION'. Defínala en la edición del Subsistema."
             )
 
-        # Cargar ítems con categoría y porcentaje
+        # Cargar ítems con categoría, porcentaje y precio efectivo
+        # (override del usuario si lo hay, derivación del catálogo si no).
         items_cargados = []
         for d in items_data:
             item      = ItemCatalogoAPU.objects.select_related("categoria").get(pk=d["item_id"])
             cantidad  = max(int(d.get("cantidad", 1)), 1)
             porcentaje = float(d.get("porcentaje", 1.0) or 1.0)
-            items_cargados.append((item, cantidad, porcentaje))
+            precio    = precio_efectivo_item(item, d.get("precio_override"))
+            items_cargados.append((item, cantidad, porcentaje, precio))
 
         # Eliminar líneas ADMINISTRACION existentes
         self.apu.lineas.filter(tipo=TipoAPU.ADMINISTRACION).delete()
 
         # Agrupar por categoría
         por_categoria: dict = defaultdict(list)
-        for item, cantidad, porcentaje in items_cargados:
-            por_categoria[item.categoria_id].append((item, cantidad, porcentaje))
+        for item, cantidad, porcentaje, precio in items_cargados:
+            por_categoria[item.categoria_id].append((item, cantidad, porcentaje, precio))
 
         creadas = []
         for cat_id, items_en_cat in por_categoria.items():
@@ -1013,19 +1056,13 @@ class APUService:
             # Días efectivos
             dias_efectivos = dias_duracion / 30.0 if categoria.aplica_dias_mensuales else dias_duracion
 
-            # Suma de costos para la fórmula
+            # Suma de costos para la fórmula, con el precio efectivo por ítem.
             suma = 0.0
-            for item, cantidad, _ in items_en_cat:
-                if (item.salario_base and item.salario_base > 0) or (item.prestaciones and item.prestaciones > 0):
-                    precio_efectivo = float(item.salario_base + item.prestaciones)
-                elif item.vida_util_dias:
-                    precio_efectivo = float(item.precio_base) / float(item.vida_util_dias)
-                else:
-                    precio_efectivo = float(item.precio_base)
-                suma += precio_efectivo * cantidad
+            for item, cantidad, _, precio in items_en_cat:
+                suma += float(precio) * cantidad
 
             # Número de personas (para la regla)
-            items_personal = [{"cantidad": cant} for item, cant, _ in items_en_cat
+            items_personal = [{"cantidad": cant} for item, cant, _, _ in items_en_cat
                               if item.salario_base or item.prestaciones]
             num_personas = self._get_num_personas(items_personal)
 
@@ -1034,25 +1071,12 @@ class APUService:
             costo_bruto = regla.evaluar(ctx)
 
             # Porcentaje promedio de la categoría
-            pcts_cat = [pct for _, _, pct in items_en_cat]
+            pcts_cat = [pct for _, _, pct, _ in items_en_cat]
             escala   = sum(pcts_cat) / len(pcts_cat) if pcts_cat else 1.0
 
             # ── Líneas detalle (referencia visual + re-marcado de modal) ─────
-            for item, cantidad, porcentaje in items_en_cat:
-                es_personal = bool(
-                    (item.salario_base and item.salario_base > 0)
-                    or (item.prestaciones and item.prestaciones > 0)
-                )
-                precio_ref_det = (
-                    Decimal(str(item.salario_base + item.prestaciones))
-                    if es_personal
-                    else (
-                        (Decimal(str(item.precio_base)) / Decimal(str(item.vida_util_dias))).quantize(
-                            Decimal("0.01"), rounding=ROUND_HALF_UP
-                        ) if item.vida_util_dias
-                        else Decimal(str(item.precio_base))
-                    )
-                )
+            for item, cantidad, porcentaje, precio_ref_det in items_en_cat:
+                es_personal = _es_personal(item)
                 APULinea.objects.create(
                     apu=self.apu,
                     tipo=TipoAPU.ADMINISTRACION,

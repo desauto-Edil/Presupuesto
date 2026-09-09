@@ -584,6 +584,77 @@ class SubsistemaDeleteView(APUSistemaAccesoMixin, DeleteView):
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
+class SubsistemaClonarView(APUSistemaAccesoMixin, View):
+    """
+    POST /ingenieria/subsistemas/<pk>/clonar/
+
+    Clona la plantilla técnica completa dentro del Sistema (categoría) que
+    elija el usuario en el modal. Al terminar abre el clon en modo edición
+    para que pueda ajustar lo que cambie respecto del original.
+
+    Campos del POST:
+        sistema_destino_id  (requerido) — Sistema donde queda el clon
+        codigo_nuevo        (opcional)  — si viene vacío se autogenera
+        nombre_nuevo        (opcional)  — si viene vacío se autogenera
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk, *args, **kwargs):
+        from django.contrib import messages
+        from django.shortcuts import redirect
+        from apps.comercial.views import registrar_log
+        from apps.ingenieria.services.subsistema_clone_service import (
+            clonar_subsistema, resumen_clonado, SubsistemaCloneError,
+        )
+
+        origen = get_object_or_404(Subsistema, pk=pk)
+
+        sistema_destino_id = (request.POST.get("sistema_destino_id") or "").strip()
+        sistema_destino = Sistema.objects.filter(pk=sistema_destino_id).first()
+        if sistema_destino is None:
+            messages.error(request, "Debe seleccionar un sistema destino válido para la copia.")
+            return redirect("ingenieria:sistema_list")
+
+        conteos = resumen_clonado(origen)
+
+        try:
+            clon = clonar_subsistema(
+                origen=origen,
+                sistema_destino=sistema_destino,
+                codigo_nuevo=request.POST.get("codigo_nuevo", ""),
+                nombre_nuevo=request.POST.get("nombre_nuevo", ""),
+            )
+        except SubsistemaCloneError as exc:
+            messages.error(request, str(exc))
+            return redirect("ingenieria:sistema_list")
+
+        detalle = (
+            f"{conteos['variables']} variable(s), "
+            f"{conteos['subconjuntos']} subconjunto(s), "
+            f"{conteos['componentes']} componente(s), "
+            f"{conteos['dependencias']} dependencia(s), "
+            f"{conteos['reglas_apu']} regla(s) APU, "
+            f"{conteos['items_apu']} ítem(s) APU"
+        )
+        registrar_log(
+            request,
+            accion="CLONAR_SUBSISTEMA",
+            descripcion=(
+                f"Plantilla «{origen.codigo}» clonada como «{clon.codigo}» "
+                f"en el sistema «{sistema_destino.nombre}». Copiado: {detalle}."
+            ),
+            modelo_afectado="Subsistema",
+            objeto_id=clon.pk,
+        )
+        messages.success(
+            request,
+            f"Plantilla clonada como «{clon.nombre}» ({clon.codigo}) en "
+            f"«{sistema_destino.nombre}». Se copiaron {detalle}. "
+            "Revise y ajuste lo que necesite antes de usarla.",
+        )
+        return redirect("ingenieria:subsistema_update", pk=clon.pk)
+
+
 # ── Catálogos de consumo (FuncionConsumo, ProblemaResuelto, SuperficieCompatible) ─
 
 class FuncionConsumoCreateView(APUSistemaAccesoMixin, CreateView):

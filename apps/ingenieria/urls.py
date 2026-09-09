@@ -6,6 +6,7 @@ from apps.ingenieria.views import (
     SistemaCreateView, SistemaUpdateView, SistemaDeleteView,
     SubsistemaDetailView,
     SubsistemaCreateView, SubsistemaUpdateView, SubsistemaDeleteView,
+    SubsistemaClonarView,
     SubsistemaConfigApuGuardarView,
     CalculadoraConsumoView,
     FuncionConsumoCreateView, FuncionConsumoDeleteView,
@@ -42,6 +43,8 @@ urlpatterns = [
     path("subsistemas/<int:pk>/", SubsistemaDetailView.as_view(), name="subsistema_detail"),
     path("subsistemas/<int:pk>/editar/", SubsistemaUpdateView.as_view(), name="subsistema_update"),
     path("subsistemas/<int:pk>/eliminar/", SubsistemaDeleteView.as_view(), name="subsistema_delete"),
+    # Clonado de plantilla técnica hacia el sistema (categoría) elegido
+    path("subsistemas/<int:pk>/clonar/", SubsistemaClonarView.as_view(), name="subsistema_clonar"),
     # Fase 6L-4: guardado del modal "Configurar APU del subsistema"
     path("subsistemas/<int:pk>/config-apu/guardar/",
          SubsistemaConfigApuGuardarView.as_view(),

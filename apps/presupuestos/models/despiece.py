@@ -218,6 +218,16 @@ class DespieceLinea(models.Model):
         max_digits=18, decimal_places=6, blank=True, null=True,
         help_text="Valor manual que reemplaza al calculado si el usuario lo ajusta.",
     )
+    cantidad_redondeada = models.DecimalField(
+        max_digits=18, decimal_places=6, null=True, blank=True,
+        help_text=(
+            "Cantidad comercial redondeada arrastrada desde el despiece "
+            "(DespieceMaestroLinea.cantidad_redondeada / "
+            "ConsolidacionDespieceMaestro.cantidad_redondeada). Es la que usa el "
+            "APU para valorizar materiales. Si es None, el APU cae a "
+            "math.ceil(cantidad_final)."
+        ),
+    )
     motivo_ajuste = models.TextField(blank=True, null=True)
     precio_snapshot = models.DecimalField(
         max_digits=18, decimal_places=6, blank=True, null=True,
@@ -261,8 +271,35 @@ class DespieceLinea(models.Model):
 
     @property
     def cantidad_final(self):
-        """Cantidad definitiva: ajustada si existe, calculada si no."""
+        """Cantidad definitiva exacta: ajustada si existe, calculada si no.
+
+        Es el valor técnico, con decimales. Para valorizar en el APU use
+        `cantidad_final_apu`, que aplica el redondeo comercial.
+        """
         return self.cantidad_ajustada if self.cantidad_ajustada is not None else self.cantidad_calculada
+
+    @property
+    def cantidad_final_apu(self):
+        """Cantidad comercial que debe usar el APU.
+
+        Prioridad:
+          1. `cantidad_redondeada` arrastrada desde el despiece — es lo que el
+             usuario vio y aprobó en la pantalla de Despiece Maestro.
+          2. `math.ceil(cantidad_final)` como respaldo para líneas legacy que
+             se crearon antes de que existiera el campo.
+
+        Se redondea SIEMPRE hacia arriba: no se puede comprar media unidad
+        comercial de un material.
+        """
+        import math
+        from decimal import Decimal
+
+        if self.cantidad_redondeada is not None:
+            return Decimal(str(self.cantidad_redondeada))
+        base = self.cantidad_final
+        if base is None:
+            return None
+        return Decimal(str(math.ceil(Decimal(str(base)))))
 
     @property
     def pendiente_seleccion(self):

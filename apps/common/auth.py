@@ -18,6 +18,16 @@ Reglas (Fase 12.2):
     PRESUPUESTOS o ADMINISTRADOR.
   • Devolver solicitud: revisor asignado de algún APU del proyecto o
     ADMINISTRADOR.
+
+Segregación de funciones (quien envía no autoriza):
+  • `APUProyecto.enviado_por` guarda quién remitió el APU a revisión.
+  • Ese usuario NO puede aprobarlo, sin excepción por rol — tampoco el
+    ADMINISTRADOR. La salida es reasignar el autorizador a otra persona
+    (`puede_reasignar_revisor`), que es un acto distinto de aprobar.
+  • A nivel de proyecto la regla se compone: para autorizar el presupuesto
+    consolidado hay que poder autorizar todos sus APUs.
+  • APUs anteriores a este control (`enviado_por` vacío) no se bloquean:
+    no hay dato para afirmar quién envió.
 """
 
 from __future__ import annotations
@@ -112,17 +122,138 @@ def puede_gestionar_unidad(request, unidad) -> bool:
 
 # ── Gates de permisos ─────────────────────────────────────────────────────────
 
+def es_autoaprobacion(usuario, apu) -> bool:
+    """
+    True si `usuario` es quien remitió este APU a revisión.
+
+    Segregación de funciones: quien envía no autoriza. Aplica a TODOS los
+    roles, ADMINISTRADOR incluido — un administrador que envió su propio APU
+    debe reasignar el revisor a otra persona para que lo autorice.
+
+    Si `enviado_por` está vacío (APUs anteriores a este control) no se puede
+    afirmar quién envió, así que no se bloquea: se conserva el comportamiento
+    histórico en lugar de dejar trabajo viejo sin poder aprobarse.
+    """
+    if usuario is None or apu is None:
+        return False
+    return bool(apu.enviado_por_id) and apu.enviado_por_id == usuario.pk
+
+
 def puede_aprobar_apu(request, apu) -> bool:
     """
-    Solo el revisor asignado en `apu.revisor` o un ADMINISTRADOR.
+    Autoriza el APU el revisor asignado en `apu.revisor` o un ADMINISTRADOR,
+    salvo que sea quien lo envió (ver `es_autoaprobacion`).
+
     No basta con tener rol PRESUPUESTOS — debe estar asignado.
     """
     usuario = get_usuario_actual(request)
     if usuario is None:
         return False
+    # La regla "quien envía no autoriza" se evalúa primero: gana sobre
+    # cualquier rol, incluido ADMINISTRADOR.
+    if es_autoaprobacion(usuario, apu):
+        return False
     if es_admin(request):
         return True
     return apu.revisor_id is not None and apu.revisor_id == usuario.pk
+
+
+def motivo_no_puede_aprobar_apu(request, apu) -> str:
+    """
+    Explica en lenguaje de negocio por qué el usuario no puede aprobar.
+    Devuelve "" cuando sí puede. Se usa para el mensaje al usuario y el log.
+    """
+    usuario = get_usuario_actual(request)
+    if usuario is None:
+        return "Debe iniciar sesión para autorizar."
+    if es_autoaprobacion(usuario, apu):
+        return (
+            "Usted remitió este presupuesto a revisión, por lo que no puede "
+            "autorizarlo. Debe autorizarlo la persona a quien se lo envió, o "
+            "reasignar el autorizador a otro usuario."
+        )
+    if es_admin(request):
+        return ""
+    if apu.revisor_id is None:
+        return (
+            "Este presupuesto no tiene autorizador asignado. Solicite que se "
+            "asigne uno antes de autorizar."
+        )
+    if apu.revisor_id != usuario.pk:
+        return (
+            f"Solo «{aprobador_label(apu)}» puede autorizar este presupuesto. "
+            "Si debe autorizarlo otra persona, reasigne el autorizador."
+        )
+    return ""
+
+
+def puede_reasignar_revisor(request, apu) -> bool:
+    """
+    Puede reasignar el autorizador de un APU:
+      - ADMINISTRADOR o GERENTE (supervisan el flujo),
+      - el revisor actualmente asignado (delega en otro),
+      - quien envió el APU (corrige a quién se lo mandó).
+
+    Reasignar NO aprueba: solo cambia a quién le toca autorizar. Por eso sí se
+    permite a quien envió — es la vía de salida cuando se equivocó de
+    destinatario o el destinatario no está disponible.
+    """
+    usuario = get_usuario_actual(request)
+    if usuario is None:
+        return False
+    if es_admin(request) or es_gerente(request):
+        return True
+    if apu.revisor_id and apu.revisor_id == usuario.pk:
+        return True
+    return bool(apu.enviado_por_id) and apu.enviado_por_id == usuario.pk
+
+
+# ── Aprobación a nivel de proyecto ────────────────────────────────────────────
+
+def _apus_revisables_del_proyecto(proyecto):
+    """APUs vivos del proyecto que participan del flujo de aprobación."""
+    from apps.presupuestos.models import APUProyecto
+    return APUProyecto.objects.filter(
+        proyecto_sistema__proyecto=proyecto,
+        archivado=False,
+        cantidad_base_apu__isnull=False,
+    )
+
+
+def puede_aprobar_proyecto(request, proyecto) -> bool:
+    """
+    Autoriza el presupuesto consolidado del proyecto.
+
+    Regla: debe poder aprobar TODOS los APUs que lo componen. Basta con que
+    uno solo sea suyo (lo envió él) para que no pueda aprobar el conjunto —
+    si no, la segregación de funciones se saltaría aprobando en bloque.
+
+    Sin APUs revisables no hay nada que autorizar → False.
+    """
+    usuario = get_usuario_actual(request)
+    if usuario is None:
+        return False
+    apus = list(_apus_revisables_del_proyecto(proyecto))
+    if not apus:
+        return False
+    return all(puede_aprobar_apu(request, apu) for apu in apus)
+
+
+def motivo_no_puede_aprobar_proyecto(request, proyecto) -> str:
+    """Primer motivo bloqueante encontrado; "" si puede aprobar."""
+    usuario = get_usuario_actual(request)
+    if usuario is None:
+        return "Debe iniciar sesión para autorizar."
+    apus = list(_apus_revisables_del_proyecto(proyecto))
+    if not apus:
+        return "El proyecto no tiene presupuestos guardados para autorizar."
+    for apu in apus:
+        motivo = motivo_no_puede_aprobar_apu(request, apu)
+        if motivo:
+            if len(apus) > 1:
+                return f"APU «{apu.nombre}»: {motivo}"
+            return motivo
+    return ""
 
 
 def puede_enviar_a_revision(request, apu) -> bool:

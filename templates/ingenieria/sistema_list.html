@@ -435,6 +435,16 @@
                  class="btn btn-ghost btn-xs" title="Editar" style="width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;">
                 <i class="bi bi-pencil" style="font-size:11px;"></i>
               </a>
+              <button type="button" class="btn btn-ghost btn-xs js-clonar-sub"
+                      style="width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;"
+                      data-bs-toggle="modal" data-bs-target="#modalClonarSub"
+                      data-clonar-url="{% url 'ingenieria:subsistema_clonar' sub.pk %}"
+                      data-sub-nombre="{{ sub.nombre }}"
+                      data-sub-codigo="{{ sub.codigo }}"
+                      data-sistema-origen="{{ sis.pk }}"
+                      title="Clonar plantilla">
+                <i class="bi bi-files" style="font-size:11px;"></i>
+              </button>
               <button class="btn btn-ghost btn-xs" style="color:rgba(14,17,23,0.28);width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;"
                       data-bs-toggle="modal" data-bs-target="#deleteModal"
                       data-delete-url="{% url 'ingenieria:subsistema_delete' sub.pk %}"
@@ -592,6 +602,73 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
           <button type="submit" class="btn btn-primary btn-sm">Guardar sistema</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════
+     MODAL — CLONAR PLANTILLA TÉCNICA
+════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalClonarSub" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header cat-modal-header">
+        <h5 class="modal-title">Clonar plantilla</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" id="formClonarSub" action="">
+        {% csrf_token %}
+        <div class="modal-body">
+
+          <div style="padding:10px 12px;background:rgba(224,125,16,.07);border:1px solid rgba(224,125,16,.2);border-radius:8px;margin-bottom:16px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#e07d10;margin-bottom:4px;">
+              Plantilla origen
+            </div>
+            <div style="font-size:13px;font-weight:600;" id="clonarSubNombre">—</div>
+            <div style="font-size:11.5px;color:var(--ink-soft);" id="clonarSubCodigo">—</div>
+          </div>
+
+          <div class="form-group">
+            <label>Sistema destino <span style="color:var(--red)">*</span></label>
+            <select name="sistema_destino_id" id="clonarSistemaDestino" class="form-select" required>
+              {% for sis in sistemas %}
+              <option value="{{ sis.pk }}">[{{ sis.codigo }}] {{ sis.nombre }}</option>
+              {% endfor %}
+            </select>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">
+              La copia queda dentro del sistema que elija aquí. Puede ser el mismo del original.
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>Código de la copia</label>
+              <input type="text" name="codigo_nuevo" id="clonarCodigoNuevo"
+                     class="form-control" maxlength="50" placeholder="Se genera automáticamente">
+            </div>
+            <div class="form-group">
+              <label>Nombre de la copia</label>
+              <input type="text" name="nombre_nuevo" id="clonarNombreNuevo"
+                     class="form-control" maxlength="200" placeholder="Se genera automáticamente">
+            </div>
+          </div>
+
+          <div style="font-size:11.5px;color:var(--ink-soft);line-height:1.7;padding-top:6px;border-top:1px solid var(--border);">
+            Se copian variables de entrada, subconjuntos, componentes y fórmulas,
+            dependencias entre variables, productos técnicos, componentes químicos,
+            reglas APU e ítems APU configurados.<br>
+            <strong>No</strong> se copian los despieces calculados ni los proyectos.
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-files" style="margin-right:4px;"></i>Clonar plantilla
+          </button>
         </div>
       </form>
     </div>
@@ -859,6 +936,30 @@
     cards.forEach(card => {
       card.style.display = (!q || card.dataset.name.includes(q)) ? '' : 'none';
     });
+  });
+
+  // ── Modal clonar plantilla ────────────────────────────────────────────────
+  // Rellena la cabecera informativa, apunta el form al endpoint del subsistema
+  // y preselecciona su sistema actual como destino por defecto.
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.js-clonar-sub');
+    if (!btn) return;
+    const form = document.getElementById('formClonarSub');
+    if (form) form.action = btn.dataset.clonarUrl;
+
+    const elNombre = document.getElementById('clonarSubNombre');
+    const elCodigo = document.getElementById('clonarSubCodigo');
+    if (elNombre) elNombre.textContent = btn.dataset.subNombre || '—';
+    if (elCodigo) elCodigo.textContent = btn.dataset.subCodigo || '—';
+
+    const sel = document.getElementById('clonarSistemaDestino');
+    if (sel && btn.dataset.sistemaOrigen) sel.value = btn.dataset.sistemaOrigen;
+
+    // Los códigos/nombres se autogeneran en backend si quedan vacíos.
+    const inCodigo = document.getElementById('clonarCodigoNuevo');
+    const inNombre = document.getElementById('clonarNombreNuevo');
+    if (inCodigo) inCodigo.value = '';
+    if (inNombre) inNombre.value = '';
   });
 
   // ── Modal subsistema: pre-selecciona y muestra/oculta campos CONSUMO ──────

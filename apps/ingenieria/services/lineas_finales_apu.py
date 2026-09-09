@@ -29,8 +29,28 @@ módulo.
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 from typing import Iterable, List, Optional, TypedDict
+
+
+def _redondear_comercial(cantidad_guardada, cantidad_exacta) -> Decimal:
+    """Cantidad comercial de una línea final.
+
+    Devuelve el redondeo que el usuario ya vio en la pantalla de Despiece
+    Maestro (`cantidad_redondeada` persistida). Si esa columna nunca se
+    guardó — líneas antiguas, o consolidaciones con el default 0 — se
+    recalcula con `math.ceil`, que es exactamente la fórmula que usa el
+    front del despiece.
+
+    Siempre hacia arriba: no se compra fracción de unidad comercial.
+    """
+    if cantidad_guardada not in (None, "", 0, Decimal("0")):
+        return Decimal(str(cantidad_guardada))
+    exacta = Decimal(str(cantidad_exacta or 0))
+    if exacta <= 0:
+        return Decimal("0")
+    return Decimal(str(math.ceil(exacta)))
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -56,7 +76,8 @@ class LineaFinalAPU(TypedDict, total=False):
     producto_nombre: str            # snapshot o nombre actual; "" si sin producto
 
     # Cantidad y unidad
-    cantidad_total: Decimal
+    cantidad_total: Decimal        # exacta, con decimales (valor técnico)
+    cantidad_redondeada: Decimal   # comercial, la que valoriza el APU
     unidad: str
 
     # Snapshot de precio (Decimal o None)
@@ -101,6 +122,9 @@ def _normalizar_linea_normal(dml) -> LineaFinalAPU:
         "producto_id": dml.producto_id,
         "producto_nombre": producto_nombre,
         "cantidad_total": Decimal(str(dml.cantidad_calculada or 0)),
+        "cantidad_redondeada": _redondear_comercial(
+            dml.cantidad_redondeada, dml.cantidad_calculada
+        ),
         "unidad": dml.unidad or "",
         "unidad_apu": dml.unidad_apu or "",  # Fase 6H: para detectar mismatch
         "precio_unitario": dml.precio_unitario,
@@ -124,6 +148,9 @@ def _normalizar_linea_consolidada(c) -> LineaFinalAPU:
         "producto_id": c.producto_id,
         "producto_nombre": producto_nombre,
         "cantidad_total": Decimal(str(c.cantidad_total or 0)),
+        "cantidad_redondeada": _redondear_comercial(
+            c.cantidad_redondeada, c.cantidad_total
+        ),
         "unidad": c.unidad or "",
         "unidad_apu": "",  # consolidaciones no manejan unidad_apu separada
         "precio_unitario": c.precio_unitario,
@@ -387,10 +414,17 @@ def productos_principal_opciones(lineas_finales: List[LineaFinalAPU]) -> List[di
     es la sumatoria de cantidades finales con ese producto (regla 5 del
     usuario para Fase 6).
 
+    `cantidad_base` usa la cantidad COMERCIAL (redondeada) de cada línea, la
+    misma que valoriza los materiales del APU. Así la línea del producto
+    principal conserva rendimiento = 1 exacto: numerador y denominador salen
+    de la misma fuente. `cantidad_base_exacta` se conserva aparte para
+    trazabilidad y para mostrar el cálculo sin redondear.
+
     Returns:
         list[dict] con:
             producto_id, producto_nombre, unidad, cantidad_base (Decimal),
-            origen_lineas: [{tipo, id, nombre, cantidad_total}, ...]
+            cantidad_base_exacta (Decimal),
+            origen_lineas: [{tipo, id, nombre, cantidad_total, cantidad_redondeada}, ...]
     """
     por_producto: dict = {}
     for f in lineas_finales:
@@ -402,14 +436,21 @@ def productos_principal_opciones(lineas_finales: List[LineaFinalAPU]) -> List[di
             "producto_nombre": f.get("producto_nombre", ""),
             "unidad": f.get("unidad", ""),
             "cantidad_base": Decimal("0"),
+            "cantidad_base_exacta": Decimal("0"),
             "origen_lineas": [],
         })
-        slot["cantidad_base"] += Decimal(str(f.get("cantidad_total") or 0))
+        slot["cantidad_base"] += Decimal(str(
+            f.get("cantidad_redondeada")
+            if f.get("cantidad_redondeada") is not None
+            else (f.get("cantidad_total") or 0)
+        ))
+        slot["cantidad_base_exacta"] += Decimal(str(f.get("cantidad_total") or 0))
         slot["origen_lineas"].append({
             "tipo": f["tipo"],
             "id": f["id"],
             "nombre": f["nombre"],
             "cantidad_total": f["cantidad_total"],
+            "cantidad_redondeada": f.get("cantidad_redondeada"),
         })
         # Si el nombre snapshot estaba vacío, intenta llenarlo con el más reciente.
         if not slot["producto_nombre"] and f.get("producto_nombre"):

@@ -954,6 +954,16 @@ class APUProyectoDetailView(DetailView):
             .values_list("item_catalogo_id", flat=True)
         )
         ctx["lineas_cantidades"] = {}  # vacío; el default en template es 1
+        # Precio efectivo con el que se generó cada línea detalle. Permite que
+        # el modal "Configurar…" reabra con el precio que el usuario editó en
+        # lugar de volver al valor del catálogo. Si el usuario no lo tocó,
+        # coincide con la derivación del catálogo y no se nota diferencia.
+        ctx["lineas_precios"] = {
+            item_id: precio
+            for item_id, precio in self.object.lineas
+            .exclude(item_catalogo=None)
+            .values_list("item_catalogo_id", "precio_referencia")
+        }
         # Panel modalidades AIU (Fase 11.3) — necesario para que el panel
         # muestre valores en lugar de guiones en apu_detail.html.
         try:
@@ -1391,12 +1401,7 @@ class APUManoObraView(View):
                     for pi in preset.items.all()
                 ]
             else:
-                item_ids  = request.POST.getlist("item_id[]")
-                cantidades = request.POST.getlist("cantidad[]")
-                items_data = [
-                    {"item_id": int(iid), "cantidad": max(int(cant or 1), 1)}
-                    for iid, cant in zip(item_ids, cantidades) if iid
-                ]
+                items_data = _parse_items_catalogo(request)
 
             if not items_data:
                 messages.warning(request, "Seleccione al menos un ítem de mano de obra.")
@@ -1427,12 +1432,7 @@ class APUHerramientasView(View):
         try:
             from apps.presupuestos.services.apu_service import APUService
 
-            item_ids   = request.POST.getlist("item_id[]")
-            cantidades = request.POST.getlist("cantidad[]")
-            items_data = [
-                {"item_id": int(iid), "cantidad": max(int(cant or 1), 1)}
-                for iid, cant in zip(item_ids, cantidades) if iid
-            ]
+            items_data = _parse_items_catalogo(request)
 
             if not items_data:
                 messages.warning(request, "No se seleccionaron herramientas del catálogo.")
@@ -2629,6 +2629,73 @@ def _filtrar_items_por_sia(apu, tipo_apu, items_data):
     return filtrados, descartados
 
 
+def _parse_items_catalogo(request):
+    """
+    Lee las filas de los modales "Configurar…" del APU.
+
+    Campos por fila:
+        item_id[]      — PK del ItemCatalogoAPU (obligatorio)
+        cantidad_<pk>  — entero >= 1 (default 1)
+        precio_<pk>    — precio unitario editado por el usuario (opcional)
+
+    Se admite además el formato posicional legacy `cantidad[]` / `precio[]`,
+    que sigue usando el modal de administración (su JS serializa a mano y solo
+    emite filas marcadas, por lo que ahí las listas sí quedan alineadas).
+
+    Por qué la clave por PK: los `item_id[]` son checkboxes y el navegador NO
+    envía los desmarcados, mientras que los `<input>` de cantidad y precio se
+    envían siempre. Con listas paralelas, desmarcar una fila intermedia
+    desplazaba las cantidades de todas las siguientes y se guardaban valores
+    del ítem equivocado. Indexar por PK elimina el problema de raíz.
+
+    `precio_override` es un override por APU: vacío o no numérico → None y el
+    servicio deriva el precio del catálogo. Un precio de 0 SÍ es un override
+    válido (permite anular el costo de un ítem sin quitarlo); solo se
+    descartan los negativos.
+    """
+    item_ids   = request.POST.getlist("item_id[]")
+    cantidades = request.POST.getlist("cantidad[]")
+    precios    = request.POST.getlist("precio[]")
+
+    def _valor(nombre_keyed, lista, idx):
+        """Clave por PK si existe; si no, posición en la lista legacy."""
+        crudo = request.POST.get(nombre_keyed)
+        if crudo is not None:
+            return crudo
+        return lista[idx] if idx < len(lista) else ""
+
+    items_data = []
+    for idx, iid in enumerate(item_ids):
+        if not iid:
+            continue
+        try:
+            item_id = int(iid)
+        except (TypeError, ValueError):
+            continue
+
+        try:
+            cantidad = max(int(_valor(f"cantidad_{iid}", cantidades, idx) or 1), 1)
+        except (TypeError, ValueError):
+            cantidad = 1
+
+        precio_override = None
+        raw = (_valor(f"precio_{iid}", precios, idx) or "").strip().replace(",", ".")
+        if raw:
+            try:
+                valor = float(raw)
+                if valor >= 0:
+                    precio_override = valor
+            except (TypeError, ValueError):
+                precio_override = None
+
+        items_data.append({
+            "item_id": item_id,
+            "cantidad": cantidad,
+            "precio_override": precio_override,
+        })
+    return items_data
+
+
 class APUManoObraView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/<pk>/mano-obra/
@@ -2636,7 +2703,8 @@ class APUManoObraView(GestionPresupuestosMixin, View):
     Registra mano de obra desde catálogo.
     Acepta:
       - preset_id: carga todos los ítems del preset seleccionado
-      - item_id[] + cantidad[]: selección manual ítem a ítem
+      - item_id[] + cantidad[] + precio[]: selección manual ítem a ítem,
+        con precio unitario editable por APU (ver _parse_items_catalogo).
     Borra líneas MANO_DE_OBRA previas antes de guardar (reemplaza).
     """
     def post(self, request, pk):
@@ -2658,12 +2726,7 @@ class APUManoObraView(GestionPresupuestosMixin, View):
                     for pi in preset.items.all()
                 ]
             else:
-                item_ids  = request.POST.getlist("item_id[]")
-                cantidades = request.POST.getlist("cantidad[]")
-                items_data = [
-                    {"item_id": int(iid), "cantidad": max(int(cant or 1), 1)}
-                    for iid, cant in zip(item_ids, cantidades) if iid
-                ]
+                items_data = _parse_items_catalogo(request)
 
             if not items_data:
                 messages.warning(request, "Seleccione al menos un ítem de mano de obra.")
@@ -2702,12 +2765,7 @@ class APUHerramientasView(GestionPresupuestosMixin, View):
         try:
             from apps.presupuestos.services.apu_service import APUService
 
-            item_ids   = request.POST.getlist("item_id[]")
-            cantidades = request.POST.getlist("cantidad[]")
-            items_data = [
-                {"item_id": int(iid), "cantidad": max(int(cant or 1), 1)}
-                for iid, cant in zip(item_ids, cantidades) if iid
-            ]
+            items_data = _parse_items_catalogo(request)
 
             if not items_data:
                 messages.warning(request, "No se seleccionaron herramientas del catálogo.")
@@ -2933,6 +2991,7 @@ class APUAdminView(GestionPresupuestosMixin, View):
     Recibe los ítems seleccionados del modal "Configurar administración":
       item_id[]    — PK del ItemCatalogoAPU
       cantidad[]   — cantidad para cada ítem
+      precio[]     — precio unitario editado por el usuario (opcional)
       porcentaje[] — porcentaje en % (e.g. 100 → 1.0, 50 → 0.5)
 
     Llama a generar_administracion_desde_catalogo() con la fórmula:
@@ -2947,26 +3006,17 @@ class APUAdminView(GestionPresupuestosMixin, View):
         try:
             from apps.presupuestos.services.apu_service import APUService
 
-            item_ids   = request.POST.getlist("item_id[]")
-            cantidades = request.POST.getlist("cantidad[]")
+            # item_id / cantidad / precio comparten el parser de los demás
+            # modales; administración añade su propio porcentaje por fila.
+            items_data = _parse_items_catalogo(request)
             porcentajes = request.POST.getlist("porcentaje[]")
 
-            items_data = []
-            for item_id_str, cant_str, pct_str in zip(item_ids, cantidades, porcentajes):
+            for idx, fila in enumerate(items_data):
                 try:
-                    item_id = int(item_id_str)
-                    cantidad = max(int(cant_str or 1), 1)
-                    pct_pct = float(pct_str or 100)
-                    porcentaje = pct_pct / 100.0
-                    if porcentaje < 0:
-                        porcentaje = 0.0
-                    items_data.append({
-                        "item_id": item_id,
-                        "cantidad": cantidad,
-                        "porcentaje": porcentaje,
-                    })
+                    pct_pct = float(porcentajes[idx]) if idx < len(porcentajes) else 100.0
                 except (ValueError, TypeError):
-                    continue
+                    pct_pct = 100.0
+                fila["porcentaje"] = max(pct_pct / 100.0, 0.0)
 
             if not items_data:
                 messages.warning(request, "No se seleccionaron ítems de administración válidos.")
@@ -3611,13 +3661,29 @@ class APUEnviarRevisionView(GestionPresupuestosMixin, View):
             if revisor_pk:
                 revisor = ConfiguracionSistema.objects.filter(pk=revisor_pk).first()
 
+            # Segregación de funciones: no tiene sentido enviarse el APU a uno
+            # mismo, porque luego no podría autorizarlo. Se rechaza aquí con un
+            # mensaje claro en lugar de dejar el APU en un callejón sin salida.
+            _remitente = get_usuario_actual(request)
+            if revisor and _remitente and revisor.pk == _remitente.pk:
+                messages.error(
+                    request,
+                    "No puede asignarse a usted mismo como autorizador: quien "
+                    "envía el presupuesto no puede autorizarlo. Seleccione a "
+                    "otra persona como autorizador.",
+                )
+                return redirect(reverse("presupuestos:apu_detail", args=[pk]))
+
             # Guardar descripción si viene del modal "Calcular Presupuesto"
             descripcion_modal = request.POST.get("descripcion_modal", "").strip()
             if descripcion_modal:
                 apu.descripcion = descripcion_modal
 
-            update_fields = ["fecha_envio_revision", "updated_at"]
+            update_fields = ["fecha_envio_revision", "enviado_por", "updated_at"]
             apu.fecha_envio_revision = tz.now()
+            # Queda registrado quién envía: es la base de la regla
+            # "quien envía no autoriza" (ver apps/common/auth.py).
+            apu.enviado_por = get_usuario_actual(request)
             if revisor:
                 apu.revisor = revisor
                 update_fields.append("revisor")
@@ -4644,6 +4710,18 @@ class ProyectoPresupuestoView(GestionPresupuestosMixin, View):
                 except ConfiguracionSistema.DoesNotExist:
                     pass
 
+            # Segregación de funciones: quien envía no autoriza, así que
+            # asignarse a sí mismo dejaría el presupuesto sin quien lo apruebe.
+            _remitente = get_usuario_actual(request)
+            if revisor_obj and _remitente and revisor_obj.pk == _remitente.pk:
+                messages.error(
+                    request,
+                    "No puede asignarse a usted mismo como autorizador: quien "
+                    "envía el presupuesto no puede autorizarlo. Seleccione a "
+                    "otra persona como autorizador.",
+                )
+                return redirect(reverse("presupuestos:proyecto_presupuesto", args=[pk]))
+
             n_confirmados = 0
             for apu in apus:
                 apu.aiu_proyecto_imprevistos_pct = _D(str(pct_i))
@@ -4654,10 +4732,13 @@ class ProyectoPresupuestoView(GestionPresupuestosMixin, View):
                     apu.revisor = revisor_obj
                 if not apu.fecha_envio_revision:
                     apu.fecha_envio_revision = timezone.now()
+                # Se registra el remitente en cada envío para la regla
+                # "quien envía no autoriza" (ver apps/common/auth.py).
+                apu.enviado_por = _remitente
                 apu.save(update_fields=[
                     "aiu_proyecto_imprevistos_pct", "aiu_proyecto_utilidad_pct",
                     "aplica_iva", "iva_pct", "revisor", "fecha_envio_revision",
-                    "updated_at",
+                    "enviado_por", "updated_at",
                 ])
                 n_confirmados += 1
 
@@ -4840,6 +4921,16 @@ class ProyectoRevisarView(GestionPresupuestosMixin, View):
         aiu = self._calcular_aiu(filas, pct_i, pct_u, aplica_iva, iva_pct)
         aprobado = (proyecto.estado == EstadoProyecto.APROBADO)
 
+        # Segregación de funciones: la plantilla oculta los botones cuando el
+        # usuario no puede autorizar y explica el motivo. El POST vuelve a
+        # validar — esto es solo la capa visual.
+        from apps.common.auth import (
+            puede_aprobar_proyecto, motivo_no_puede_aprobar_proyecto,
+            puede_reasignar_revisor,
+        )
+        from apps.configuracion.models import ConfiguracionSistema
+        primer_apu = apus.first()
+
         return render(request, self.template_name, {
             "proyecto": proyecto,
             "filas": filas,
@@ -4851,6 +4942,12 @@ class ProyectoRevisarView(GestionPresupuestosMixin, View):
             "n_apus": len(filas),
             "aprobado": aprobado,
             "motivo_devolucion": proyecto.motivo_devolucion or "",
+            "puede_aprobar": puede_aprobar_proyecto(request, proyecto),
+            "motivo_no_aprobar": motivo_no_puede_aprobar_proyecto(request, proyecto),
+            "puede_reasignar": bool(primer_apu) and puede_reasignar_revisor(request, primer_apu),
+            "apu_revisor": primer_apu.revisor if primer_apu and primer_apu.revisor_id else None,
+            "apu_enviado_por": primer_apu.enviado_por if primer_apu and primer_apu.enviado_por_id else None,
+            "autorizadores": ConfiguracionSistema.objects.filter(activo=True).order_by("nombre_completo"),
         })
 
     # ── POST ──────────────────────────────────────────────────────────────────
@@ -4859,19 +4956,53 @@ class ProyectoRevisarView(GestionPresupuestosMixin, View):
         from apps.common.choices import EstadoProyecto
         from django.utils import timezone
 
+        from apps.common.auth import (
+            puede_aprobar_proyecto, motivo_no_puede_aprobar_proyecto,
+        )
+
         proyecto = get_object_or_404(Proyecto, pk=pk)
         apus = self._get_apus_guardados(proyecto)
         accion = request.POST.get("accion", "")
 
+        # Gate de autorización: aprobar y devolver son actos del autorizador.
+        # "modificar" no lo es (solo navega al editor) y queda fuera.
+        if accion in ("aprobar", "devolver") and not puede_aprobar_proyecto(request, proyecto):
+            motivo = motivo_no_puede_aprobar_proyecto(request, proyecto)
+            registrar_log(
+                request, accion="APROBACION_DENEGADA",
+                descripcion=(
+                    f"Intento no autorizado de {accion} el presupuesto del "
+                    f"proyecto {proyecto.pk}. Motivo: {motivo}"
+                ),
+                modelo_afectado="Proyecto", objeto_id=proyecto.pk,
+            )
+            messages.error(request, motivo or "No tiene permiso para autorizar este presupuesto.")
+            return redirect(reverse("presupuestos:proyecto_revisar", args=[pk]))
+
         if accion == "aprobar":
+            aprobador = get_usuario_actual(request)
             for apu in apus:
+                campos = ["updated_at"]
                 # Si el APU ya tiene modalidad seleccionada, respetarla; si no, usar "1" por defecto
                 if not apu.modalidad_aiu_seleccionada:
                     apu.modalidad_aiu_seleccionada = "1"
-                    apu.save(update_fields=["modalidad_aiu_seleccionada", "updated_at"])
+                    campos.append("modalidad_aiu_seleccionada")
+                # Trazabilidad de quién autorizó y cuándo.
+                apu.aprobado_por = aprobador
+                apu.fecha_aprobacion = timezone.now()
+                campos += ["aprobado_por", "fecha_aprobacion"]
+                apu.save(update_fields=campos)
             proyecto.estado = EstadoProyecto.APROBADO
             proyecto.motivo_devolucion = ""
             proyecto.save(update_fields=["estado", "motivo_devolucion", "updated_at"])
+            registrar_log(
+                request, accion="APROBAR_PRESUPUESTO",
+                descripcion=(
+                    f"Presupuesto del proyecto {proyecto.pk} aprobado "
+                    f"({apus.count()} APU(s))."
+                ),
+                modelo_afectado="Proyecto", objeto_id=proyecto.pk,
+            )
             messages.success(request, "Presupuesto aprobado. Ya puede descargar PDF y Excel.")
 
         elif accion == "devolver":
@@ -4893,6 +5024,104 @@ class ProyectoRevisarView(GestionPresupuestosMixin, View):
             return redirect(reverse("presupuestos:proyecto_presupuesto", args=[pk]))
 
         return redirect(reverse("presupuestos:proyecto_revisar", args=[pk]))
+
+
+class ProyectoReasignarRevisorView(GestionPresupuestosMixin, View):
+    """
+    POST /presupuestos/proyectos/<pk>/reasignar-autorizador/
+
+    Cambia el autorizador de todos los APUs del proyecto que están en revisión.
+
+    Es la salida prevista cuando quien envió el presupuesto resulta ser también
+    el autorizador asignado, o cuando el autorizador no está disponible.
+    Reasignar NO aprueba nada: solo cambia a quién le corresponde autorizar,
+    por eso lo puede hacer también quien envió (ver `puede_reasignar_revisor`).
+
+    Campos del POST:
+        revisor_id — PK del ConfiguracionSistema que autorizará
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk):
+        from django.utils import timezone
+        from apps.configuracion.models import ConfiguracionSistema
+        from apps.common.auth import puede_reasignar_revisor
+
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        apus = list(
+            APUProyecto.objects.filter(
+                proyecto_sistema__proyecto=proyecto,
+                archivado=False,
+                cantidad_base_apu__isnull=False,
+            )
+        )
+        destino = reverse("presupuestos:proyecto_revisar", args=[pk])
+
+        if not apus:
+            messages.error(request, "El proyecto no tiene presupuestos para reasignar.")
+            return redirect(destino)
+
+        # Basta con poder reasignar el primero: todos comparten el flujo del
+        # proyecto y se reasignan en bloque.
+        if not puede_reasignar_revisor(request, apus[0]):
+            registrar_log(
+                request, accion="APROBACION_DENEGADA",
+                descripcion=(
+                    f"Intento no autorizado de reasignar el autorizador del "
+                    f"proyecto {proyecto.pk}."
+                ),
+                modelo_afectado="Proyecto", objeto_id=proyecto.pk,
+            )
+            messages.error(
+                request,
+                "No tiene permiso para reasignar el autorizador de este presupuesto.",
+            )
+            return redirect(destino)
+
+        nuevo = ConfiguracionSistema.objects.filter(
+            pk=(request.POST.get("revisor_id") or "").strip(), activo=True,
+        ).first()
+        if nuevo is None:
+            messages.error(request, "Debe seleccionar un autorizador válido.")
+            return redirect(destino)
+
+        # El nuevo autorizador no puede ser quien envió: reasignar no debe
+        # servir para saltarse la segregación de funciones.
+        conflictivos = [a for a in apus if a.enviado_por_id and a.enviado_por_id == nuevo.pk]
+        if conflictivos:
+            messages.error(
+                request,
+                f"«{nuevo.nombre_completo or nuevo.email}» remitió este presupuesto a "
+                "revisión, así que no puede ser su autorizador. Seleccione a otra persona.",
+            )
+            return redirect(destino)
+
+        actor = get_usuario_actual(request)
+        ahora = timezone.now()
+        anterior = apus[0].revisor
+        for apu in apus:
+            apu.revisor = nuevo
+            apu.reasignado_por = actor
+            apu.fecha_reasignacion = ahora
+            apu.save(update_fields=[
+                "revisor", "reasignado_por", "fecha_reasignacion", "updated_at",
+            ])
+
+        registrar_log(
+            request, accion="REASIGNAR_AUTORIZADOR",
+            descripcion=(
+                f"Autorizador del proyecto {proyecto.pk} reasignado de "
+                f"«{anterior or '— sin asignar —'}» a «{nuevo}» "
+                f"en {len(apus)} APU(s)."
+            ),
+            modelo_afectado="Proyecto", objeto_id=proyecto.pk,
+        )
+        messages.success(
+            request,
+            f"Autorizador reasignado a «{nuevo.nombre_completo or nuevo.email}». "
+            f"Se actualizaron {len(apus)} presupuesto(s).",
+        )
+        return redirect(destino)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
