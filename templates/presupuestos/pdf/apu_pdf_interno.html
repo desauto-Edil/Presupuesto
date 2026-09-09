@@ -281,8 +281,8 @@
     <div class="kpi__value">{{ apu.subtotal_administracion|currency_nodec }}</div>
   </div>
   <div class="kpi">
-    <div class="kpi__label">Factor venta</div>
-    <div class="kpi__value">{{ apu.factor_venta_pct }}%</div>
+    <div class="kpi__label">Margen material</div>
+    <div class="kpi__value">{{ apu.margen_material_pct }}%</div>
   </div>
   <div class="kpi">
     <div class="kpi__label">IVA</div>
@@ -477,7 +477,7 @@
                 <td>{{ linea.precio_referencia|currency }}</td>
                 <td>{{ linea.costo_unitario|currency }}</td>
                 <td>{{ linea.costo_total|currency_nodec }}</td>
-                <td>{{ linea.factor_venta_aplicado|floatformat:2 }}%</td>
+                <td>{{ linea.margen_aplicado_pct|floatformat:2 }}%</td>
                 <td>{{ linea.valor_unitario|currency }}</td>
                 <td>{{ linea.valor_total|currency_nodec }}</td>
               </tr>
@@ -501,7 +501,7 @@
           <td>{{ linea.precio_referencia|currency }}</td>
           <td>{{ linea.costo_unitario|currency }}</td>
           <td>{{ linea.costo_total|currency_nodec }}</td>
-          <td>{{ linea.factor_venta_aplicado|floatformat:2 }}%</td>
+          <td>{{ linea.margen_aplicado_pct|floatformat:2 }}%</td>
           <td>{{ linea.valor_unitario|currency }}</td>
           <td>{{ linea.valor_total|currency_nodec }}</td>
         </tr>
@@ -516,7 +516,7 @@
           <td>{{ linea.precio_referencia|currency }}</td>
           <td>{{ linea.costo_unitario|currency }}</td>
           <td>{{ linea.costo_total|currency_nodec }}</td>
-          <td>{{ linea.factor_venta_aplicado|floatformat:2 }}%</td>
+          <td>{{ linea.margen_aplicado_pct|floatformat:2 }}%</td>
           <td>{{ linea.valor_unitario|currency }}</td>
           <td>{{ linea.valor_total|currency_nodec }}</td>
         </tr>

@@ -66,19 +66,32 @@
               {{ proyecto_form.trm }}
             </div>
             <div class="form-group">
-              <label class="form-label fw-semibold" style="font-size:12px;">Margen comercial (%)</label>
-              {{ proyecto_form.margen_comercial_pct }}
+              <label class="form-label fw-semibold" style="font-size:12px;">Margen de material (%)</label>
+              {{ proyecto_form.margen_material_pct }}
+              <div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">
+                Se aplica automáticamente a las líneas de materiales del APU.
+              </div>
             </div>
             <div class="form-group">
-              <label class="form-label fw-semibold" style="font-size:12px;">IVA (%)</label>
-              {{ proyecto_form.iva_pct }}
+              <label class="form-label fw-semibold" style="font-size:12px;">Margen de mano de obra (%)</label>
+              {{ proyecto_form.margen_mano_obra_pct }}
+              <div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">
+                Disponible como «margen_mano_obra» en las reglas del subsistema.
+              </div>
             </div>
           </div>
 
           <div class="form-grid-3">
             <div class="form-group">
               <label class="form-label fw-semibold" style="font-size:12px;">AIU contratista (%)</label>
-              {{ proyecto_form.aiu_pct }}
+              {{ proyecto_form.aiu_contratista_pct }}
+              <div style="font-size:10.5px;color:var(--ink-soft);margin-top:3px;">
+                Disponible como «aiu» en las reglas del subsistema.
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label fw-semibold" style="font-size:12px;">IVA (%)</label>
+              {{ proyecto_form.iva_pct }}
             </div>
             <div class="form-group">
               <label class="form-label fw-semibold" style="font-size:12px;">Moneda</label>

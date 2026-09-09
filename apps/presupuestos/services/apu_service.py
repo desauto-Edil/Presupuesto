@@ -125,10 +125,10 @@ def build_formula_context(
     suma: float,
     dias: float,
     aiu: float,
-    mg: float,
+    margen_mo: float,
     tp,
     num_personas: int = 1,
-    factor_venta_pct=None,
+    margen_material_pct=None,
     proyecto=None,
     ps=None,
 ) -> dict:
@@ -141,34 +141,39 @@ def build_formula_context(
     el diccionario de forma ad-hoc.
 
     Variables inyectadas:
-        suma        — suma de costos de todos los ítems de la categoría
-        aiu         — factor AIU (e.g. 1.30 si AIU=30%)
-        margen      — factor margen (e.g. 1.20 si margen=20%)
-        dias        — días efectivos
-        tp          — total_powergrip (unidades del producto base, denominador)
-        personas    — número de personas en cuadrilla
-        factor_venta — factor de venta (e.g. 1.21 si factor_venta=21%)
-        trm         — TRM vigente (COP/USD). Si el proyecto tiene trm guardada,
-                      se usa esa; si no, se obtiene la TRM global.
-        <var_ref>   — variable de referencia del subsistema (ej: "total_powergrip")
-                      si difiere de "tp"; inyectada con el mismo valor que tp.
-        <param_*>   — parámetros de entrada del ProyectoSistema (ps).
+        suma             — suma de costos de todos los ítems de la categoría
+        aiu              — factor AIU contratista (e.g. 1.30 si AIU=30%)
+        margen_mano_obra — factor margen de mano de obra (e.g. 1.20 si margen=20%)
+        margen_material  — factor margen de material (e.g. 1.20 si margen=20%)
+        dias             — días efectivos
+        tp               — total_powergrip (unidades del producto base, denominador)
+        personas         — número de personas en cuadrilla
+        trm              — TRM vigente (COP/USD). Si el proyecto tiene trm guardada,
+                           se usa esa; si no, se obtiene la TRM global.
+        margen           — alias histórico de margen_mano_obra
+        factor_venta     — alias histórico de margen_material
+        <var_ref>        — variable de referencia del subsistema (ej: "total_powergrip")
+                           si difiere de "tp"; inyectada con el mismo valor que tp.
+        <param_*>        — parámetros de entrada del ProyectoSistema (ps).
+
+    Los alias existen para que las reglas escritas antes del renombramiento
+    sigan evaluando. En reglas nuevas usar los nombres explícitos.
 
     Args:
-        suma:           suma de costos de la categoría
-        dias:           días efectivos
-        aiu:            factor AIU
-        mg:             factor margen/ganancia
-        tp:             total unidades del producto base
-        num_personas:   personas en cuadrilla
-        factor_venta_pct: porcentaje de factor de venta (None=0)
-        proyecto:       instancia de Proyecto (opcional; para leer proyecto.trm)
-        ps:             instancia de ProyectoSistema (opcional; para var_ref y params)
+        suma:                suma de costos de la categoría
+        dias:                días efectivos
+        aiu:                 factor AIU contratista
+        margen_mo:           factor margen de mano de obra
+        tp:                  total unidades del producto base
+        num_personas:        personas en cuadrilla
+        margen_material_pct: porcentaje de margen de material (None=0)
+        proyecto:            instancia de Proyecto (opcional; para leer proyecto.trm)
+        ps:                  instancia de ProyectoSistema (opcional; var_ref y params)
     """
     from apps.common.trm_service import obtener_trm_vigente, TRMNoDisponibleError
 
     tp_float = float(tp) if tp is not None else 0.0
-    fv_pct = float(factor_venta_pct) if factor_venta_pct is not None else 0.0
+    mat_pct = float(margen_material_pct) if margen_material_pct is not None else 0.0
 
     # TRM: preferir la del proyecto (contractual); fallback a la global.
     trm_val: float
@@ -182,15 +187,21 @@ def build_formula_context(
             trm_val = 0.0  # Sin TRM disponible; la fórmula fallará explícitamente
             logger.warning("TRM no disponible al evaluar fórmula; trm=0.0")
 
+    margen_mano_obra = float(margen_mo)
+    margen_material  = 1.0 + mat_pct / 100.0
+
     ctx: dict = {
-        "suma":         float(suma),
-        "aiu":          float(aiu),
-        "margen":       float(mg),
-        "dias":         float(dias),
-        "tp":           tp_float,
-        "personas":     int(num_personas),
-        "factor_venta": 1.0 + fv_pct / 100.0,
-        "trm":          trm_val,
+        "suma":             float(suma),
+        "aiu":              float(aiu),
+        "margen_mano_obra": margen_mano_obra,
+        "margen_material":  margen_material,
+        "dias":             float(dias),
+        "tp":               tp_float,
+        "personas":         int(num_personas),
+        "trm":              trm_val,
+        # Alias de compatibilidad con reglas anteriores al renombramiento
+        "margen":           margen_mano_obra,
+        "factor_venta":     margen_material,
     }
 
     # Variable de referencia del subsistema (si difiere de "tp")
@@ -231,16 +242,23 @@ class APUService:
         _proyecto = proyecto_sistema.proyecto
         _dias = getattr(_proyecto, "dias_duracion", None) or 30
 
+        def _pct(campo: str):
+            """Valor del proyecto si está definido; si no, el de la configuración global."""
+            valor = getattr(_proyecto, campo, None)
+            return self.cfg_valor(campo) if valor is None else valor
+
         self.apu, created = APU.objects.get_or_create(
             proyecto_sistema=proyecto_sistema,
             defaults={
                 "nombre": nombre_default,
                 "descripcion": "",
-                "factor_venta_pct": self.cfg.factor_venta_pct,
+                # Los márgenes y el AIU se siembran desde el proyecto (el asesor los
+                # fija al crearlo); la ConfiguracionAPU global queda como respaldo.
+                "margen_material_pct": _pct("margen_material_pct"),
                 "iva_pct": getattr(_proyecto, "iva_pct", self.cfg.iva_pct),
                 "aplica_iva": not getattr(_proyecto, "aplica_exencion_iva", False),
-                "aiu_contratista_pct": self.cfg.aiu_contratista_pct,
-                "margen_ganancia_pct": self.cfg.margen_ganancia_pct,
+                "aiu_contratista_pct": _pct("aiu_contratista_pct"),
+                "margen_mano_obra_pct": _pct("margen_mano_obra_pct"),
                 "dias_duracion": _dias,
             },
         )
@@ -249,6 +267,10 @@ class APUService:
             self.apu.pk, "nuevo" if created else "existente",
             proyecto_sistema.pk, self.cfg.nombre,
         )
+
+    def cfg_valor(self, campo: str):
+        """Lee un porcentaje de la ConfiguracionAPU global."""
+        return getattr(self.cfg, campo)
 
     # ── Classmethod de entrada ────────────────────────────────────────────────
 
@@ -603,7 +625,7 @@ class APUService:
         suma: float,
         dias_efectivos: float,
         aiu: float,
-        mg: float,
+        margen_mo: float,
         tp,
         num_personas: int = 1,
     ) -> dict:
@@ -621,10 +643,10 @@ class APUService:
             suma=suma,
             dias=dias_efectivos,
             aiu=aiu,
-            mg=mg,
+            margen_mo=margen_mo,
             tp=tp,
             num_personas=num_personas,
-            factor_venta_pct=self.apu.factor_venta_pct,
+            margen_material_pct=self.apu.margen_material_pct,
             proyecto=proyecto,
             ps=self.ps,
         )
@@ -665,7 +687,7 @@ class APUService:
 
         tp  = self._get_total_powergrip()
         aiu = 1 + float(self.apu.aiu_contratista_pct) / 100
-        mg  = 1 + float(self.apu.margen_ganancia_pct) / 100
+        mmo = 1 + float(self.apu.margen_mano_obra_pct) / 100
 
         # Obtener regla de cálculo para este subsistema + tipo
         try:
@@ -719,7 +741,7 @@ class APUService:
                 suma += float(precio) * cantidad
 
             # Evaluar fórmula → costo unitario de la categoría
-            ctx = self._build_regla_context(suma, dias_efectivos, aiu, mg, tp, num_personas)
+            ctx = self._build_regla_context(suma, dias_efectivos, aiu, mmo, tp, num_personas)
             costo_unitario_cat = regla.evaluar(ctx)
 
             logger.debug(
@@ -1018,7 +1040,7 @@ class APUService:
 
         tp  = self._get_total_powergrip()
         aiu = 1 + float(self.apu.aiu_contratista_pct) / 100
-        mg  = 1 + float(self.apu.margen_ganancia_pct) / 100
+        mmo = 1 + float(self.apu.margen_mano_obra_pct) / 100
 
         try:
             regla = ReglaAPUSubsistema.objects.get(
@@ -1067,7 +1089,7 @@ class APUService:
             num_personas = self._get_num_personas(items_personal)
 
             # Evaluar fórmula del subsistema → resultado BRUTO (sin porcentaje)
-            ctx        = self._build_regla_context(suma, dias_efectivos, aiu, mg, tp, num_personas)
+            ctx        = self._build_regla_context(suma, dias_efectivos, aiu, mmo, tp, num_personas)
             costo_bruto = regla.evaluar(ctx)
 
             # Porcentaje promedio de la categoría

@@ -1089,9 +1089,9 @@ class APUProyectoUpdateView(UpdateView):
         # Snapshot config fields before save to detect changes
         old = APUProyecto.objects.get(pk=self.object.pk)
         old_aiu  = old.aiu_contratista_pct
-        old_mg   = old.margen_ganancia_pct
+        old_mmo  = old.margen_mano_obra_pct
         old_dias = old.dias_duracion
-        old_fv   = old.factor_venta_pct
+        old_mat  = old.margen_material_pct
 
         response = super().form_valid(form)
 
@@ -1099,9 +1099,9 @@ class APUProyectoUpdateView(UpdateView):
         new = self.object
         parametros_cambiaron = (
             new.aiu_contratista_pct != old_aiu
-            or new.margen_ganancia_pct != old_mg
+            or new.margen_mano_obra_pct != old_mmo
             or new.dias_duracion != old_dias
-            or new.factor_venta_pct != old_fv
+            or new.margen_material_pct != old_mat
         )
         if parametros_cambiaron:
             try:
@@ -1150,8 +1150,8 @@ class APUProyectoUpdateView(UpdateView):
                 accion="ACTUALIZAR_APU",
                 descripcion=(
                     f"Parámetros APU actualizados — {proyecto_nombre}: "
-                    f"AIU {new.aiu_contratista_pct}%, margen {new.margen_ganancia_pct}%, "
-                    f"días {new.dias_duracion}, factor venta {new.factor_venta_pct}%"
+                    f"AIU {new.aiu_contratista_pct}%, margen MO {new.margen_mano_obra_pct}%, "
+                    f"días {new.dias_duracion}, margen material {new.margen_material_pct}%"
                     + (" · líneas recalculadas" if parametros_cambiaron else "")
                 ),
                 modelo_afectado="Proyecto",
@@ -4521,8 +4521,10 @@ class ProyectoPresupuestoView(GestionPresupuestosMixin, View):
             total_venta   = _D(str(apu.total_valor_venta or 0))
             admin_costo   = _D(str(apu.subtotal_administracion or 0))
             mat_valor_u   = _D(str(apu.valor_materiales or 0))  # ya es valor_total (con margen+iva)
-            fv            = _D("1") + _D(str(apu.factor_venta_pct or 0)) / _D("100")
-            admin_valor_u = admin_costo * fv          # admin expresado en valor venta
+            # La administración ya no recibe margen automático (el margen sólo se
+            # aplica a MATERIALES y a lo que la fórmula del subsistema invoque),
+            # así que su valor de venta coincide con su costo.
+            admin_valor_u = admin_costo
             # P.U. base: sin admin
             vu_m1 = total_venta - admin_valor_u       # Modalidad 1: mat+MO+herr+transp
             vu_m2 = vu_m1 - mat_valor_u               # Modalidad 2: MO+herr+transp
@@ -4818,8 +4820,10 @@ class ProyectoRevisarView(GestionPresupuestosMixin, View):
             total_venta   = _D(str(apu.total_valor_venta or 0))
             admin_costo   = _D(str(apu.subtotal_administracion or 0))
             mat_valor_u   = _D(str(apu.valor_materiales or 0))  # ya es valor_total (con margen+iva)
-            fv            = _D("1") + _D(str(apu.factor_venta_pct or 0)) / _D("100")
-            admin_valor_u = admin_costo * fv          # admin expresado en valor venta
+            # La administración ya no recibe margen automático (el margen sólo se
+            # aplica a MATERIALES y a lo que la fórmula del subsistema invoque),
+            # así que su valor de venta coincide con su costo.
+            admin_valor_u = admin_costo
             vu_m1 = total_venta - admin_valor_u       # Modalidad 1: mat+MO+herr+transp
             vu_m2 = vu_m1 - mat_valor_u               # Modalidad 2: MO+herr+transp
             modalidad = apu.modalidad_aiu_seleccionada or "1"

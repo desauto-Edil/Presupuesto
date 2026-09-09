@@ -638,10 +638,10 @@
          style="font-size:10px;font-weight:600;color:var(--theme-accent);margin-left:6px;">Editar</a>
       {% endif %}
     </div>
-    <div class="apu-param-row"><span>Factor venta</span><strong>{{ apu.factor_venta_pct|floatformat:"-2" }}%</strong></div>
+    <div class="apu-param-row"><span>Margen material</span><strong>{{ apu.margen_material_pct|floatformat:"-2" }}%</strong></div>
     <div class="apu-param-row"><span>IVA</span><strong>{% if apu.aplica_iva %}{{ apu.iva_pct|floatformat:"-2" }}%{% else %}—{% endif %}</strong></div>
     <div class="apu-param-row"><span>AIU contratista</span><strong>{{ apu.aiu_contratista_pct|floatformat:"-2" }}%</strong></div>
-    <div class="apu-param-row"><span>Margen ganancia</span><strong>{{ apu.margen_ganancia_pct|floatformat:"-2" }}%</strong></div>
+    <div class="apu-param-row"><span>Margen mano de obra</span><strong>{{ apu.margen_mano_obra_pct|floatformat:"-2" }}%</strong></div>
     <div class="apu-param-row"><span>Días duración</span><strong>{{ apu.dias_duracion }} días</strong></div>
   </div>
 

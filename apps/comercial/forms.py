@@ -163,12 +163,21 @@ _PROYECTO_WIDGETS = {
     "dias_duracion":        forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     "num_personas":         forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
     "trm":                  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-    "margen_comercial_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+    "margen_material_pct":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+    "margen_mano_obra_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
     "iva_pct":              forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-    "aiu_pct":              forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+    "aiu_contratista_pct":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
     "moneda":               forms.Select(attrs={"class": "form-select"}),
     "aplica_exencion_iva":  forms.CheckboxInput(attrs={"class": "form-check-input"}),
     "observaciones":        forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+}
+
+_PROYECTO_LABELS = {
+    "margen_material_pct":  "Margen de material (%)",
+    "margen_mano_obra_pct": "Margen de mano de obra (%)",
+    "aiu_contratista_pct":  "AIU contratista (%)",
+    "iva_pct":              "IVA (%)",
+    "trm":                  "TRM (COP/USD)",
 }
 
 
@@ -178,10 +187,12 @@ class ProyectoForm(forms.ModelForm):
         fields = [
             "cliente", "nombre", "descripcion",
             "dias_duracion", "num_personas",
-            "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
+            "trm", "margen_material_pct", "margen_mano_obra_pct",
+            "iva_pct", "aiu_contratista_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
         widgets = {"cliente": forms.Select(attrs={"class": "form-select"}), **_PROYECTO_WIDGETS}
+        labels = _PROYECTO_LABELS
 
 
 class ProyectoFromSolicitudForm(forms.ModelForm):
@@ -191,10 +202,12 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
         fields = [
             "nombre", "descripcion",
             "dias_duracion", "num_personas",
-            "trm", "margen_comercial_pct", "iva_pct", "aiu_pct",
+            "trm", "margen_material_pct", "margen_mano_obra_pct",
+            "iva_pct", "aiu_contratista_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
         widgets = _PROYECTO_WIDGETS
+        labels = _PROYECTO_LABELS
 
 
 _EXTENSIONES_PERMITIDAS = {

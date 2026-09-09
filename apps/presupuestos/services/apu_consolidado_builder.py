@@ -78,11 +78,11 @@ class APUConsolidadoBuilder:
             proyecto=self.proyecto,
             proyecto_sistema=None,
             # Parámetros de cálculo (semilla, configurables después):
-            factor_venta_pct=semilla.factor_venta_pct,
+            margen_material_pct=semilla.margen_material_pct,
             iva_pct=semilla.iva_pct,
             aplica_iva=semilla.aplica_iva,
             aiu_contratista_pct=semilla.aiu_contratista_pct,
-            margen_ganancia_pct=semilla.margen_ganancia_pct,
+            margen_mano_obra_pct=semilla.margen_mano_obra_pct,
             dias_duracion=semilla.dias_duracion,
             aiu_proyecto_admin_pct=semilla.aiu_proyecto_admin_pct,
             aiu_proyecto_imprevistos_pct=semilla.aiu_proyecto_imprevistos_pct,

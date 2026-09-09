@@ -7,7 +7,7 @@
 
 ### Proyecto (`comercial.Proyecto` · db: `proyectos`)
 - Propósito: cabecera del presupuesto
-- Campos clave: `consecutivo`, `estado` (EstadoProyecto), `area_total_m2`, `perimetro_ml`, `iva_pct`, `aplica_exencion_iva`, `trm`, `margen_comercial_pct`, `aiu_pct`
+- Campos clave: `consecutivo`, `estado` (EstadoProyecto), `area_total_m2`, `perimetro_ml`, `iva_pct`, `aplica_exencion_iva`, `trm`, `margen_material_pct`, `margen_mano_obra_pct`, `aiu_contratista_pct`
 - Relaciones: → ProyectoSistema (1:N), → DespieceLinea (1:N)
 - Métodos: `avanzar_a_despiece()`, `avanzar_a_apu()`
 
@@ -36,12 +36,13 @@
 
 ### ConfiguracionAPU (`presupuestos` · db: `configuracion_apu`)
 - Propósito: parámetros globales para el cálculo APU (singleton activo)
-- Campos: `factor_venta_pct` (def 20%), `iva_pct` (def 19%), `aiu_contratista_pct` (def 30%), `margen_ganancia_pct` (def 20%), `desperdicio_pct` (def 3%)
+- Campos: `margen_material_pct` (def 20%), `iva_pct` (def 19%), `aiu_contratista_pct` (def 30%), `margen_mano_obra_pct` (def 20%), `desperdicio_pct` (def 3%)
 - Classmethod: `activa_o_default()` → crea si no existe
 
 ### APU (`presupuestos` · db: `apus`)
 - Propósito: cabecera del Análisis de Precios Unitarios
-- Campos clave: `nombre`, FK→`proyecto_sistema` (OneToOne nullable), `factor_venta_pct`, `iva_pct`, `aplica_iva`
+- Campos clave: `nombre`, FK→`proyecto_sistema` (OneToOne nullable), `margen_material_pct`, `margen_mano_obra_pct`, `aiu_contratista_pct`, `iva_pct`, `aplica_iva`
+- Los márgenes y el AIU se siembran desde el `Proyecto` al crear el APU; `ConfiguracionAPU` es el respaldo
 - Subtotales (calculados): `subtotal_materiales`, `subtotal_herramientas`, `subtotal_transporte`, `subtotal_mano_obra`, `subtotal_administracion`
 - Totales (calculados): `total_costo`, `total_valor_venta`
 - Método: `recalcular()` → llama `linea.calcular()` por cada línea, agrega por tipo, guarda
@@ -124,7 +125,7 @@ tp = first_match(parametros_entrada, claves) or proyecto.area_total_m2
 rendimiento = tp / cantidad_final
 CU = precio_snapshot × IVA_factor
 CT = rendimiento × CU
-VU = CU × (1 + factor_venta_pct/100)
+VU = CU × (1 + margen_material_pct/100)     # sólo MATERIALES
 VT = rendimiento × VU
 ```
 
@@ -162,8 +163,11 @@ CU = costo_total_admin / tp
 iva_factor = 1 + iva_pct/100  if iva_aplicado and aplica_iva  else 1
 CU = precio_referencia × iva_factor
 CT = rendimiento × CU
-VU = CU × (1 + factor_venta_pct/100)
+VU = CU × (1 + margen_material_pct/100)  si tipo == MATERIALES,  si no  VU = CU
 VT = rendimiento × VU
+
+# El resto de categorías obtiene su margen de la fórmula del subsistema
+# (variables `margen_mano_obra`, `margen_material`, `aiu`), no de aquí.
 ```
 
 ---

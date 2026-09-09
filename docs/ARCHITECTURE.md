@@ -428,7 +428,7 @@ compatible con `_generar_categoria_desde_catalogo`.
 tiene ítems configurados, log INFO y se omite (no fallback al catálogo
 completo).
 
-`APUProyectoUpdateView.form_valid` (cambio de AIU/margen/días/factor_venta)
+`APUProyectoUpdateView.form_valid` (cambio de AIU/márgenes/días)
 también pasa por el mismo filtro y limpia líneas previas de categorías sin
 configuración.
 
@@ -742,7 +742,7 @@ poder ajustar A/I/U efectivos del proyecto.
 
 | Concepto | Ámbito | Campo(s) |
 |---|---|---|
-| **AIU contratista** | Costo unitario de cada `APULinea`. Afecta `valor_unitario` y por tanto el costo comercial técnico. | `aiu_contratista_pct`, `margen_ganancia_pct`, `factor_venta_pct` en `APUProyecto` |
+| **AIU contratista** | Costo unitario de cada `APULinea`. Afecta `valor_unitario` y por tanto el costo comercial técnico. | `aiu_contratista_pct`, `margen_mano_obra_pct`, `margen_material_pct` en `APUProyecto` (sembrados desde `Proyecto`) |
 | **AIU final del proyecto** | Cálculo agregado sobre subtotales técnicos del APU para llegar al gran total comercial aprobado. | `aiu_proyecto_admin_pct`, `aiu_proyecto_imprevistos_pct`, `aiu_proyecto_utilidad_pct` (base) y `aiu_final_admin_pct`, `aiu_final_imprevistos_pct`, `aiu_final_utilidad_pct` (snapshot del revisor) |
 
 No mezclar: el contratista se aplica **dentro** del cálculo por línea; el
@@ -873,7 +873,7 @@ del modelo `CuadrillaPreset` se mantienen para no romper cálculos.
 
 ### 11.12 Lo que NO se tocó en Fase 10A
 
-- `APULinea.valor_total`, `costo_total`, `factor_venta_pct`.
+- `APULinea.valor_total`, `costo_total`, `margen_material_pct`.
 - `APUService.generar`, signals.
 - Despiece Maestro, dependencias técnicas, producto principal.
 - Garantía Red Shield (solo se lee `garantia_valor_recargo` para gran total).

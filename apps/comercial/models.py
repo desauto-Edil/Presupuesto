@@ -244,9 +244,27 @@ class Proyecto(models.Model):
         help_text="TRM contractual del proyecto. Se precarga con la TRM global al crear; "
                   "queda congelada para este proyecto.",
     )
-    margen_comercial_pct = models.DecimalField(max_digits=8, decimal_places=4, default=130)
+    margen_material_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("20"),
+        verbose_name="Margen de material (%)",
+        help_text="Margen de material (%) del proyecto. Siembra el mismo campo del APU, "
+                  "donde se aplica automáticamente al valor unitario de las líneas de "
+                  "MATERIALES. Ej: 20 → × 1.20.",
+    )
+    margen_mano_obra_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("20"),
+        verbose_name="Margen de mano de obra (%)",
+        help_text="Margen de mano de obra (%) del proyecto. Siembra el mismo campo del APU, "
+                  "donde queda disponible como variable «margen_mano_obra» en las fórmulas "
+                  "de ReglaAPUSubsistema. No se aplica solo.",
+    )
     iva_pct = models.DecimalField(max_digits=8, decimal_places=4, default=19)
-    aiu_pct = models.DecimalField(max_digits=8, decimal_places=4, default=130)
+    aiu_contratista_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("30"),
+        verbose_name="AIU contratista (%)",
+        help_text="AIU del contratista (%) del proyecto. Siembra el mismo campo del APU, "
+                  "donde queda disponible como variable «aiu» en las fórmulas.",
+    )
     moneda = models.CharField(max_length=3, choices=Moneda.choices, default=Moneda.COP)
     aplica_exencion_iva = models.BooleanField(default=False)
     observaciones = models.TextField(blank=True, null=True)

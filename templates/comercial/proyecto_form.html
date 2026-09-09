@@ -71,19 +71,23 @@
           {{ form.trm }}
         </div>
         <div class="form-group">
-          <label>Margen comercial (%)</label>
-          {{ form.margen_comercial_pct }}
+          <label>Margen de material (%)</label>
+          {{ form.margen_material_pct }}
         </div>
         <div class="form-group">
-          <label>IVA (%)</label>
-          {{ form.iva_pct }}
+          <label>Margen de mano de obra (%)</label>
+          {{ form.margen_mano_obra_pct }}
         </div>
       </div>
 
       <div class="form-grid-3">
         <div class="form-group">
-          <label>AIU Contratista (%)</label>
-          {{ form.aiu_pct }}
+          <label>AIU contratista (%)</label>
+          {{ form.aiu_contratista_pct }}
+        </div>
+        <div class="form-group">
+          <label>IVA (%)</label>
+          {{ form.iva_pct }}
         </div>
         <div class="form-group">
           <label>Moneda</label>
@@ -137,11 +141,11 @@ window.CP_SECCIONES = [
   {
     label: 'Variables financieras', anchor: '', fn: function() {
       const trm    = document.querySelector('input[name="trm"]');
-      const margen = document.querySelector('input[name="margen_comercial_pct"]');
+      const margen = document.querySelector('input[name="margen_material_pct"]');
       const iva    = document.querySelector('input[name="iva_pct"]');
       const advertencias = [];
       if (!trm    || !trm.value)    advertencias.push('TRM no ingresada');
-      if (!margen || !margen.value) advertencias.push('Margen comercial no ingresado');
+      if (!margen || !margen.value) advertencias.push('Margen de material no ingresado');
       if (!iva    || !iva.value)    advertencias.push('IVA no ingresado');
       const puntaje = advertencias.length === 0 ? 35 : Math.max(10, 35 - advertencias.length * 8);
       return { puntaje, maximo: 35,

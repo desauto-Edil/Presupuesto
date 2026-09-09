@@ -1112,9 +1112,10 @@ class ProyectoUpdateView(GestionComercialMixin, UpdateView):
             "trm": "TRM",
             "dias_duracion": "Días",
             "num_personas": "Personas",
-            "margen_comercial_pct": "Margen comercial",
+            "margen_material_pct": "Margen de material",
+            "margen_mano_obra_pct": "Margen de mano de obra",
             "iva_pct": "IVA",
-            "aiu_pct": "AIU",
+            "aiu_contratista_pct": "AIU contratista",
             "moneda": "Moneda",
             "tipo_proyecto": "Tipo proyecto",
         })

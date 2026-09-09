@@ -263,16 +263,20 @@ Elimina las tarjetas "Datos del sistema", "Solicitud origen",
     {# Bloque 4 — parámetros financieros #}
     <div class="pry-summary-col">
       <div>
-        <div class="pry-field-label">Margen comercial</div>
-        <div class="pry-field-value">{{ proyecto.margen_comercial_pct|floatformat:0 }} %</div>
+        <div class="pry-field-label">Margen de material</div>
+        <div class="pry-field-value">{{ proyecto.margen_material_pct|floatformat:"-2" }} %</div>
+      </div>
+      <div>
+        <div class="pry-field-label">Margen de mano de obra</div>
+        <div class="pry-field-value">{{ proyecto.margen_mano_obra_pct|floatformat:"-2" }} %</div>
       </div>
       <div>
         <div class="pry-field-label">IVA</div>
-        <div class="pry-field-value">{{ proyecto.iva_pct|floatformat:0 }} %</div>
+        <div class="pry-field-value">{{ proyecto.iva_pct|floatformat:"-2" }} %</div>
       </div>
       <div>
-        <div class="pry-field-label">AIU Contratista</div>
-        <div class="pry-field-value">{{ proyecto.aiu_pct|floatformat:0 }} %</div>
+        <div class="pry-field-label">AIU contratista</div>
+        <div class="pry-field-value">{{ proyecto.aiu_contratista_pct|floatformat:"-2" }} %</div>
       </div>
       <div>
         <div class="pry-field-label">Exención IVA</div>

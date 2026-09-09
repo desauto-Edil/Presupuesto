@@ -48,18 +48,23 @@ class ConfiguracionAPUForm(forms.ModelForm):
     class Meta:
         model = ConfiguracionAPU
         fields = [
-            "nombre", "factor_venta_pct", "iva_pct",
-            "aiu_contratista_pct", "margen_ganancia_pct",
+            "nombre", "margen_material_pct", "iva_pct",
+            "aiu_contratista_pct", "margen_mano_obra_pct",
             "desperdicio_pct", "activa",
         ]
         widgets = {
             "nombre":              forms.TextInput(attrs={"class": "form-control"}),
-            "factor_venta_pct":    forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "iva_pct":             forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "aiu_contratista_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "desperdicio_pct":     forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "margen_ganancia_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "activa":              forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "margen_material_pct":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "iva_pct":              forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "aiu_contratista_pct":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "desperdicio_pct":      forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "margen_mano_obra_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "activa":               forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "margen_material_pct":  "Margen de material (%)",
+            "margen_mano_obra_pct": "Margen de mano de obra (%)",
+            "aiu_contratista_pct":  "AIU contratista (%)",
         }
 
 
@@ -70,26 +75,26 @@ class APUProyectoForm(forms.ModelForm):
         model = APUProyecto
         fields = [
             "nombre", "descripcion",
-            "factor_venta_pct", "iva_pct", "aplica_iva",
-            "aiu_contratista_pct", "margen_ganancia_pct", "dias_duracion",
+            "margen_material_pct", "iva_pct", "aplica_iva",
+            "aiu_contratista_pct", "margen_mano_obra_pct", "dias_duracion",
         ]
         widgets = {
             "nombre":              forms.TextInput(attrs={"class": "form-control"}),
             "descripcion":         forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "factor_venta_pct":    forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "iva_pct":             forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "aplica_iva":          forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "aiu_contratista_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "margen_ganancia_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
-            "dias_duracion":       forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
+            "margen_material_pct":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "iva_pct":              forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "aplica_iva":           forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "aiu_contratista_pct":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "margen_mano_obra_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "dias_duracion":        forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
         }
         labels = {
-            "factor_venta_pct":    "Factor de venta (%)",
-            "iva_pct":             "IVA (%)",
-            "aplica_iva":          "Aplica IVA",
-            "aiu_contratista_pct": "AIU contratista (%)",
-            "margen_ganancia_pct": "Margen de ganancia (%)",
-            "dias_duracion":       "Días de duración",
+            "margen_material_pct":  "Margen de material (%)",
+            "iva_pct":              "IVA (%)",
+            "aplica_iva":           "Aplica IVA",
+            "aiu_contratista_pct":  "AIU contratista (%)",
+            "margen_mano_obra_pct": "Margen de mano de obra (%)",
+            "dias_duracion":        "Días de duración",
         }
 
 

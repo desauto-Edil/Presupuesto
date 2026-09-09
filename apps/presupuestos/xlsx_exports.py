@@ -331,10 +331,10 @@ def _build_apu_sheet(ws, apu):
         (f"Proyecto: {consec}", f"Cliente: {cliente}"),
         (f"Sistema: {sistema}", f"Subsistema: {subsistema}"),
         (
-            f"Factor venta: {apu.factor_venta_pct}%    "
+            f"Margen material: {apu.margen_material_pct}%    "
             f"IVA: {apu.iva_pct}%    "
             f"AIU contratista: {apu.aiu_contratista_pct}%    "
-            f"Margen: {apu.margen_ganancia_pct}%",
+            f"Margen mano de obra: {apu.margen_mano_obra_pct}%",
             f"Días de duración: {apu.dias_duracion}"
         ),
     ]

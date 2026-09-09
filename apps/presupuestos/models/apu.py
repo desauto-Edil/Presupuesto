@@ -23,9 +23,13 @@ class ConfiguracionAPU(models.Model):
     """
 
     nombre = models.CharField(max_length=100, default="Configuración global")
-    factor_venta_pct = models.DecimalField(
+    margen_material_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("20"),
-        help_text="Margen de venta (%). Se suma al costo para obtener el valor unitario. Ej: 20 → multiplica × 1.20.",
+        help_text=(
+            "Margen de material (%). Se aplica automáticamente al valor unitario de "
+            "las líneas de MATERIALES, que no pasan por ReglaAPUSubsistema. "
+            "Ej: 20 → multiplica × 1.20."
+        ),
     )
     iva_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("19"),
@@ -35,9 +39,12 @@ class ConfiguracionAPU(models.Model):
         max_digits=8, decimal_places=4, default=Decimal("30"),
         help_text="AIU del contratista (%).",
     )
-    margen_ganancia_pct = models.DecimalField(
+    margen_mano_obra_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("20"),
-        help_text="Margen de ganancia general (%).",
+        help_text=(
+            "Margen de mano de obra (%). No se aplica solo: queda disponible como "
+            "variable «margen_mano_obra» en las fórmulas de ReglaAPUSubsistema."
+        ),
     )
     desperdicio_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("3"),
@@ -292,18 +299,27 @@ class ReglaAPUSubsistema(models.Model):
     las líneas del despiece).
 
     Variables disponibles en formula_costo_unitario:
-        suma      — suma del costo de todos los ítems de la categoría (float)
-        aiu       — factor AIU, e.g. 1.30 si AIU=30%
-        margen    — factor margen, e.g. 1.20 si margen=20%
-        dias      — días efectivos (ya ajustados si aplica_dias_mensuales)
-        tp        — total_powergrip (denominador)
-        personas  — número de personas en cuadrilla (solo MO)
-        factor_venta — factor de venta, e.g. 1.21 si factor_venta=121%
+        suma             — suma del costo de todos los ítems de la categoría (float)
+        aiu              — factor AIU contratista, e.g. 1.30 si AIU=30%
+        margen_mano_obra — factor margen de mano de obra, e.g. 1.20 si margen=20%
+        margen_material  — factor margen de material, e.g. 1.20 si margen=20%
+        dias             — días efectivos (ya ajustados si aplica_dias_mensuales)
+        tp               — total_powergrip (denominador)
+        personas         — número de personas en cuadrilla (solo MO)
+        trm              — TRM vigente (COP/USD)
 
-    Ejemplo Herramientas:  suma * aiu * margen * dias / tp
-    Ejemplo Mano de Obra:  suma * aiu * margen * dias * personas / tp
-    Ejemplo Transporte:    suma / tp
-    Ejemplo Administración: suma * aiu * margen * dias / tp
+    Alias de compatibilidad (fórmulas antiguas; preferir los nombres nuevos):
+        margen       → margen_mano_obra
+        factor_venta → margen_material
+
+    Ningún margen se aplica solo sobre estas categorías: si la fórmula no lo
+    invoca, no entra al costo. La excepción es MATERIALES, que no tiene regla
+    configurable y recibe margen_material automáticamente en APULinea.calcular().
+
+    Ejemplo Herramientas:   suma * aiu * margen_mano_obra * dias / tp
+    Ejemplo Mano de Obra:   suma * aiu * margen_mano_obra * dias * personas / tp
+    Ejemplo Transporte:     suma * margen_mano_obra / tp
+    Ejemplo Administración: suma * aiu * margen_mano_obra * dias / tp
     """
 
     subsistema = models.ForeignKey(
@@ -319,8 +335,9 @@ class ReglaAPUSubsistema(models.Model):
     formula_costo_unitario = models.TextField(
         help_text=(
             "Expresión Python que devuelve el costo unitario de la categoría. "
-            "Variables: suma, aiu, margen, dias, tp, personas, factor_venta. "
-            "Ej (herramientas): suma * aiu * margen * dias / tp"
+            "Variables: suma, aiu, margen_mano_obra, margen_material, dias, tp, "
+            "personas, trm. Alias antiguos: margen, factor_venta. "
+            "Ej (herramientas): suma * aiu * margen_mano_obra * dias / tp"
         ),
     )
     orden = models.PositiveIntegerField(default=0)
@@ -393,9 +410,13 @@ class APUProyecto(models.Model):
     )
 
     # -- Parámetros de cálculo --
-    factor_venta_pct = models.DecimalField(
+    margen_material_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("20"),
-        help_text="Margen de venta (%). Valor unit = Costo unit × (1 + factor/100). Ej: 20 → × 1.20.",
+        help_text=(
+            "Margen de material (%). Se aplica automáticamente a las líneas de "
+            "MATERIALES: valor unit = costo unit × (1 + margen/100). Ej: 20 → × 1.20. "
+            "También está disponible como variable «margen_material» en las fórmulas."
+        ),
     )
     iva_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("19"),
@@ -405,9 +426,12 @@ class APUProyecto(models.Model):
         max_digits=8, decimal_places=4, default=Decimal("30"),
         help_text="AIU del contratista (%). Se aplica al calcular costo unitario de MO, herramientas, transporte y admin.",
     )
-    margen_ganancia_pct = models.DecimalField(
+    margen_mano_obra_pct = models.DecimalField(
         max_digits=8, decimal_places=4, default=Decimal("20"),
-        help_text="Margen de ganancia (%). Se aplica junto al AIU en el costo unitario.",
+        help_text=(
+            "Margen de mano de obra (%). Sólo se aplica donde la fórmula del "
+            "subsistema lo invoque como «margen_mano_obra»."
+        ),
     )
     dias_duracion = models.PositiveIntegerField(
         default=30,
@@ -1011,8 +1035,12 @@ class APULinea(models.Model):
     Fórmulas:
         costo_unitario = precio_referencia × IVA_factor
         costo_total    = rendimiento × costo_unitario
-        valor_unitario = costo_unitario × (1 + factor_venta_pct / 100)
+        valor_unitario = costo_unitario × margen_material_factor
         valor_total    = rendimiento × valor_unitario
+
+    margen_material_factor sólo es distinto de 1 en las líneas de MATERIALES.
+    En las demás categorías el margen ya viene incorporado por la fórmula de
+    ReglaAPUSubsistema, así que aplicarlo aquí lo duplicaría.
     """
 
     UNIDAD_CHOICES = [
@@ -1134,7 +1162,11 @@ class APULinea(models.Model):
     )
     valor_unitario = models.DecimalField(
         max_digits=18, decimal_places=6, default=Decimal("0"),
-        help_text="costo_unitario × (1 + factor_venta_pct / 100).",
+        help_text=(
+            "costo_unitario × (1 + margen_material_pct / 100) en MATERIALES; "
+            "igual a costo_unitario en las demás categorías, donde el margen lo "
+            "aporta la fórmula del subsistema."
+        ),
     )
     valor_total = models.DecimalField(
         max_digits=18, decimal_places=6, default=Decimal("0"),
@@ -1166,6 +1198,23 @@ class APULinea(models.Model):
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.descripcion}"
 
+    @property
+    def margen_aplicado_pct(self) -> Decimal:
+        """
+        Porcentaje de margen efectivamente aplicado sobre el costo unitario.
+
+        Se deriva de los valores ya calculados, así que es correcto sin importar
+        de dónde venga el margen: margen_material en MATERIALES, o el que la
+        fórmula del subsistema haya incorporado en las demás categorías.
+        """
+        costo = Decimal(str(self.costo_unitario or 0))
+        if not costo:
+            return Decimal("0")
+        valor = Decimal(str(self.valor_unitario or 0))
+        return ((valor / costo - Decimal("1")) * Decimal("100")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
     def calcular(self):
 
         apu = self.apu
@@ -1193,8 +1242,16 @@ class APULinea(models.Model):
             if (self.iva_aplicado and apu.aplica_iva)
             else Decimal("1")
         )
-        # factor_venta: mismo convenio que AIU/margen → 20 = 20% markup → ×1.20
-        factor_venta = Decimal("1") + Decimal(str(apu.factor_venta_pct)) / Decimal("100")
+        # Margen de material: mismo convenio que el AIU → 20 = 20% markup → ×1.20.
+        # Sólo aplica a MATERIALES. El resto de categorías obtiene su margen de la
+        # fórmula de ReglaAPUSubsistema (variables margen_mano_obra / margen_material),
+        # así que aplicarlo también aquí lo cobraría dos veces.
+        if self.tipo == TipoAPU.MATERIALES:
+            margen_material = (
+                Decimal("1") + Decimal(str(apu.margen_material_pct)) / Decimal("100")
+            )
+        else:
+            margen_material = Decimal("1")
         rendimiento  = Decimal(str(self.rendimiento)) if self.rendimiento else Decimal("1")
         precio       = Decimal(str(self.precio_referencia))
 
@@ -1206,8 +1263,8 @@ class APULinea(models.Model):
         self.costo_total = (rendimiento * self.costo_unitario).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
-        # Valor unit  = Costo unit × (1 + factor_venta_pct/100)   (Ej: 20% → ×1.20)
-        self.valor_unitario = (self.costo_unitario * factor_venta).quantize(
+        # Valor unit  = Costo unit × margen de material   (Ej: 20% → ×1.20)
+        self.valor_unitario = (self.costo_unitario * margen_material).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
         # Valor total = Valor unit × rendimiento

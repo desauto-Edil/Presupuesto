@@ -187,27 +187,27 @@
     <!-- Métricas 2×2 -->
     <div class="apu-metrics">
       <div class="apu-metric">
-        <div class="apu-metric__label">Factor de venta</div>
+        <div class="apu-metric__label">Margen de material</div>
         <div class="apu-metric__value apu-metric__value--accent">
-          {{ config.porcentaje_ganancia }}<span class="apu-metric__unit">%</span>
+          {{ config.margen_material_pct|floatformat:"-2" }}<span class="apu-metric__unit">%</span>
         </div>
       </div>
       <div class="apu-metric">
         <div class="apu-metric__label">AIU Contratista</div>
         <div class="apu-metric__value">
-          {{ config.aiu_contratista }}<span class="apu-metric__unit">%</span>
+          {{ config.aiu_contratista_pct|floatformat:"-2" }}<span class="apu-metric__unit">%</span>
         </div>
       </div>
       <div class="apu-metric">
         <div class="apu-metric__label">Desperdicio</div>
         <div class="apu-metric__value">
-          {{ config.desperdicio }}<span class="apu-metric__unit">%</span>
+          {{ config.desperdicio_pct|floatformat:"-2" }}<span class="apu-metric__unit">%</span>
         </div>
       </div>
       <div class="apu-metric">
-        <div class="apu-metric__label">Margen contratista</div>
+        <div class="apu-metric__label">Margen de mano de obra</div>
         <div class="apu-metric__value">
-          {{ config.margen_ganancia_contratista }}<span class="apu-metric__unit">%</span>
+          {{ config.margen_mano_obra_pct|floatformat:"-2" }}<span class="apu-metric__unit">%</span>
         </div>
       </div>
     </div>

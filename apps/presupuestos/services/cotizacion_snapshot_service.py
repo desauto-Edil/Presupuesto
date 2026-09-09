@@ -210,7 +210,7 @@ class CotizacionSnapshotService:
 
         bloque = {
             "lineas": lineas_serializables,
-            "factor_venta_pct": str(apu.factor_venta_pct or 0),
+            "margen_material_pct": str(apu.margen_material_pct or 0),
             "dias_duracion": apu.dias_duracion,
             "descripcion": apu.descripcion or "",
         }

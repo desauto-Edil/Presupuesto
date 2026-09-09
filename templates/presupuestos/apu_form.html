@@ -52,12 +52,12 @@
           <div class="row g-3 mb-4">
 
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.factor_venta_pct.label }}</label>
-              {{ form.factor_venta_pct }}
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.margen_material_pct.label }}</label>
+              {{ form.margen_material_pct }}
               <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">
-                Valor unit. = Costo unit. × (factor ÷ 100). Ej: 121 → ×1.21
+                Se aplica automáticamente a materiales: Valor unit. = Costo unit. × (1 + margen ÷ 100). Ej: 20 → ×1.20
               </div>
-              {% if form.factor_venta_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.factor_venta_pct.errors.0 }}</div>{% endif %}
+              {% if form.margen_material_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.margen_material_pct.errors.0 }}</div>{% endif %}
             </div>
 
             <div class="col-6">
@@ -93,10 +93,10 @@
             </div>
 
             <div class="col-6">
-              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.margen_ganancia_pct.label }}</label>
-              {{ form.margen_ganancia_pct }}
-              <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">Margen de ganancia sobre el costo directo</div>
-              {% if form.margen_ganancia_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.margen_ganancia_pct.errors.0 }}</div>{% endif %}
+              <label class="form-label" style="font-size:12px;font-weight:600;">{{ form.margen_mano_obra_pct.label }}</label>
+              {{ form.margen_mano_obra_pct }}
+              <div style="font-size:10.5px;color:rgba(14,17,23,0.40);margin-top:4px;">Sólo aplica donde la regla del subsistema use <code>margen_mano_obra</code></div>
+              {% if form.margen_mano_obra_pct.errors %}<div style="color:var(--red,#e62833);font-size:11px;margin-top:3px;">{{ form.margen_mano_obra_pct.errors.0 }}</div>{% endif %}
             </div>
 
             <div class="col-6">
