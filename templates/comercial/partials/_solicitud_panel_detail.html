@@ -456,22 +456,6 @@ apu_resumen, logs, proxima_version, proyecto_form, puede_devolver.
             </div>
             {% endif %}
 
-            {% comment %}Barra "Consolidar despieces" — visible cuando el proyecto tiene 2+ despieces guardados o 2+ APUs.{% endcomment %}
-            {% if item.puede_consolidar %}
-            <div style="padding:10px 18px;background:rgba(79,70,229,.05);
-                        border-top:1px solid var(--border);
-                        display:flex;justify-content:space-between;align-items:center;
-                        gap:10px;flex-wrap:wrap;">
-                <div style="font-size:11.5px;color:var(--ink-soft);line-height:1.4;">
-                    Puedes unir varios despieces de este proyecto para consolidar materiales y costos.
-                </div>
-                <a href="{% url 'presupuestos:apu_consolidar_seleccionar' proy.pk %}"
-                   class="btn btn-xs"
-                   style="background:#4f46e5;color:#fff;font-size:10.5px;white-space:nowrap;">
-                    <i class="bi bi-layers" style="margin-right:3px;"></i>Consolidar despieces
-                </a>
-            </div>
-            {% endif %}
 
         </div>
         {% endwith %}

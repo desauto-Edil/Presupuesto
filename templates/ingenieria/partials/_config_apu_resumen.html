@@ -1,0 +1,12 @@
+{# Fase 3.B — resumen compacto: fuente efectiva de cada TipoAPU. Re-renderizado vía AJAX. #}
+{% for c in config_apu %}
+<a href="#cfg-{{ c.tipo }}" class="capu-cfg-chip capu-t-{{ c.tipo }}" data-capu-cfg-jump="{{ c.tipo }}">
+  <span class="capu-dot"></span>
+  <span class="capu-cfg-chip__label">{{ c.label }}</span>
+  <span class="capu-cfg-chip__state capu-cfg-chip__state--{{ c.fuente }}">
+    {% if c.fuente == "paquetes" %}{{ c.n_paquetes_efectivos }} paquete{{ c.n_paquetes_efectivos|pluralize }}
+    {% elif c.fuente == "sia" %}Config. individual
+    {% else %}Sin configurar{% endif %}
+  </span>
+</a>
+{% endfor %}

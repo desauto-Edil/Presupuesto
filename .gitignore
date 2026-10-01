@@ -99,3 +99,14 @@ coverage.xml
 *.bak
 *.tmp
 *.orig
+
+# ── Pruebas (no se versionan) ────────────────────────────────────────────────
+tests/
+**/tests/
+test_*.py
+*_test.py
+tests.py
+conftest.py
+.pytest_cache/
+pytest.ini
+docs/test_guide.md

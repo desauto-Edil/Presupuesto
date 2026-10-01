@@ -6,6 +6,7 @@ las recetas técnicas se definen en apps/ingenieria/system_defs/.
 """
 
 import json
+from apps.common.mixins import EliminacionProtegidaMixin
 from django.db import transaction
 from django.db.models import Prefetch
 from django.urls import reverse_lazy
@@ -103,7 +104,7 @@ class SistemaUpdateView(APUSistemaAccesoMixin, UpdateView):
     success_url = reverse_lazy("ingenieria:sistema_list")
 
 
-class SistemaDeleteView(APUSistemaAccesoMixin, DeleteView):
+class SistemaDeleteView(APUSistemaAccesoMixin, EliminacionProtegidaMixin, DeleteView):
     model = Sistema
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -522,6 +523,9 @@ class SubsistemaUpdateView(APUSistemaAccesoMixin, UpdateView):
         ctx["superficies_seleccionadas"] = list(self.object.superficies_compatibles.values_list("pk", flat=True))
         # Fase 6L-C: configuración APU del subsistema (con selección actual)
         ctx.update(_items_apu_subsistema_context(self.object))
+        # Fase 3.B: paquetes APU por TipoAPU (fuente efectiva: paquetes / SIA / vacío)
+        from apps.ingenieria.services.subsistema_service import config_apu_subsistema
+        ctx["config_apu"] = config_apu_subsistema(self.object)
         return ctx
 
     def get_form_kwargs(self):
@@ -574,11 +578,123 @@ class SubsistemaConfigApuGuardarView(APUSistemaAccesoMixin, View):
         subsistema = get_object_or_404(Subsistema, pk=pk)
         with transaction.atomic():
             guardar_items_apu_subsistema(subsistema, request.POST)
-        messages.success(request, "Configuración APU del subsistema guardada.")
-        return redirect("ingenieria:sistema_list")
+        messages.success(request, "Configuración individual anterior guardada.")
+        return redirect(
+            reverse_lazy("ingenieria:subsistema_update", args=[subsistema.pk]) + "#anchorConfigApu"
+        )
 
 
-class SubsistemaDeleteView(APUSistemaAccesoMixin, DeleteView):
+# ── Fase 3.B: paquetes APU del subsistema ────────────────────────────────────
+
+_MENSAJES_TRANSICION = {
+    ("sia", "paquetes"): "Desde ahora los APU nuevos usarán paquetes para este tipo. "
+                         "La configuración individual anterior se conserva, pero ya no se suma.",
+    ("paquetes", "sia"): "Este tipo vuelve a usar su configuración individual anterior.",
+    ("paquetes", "vacio"): "Este tipo quedó sin configuración.",
+}
+
+
+class _SubsistemaPaquetesBaseView(APUSistemaAccesoMixin, View):
+    """
+    Operaciones sobre SubsistemaPaqueteAPU. POST-only. Si la petición es AJAX
+    responde JSON con el bloque del TipoAPU y el resumen re-renderizados; si
+    no, redirige a la edición del subsistema. Toda validación vive en
+    `subsistema_service` (backend), no en JavaScript.
+    """
+    http_method_names = ["post"]
+
+    def _responder(self, request, subsistema, tipo, mensaje, nivel="success", status=200):
+        from django.contrib import messages
+        from django.shortcuts import redirect
+        from django.template.loader import render_to_string
+        from apps.ingenieria.services.subsistema_service import config_apu_subsistema
+
+        if request.headers.get("x-requested-with") != "XMLHttpRequest":
+            getattr(messages, nivel)(request, mensaje)
+            return redirect(
+                reverse_lazy("ingenieria:subsistema_update", args=[subsistema.pk]) + "#anchorConfigApu"
+            )
+        config = config_apu_subsistema(subsistema)
+        cfg = next((c for c in config if c["tipo"] == tipo), None)
+        ctx = {"subsistema": subsistema, "config_apu": config, "cfg": cfg}
+        return JsonResponse({
+            "ok": nivel != "error",
+            "mensaje": mensaje,
+            "tipo": tipo,
+            "html_tipo": render_to_string("ingenieria/partials/_config_apu_tipo.html", ctx, request=request) if cfg else "",
+            "html_resumen": render_to_string("ingenieria/partials/_config_apu_resumen.html", ctx, request=request),
+        }, status=status)
+
+
+class SubsistemaPaquetesDisponiblesView(APUSistemaAccesoMixin, View):
+    """GET ?tipo=&q= → paquetes activos asignables del tipo, marcando los ya asignados."""
+    http_method_names = ["get"]
+
+    def get(self, request, pk):
+        from apps.ingenieria.services.subsistema_service import paquetes_disponibles, tipos_config_apu
+        from apps.presupuestos.models import SubsistemaPaqueteAPU
+        subsistema = get_object_or_404(Subsistema, pk=pk)
+        tipo = request.GET.get("tipo", "")
+        if tipo not in dict(tipos_config_apu()):
+            return JsonResponse({"error": "Tipo APU no válido para paquetes."}, status=400)
+        asignados = set(
+            SubsistemaPaqueteAPU.objects.filter(subsistema=subsistema, activo=True)
+            .values_list("paquete_id", flat=True)
+        )
+        paquetes = paquetes_disponibles(tipo, request.GET.get("q", ""))
+        for p in paquetes:
+            p["asignado"] = p["id"] in asignados
+        return JsonResponse({"tipo": tipo, "paquetes": paquetes})
+
+
+class SubsistemaPaqueteAgregarView(_SubsistemaPaquetesBaseView):
+    def post(self, request, pk):
+        from apps.ingenieria.services.subsistema_service import (
+            ConfigPaquetesError, asignar_paquete_subsistema,
+        )
+        subsistema = get_object_or_404(Subsistema, pk=pk)
+        tipo = request.POST.get("tipo", "")
+        try:
+            asig, antes, despues = asignar_paquete_subsistema(subsistema, request.POST.get("paquete"), tipo)
+        except ConfigPaquetesError as exc:
+            return self._responder(request, subsistema, tipo, str(exc), "error", status=400)
+        mensaje = _MENSAJES_TRANSICION.get(
+            (antes, despues), f"«{asig.paquete.nombre}» asignado al subsistema.",
+        )
+        return self._responder(request, subsistema, tipo, mensaje)
+
+
+class SubsistemaPaqueteQuitarView(_SubsistemaPaquetesBaseView):
+    def post(self, request, pk, asig_pk):
+        from apps.ingenieria.services.subsistema_service import (
+            ConfigPaquetesError, quitar_paquete_subsistema,
+        )
+        subsistema = get_object_or_404(Subsistema, pk=pk)
+        try:
+            tipo, nombre, antes, despues = quitar_paquete_subsistema(subsistema, asig_pk)
+        except ConfigPaquetesError as exc:
+            return self._responder(request, subsistema, request.POST.get("tipo", ""), str(exc), "error", status=400)
+        mensaje = _MENSAJES_TRANSICION.get(
+            (antes, despues), f"«{nombre}» se quitó del subsistema. El paquete sigue en el catálogo.",
+        )
+        return self._responder(request, subsistema, tipo, mensaje)
+
+
+class SubsistemaPaqueteMoverView(_SubsistemaPaquetesBaseView):
+    def post(self, request, pk, asig_pk):
+        from apps.ingenieria.services.subsistema_service import (
+            ConfigPaquetesError, mover_paquete_subsistema,
+        )
+        subsistema = get_object_or_404(Subsistema, pk=pk)
+        delta = 1 if request.POST.get("direccion") == "abajo" else -1
+        try:
+            tipo = mover_paquete_subsistema(subsistema, asig_pk, delta)
+        except ConfigPaquetesError as exc:
+            return self._responder(request, subsistema, request.POST.get("tipo", ""), str(exc), "error", status=400)
+        return self._responder(request, subsistema, tipo, "Orden actualizado.")
+
+
+class SubsistemaDeleteView(APUSistemaAccesoMixin, EliminacionProtegidaMixin, DeleteView):
     model = Subsistema
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -667,7 +783,7 @@ class FuncionConsumoCreateView(APUSistemaAccesoMixin, CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class FuncionConsumoDeleteView(APUSistemaAccesoMixin, DeleteView):
+class FuncionConsumoDeleteView(APUSistemaAccesoMixin, EliminacionProtegidaMixin, DeleteView):
     model = FuncionConsumo
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -683,7 +799,7 @@ class ProblemaResueltoCreateView(APUSistemaAccesoMixin, CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class ProblemaResueltoDeleteView(APUSistemaAccesoMixin, DeleteView):
+class ProblemaResueltoDeleteView(APUSistemaAccesoMixin, EliminacionProtegidaMixin, DeleteView):
     model = ProblemaResuelto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")
@@ -699,7 +815,7 @@ class SuperficieCompatibleCreateView(APUSistemaAccesoMixin, CreateView):
         return HttpResponseNotAllowed(["POST"])
 
 
-class SuperficieCompatibleDeleteView(APUSistemaAccesoMixin, DeleteView):
+class SuperficieCompatibleDeleteView(APUSistemaAccesoMixin, EliminacionProtegidaMixin, DeleteView):
     model = SuperficieCompatible
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("ingenieria:sistema_list")

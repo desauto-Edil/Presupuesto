@@ -270,7 +270,9 @@ def clonar_subsistema(
     # ── 9. Configuración APU (vive en la app presupuestos) ───────────────────
     # Import diferido: ingenieria no debe depender de presupuestos en tiempo
     # de import (evita ciclos en el arranque de Django).
-    from apps.presupuestos.models import ReglaAPUSubsistema, SubsistemaItemAPU
+    from apps.presupuestos.models import (
+        ReglaAPUSubsistema, SubsistemaItemAPU, SubsistemaPaqueteAPU,
+    )
 
     for r in ReglaAPUSubsistema.objects.filter(subsistema=origen).order_by("orden", "pk"):
         ReglaAPUSubsistema.objects.create(
@@ -292,6 +294,16 @@ def clonar_subsistema(
             observaciones=i.observaciones,
         )
 
+    # Fase 2: paquetes predeterminados. Se referencian los MISMOS paquetes
+    # maestros (no se duplican).
+    for sp in SubsistemaPaqueteAPU.objects.filter(subsistema=origen).order_by("orden", "pk"):
+        SubsistemaPaqueteAPU.objects.create(
+            subsistema=clon,
+            paquete_id=sp.paquete_id,
+            activo=sp.activo,
+            orden=sp.orden,
+        )
+
     return clon
 
 
@@ -300,7 +312,9 @@ def resumen_clonado(origen: Subsistema) -> dict:
     Cuenta qué se va a copiar. Se usa para el mensaje de confirmación en la UI
     y para el registro en LogSistema.
     """
-    from apps.presupuestos.models import ReglaAPUSubsistema, SubsistemaItemAPU
+    from apps.presupuestos.models import (
+        ReglaAPUSubsistema, SubsistemaItemAPU, SubsistemaPaqueteAPU,
+    )
 
     return {
         "variables":       VariableSubsistema.objects.filter(subsistema=origen).count(),
@@ -311,4 +325,5 @@ def resumen_clonado(origen: Subsistema) -> dict:
         "comp_quimicos":   ComponenteQuimico.objects.filter(subsistema=origen).count(),
         "reglas_apu":      ReglaAPUSubsistema.objects.filter(subsistema=origen).count(),
         "items_apu":       SubsistemaItemAPU.objects.filter(subsistema=origen).count(),
+        "paquetes_apu":    SubsistemaPaqueteAPU.objects.filter(subsistema=origen).count(),
     }

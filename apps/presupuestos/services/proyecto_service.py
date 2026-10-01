@@ -16,7 +16,6 @@ from apps.comercial.models import Proyecto
 from apps.presupuestos.models.despiece import ProyectoSistema
 
 from .despiece_service import DespieceService
-from .apu_service      import APUService
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +48,7 @@ def clonar_proyecto_como_version(proyecto_base, usuario):
         margen_mano_obra_pct=proyecto_base.margen_mano_obra_pct,
         iva_pct=proyecto_base.iva_pct,
         aiu_contratista_pct=proyecto_base.aiu_contratista_pct,
+        margen_contratista_pct=proyecto_base.margen_contratista_pct,
         moneda=proyecto_base.moneda,
         aplica_exencion_iva=proyecto_base.aplica_exencion_iva,
         observaciones=proyecto_base.observaciones,
@@ -243,64 +243,3 @@ class ProyectoService:
             ps.pk, len(lineas_resultado), proyecto.consecutivo,
         )
         return ps
-    
-
-    @staticmethod
-    @transaction.atomic
-    def iniciar_apu(proyecto_sistema_id: int, **kwargs_apu):
-        """
-        Genera el APU completo para un ProyectoSistema.
-        Solo se puede iniciar si el proyecto esta en DESPIECE_VALIDADO, APU
-        o APU_GENERADO (permite regenerar).
-        """
-        from apps.presupuestos.models import ProyectoSistema
-        from apps.common.choices import EstadoProyecto
-
-        ps      = ProyectoSistema.objects.select_related("proyecto").get(pk=proyecto_sistema_id)
-        proyecto = ps.proyecto
-
-        estados_validos = (
-            EstadoProyecto.DESPIECE_VALIDADO,
-            EstadoProyecto.APU,
-            EstadoProyecto.APU_GENERADO,
-        )
-        if proyecto.estado not in estados_validos:
-            raise ValueError(
-                f"Proyecto '{proyecto.consecutivo}' en estado "
-                f"'{proyecto.get_estado_display()}'. "
-                "Valide el despiece antes de generar el APU."
-            )
-
-        logger.info(
-            "[ProyectoService] Iniciando APU para PS %s (proyecto=%s, estado=%s).",
-            ps.pk, proyecto.consecutivo, proyecto.estado,
-        )
-
-        service      = APUService(ps)
-        materiales   = service.generar_materiales()
-        mo_result    = service.generar_mano_obra(
-            hya_dia        = kwargs_apu.get("hya_dia", 0),
-            cuadrilla_dia  = kwargs_apu.get("cuadrilla_dia", 0),
-            dotacion_dia   = kwargs_apu.get("dotacion_dia", 0),
-            proteccion_dia = kwargs_apu.get("proteccion_dia", 0),
-        )
-        herramientas = service.generar_herramientas(kwargs_apu.get("herramientas_items", []))
-        transporte   = service.generar_transporte(kwargs_apu.get("costo_transporte", 0))
-        admin        = service.generar_administracion(kwargs_apu.get("costo_admin", 0))
-        totales      = service.finalizar()
-
-        logger.info(
-            "[ProyectoService] APU PS %s — costo=%.2f | venta=%.2f.",
-            ps.pk,
-            totales.get("total_costo", 0),
-            totales.get("total_valor_venta", 0),
-        )
-
-        return {
-            "materiales":    materiales,
-            "mano_obra":     mo_result,
-            "herramientas":  herramientas,
-            "transporte":    transporte,
-            "administracion": admin,
-            "totales":       totales,
-        }

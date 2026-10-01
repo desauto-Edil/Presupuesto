@@ -1,5 +1,6 @@
 """apps/configuracion/views.py — Vistas unificadas de Configuración."""
 
+from apps.common.mixins import EliminacionProtegidaMixin
 from django.contrib import messages
 from django.contrib.auth.hashers import check_password, make_password, identify_hasher
 from django.shortcuts import render, redirect, get_object_or_404
@@ -119,7 +120,7 @@ class ConfiguracionDetailView(DetailView):
     context_object_name = "configuracion"
 
 
-class ConfiguracionDeleteView(AdminRequiredMixin, DeleteView):
+class ConfiguracionDeleteView(AdminRequiredMixin, EliminacionProtegidaMixin, DeleteView):
     model = ConfiguracionSistema
     success_url = reverse_lazy("configuracion:configuracion")
 
@@ -153,7 +154,7 @@ class UnidadUpdateView(AdminRequiredMixin, UpdateView):
         return redirect("configuracion:configuracion")
 
 
-class UnidadDeleteView(AdminRequiredMixin, DeleteView):
+class UnidadDeleteView(AdminRequiredMixin, EliminacionProtegidaMixin, DeleteView):
     model = UnidadNegocioInfo
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("configuracion:configuracion")
@@ -193,7 +194,7 @@ class PoliticaUpdateView(UpdateView):
         return redirect("configuracion:configuracion")
 
 
-class PoliticaDeleteView(DeleteView):
+class PoliticaDeleteView(EliminacionProtegidaMixin, DeleteView):
     model = UnidadPolitica
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("configuracion:configuracion")
@@ -233,7 +234,7 @@ class ClausulaUpdateView(UpdateView):
         return redirect("configuracion:configuracion")
 
 
-class ClausulaDeleteView(DeleteView):
+class ClausulaDeleteView(EliminacionProtegidaMixin, DeleteView):
     model = UnidadClausula
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("configuracion:configuracion")
@@ -273,7 +274,7 @@ class AlianzaUpdateView(AdminRequiredMixin, UpdateView):
         return redirect("configuracion:configuracion")
 
 
-class AlianzaDeleteView(AdminRequiredMixin, DeleteView):
+class AlianzaDeleteView(AdminRequiredMixin, EliminacionProtegidaMixin, DeleteView):
     model = UnidadAlianza
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("configuracion:configuracion")

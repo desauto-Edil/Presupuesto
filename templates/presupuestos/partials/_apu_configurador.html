@@ -1,0 +1,107 @@
+{% load catalogo_tags %}
+{# Fase 3.C — "Configurar APU": edición local de ESTE APU (paquetes + ítems adicionales). #}
+{# No edita el paquete maestro, el catálogo ni el subsistema. Materiales no entra aquí.  #}
+<div class="offcanvas offcanvas-end apu-cfg" tabindex="-1" id="apuConfigurador" aria-labelledby="apuConfiguradorTitle"
+     data-apu-config
+     data-url-tipo="{% url 'presupuestos:apu_configurar_tipo' apu.pk 'TIPO' %}"
+     data-url-disponibles="{% url 'presupuestos:apu_paquetes_disponibles' apu.pk %}"
+     data-url-agregar="{% url 'presupuestos:apu_paquete_agregar' apu.pk %}"
+     data-url-eliminar="{% url 'presupuestos:apu_paquete_eliminar' 0 %}"
+     data-url-componente="{% url 'presupuestos:apu_componente_update' 0 %}"
+     data-url-restablecer="{% url 'presupuestos:apu_componente_restablecer_precio' 0 %}"
+     data-bloqueado="{{ apu.esta_aprobado|yesno:'1,0' }}">
+  {% csrf_token %}
+  <div class="offcanvas-header apu-cfg__header">
+    <div style="min-width:0;">
+      <div class="capu-hero__eyebrow">{% if apu.esta_aprobado %}Consulta · APU aprobado{% else %}Configurar APU{% endif %}</div>
+      <h5 class="offcanvas-title apu-cfg__title" id="apuConfiguradorTitle">{{ apu.nombre }}</h5>
+      <div class="apu-cfg__totals">
+        <span>Costo total <strong data-apu-cfg-costo>{{ apu.total_costo|currency:"COP" }}</strong></span>
+        <span>Valor total <strong data-apu-cfg-valor>{{ apu.total_valor_venta|currency:"COP" }}</strong></span>
+      </div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <nav class="apu-cfg__tabs capu-seg" role="tablist" aria-label="Tipo APU">
+    <button type="button" class="capu-t-MANO_DE_OBRA" data-apu-cfg-tab="MANO_DE_OBRA"><span class="capu-dot"></span>Mano de obra</button>
+    <button type="button" class="capu-t-HERRAMIENTAS_EQUIPOS" data-apu-cfg-tab="HERRAMIENTAS_EQUIPOS"><span class="capu-dot"></span>Herramientas</button>
+    <button type="button" class="capu-t-TRANSPORTE" data-apu-cfg-tab="TRANSPORTE"><span class="capu-dot"></span>Transporte</button>
+    <button type="button" class="capu-t-ADMINISTRACION" data-apu-cfg-tab="ADMINISTRACION"><span class="capu-dot"></span>Administración</button>
+  </nav>
+
+  <div class="capu-cfg-toast" role="status" aria-live="polite" data-apu-cfg-toast hidden></div>
+
+  <div class="offcanvas-body apu-cfg__body" data-apu-cfg-body>
+    <div class="p-4 text-center capu-muted"><span class="spinner-border spinner-border-sm"></span> Cargando…</div>
+  </div>
+
+  <div class="apu-cfg__foot">
+    <span class="capu-muted"><i class="bi bi-info-circle"></i> Los cambios solo afectan este APU: el paquete maestro, el catálogo y el subsistema no cambian.</span>
+    <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="offcanvas">Listo</button>
+  </div>
+</div>
+
+<!-- Selector de paquetes maestros para ESTE APU -->
+<div class="modal fade capu-picker" id="apuPaquetePicker" tabindex="-1" aria-labelledby="apuPaquetePickerTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="apuPaquetePickerTitle">Agregar paquete a este APU</h5>
+          <div class="capu-muted" style="font-size:12px;">Paquetes activos de <strong data-apu-pick-tipo></strong> que aún no están en el APU</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="capu-picker__search">
+          <div class="capu-search">
+            <i class="bi bi-search"></i>
+            <input type="search" data-apu-pick-q placeholder="Buscar paquete por nombre" autocomplete="off" aria-label="Buscar paquetes">
+          </div>
+        </div>
+        <div class="capu-picker__confirm" data-apu-pick-confirm hidden>
+          <div class="capu-note capu-note--warn">
+            <i class="bi bi-arrow-repeat"></i>
+            <div>
+              <strong>Este tipo pasará a calcularse por paquetes</strong><br>
+              Hoy usa la estructura anterior (una resumen por categoría). Al agregar el paquete, todos
+              sus componentes e ítems se sumarán en un solo total y la regla del subsistema se aplicará
+              una vez. <strong>El resultado económico de este tipo puede cambiar.</strong>
+              Los ítems de catálogo se conservan como ítems adicionales; los demás tipos no cambian.
+              <div data-apu-pick-lineas></div>
+              <div class="d-flex gap-2 mt-2">
+                <button type="button" class="btn btn-primary btn-sm" data-apu-confirm-ok>Convertir y agregar</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-apu-confirm-cancel>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="capu-picker__list" data-apu-pick-list></div>
+      </div>
+      <div class="modal-footer">
+        <a class="btn btn-link btn-sm me-auto p-0" href="{% url 'presupuestos:catalogo_apu' %}#paquetes" target="_blank" rel="noopener">
+          <i class="bi bi-box-arrow-up-right"></i> Ver paquetes en el catálogo
+        </a>
+        <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmación al quitar un paquete de ESTE APU -->
+<div class="modal fade" id="apuQuitarPaquete" tabindex="-1" aria-labelledby="apuQuitarPaqueteTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="apuQuitarPaqueteTitle">Quitar paquete de este APU</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body" style="font-size:13px;line-height:1.5;" data-apu-quitar-texto></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger btn-sm" data-apu-quitar-ok>Quitar paquete</button>
+      </div>
+    </div>
+  </div>
+</div>

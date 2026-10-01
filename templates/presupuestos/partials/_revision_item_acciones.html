@@ -1,0 +1,26 @@
+{# Acciones de un ítem en la revisión del presupuesto (antes, inline en proyecto_revisar.html). #}
+{# Contexto: fila (fila económica), aprobado. #}
+<div class="pr-acciones">
+  {# Enlace al APU con ?revisor=1 para que muestre banner de solo-lectura #}
+  <a href="{% url 'presupuestos:apu_detail' fila.apu.pk %}?revisor=1"
+     class="btn btn-ghost btn-xs" title="Ver APU en modo revisión">
+    <i class="bi bi-calculator"></i> Ver APU
+  </a>
+  {% if fila.despiece_pk %}
+  <a href="{% url 'presupuestos:despiece_proyecto' fila.despiece_pk %}?revisor=1"
+     class="btn btn-ghost btn-xs" title="Ver despiece">
+    <i class="bi bi-list-nested"></i> Ver despiece
+  </a>
+  {% endif %}
+  {% if aprobado %}
+  {# Links de descarga habilitados solo tras aprobación #}
+  <a href="{% url 'presupuestos:apu_xlsx' fila.apu.pk %}"
+     class="btn btn-ghost btn-xs pr-acciones--ok" title="Descargar Excel APU">
+    <i class="bi bi-file-earmark-excel"></i> Excel
+  </a>
+  <a href="{% url 'presupuestos:apu_pdf_cliente' fila.apu.pk %}"
+     class="btn btn-ghost btn-xs pr-acciones--ok" title="PDF Cliente APU" target="_blank">
+    <i class="bi bi-file-earmark-pdf"></i> PDF
+  </a>
+  {% endif %}
+</div>

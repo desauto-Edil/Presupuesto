@@ -1,136 +1,170 @@
 {% extends "base.html" %}
+{% load static catalogo_tags %}
 {% block nav_apu %}active{% endblock %}
-{% block title %}{% if form.instance.pk %}Editar ítem{% else %}Nuevo ítem APU{% endif %}{% endblock %}
+{% block title %}{% if form.instance.pk %}Editar ítem{% else %}Agregar ítem{% endif %} · Catálogo APU{% endblock %}
+{% block page_title %}Catálogo APU{% endblock %}
+{% block breadcrumb %}{% if form.instance.pk %}Editar ítem{% else %}Agregar ítem{% endif %}{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/catalogo-apu.css' %}" rel="stylesheet">
+{% endblock %}
 
 {% block content %}
-<div class="page-header mb-4">
-  <nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{% url 'presupuestos:catalogo_apu' %}">Catálogo APU</a></li>
-      <li class="breadcrumb-item active">
-        {% if form.instance.pk %}Editar «{{ form.instance.nombre }}»{% else %}Nuevo ítem{% endif %}
-      </li>
-    </ol>
-  </nav>
-  <h1 class="page-title">
-    <i class="bi bi-plus-circle me-2"></i>
-    {% if form.instance.pk %}Editar ítem APU{% else %}Nuevo ítem APU{% endif %}
-  </h1>
-</div>
+{% with item=form.instance %}
+<div class="capu-page capu-page--narrow fade-up" data-capu-item-form
+     data-preview-url="{% url 'presupuestos:catalogo_item_valor_diario' %}">
 
-<div class="row justify-content-center">
-  <div class="col-12 col-lg-7">
-    <div class="card shadow-sm border-0">
-      <div class="card-body p-4">
-        <form method="post" novalidate>
-          {% csrf_token %}
+  <a href="{% url 'presupuestos:catalogo_apu' %}#items" class="capu-back"><i class="bi bi-arrow-left"></i> Catálogo APU</a>
 
-          <div class="row g-3">
+  <header class="capu-hero" style="margin-bottom:16px;">
+    <div>
+      <div class="capu-hero__eyebrow">Ítem del catálogo</div>
+      <h1 class="capu-hero__title">{% if item.pk %}{{ item.nombre }}{% else %}Agregar ítem{% endif %}</h1>
+      <p class="capu-hero__sub">
+        Un ítem es un recurso individual (una persona, una herramienta, un transporte…).
+        Aquí se define su economía: el valor diario se calcula a partir del valor base y la vida útil.
+      </p>
+    </div>
+  </header>
 
-            <div class="col-12 col-md-8">
-              <label class="form-label fw-medium">Categoría <span class="text-danger">*</span></label>
-              {{ form.categoria }}
-              {% if form.categoria.errors %}
-                <div class="text-danger small mt-1">{{ form.categoria.errors }}</div>{% endif %}
-            </div>
+  {% if form.non_field_errors %}
+  <div class="capu-note capu-note--error mb-3"><i class="bi bi-exclamation-circle"></i><div>{{ form.non_field_errors|join:" " }}</div></div>
+  {% endif %}
 
-            <div class="col-12 col-md-4">
-              <label class="form-label fw-medium">Código</label>
-              {{ form.codigo }}
-            </div>
+  <form method="post" novalidate class="capu-card">
+    {% csrf_token %}
+    <div class="capu-card__body">
+      <div class="capu-form-grid">
 
-            <div class="col-12">
-              <label class="form-label fw-medium">Nombre <span class="text-danger">*</span></label>
-              {{ form.nombre }}
-              {% if form.nombre.errors %}
-                <div class="text-danger small mt-1">{{ form.nombre.errors }}</div>{% endif %}
-            </div>
+        <div class="capu-fieldset-title">Identificación</div>
 
-            <div class="col-12">
-              <label class="form-label fw-medium">Descripción</label>
-              {{ form.descripcion }}
-            </div>
+        <div class="capu-col-8">
+          <label class="form-label" for="{{ form.categoria.id_for_label }}">Categoría <span class="text-danger">*</span></label>
+          <select name="{{ form.categoria.html_name }}" id="{{ form.categoria.id_for_label }}" class="form-select" required>
+            <option value="">Selecciona una categoría</option>
+            {% for label, cats in categorias_por_tipo %}
+              {% if cats %}
+              <optgroup label="{{ label }}">
+                {% for c in cats %}
+                <option value="{{ c.pk }}"{% if form.categoria.value|stringformat:"s" == c.pk|stringformat:"s" %} selected{% endif %}>{{ c.nombre }}{% if not c.activa %} (inactiva){% endif %}</option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <div class="capu-field-hint">La categoría determina el Tipo APU del ítem.
+            <a href="{% url 'presupuestos:catalogo_categoria_create' %}">Nueva categoría</a></div>
+          {% for e in form.categoria.errors %}<div class="capu-field-error">{{ e }}</div>{% endfor %}
+        </div>
 
-            <!-- Precio base -->
-            <div class="col-12 col-md-6">
-              <label class="form-label fw-medium">Precio base</label>
-              <div class="input-group">
-                <span class="input-group-text">$</span>
-                {{ form.precio_base }}
-              </div>
-            </div>
+        <div class="capu-col-4">
+          <label class="form-label" for="{{ form.codigo.id_for_label }}">Código</label>
+          {{ form.codigo }}
+          {% for e in form.codigo.errors %}<div class="capu-field-error">{{ e }}</div>{% endfor %}
+        </div>
 
-            <div class="col-12 col-md-6">
-              <label class="form-label fw-medium">Unidad</label>
-              {{ form.unidad }}
-            </div>
+        <div>
+          <label class="form-label" for="{{ form.nombre.id_for_label }}">Nombre <span class="text-danger">*</span></label>
+          {{ form.nombre }}
+          {% for e in form.nombre.errors %}<div class="capu-field-error">{{ e }}</div>{% endfor %}
+        </div>
 
-            <div class="col-12">
-              <label class="form-label fw-medium">{{ form.tienda_referencia.label }}</label>
-              {{ form.tienda_referencia }}
-              <div class="form-text">Proveedor o tienda donde se cotizó el precio (aparecerá en el APU)</div>
-            </div>
+        <div>
+          <label class="form-label" for="{{ form.descripcion.id_for_label }}">Descripción</label>
+          {{ form.descripcion }}
+        </div>
 
-            <!-- Sección personal (salario + prestaciones) -->
-            <div class="col-12">
-              <hr class="my-1">
-              <p class="small text-muted mb-2 fw-semibold">
-                <i class="bi bi-people me-1"></i>Personal (dejar en 0 si no aplica)
-              </p>
-            </div>
+        <div class="capu-fieldset-title mt-2">Economía del ítem</div>
 
-            <div class="col-12 col-md-6">
-              <label class="form-label fw-medium">{{ form.salario_base.label }}</label>
-              <div class="input-group">
-                <span class="input-group-text">$</span>
-                {{ form.salario_base }}
-              </div>
-              <div class="form-text">Salario mensual base del cargo</div>
-            </div>
-
-            <div class="col-12 col-md-6">
-              <label class="form-label fw-medium">{{ form.prestaciones.label }}</label>
-              <div class="input-group">
-                <span class="input-group-text">$</span>
-                {{ form.prestaciones }}
-              </div>
-              <div class="form-text">Prima, cesantías, vacaciones, etc.</div>
-            </div>
-
-            <!-- Sección herramientas (vida útil) -->
-            <div class="col-12">
-              <hr class="my-1">
-              <p class="small text-muted mb-2 fw-semibold">
-                <i class="bi bi-tools me-1"></i>Herramientas/equipos (dejar vacío si no aplica)
-              </p>
-            </div>
-
-            <div class="col-12 col-md-6">
-              <label class="form-label fw-medium">{{ form.vida_util_dias.label }}</label>
-              {{ form.vida_util_dias }}
-              <div class="form-text">Permite calcular depreciación diaria automáticamente</div>
-            </div>
-
-            <div class="col-12 col-md-6 d-flex align-items-end pb-1">
-              <div class="form-check">
-                {{ form.activo }}
-                <label class="form-check-label">Ítem activo</label>
-              </div>
-            </div>
-
-          </div><!-- row -->
-
-          <div class="d-flex gap-2 justify-content-end mt-4">
-            <a href="{% url 'presupuestos:catalogo_apu' %}" class="btn btn-outline-secondary">
-              Cancelar
-            </a>
-            <button type="submit" class="btn btn-primary">
-              <i class="bi bi-check-lg me-1"></i>Guardar ítem
-            </button>
+        <div class="capu-col-6">
+          <label class="form-label" for="{{ form.valor_base.id_for_label }}">Valor base</label>
+          <div class="input-group">
+            <span class="input-group-text">$</span>
+            {{ form.valor_base }}
           </div>
-        </form>
+          {% for e in form.valor_base.errors %}<div class="capu-field-error">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="capu-col-6">
+          <label class="form-label" for="{{ form.unidad.id_for_label }}">Unidad</label>
+          {{ form.unidad }}
+        </div>
+
+        <div class="capu-col-6">
+          <label class="form-label" for="{{ form.vida_util_dias.id_for_label }}">Vida útil (días)</label>
+          {{ form.vida_util_dias }}
+          <div class="capu-field-hint">Déjala vacía si aún no se conoce: el ítem quedará pendiente y no calculable.</div>
+          {% for e in form.vida_util_dias.errors %}<div class="capu-field-error">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="capu-col-6" style="align-self:start;">
+          <label class="form-label">Valor diario <span class="capu-tag-calc">Calculado</span></label>
+          {% with vd=item.valor_diario_o_none %}
+          <div class="capu-calc" data-capu-calc>
+            <div>
+              <div class="capu-calc__formula">valor base ÷ vida útil</div>
+            </div>
+            <div class="capu-calc__value{% if vd is None %} is-na{% endif %}" data-capu-calc-value>
+              {% if vd is not None %}{{ vd|currency }} <small>/ día</small>{% else %}No disponible · vida útil pendiente{% endif %}
+            </div>
+          </div>
+          {% endwith %}
+        </div>
+
+        <div class="capu-fieldset-title mt-2">Referencia y estado</div>
+
+        <div>
+          <label class="form-label" for="{{ form.tienda_referencia.id_for_label }}">Tienda o proveedor de referencia</label>
+          {{ form.tienda_referencia }}
+          <div class="capu-field-hint">Dónde se cotizó el valor base (aparece en el APU).</div>
+        </div>
+
+        <div>
+          <div class="form-check form-switch">
+            <input type="checkbox" name="{{ form.activo.html_name }}" id="{{ form.activo.id_for_label }}"
+                   class="form-check-input" role="switch"{% if form.activo.value %} checked{% endif %}>
+            <label class="form-check-label" for="{{ form.activo.id_for_label }}">Ítem activo</label>
+          </div>
+          <div class="capu-field-hint">Un ítem inactivo no se ofrece al construir nuevos paquetes.</div>
+        </div>
+
+        {% if item.pk %}
+        <div>
+          {% if paquetes_del_item %}
+          <div class="capu-note">
+            <i class="bi bi-stack"></i>
+            <div>
+              Este ítem es componente de
+              {% for c in paquetes_del_item %}<a href="{% url 'presupuestos:catalogo_paquete_detail' c.paquete_id %}">{{ c.paquete.nombre }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.
+              Un cambio de valor base o vida útil se refleja en el valor de esos paquetes maestros;
+              los APU ya generados conservan su propia copia.
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
     </div>
-  </div>
+
+    <div class="capu-card__foot">
+      {% if item.pk %}
+        {% if paquetes_del_item %}
+        <span class="capu-muted me-auto" style="font-size:12px;"><i class="bi bi-lock me-1"></i>No se puede eliminar: está en paquetes</span>
+        {% else %}
+        <a href="{% url 'presupuestos:catalogo_item_delete' item.pk %}" class="btn btn-ghost btn-sm me-auto"
+           title="{% if n_subsistemas %}También se quitará de {{ n_subsistemas }} subsistema(s){% endif %}">
+          <i class="bi bi-trash3"></i> Eliminar
+        </a>
+        {% endif %}
+      {% endif %}
+      <a href="{% url 'presupuestos:catalogo_apu' %}#items" class="btn btn-outline-secondary">Cancelar</a>
+      <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Guardar ítem</button>
+    </div>
+  </form>
 </div>
+{% endwith %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/catalogo-apu.js' %}"></script>
 {% endblock %}

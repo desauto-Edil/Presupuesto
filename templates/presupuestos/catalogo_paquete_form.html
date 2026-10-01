@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% load static %}
+{% block nav_apu %}active{% endblock %}
+{% block title %}{% if paquete.pk %}Editar paquete{% else %}Crear paquete{% endif %} · Catálogo APU{% endblock %}
+{% block page_title %}Catálogo APU{% endblock %}
+{% block breadcrumb %}{% if paquete.pk %}Editar paquete{% else %}Crear paquete{% endif %}{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/catalogo-apu.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="capu-page fade-up" data-capu-builder
+     data-preview-url="{% url 'presupuestos:catalogo_paquete_preview' %}"
+     data-item-create-url="{% url 'presupuestos:catalogo_item_create' %}">
+
+  {% if paquete.pk %}
+  <a href="{% url 'presupuestos:catalogo_paquete_detail' paquete.pk %}" class="capu-back"><i class="bi bi-arrow-left"></i> Volver al paquete</a>
+  {% else %}
+  <a href="{% url 'presupuestos:catalogo_apu' %}#paquetes" class="capu-back"><i class="bi bi-arrow-left"></i> Catálogo APU</a>
+  {% endif %}
+
+  <header class="capu-hero" style="margin-bottom:16px;">
+    <div>
+      <div class="capu-hero__eyebrow">Paquete APU</div>
+      <h1 class="capu-hero__title">{% if paquete.pk %}Editar «{{ paquete.nombre }}»{% else %}Crear paquete{% endif %}</h1>
+      <p class="capu-hero__sub">
+        Un paquete agrupa ítems que <strong>ya existen</strong> en el catálogo. Aquí solo se define
+        qué ítems lo componen y en qué cantidad; el valor diario de cada ítem se edita desde el catálogo.
+      </p>
+    </div>
+  </header>
+
+  {% if form.non_field_errors or errores_componentes %}
+  <div class="capu-note capu-note--error mb-3">
+    <i class="bi bi-exclamation-circle"></i>
+    <div>
+      No se pudo guardar el paquete.
+      <ul>
+        {% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}
+        {% for e in errores_componentes %}<li>{{ e }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="componentes" value="">
+
+    <div class="capu-builder">
+      <div class="d-flex flex-column gap-3" style="min-width:0;">
+
+        <!-- 1. Datos generales -->
+        <section class="capu-card">
+          <div class="capu-card__head"><span class="capu-card__title">1 · Datos generales</span></div>
+          <div class="capu-card__body">
+            <div class="capu-form-grid">
+              <div class="capu-col-8">
+                <label class="form-label" for="{{ form.nombre.id_for_label }}">Nombre <span class="text-danger">*</span></label>
+                {{ form.nombre }}
+                {% for e in form.nombre.errors %}<div class="capu-field-error">{{ e }}</div>{% endfor %}
+              </div>
+              <div class="capu-col-4">
+                <label class="form-label" for="{{ form.tipo_apu.id_for_label }}">Tipo APU <span class="text-danger">*</span></label>
+                {{ form.tipo_apu }}
+                {% if form.tipo_bloqueado %}
+                <div class="capu-field-hint"><i class="bi bi-lock me-1"></i>Fijo mientras el paquete tenga componentes guardados.</div>
+                {% else %}
+                <div class="capu-field-hint">Define qué ítems son compatibles.</div>
+                {% endif %}
+                {% for e in form.tipo_apu.errors %}<div class="capu-field-error">{{ e }}</div>{% endfor %}
+              </div>
+              <div>
+                <label class="form-label" for="{{ form.descripcion.id_for_label }}">Descripción</label>
+                {{ form.descripcion }}
+              </div>
+              <div>
+                <div class="form-check form-switch">
+                  {{ form.activo }}
+                  <label class="form-check-label" for="{{ form.activo.id_for_label }}">Paquete activo</label>
+                </div>
+                <div class="capu-field-hint">Un paquete inactivo se conserva para trazabilidad, pero no debería asignarse a nuevos subsistemas.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Componentes -->
+        <section class="capu-card">
+          <div class="capu-card__head">
+            <span class="capu-card__title">2 · Componentes</span>
+            <span class="capu-formula d-none d-md-inline">valor diario × cantidad = aporte</span>
+          </div>
+          <div class="capu-comp-head" data-capu-comp-head hidden>
+            <span></span><span>Ítem</span><span class="r">Valor diario</span><span></span>
+            <span class="r">Cantidad</span><span></span><span class="r">Aporte</span><span></span>
+          </div>
+          <div class="capu-comp-list" data-capu-comp-list aria-live="polite"></div>
+          <div class="px-3 pb-2" data-capu-add-hint hidden>
+            <div class="capu-note">
+              <i class="bi bi-info-circle"></i>
+              <div>No hay ítems activos de este tipo en el catálogo. Un paquete solo usa ítems existentes:
+                <a href="{% url 'presupuestos:catalogo_item_create' %}" target="_blank" rel="noopener">agrega primero un ítem</a>.</div>
+            </div>
+          </div>
+          <button type="button" class="capu-add-comp" data-capu-add>
+            <i class="bi bi-plus-circle"></i> Agregar componente
+          </button>
+        </section>
+      </div>
+
+      <!-- Resumen -->
+      <aside class="capu-card capu-summary" data-capu-summary>
+        <div class="capu-card__body">
+          <div class="capu-summary__label">Valor del paquete</div>
+          <div class="capu-summary__total is-na" data-capu-total>Sin componentes</div>
+          <div class="capu-summary__formula">Σ (valor diario × cantidad) · calculado con el catálogo vigente</div>
+
+          <div class="capu-summary__rows">
+            <div><span>Componentes</span><strong data-capu-n>0</strong></div>
+            <div hidden><span>Pendientes</span><strong data-capu-pend style="color:var(--amber);">0</strong></div>
+          </div>
+
+          <div class="capu-note capu-note--warn mt-3" data-capu-pend-note hidden>
+            <i class="bi bi-hourglass-split"></i>
+            <div>Hay componentes sin vida útil configurada. El paquete puede guardarse, pero su valor no estará disponible hasta completarla en el ítem.</div>
+          </div>
+
+          {% if n_instancias %}
+          <div class="capu-note mt-3">
+            <i class="bi bi-shield-check"></i>
+            <div>Usado en {{ n_instancias }} APU. Los APU ya generados conservan su propia copia: estos cambios no los modifican.</div>
+          </div>
+          {% endif %}
+
+          <div class="d-flex flex-column gap-2 mt-3">
+            <button type="submit" class="btn btn-primary justify-content-center"><i class="bi bi-check-lg"></i> Guardar paquete</button>
+            <a href="{% if paquete.pk %}{% url 'presupuestos:catalogo_paquete_detail' paquete.pk %}{% else %}{% url 'presupuestos:catalogo_apu' %}#paquetes{% endif %}"
+               class="btn btn-outline-secondary justify-content-center">Cancelar</a>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </form>
+</div>
+
+<!-- Selector de ítems existentes -->
+<div class="modal fade capu-picker" id="capuPicker" tabindex="-1" aria-labelledby="capuPickerTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="capuPickerTitle">Agregar componente</h5>
+          <div class="capu-muted" style="font-size:12px;">Ítems existentes de <strong data-capu-pick-tipo></strong> · pueden ser de distintas categorías</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="capu-picker__search">
+          <div class="capu-search">
+            <i class="bi bi-search"></i>
+            <input type="search" id="capuPickQ" placeholder="Buscar por nombre, código o categoría" autocomplete="off" aria-label="Buscar ítems">
+          </div>
+        </div>
+        <div class="capu-picker__list" data-capu-pick-list></div>
+      </div>
+      <div class="modal-footer">
+        <span class="capu-muted me-auto" style="font-size:12px;">La cantidad se define en el paquete, después de agregar.</span>
+        <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">Listo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{ items_json|json_script:"capu-items" }}
+{{ filas_json|json_script:"capu-filas" }}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/catalogo-apu.js' %}"></script>
+{% endblock %}

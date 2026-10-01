@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import logging
+from apps.common.mixins import EliminacionProtegidaMixin
 from datetime import date
 from decimal import Decimal
 
@@ -20,7 +21,7 @@ from apps.presupuestos.models import (
     ProyectoSistema, DespieceLinea,
     ConfiguracionAPU,
     APU, APUProyecto, APULinea, APUPoliza,
-    CategoriaItemAPU, CuadrillaPreset, CuadrillaPresetItem, ItemCatalogoAPU,
+    CategoriaItemAPU, ItemCatalogoAPU,
 )
 from apps.comercial.models import Proyecto
 from apps.comercial.views import registrar_log, _usuario_sistema
@@ -42,8 +43,7 @@ from apps.common.choices import TipoAPU
 from apps.presupuestos.forms import (
     ProyectoSistemaForm, DespieceLineaAjusteForm,
     ConfiguracionAPUForm, APUProyectoForm,
-    CategoriaItemAPUForm, ItemCatalogoAPUForm,
-    CuadrillaPresetForm, CuadrillaPresetItemFormSet,
+    CategoriaItemAPUForm, ItemCatalogoAPUForm, PaqueteAPUForm,
 )
 from apps.comercial.forms import SolicitudForm
 from apps.common.mixins import (
@@ -107,7 +107,7 @@ class ProyectoSistemaUpdateView(UpdateView):
     success_url = reverse_lazy("presupuestos:proyectosistema_list")
 
 
-class ProyectoSistemaDeleteView(DeleteView):
+class ProyectoSistemaDeleteView(EliminacionProtegidaMixin, DeleteView):
     model = ProyectoSistema
     template_name = "confirm_delete.html"
 
@@ -513,14 +513,68 @@ class DespieceLineaAjusteView(UpdateView):
         return reverse("presupuestos:despiece_proyecto", args=[self.object.proyecto_id])
 
 
+def _componente_de_linea(linea):
+    """ComponenteSubsistema de una DespieceLinea (por subsistema del PS + código)."""
+    from apps.ingenieria.models import ComponenteSubsistema
+
+    ps = linea.proyecto_sistema
+    if not ps or not ps.subsistema_id:
+        return None
+    return (
+        ComponenteSubsistema.objects
+        .filter(subsistema_id=ps.subsistema_id, codigo=linea.componente_codigo)
+        .first()
+    )
+
+
+def _estado_presentacion_json(linea) -> dict:
+    """Estado de cálculo de una línea en JSON (None → null, nunca 0)."""
+    return {
+        "id": linea.pk,
+        "componente_codigo": linea.componente_codigo,
+        "cantidad_calculada": (
+            float(linea.cantidad_calculada) if linea.cantidad_calculada is not None else None
+        ),
+        "pendiente_producto": linea.pendiente_producto,
+        "presentacion_snapshot": (
+            float(linea.presentacion_snapshot) if linea.presentacion_snapshot is not None else None
+        ),
+    }
+
+
 class AsignarProductoLineaAPIView(View):
     """
-    POST /presupuestos/despiece/api/asignar-producto/<linea_pk>/
-    Body JSON: {"producto_id": int}
-    Asigna un producto concreto a una línea de despiece y captura el precio.
+    POST   /presupuestos/despiece/api/asignar-producto/<linea_pk>/
+           Body JSON: {"producto_id": int}
+           Asigna un producto concreto a la línea y captura su precio. Si el
+           componente requiere presentación de producto, calcula la cantidad con
+           PresentacionProductoService y propaga la cascade a los dependientes.
+           Error de presentación o de fórmula → 422 y rollback completo (el
+           producto no queda asignado).
+
+    DELETE /presupuestos/despiece/api/asignar-producto/<linea_pk>/
+           Retira el producto. En componentes con presentación, la línea vuelve
+           a pendiente (cantidad null) e invalida en cascade sus dependientes.
+
+    Ambos responden 403 si la línea está bloqueada por un APU aprobado.
     """
+
+    @staticmethod
+    def _bloqueado(linea):
+        if objeto_bloqueado_por_apu(linea):
+            return JsonResponse({"error": MENSAJE_BLOQUEO}, status=403)
+        return None
+
     def post(self, request, pk):
+        from django.db import transaction
+        from apps.catalogos.models import Producto
+        from apps.presupuestos.services.presentacion_service import PresentacionProductoService
+
         linea = get_object_or_404(DespieceLinea, pk=pk)
+        blk = self._bloqueado(linea)
+        if blk:
+            return blk
+
         try:
             data = json.loads(request.body)
             producto_id = int(data.get("producto_id", 0))
@@ -530,15 +584,25 @@ class AsignarProductoLineaAPIView(View):
         if not producto_id:
             return JsonResponse({"error": "Debe indicar un producto."}, status=400)
 
-        from apps.catalogos.models import Producto
         producto = get_object_or_404(Producto, pk=producto_id, activo=True)
+        comp = _componente_de_linea(linea)
 
-        linea.producto = producto
-        linea.categoria_producto = producto.categoria
-        linea.save(update_fields=["producto", "categoria_producto"])
-        linea.capturar_precio()
+        dependientes = []
+        try:
+            with transaction.atomic():
+                linea.producto = producto
+                linea.categoria_producto = producto.categoria
+                linea.save(update_fields=["producto", "categoria_producto"])
+                linea.capturar_precio()
+                if comp is not None and comp.requiere_presentacion_producto:
+                    actualizadas = PresentacionProductoService.recalcular_tras_asignacion(
+                        linea, producto,
+                    )
+                    dependientes = actualizadas[1:]
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=422)
+
         linea.refresh_from_db()
-
         moneda = producto.moneda or "COP"
         fecha_act = (
             producto.fecha_actualizacion_precio.strftime("%d/%m/%Y")
@@ -551,6 +615,36 @@ class AsignarProductoLineaAPIView(View):
             "moneda": moneda,
             "precio_snapshot": float(linea.precio_snapshot or 0),
             "fecha_actualizacion": fecha_act,
+            **{k: v for k, v in _estado_presentacion_json(linea).items()
+               if k not in ("id", "componente_codigo")},
+            "dependientes": [_estado_presentacion_json(d) for d in dependientes],
+        })
+
+    def delete(self, request, pk):
+        from django.db import transaction
+        from apps.presupuestos.services.presentacion_service import PresentacionProductoService
+
+        linea = get_object_or_404(DespieceLinea, pk=pk)
+        blk = self._bloqueado(linea)
+        if blk:
+            return blk
+
+        comp = _componente_de_linea(linea)
+        dependientes = []
+        with transaction.atomic():
+            linea.producto = None
+            linea.save(update_fields=["producto"])
+            if comp is not None and comp.requiere_presentacion_producto:
+                actualizadas = PresentacionProductoService.limpiar_tras_eliminacion(linea)
+                dependientes = actualizadas[1:]
+
+        linea.refresh_from_db()
+        return JsonResponse({
+            "ok": True,
+            "producto_retirado": True,
+            **{k: v for k, v in _estado_presentacion_json(linea).items()
+               if k not in ("id", "componente_codigo")},
+            "dependientes": [_estado_presentacion_json(d) for d in dependientes],
         })
 
 
@@ -743,8 +837,10 @@ def _build_categorias_context(apu) -> list:
     all_lineas = list(
         apu.lineas.select_related(
             "item_catalogo__categoria", "despiece_linea__producto", "despiece_maestro",
+            "apu_paquete",
         ).order_by("descripcion")
     )
+    paquetes_apu = list(apu.paquetes.order_by("tipo_apu", "orden", "id"))
 
     # Anotar líneas MATERIALES con componente_nombre, producto_nombre, cantidad_total
     materiales = [l for l in all_lineas if l.tipo == TipoAPU.MATERIALES]
@@ -830,7 +926,26 @@ def _build_categorias_context(apu) -> list:
             detalle_lines = [l for l in lineas_tipo if l.item_catalogo_id]
 
             grupos = []
-            if resumen_lines:
+            paquetes_tipo = [p for p in paquetes_apu if p.tipo_apu == tipo]
+            if paquetes_tipo:
+                # Fase 2: una sola resumen por TipoAPU; los componentes (de paquetes y
+                # sueltos) se listan juntos, anotados con su paquete de origen.
+                componentes = [l for l in lineas_tipo if l.item_catalogo_id or l.apu_paquete_id]
+                orden_paq = {p.pk: i for i, p in enumerate(paquetes_tipo)}
+                componentes.sort(key=lambda l: (
+                    orden_paq.get(l.apu_paquete_id, len(orden_paq)), l.pk,
+                ))
+                for l in componentes:
+                    l.paquete_nombre = l.apu_paquete.nombre_snapshot if l.apu_paquete_id else ""
+                lr = next((l for l in lineas_tipo if l not in componentes and not l.despiece_linea_id), None)
+                grupos.append({
+                    "descripcion": lr.descripcion if lr else info["label"],
+                    "linea_resumen": lr,
+                    "lineas_detalle": componentes,
+                    "subtotal_costo": lr.costo_total if lr else Decimal("0"),
+                    "subtotal_valor": lr.valor_total if lr else Decimal("0"),
+                })
+            elif resumen_lines:
                 # Agrupar líneas detalle por nombre de categoría (coincide con descripcion de la resumen)
                 for lr in resumen_lines:
                     # Las líneas detalle de esta resumen comparten el nombre de categoría
@@ -872,10 +987,143 @@ def _build_categorias_context(apu) -> list:
         }
         if tipo == TipoAPU.ADMINISTRACION:
             cat_data["lineas_admin_detalle"] = lineas_tipo
+        if tipo != TipoAPU.MATERIALES:
+            cat_data["paquetes"] = [p for p in paquetes_apu if p.tipo_apu == tipo]
+            # Fase 3.C: agrupación por APUPaquete + ítems adicionales + resultado.
+            cat_data["est"] = _estructura_tipo_apu(
+                apu, tipo, sorted(lineas_tipo, key=lambda l: l.pk), paquetes_apu,
+            )
 
         categorias.append(cat_data)
 
     return categorias
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Fase 11.5.2 — Helper compartido para contexto de APU consolidado
+# (restaurado: se había borrado en el commit 9554562 pero las vistas de PDF y
+#  cotización de consolidados lo siguen usando)
+# ──────────────────────────────────────────────────────────────────────────────
+def _build_apu_consolidado_context(apu) -> dict:
+    """
+    Construye el contexto consolidado reutilizable por la vista detalle y por
+    los PDFs (Interno/Cliente) cuando ``apu.es_consolidado``.
+
+    Devuelve un dict con:
+      - apus_origen
+      - resumen_consolidacion
+      - materiales_por_origen_consolidado
+      - lineas_no_materiales
+
+    Si el APU no es consolidado devuelve dict vacío (no agrega claves al ctx).
+    """
+    if not apu.es_consolidado:
+        return {}
+
+    from apps.common.choices import TipoAPU as _TipoAPU
+
+    materiales = list(
+        apu.lineas.filter(tipo=_TipoAPU.MATERIALES)
+        .order_by(
+            "subsistema_nombre_snapshot", "sistema_nombre_snapshot",
+            "despiece_maestro_id", "descripcion",
+        )
+        .select_related("despiece_linea__producto", "item_catalogo")
+    )
+
+    apus_origen = list(
+        apu.get_apus_origen().select_related(
+            "proyecto_sistema__sistema",
+            "proyecto_sistema__subsistema",
+        )
+    )
+
+    def _nuevo_grupo(ln):
+        return {
+            "sistema": ln.sistema_nombre_snapshot or "",
+            "subsistema": ln.subsistema_nombre_snapshot or "",
+            "despiece_id": ln.despiece_maestro_id,
+            "lineas": [],
+            "subtotal_costo": Decimal("0"),
+            "subtotal_valor": Decimal("0"),
+        }
+
+    materiales_por_origen: list = []
+    for apu_o in apus_origen:
+        lineas_apu = [ln for ln in materiales if ln.apu_origen_id == apu_o.pk]
+        if not lineas_apu:
+            continue
+        grupos: dict = {}
+        for ln in lineas_apu:
+            key = (
+                ln.sistema_nombre_snapshot or "",
+                ln.subsistema_nombre_snapshot or "",
+                ln.despiece_maestro_id or 0,
+            )
+            g = grupos.setdefault(key, _nuevo_grupo(ln))
+            g["lineas"].append(ln)
+            g["subtotal_costo"] += Decimal(str(ln.costo_total or 0))
+            g["subtotal_valor"] += Decimal(str(ln.valor_total or 0))
+        materiales_por_origen.append({
+            "apu": apu_o,
+            "grupos": list(grupos.values()),
+            "total_lineas": len(lineas_apu),
+            "subtotal_valor": sum((g["subtotal_valor"] for g in grupos.values()),
+                                  Decimal("0")),
+        })
+
+    # Líneas sin apu_origen (defensivo — consolidado migrado o legacy).
+    lineas_sin_origen = [ln for ln in materiales if not ln.apu_origen_id]
+    if lineas_sin_origen:
+        grupos_so: dict = {}
+        for ln in lineas_sin_origen:
+            key = (
+                ln.sistema_nombre_snapshot or "",
+                ln.subsistema_nombre_snapshot or "",
+                ln.despiece_maestro_id or 0,
+            )
+            g = grupos_so.setdefault(key, _nuevo_grupo(ln))
+            g["lineas"].append(ln)
+            g["subtotal_costo"] += Decimal(str(ln.costo_total or 0))
+            g["subtotal_valor"] += Decimal(str(ln.valor_total or 0))
+        materiales_por_origen.append({
+            "apu": None,  # bloque "sin origen"
+            "grupos": list(grupos_so.values()),
+            "total_lineas": len(lineas_sin_origen),
+            "subtotal_valor": sum((g["subtotal_valor"] for g in grupos_so.values()),
+                                  Decimal("0")),
+        })
+
+    no_materiales_total = apu.lineas.exclude(tipo=_TipoAPU.MATERIALES).count()
+    no_mat_antes = 0
+    for apu_o in apus_origen:
+        no_mat_antes += apu_o.lineas.exclude(tipo=_TipoAPU.MATERIALES).count()
+    sistemas_set = sorted({ln.sistema_nombre_snapshot for ln in materiales
+                           if ln.sistema_nombre_snapshot})
+    subsistemas_set = sorted({ln.subsistema_nombre_snapshot for ln in materiales
+                              if ln.subsistema_nombre_snapshot})
+
+    resumen_consolidacion = {
+        "apus_origen_count": len(apus_origen),
+        "sistemas": sistemas_set,
+        "subsistemas": subsistemas_set,
+        "materiales_total": len(materiales),
+        "no_materiales_antes": no_mat_antes,
+        "no_materiales_despues": no_materiales_total,
+    }
+
+    lineas_no_materiales = list(
+        apu.lineas.exclude(tipo=_TipoAPU.MATERIALES)
+        .order_by("tipo", "descripcion")
+        .select_related("despiece_linea__producto", "item_catalogo")
+    )
+
+    return {
+        "apus_origen": apus_origen,
+        "resumen_consolidacion": resumen_consolidacion,
+        "materiales_por_origen_consolidado": materiales_por_origen,
+        "lineas_no_materiales": lineas_no_materiales,
+    }
 
 
 class APUProyectoDetailView(DetailView):
@@ -920,11 +1168,6 @@ class APUProyectoDetailView(DetailView):
         ctx["proyecto_num_personas"] = getattr(proyecto, "num_personas", None)
 
         # Catálogo para los modales de selección
-        ctx["presets"] = (
-            CuadrillaPreset.objects
-            .filter(activo=True)
-            .prefetch_related("items__item")
-        )
         ctx["items_mo"] = (
             ItemCatalogoAPU.objects
             .filter(activo=True, categoria__tipo_apu="MANO_DE_OBRA")
@@ -946,24 +1189,28 @@ class APUProyectoDetailView(DetailView):
             .select_related("categoria").order_by("categoria__nombre", "nombre")
         )
         # PKs de ítems ya usados en este APU (para pre-marcar checkboxes)
-        # APULinea no tiene campo 'cantidad' — el valor se integra en rendimiento.
-        # Los modales muestran siempre 1 como punto de partida editable.
         ctx["lineas_item_ids"] = set(
             self.object.lineas
             .exclude(item_catalogo=None)
+            .filter(apu_paquete__isnull=True)
             .values_list("item_catalogo_id", flat=True)
         )
-        ctx["lineas_cantidades"] = {}  # vacío; el default en template es 1
-        # Precio efectivo con el que se generó cada línea detalle. Permite que
-        # el modal "Configurar…" reabra con el precio que el usuario editó en
-        # lugar de volver al valor del catálogo. Si el usuario no lo tocó,
-        # coincide con la derivación del catálogo y no se nota diferencia.
-        ctx["lineas_precios"] = {
-            item_id: precio
-            for item_id, precio in self.object.lineas
-            .exclude(item_catalogo=None)
-            .values_list("item_catalogo_id", "precio_referencia")
-        }
+        # Cantidad y precio con que cada ítem quedó en el APU, reconstruidos
+        # por el mismo servicio que usa la regeneración: al reabrir un modal
+        # se ve la cantidad guardada (no 1) y solo los precios que el usuario
+        # personalizó; el resto muestra el valor diario vigente del catálogo.
+        from apps.presupuestos.services.apu_service import APUService as _APUService
+        _svc = _APUService.for_apu(self.object)
+        ctx["lineas_cantidades"] = {}
+        ctx["lineas_precios"] = {}
+        for _tipo in (
+            TipoAPU.MANO_DE_OBRA, TipoAPU.HERRAMIENTAS_EQUIPOS,
+            TipoAPU.TRANSPORTE, TipoAPU.ADMINISTRACION,
+        ):
+            for _fila in _svc.items_data_desde_lineas(_tipo):
+                ctx["lineas_cantidades"][_fila["item_id"]] = _fila["cantidad"]
+                if _fila["precio_override"] is not None:
+                    ctx["lineas_precios"][_fila["item_id"]] = _fila["precio_override"]
         # Panel modalidades AIU (Fase 11.3) — necesario para que el panel
         # muestre valores en lugar de guiones en apu_detail.html.
         try:
@@ -1044,27 +1291,35 @@ class APUProyectoDetailView(DetailView):
         # Ítems configurados en SubsistemaItemAPU para el subsistema de este APU
         sia_item_ids: set = set()
         sia_admin: dict = {}
+        sia_preseleccion: set = set()
         if self.object.proyecto_sistema_id and self.object.proyecto_sistema.subsistema_id:
-            try:
-                from apps.ingenieria.models import SubsistemaItemAPU
-                sia_qs = SubsistemaItemAPU.objects.filter(
-                    subsistema=self.object.proyecto_sistema.subsistema,
-                    activo=True,
-                ).select_related("item_catalogo")
-                for sia in sia_qs:
-                    sia_item_ids.add(sia.item_catalogo_id)
-                    if sia.item_catalogo.categoria.tipo_apu == "ADMINISTRACION":
-                        sia_admin[str(sia.item_catalogo_id)] = {
-                            "porcentaje": 100,  # default; se sobreescribe desde APULineas
-                        }
-            except Exception:
-                pass
+            from apps.presupuestos.models import SubsistemaItemAPU
+            sia_qs = SubsistemaItemAPU.objects.filter(
+                subsistema=self.object.proyecto_sistema.subsistema,
+                activo=True,
+            ).select_related("item_catalogo__categoria")
+            # Tipos que ya tienen selección propia en el APU: su selección manda.
+            tipos_con_seleccion = set(
+                self.object.lineas.exclude(item_catalogo=None).values_list("tipo", flat=True)
+            )
+            for sia in sia_qs:
+                sia_item_ids.add(sia.item_catalogo_id)
+                if sia.tipo not in tipos_con_seleccion:
+                    # Predeterminado del subsistema: pre-marcado y con su cantidad.
+                    sia_preseleccion.add(sia.item_catalogo_id)
+                    ctx["lineas_cantidades"].setdefault(sia.item_catalogo_id, sia.cantidad)
+                if sia.tipo == TipoAPU.ADMINISTRACION:
+                    # rendimiento_override = % de aplicación (fracción); NULL → 100 %.
+                    rov = sia.rendimiento_override
+                    sia_admin[str(sia.item_catalogo_id)] = {
+                        "porcentaje": round(float(rov) * 100, 2) if rov is not None else 100,
+                    }
 
         # Sobreescribir con porcentajes ya guardados en APULineas del APU.
         # Las líneas de detalle de admin almacenan rendimiento = porcentaje (fracción).
         from apps.common.choices import TipoAPU as _TipoAPU
         for linea in self.object.lineas.filter(
-            tipo=_TipoAPU.ADMINISTRACION,
+            tipo=_TipoAPU.ADMINISTRACION, apu_paquete__isnull=True,
         ).exclude(item_catalogo=None):
             sia_admin[str(linea.item_catalogo_id)] = {
                 "porcentaje": round(float(linea.rendimiento) * 100, 2),
@@ -1072,6 +1327,7 @@ class APUProyectoDetailView(DetailView):
 
         import json as _json
         ctx["sia_item_ids"] = sia_item_ids
+        ctx["sia_preseleccion"] = sia_preseleccion
         ctx["sia_admin_json"] = _json.dumps(sia_admin)
 
         return ctx
@@ -1085,58 +1341,38 @@ class APUProyectoUpdateView(UpdateView):
     def get_success_url(self):
         return reverse("presupuestos:apu_detail", args=[self.object.pk])
 
+    # Parámetros que alteran el cálculo de líneas ya existentes.
+    CAMPOS_RECALCULO = (
+        "aiu_contratista_pct", "margen_mano_obra_pct", "dias_duracion",
+        "margen_material_pct", "iva_pct", "aplica_iva", "margen_contratista_pct",
+    )
+
     def form_valid(self, form):
-        # Snapshot config fields before save to detect changes
+        from django.db import transaction
+        from apps.presupuestos.services.apu_service import APUService
+
         old = APUProyecto.objects.get(pk=self.object.pk)
-        old_aiu  = old.aiu_contratista_pct
-        old_mmo  = old.margen_mano_obra_pct
-        old_dias = old.dias_duracion
-        old_mat  = old.margen_material_pct
+        antes = {c: getattr(old, c) for c in self.CAMPOS_RECALCULO}
 
-        response = super().form_valid(form)
+        # Guardar + recalcular es atómico: si el recálculo falla (p. ej. un ítem
+        # sin vida útil), los parámetros no quedan guardados con líneas viejas.
+        try:
+            with transaction.atomic():
+                response = super().form_valid(form)
+                new = self.object
+                cambiados = [c for c in self.CAMPOS_RECALCULO if getattr(new, c) != antes[c]]
+                if cambiados:
+                    APUService.for_apu(new).recalcular_por_parametros()
+        except Exception as exc:
+            logger.exception("[APUProyectoUpdateView] Error recalculando APU %s", self.object.pk)
+            form.add_error(None, f"No se guardaron los parámetros: error al recalcular el APU: {exc}")
+            return self.form_invalid(form)
 
-        # If any calc-affecting field changed, regenerate non-MATERIALES lines
-        new = self.object
-        parametros_cambiaron = (
-            new.aiu_contratista_pct != old_aiu
-            or new.margen_mano_obra_pct != old_mmo
-            or new.dias_duracion != old_dias
-            or new.margen_material_pct != old_mat
-        )
-        if parametros_cambiaron:
-            try:
-                from apps.presupuestos.services.apu_service import APUService
-                from apps.presupuestos.models import ItemCatalogoAPU
-
-                svc = APUService.for_apu(new)
-                tipos = [
-                    TipoAPU.HERRAMIENTAS_EQUIPOS,
-                    TipoAPU.MANO_DE_OBRA,
-                    TipoAPU.TRANSPORTE,
-                    TipoAPU.ADMINISTRACION,
-                ]
-                regenerado = False
-                for tipo in tipos:
-                    items = list(ItemCatalogoAPU.objects.filter(
-                        activo=True, categoria__tipo_apu=tipo
-                    ))
-                    if items:
-                        svc._generar_categoria_desde_catalogo(
-                            tipo,
-                            [{"item_id": i.pk, "cantidad": 1} for i in items],
-                        )
-                        regenerado = True
-                if regenerado:
-                    new.recalcular()
-                    messages.success(
-                        self.request,
-                        "Parámetros guardados y líneas recalculadas con los nuevos valores.",
-                    )
-            except Exception as exc:
-                messages.warning(
-                    self.request,
-                    f"Parámetros guardados, pero error al recalcular líneas: {exc}",
-                )
+        if cambiados:
+            messages.success(
+                self.request,
+                "Parámetros guardados y líneas recalculadas con los nuevos valores.",
+            )
 
         # Registrar log de actualización de parámetros APU
         try:
@@ -1151,8 +1387,10 @@ class APUProyectoUpdateView(UpdateView):
                 descripcion=(
                     f"Parámetros APU actualizados — {proyecto_nombre}: "
                     f"AIU {new.aiu_contratista_pct}%, margen MO {new.margen_mano_obra_pct}%, "
-                    f"días {new.dias_duracion}, margen material {new.margen_material_pct}%"
-                    + (" · líneas recalculadas" if parametros_cambiaron else "")
+                    f"margen contratista {new.margen_contratista_pct}%, "
+                    f"días {new.dias_duracion}, margen material {new.margen_material_pct}%, "
+                    f"IVA {new.iva_pct}% (aplica={new.aplica_iva})"
+                    + (f" · líneas recalculadas ({', '.join(cambiados)})" if cambiados else "")
                 ),
                 modelo_afectado="Proyecto",
                 objeto_id=proyecto_id,
@@ -1175,6 +1413,11 @@ class APUGuardarView(GestionPresupuestosMixin, View):
     def post(self, request, pk):
         from decimal import Decimal as _D
         apu = get_object_or_404(APUProyecto, pk=pk)
+        # Fase 3.D (D9) — un APU aprobado no cambia nombre, descripción ni
+        # cantidad_base_apu (regla única de apps.common.apu_lock).
+        blk = redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
+        if blk:
+            return blk
         nombre = request.POST.get("nombre", "").strip()
         descripcion = request.POST.get("descripcion", "").strip()
         campos = ["updated_at"]
@@ -1234,9 +1477,37 @@ class APUGuardarView(GestionPresupuestosMixin, View):
 
 
 class APUGenerarView(View):
-    """Genera el APU para un ProyectoSistema dado."""
+    """
+    GET  /presupuestos/apu/generar/<ps_pk>/
+         Vista intermedia: lista las líneas del despiece con pendiente_producto
+         (componentes que necesitan un producto para calcular su cantidad).
+    POST Genera el APU del ProyectoSistema. Si hay líneas con
+         pendiente_producto, no genera y vuelve al GET. Las líneas con
+         pendiente_seleccion (categoría sin producto) no bloquean: el APU las omite.
+    """
+    template_name = "presupuestos/apu_generar_pendientes.html"
+
+    def get(self, request, pk):
+        ps = get_object_or_404(
+            ProyectoSistema.objects.select_related("proyecto", "sistema", "subsistema"), pk=pk,
+        )
+        return render(request, self.template_name, {
+            "ps": ps,
+            "proyecto": ps.proyecto,
+            "pendientes": lineas_pendientes_producto(ps),
+        })
+
     def post(self, request, pk):
         ps = get_object_or_404(ProyectoSistema, pk=pk)
+        pendientes = lineas_pendientes_producto(ps)
+        if pendientes:
+            codigos = ", ".join(l.componente_codigo for l in pendientes)
+            messages.error(
+                request,
+                f"No se puede generar el APU: los siguientes componentes requieren que se "
+                f"asigne un producto antes de calcular su cantidad: {codigos}.",
+            )
+            return redirect(reverse("presupuestos:apu_generar", args=[ps.pk]))
         try:
             from apps.presupuestos.services.apu_service import APUService
             apu = APUService.generar(ps)
@@ -1381,7 +1652,6 @@ class APUManoObraView(View):
 
     Registra mano de obra desde catálogo.
     Acepta:
-      - preset_id: carga todos los ítems del preset seleccionado
       - item_id[] + cantidad[]: selección manual ítem a ítem
     Borra líneas MANO_DE_OBRA previas antes de guardar (reemplaza).
     """
@@ -1390,18 +1660,7 @@ class APUManoObraView(View):
         try:
             from apps.presupuestos.services.apu_service import APUService
 
-            preset_id = request.POST.get("preset_id", "").strip()
-            if preset_id:
-                preset = get_object_or_404(
-                    CuadrillaPreset.objects.prefetch_related("items__item"),
-                    pk=preset_id, activo=True,
-                )
-                items_data = [
-                    {"item_id": pi.item_id, "cantidad": pi.cantidad}
-                    for pi in preset.items.all()
-                ]
-            else:
-                items_data = _parse_items_catalogo(request)
+            items_data = _parse_items_catalogo(request)
 
             if not items_data:
                 messages.warning(request, "Seleccione al menos un ítem de mano de obra.")
@@ -1446,51 +1705,6 @@ class APUHerramientasView(View):
         except Exception as exc:
             messages.error(request, f"Error al registrar herramientas: {exc}")
             logger.exception("[APUHerramientasView] Error APU %s", pk)
-
-        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
-
-
-class APUTransporteView(View):
-    """
-    POST /presupuestos/apu/<pk>/transporte/
-
-    Registra ítems de transporte del APU (retiro, envío, flete, etc.).
-    El form envía múltiples filas: descripcion[] y precio_total[].
-    Borra las líneas TRANSPORTE previas antes de crear las nuevas (reemplaza).
-    """
-    def post(self, request, pk):
-        apu = get_object_or_404(APUProyecto, pk=pk)
-        try:
-            descripciones   = request.POST.getlist("descripcion[]")
-            precios_totales = request.POST.getlist("precio_total[]")
-
-            items = []
-            for desc, precio_str in zip(descripciones, precios_totales):
-                desc = desc.strip()
-                if not desc or not precio_str:
-                    continue
-                try:
-                    precio = float(precio_str)
-                    if precio > 0:
-                        items.append({"descripcion": desc, "precio_total": precio})
-                except (ValueError, TypeError):
-                    pass
-
-            if not items:
-                messages.warning(request, "No se ingresaron ítems de transporte válidos.")
-                return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
-
-            # Reemplazar líneas previas de transporte
-            apu.lineas.filter(tipo="TRANSPORTE").delete()
-
-            from apps.presupuestos.services.apu_service import APUService
-            svc = APUService.for_apu(apu)
-            svc.generar_transporte_items(items)
-            svc.finalizar()
-            messages.success(request, f"{len(items)} ítem(s) de transporte registrados.")
-        except Exception as exc:
-            messages.error(request, f"Error al registrar transporte: {exc}")
-            logger.exception("[APUTransporteView] Error APU %s", pk)
 
         return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
@@ -1547,50 +1761,6 @@ class APULineaDeleteView(View):
         return redirect(reverse("presupuestos:apu_detail", args=[apu_pk]))
 
 
-class APUAdminView(View):
-    """
-    POST /presupuestos/apu/<pk>/administrativo/
-
-    Acepta ítems del catálogo como descripcion[] + precio_total[].
-    Reemplaza todas las líneas ADMINISTRACION previas.
-    """
-    def post(self, request, pk):
-        apu = get_object_or_404(APUProyecto, pk=pk)
-        try:
-            from apps.presupuestos.services.apu_service import APUService
-
-            descripciones   = request.POST.getlist("descripcion[]")
-            precios_totales = request.POST.getlist("precio_total[]")
-
-            items = []
-            for desc, precio_str in zip(descripciones, precios_totales):
-                desc = (desc or "").strip()
-                if not desc or not precio_str:
-                    continue
-                try:
-                    precio = float(precio_str)
-                    if precio >= 0:
-                        items.append({"descripcion": desc, "precio_total": precio})
-                except (ValueError, TypeError):
-                    pass
-
-            if not items:
-                messages.warning(request, "No se ingresaron ítems de administración válidos.")
-                return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
-
-            apu.lineas.filter(tipo="ADMINISTRACION").delete()
-            svc = APUService.for_apu(apu)
-            for item in items:
-                svc.generar_administracion_item(item["descripcion"], item["precio_total"])
-            svc.finalizar()
-            messages.success(request, f"{len(items)} ítem(s) de administración registrados.")
-        except Exception as exc:
-            messages.error(request, f"Error al registrar administrativo: {exc}")
-            logger.exception("[APUAdminView] Error APU %s", pk)
-
-        return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # CATÁLOGO APU — Vista principal + CRUD
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1634,11 +1804,6 @@ class CatalogoAPUView(ListView):
             for tipo in orden_tipos
             if tipo in grupos
         ]
-        ctx["presets"] = (
-            CuadrillaPreset.objects
-            .filter(activo=True)
-            .prefetch_related("items__item")
-        )
         ctx["tipo_choices"] = TipoAPU.choices
         return ctx
 
@@ -1659,7 +1824,7 @@ class CategoriaItemAPUUpdateView(UpdateView):
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 
-class CategoriaItemAPUDeleteView(DeleteView):
+class CategoriaItemAPUDeleteView(EliminacionProtegidaMixin, DeleteView):
     model = CategoriaItemAPU
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
@@ -1694,66 +1859,6 @@ class ItemCatalogoAPUDeleteView(DeleteView):
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 
-# ── CuadrillaPreset CRUD ──────────────────────────────────────────────────────
-
-class CuadrillaPresetCreateView(CreateView):
-    model = CuadrillaPreset
-    form_class = CuadrillaPresetForm
-    template_name = "presupuestos/cuadrilla_preset_form.html"
-    success_url = reverse_lazy("presupuestos:catalogo_apu")
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        if self.request.POST:
-            ctx["formset"] = CuadrillaPresetItemFormSet(self.request.POST)
-        else:
-            ctx["formset"] = CuadrillaPresetItemFormSet()
-        return ctx
-
-    def form_valid(self, form):
-        ctx = self.get_context_data()
-        formset = ctx["formset"]
-        if formset.is_valid():
-            self.object = form.save()
-            formset.instance = self.object
-            formset.save()
-            messages.success(self.request, f"Cuadrilla «{self.object.nombre}» creada.")
-            return redirect(self.success_url)
-        return self.form_invalid(form)
-
-
-class CuadrillaPresetUpdateView(UpdateView):
-    model = CuadrillaPreset
-    form_class = CuadrillaPresetForm
-    template_name = "presupuestos/cuadrilla_preset_form.html"
-    success_url = reverse_lazy("presupuestos:catalogo_apu")
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        if self.request.POST:
-            ctx["formset"] = CuadrillaPresetItemFormSet(self.request.POST, instance=self.object)
-        else:
-            ctx["formset"] = CuadrillaPresetItemFormSet(instance=self.object)
-        return ctx
-
-    def form_valid(self, form):
-        ctx = self.get_context_data()
-        formset = ctx["formset"]
-        if formset.is_valid():
-            self.object = form.save()
-            formset.instance = self.object
-            formset.save()
-            messages.success(self.request, f"Cuadrilla «{self.object.nombre}» actualizada.")
-            return redirect(self.success_url)
-        return self.form_invalid(form)
-
-
-class CuadrillaPresetDeleteView(DeleteView):
-    model = CuadrillaPreset
-    template_name = "confirm_delete.html"
-    success_url = reverse_lazy("presupuestos:catalogo_apu")
-
-
 # ── API: ítems del catálogo por tipo APU ─────────────────────────────────────
 
 class ItemsCatalogoAPIView(View):
@@ -1766,8 +1871,7 @@ class ItemsCatalogoAPIView(View):
             ItemCatalogoAPU.objects
             .filter(activo=True, categoria__tipo_apu=tipo_apu)
             .select_related("categoria")
-            .values("pk", "nombre", "precio_base", "unidad",
-                    "salario_base", "prestaciones", "vida_util_dias",
+            .values("pk", "nombre", "valor_base", "unidad", "vida_util_dias",
                     "categoria__nombre")
         )
         return JsonResponse({"items": items, "tipo_apu": tipo_apu})
@@ -2432,7 +2536,7 @@ class APUArmarDesdeDespieceView(GestionPresupuestosMixin, View):
                 apu_existia = APUProyecto.objects.filter(proyecto_sistema=ps).exists()
 
                 from apps.presupuestos.services.apu_service import APUService
-                apu = APUService.generar(ps)
+                apu = APUService.generar(ps, despiece_origen=dm)
 
                 # ── Fase 11.4 · Trazabilidad explícita despiece → APU ───────
                 # El botón "Armar mi APU" usa un único DespieceMaestro origen.
@@ -2702,7 +2806,6 @@ class APUManoObraView(GestionPresupuestosMixin, View):
 
     Registra mano de obra desde catálogo.
     Acepta:
-      - preset_id: carga todos los ítems del preset seleccionado
       - item_id[] + cantidad[] + precio[]: selección manual ítem a ítem,
         con precio unitario editable por APU (ver _parse_items_catalogo).
     Borra líneas MANO_DE_OBRA previas antes de guardar (reemplaza).
@@ -2715,18 +2818,7 @@ class APUManoObraView(GestionPresupuestosMixin, View):
         try:
             from apps.presupuestos.services.apu_service import APUService
 
-            preset_id = request.POST.get("preset_id", "").strip()
-            if preset_id:
-                preset = get_object_or_404(
-                    CuadrillaPreset.objects.prefetch_related("items__item"),
-                    pk=preset_id, activo=True,
-                )
-                items_data = [
-                    {"item_id": pi.item_id, "cantidad": pi.cantidad}
-                    for pi in preset.items.all()
-                ]
-            else:
-                items_data = _parse_items_catalogo(request)
+            items_data = _parse_items_catalogo(request)
 
             if not items_data:
                 messages.warning(request, "Seleccione al menos un ítem de mano de obra.")
@@ -2737,7 +2829,8 @@ class APUManoObraView(GestionPresupuestosMixin, View):
             # ItemCatalogoAPU activo de tipo MANO_DE_OBRA — la restricción a
             # SubsistemaItemAPU se eliminó porque los predeterminados solo
             # actúan como marcado visual en el modal, no como tope.
-            apu.lineas.filter(tipo="MANO_DE_OBRA").delete()
+            # Fase 2: el servicio reemplaza las líneas del tipo (o solo los ítems
+            # sueltos si el tipo tiene paquetes); la vista ya no borra antes.
             svc = APUService.for_apu(apu)
             svc.generar_mano_obra_desde_catalogo(items_data)
             svc.finalizar()
@@ -2772,7 +2865,7 @@ class APUHerramientasView(GestionPresupuestosMixin, View):
                 return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
 
             # Fase 6L-13: biblioteca completa — sin filtro por subsistema.
-            apu.lineas.filter(tipo="HERRAMIENTAS_EQUIPOS").delete()
+            # Fase 2: el servicio decide qué reemplaza (ver APUManoObraView).
             svc = APUService.for_apu(apu)
             svc.generar_herramientas_desde_catalogo(items_data)
             svc.finalizar()
@@ -2788,9 +2881,10 @@ class APUTransporteView(GestionPresupuestosMixin, View):
     """
     POST /presupuestos/apu/<pk>/transporte/
 
-    Registra ítems de transporte del APU (retiro, envío, flete, etc.).
-    El form envía múltiples filas: descripcion[] y precio_total[].
-    Borra las líneas TRANSPORTE previas antes de crear las nuevas (reemplaza).
+    Registra transporte desde el catálogo APU, con el mismo motor que
+    Herramientas y Mano de obra: item_id[] + cantidad_<pk> + precio_<pk>
+    (ver _parse_items_catalogo), valor diario universal y ReglaAPUSubsistema.
+    Reemplaza las líneas TRANSPORTE previas.
     """
     def post(self, request, pk):
         apu = get_object_or_404(APUProyecto, pk=pk)
@@ -2798,33 +2892,15 @@ class APUTransporteView(GestionPresupuestosMixin, View):
         if blk:
             return blk
         try:
-            descripciones   = request.POST.getlist("descripcion[]")
-            precios_totales = request.POST.getlist("precio_total[]")
-
-            items = []
-            for desc, precio_str in zip(descripciones, precios_totales):
-                desc = desc.strip()
-                if not desc or not precio_str:
-                    continue
-                try:
-                    precio = float(precio_str)
-                    if precio > 0:
-                        items.append({"descripcion": desc, "precio_total": precio})
-                except (ValueError, TypeError):
-                    pass
-
-            if not items:
-                messages.warning(request, "No se ingresaron ítems de transporte válidos.")
-                return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
-
-            # Reemplazar líneas previas de transporte
-            apu.lineas.filter(tipo="TRANSPORTE").delete()
-
             from apps.presupuestos.services.apu_service import APUService
+            items_data = _parse_items_catalogo(request)
+            if not items_data:
+                messages.warning(request, "No se seleccionaron ítems de transporte del catálogo.")
+                return redirect(reverse("presupuestos:apu_detail", args=[apu.pk]))
             svc = APUService.for_apu(apu)
-            svc.generar_transporte_items(items)
+            svc.generar_transporte_desde_catalogo(items_data)
             svc.finalizar()
-            messages.success(request, f"{len(items)} ítem(s) de transporte registrados.")
+            messages.success(request, f"{len(items_data)} ítem(s) de transporte registrados.")
         except Exception as exc:
             messages.error(request, f"Error al registrar transporte: {exc}")
             logger.exception("[APUTransporteView] Error APU %s", pk)
@@ -2851,29 +2927,32 @@ class APULineaUpdateView(GestionPresupuestosMixin, View):
         if blk:
             return blk
 
+        # Fase 3.C: en un TipoAPU que opera con paquetes la resumen es resultado
+        # del cálculo (componentes → ReglaAPUSubsistema) y los componentes se
+        # editan con APUComponenteUpdateView. Este endpoint queda para la
+        # estructura anterior.
+        if linea.apu_paquete_id or linea.apu.paquetes.filter(tipo_apu=linea.tipo).exists():
+            messages.error(
+                request,
+                "En los tipos que se calculan por paquetes la línea resumen es de solo lectura; "
+                "use «Configurar APU» para editar cantidades, precios o porcentajes.",
+            )
+            return redirect(reverse("presupuestos:apu_detail", args=[apu_pk]))
+
         try:
-            if linea.tipo == TipoAPU.ADMINISTRACION:
-                porcentaje_str = request.POST.get("rendimiento", "").strip()
-                precio_str = request.POST.get("precio_referencia", "").strip()
-
-                linea.rendimiento = Decimal(str(porcentaje_str)) if porcentaje_str else linea.rendimiento
-                linea.precio_referencia = Decimal(str(precio_str)) if precio_str else linea.precio_referencia
-
-                valor_total = (linea.precio_referencia * linea.admin_cantidad * linea.admin_numero_meses * linea.rendimiento)
-                linea.costo_total = valor_total
-                linea.valor_total = valor_total
-                linea.costo_unitario = valor_total
-                linea.valor_unitario = valor_total
-                linea.save(update_fields=["rendimiento", "precio_referencia", "costo_total", "valor_total", "costo_unitario", "valor_unitario", "updated_at"])
-            else:
-                rend_str = request.POST.get("rendimiento", "").strip()
-                precio_str = request.POST.get("precio_referencia", "").strip()
-                if rend_str:
-                    linea.rendimiento = Decimal(str(float(rend_str)))
-                if precio_str:
-                    linea.precio_referencia = Decimal(str(float(precio_str)))
-                linea.save(update_fields=["rendimiento", "precio_referencia", "updated_at"])
-                linea.calcular() # El método calcular() ya hace el save final
+            # Todas las categorías (incluida ADMINISTRACION, cuya línea resumen
+            # guarda rendimiento = % de aplicación y precio_referencia = resultado
+            # de la regla) se recalculan igual: costo = rendimiento × precio.
+            rend_str = request.POST.get("rendimiento", "").strip().replace(",", ".")
+            precio_str = request.POST.get("precio_referencia", "").strip().replace(",", ".")
+            if rend_str:
+                linea.rendimiento = Decimal(rend_str)
+            if precio_str:
+                linea.precio_referencia = Decimal(precio_str)
+            if linea.rendimiento < 0 or linea.precio_referencia < 0:
+                raise ValueError("Rendimiento y precio no pueden ser negativos.")
+            linea.save(update_fields=["rendimiento", "precio_referencia", "updated_at"])
+            linea.calcular()  # persiste costos y dispara el recálculo del APU
 
             linea.apu.recalcular()
             messages.success(request, f"Línea «{linea.descripcion}» actualizada.")
@@ -2882,6 +2961,358 @@ class APULineaUpdateView(GestionPresupuestosMixin, View):
             logger.exception("[APULineaUpdateView] Error línea %s", pk)
 
         return redirect(reverse("presupuestos:apu_detail", args=[apu_pk]))
+
+
+# ── Paquetes APU en el proyecto (Fase 2) + Configurar APU (Fase 3.C) ─────────
+
+TIPOS_CONFIG_APU = [
+    ("MANO_DE_OBRA", "Mano de obra", "people"),
+    ("HERRAMIENTAS_EQUIPOS", "Herramientas", "tools"),
+    ("TRANSPORTE", "Transporte", "truck"),
+    ("ADMINISTRACION", "Administración", "briefcase"),
+]
+
+
+def _es_ajax(request) -> bool:
+    return request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+
+def _estructura_tipo_apu(apu, tipo, lineas_tipo=None, paquetes=None) -> dict:
+    """
+    Fase 3.C — estructura de un TipoAPU no material para la vista y el
+    configurador. Solo presentación: los importes salen de las líneas ya
+    calculadas por APUService (aporte = precio_referencia × cantidad con la
+    misma `_cantidad_linea` del servicio).
+
+      modo = "paquetes" → hay APUPaquete del tipo: bloques por paquete +
+                          ítems adicionales + una resumen (solo lectura).
+             "legacy"   → estructura anterior (resúmenes por categoría).
+             "vacio"    → sin líneas.
+    """
+    from apps.presupuestos.economia import calcular_aporte
+    from apps.presupuestos.services.apu_service import APUService
+
+    if lineas_tipo is None:
+        lineas_tipo = list(
+            apu.lineas.filter(tipo=tipo)
+            .select_related("item_catalogo__categoria", "apu_paquete")
+            .order_by("id")
+        )
+    if paquetes is None:
+        paquetes = list(apu.paquetes.filter(tipo_apu=tipo).order_by("orden", "id"))
+    paquetes = [p for p in paquetes if p.tipo_apu == tipo]
+
+    def _anotar(ln):
+        ln.cantidad_efectiva = APUService._cantidad_linea(ln, tipo)
+        ln.aporte = calcular_aporte(ln.precio_referencia, ln.cantidad_efectiva)
+        ln.porcentaje = (ln.rendimiento * 100) if ln.rendimiento is not None else None
+        item = ln.item_catalogo
+        ln.valor_diario_catalogo = item.valor_diario_o_none if item is not None else None
+        ln.search_text = " ".join(filter(None, [
+            ln.descripcion, item.codigo if item else "", item.categoria.nombre if item else "",
+            ln.apu_paquete.nombre_snapshot if ln.apu_paquete_id else "",
+        ])).lower()
+        return ln
+
+    componentes = [l for l in lineas_tipo if l.item_catalogo_id or l.apu_paquete_id]
+    resumenes = [l for l in lineas_tipo
+                 if not l.item_catalogo_id and not l.apu_paquete_id and not l.despiece_linea_id]
+    for ln in componentes:
+        _anotar(ln)
+
+    bloques = []
+    for ap in paquetes:
+        comps = [l for l in componentes if l.apu_paquete_id == ap.pk]
+        bloques.append({
+            "ap": ap,
+            "componentes": comps,
+            "subtotal": sum((l.aporte for l in comps), Decimal("0")),
+            "search_text": ap.nombre_snapshot.lower(),
+        })
+    sueltos = [l for l in componentes if not l.apu_paquete_id]
+
+    if paquetes:
+        modo = "paquetes"
+    elif lineas_tipo:
+        modo = "legacy"
+    else:
+        modo = "vacio"
+    return {
+        "tipo": tipo,
+        "modo": modo,
+        "bloques": bloques,
+        "sueltos": sueltos,
+        "suma_sueltos": sum((l.aporte for l in sueltos), Decimal("0")),
+        "suma": sum((l.aporte for l in componentes), Decimal("0")),
+        "resumen": resumenes[0] if modo == "paquetes" and resumenes else None,
+        "resumenes_legacy": resumenes if modo == "legacy" else [],
+        "n_componentes": len(componentes),
+        "es_admin": tipo == "ADMINISTRACION",
+    }
+
+
+def _contexto_config_apu(apu, tipo) -> dict:
+    info = next((t for t in TIPOS_CONFIG_APU if t[0] == tipo), None)
+    est = _estructura_tipo_apu(apu, tipo)
+    subtotal_campo = {
+        "MANO_DE_OBRA": "subtotal_mano_obra",
+        "HERRAMIENTAS_EQUIPOS": "subtotal_herramientas",
+        "TRANSPORTE": "subtotal_transporte",
+        "ADMINISTRACION": "subtotal_administracion",
+    }[tipo]
+    return {
+        "apu": apu,
+        "tipo": tipo,
+        "tipo_label": info[1],
+        "tipo_icono": info[2],
+        "est": est,
+        "subtotal_tipo": getattr(apu, subtotal_campo),
+        "bloqueado": apu.esta_aprobado,
+        "modal_sueltos": {
+            "MANO_DE_OBRA": "#modalManoObra",
+            "HERRAMIENTAS_EQUIPOS": "#modalHerramientas",
+            "TRANSPORTE": "#modalTransporte",
+            "ADMINISTRACION": "#modalAdmin",
+        }[tipo],
+    }
+
+
+def _respuesta_config_apu(request, apu, tipo, mensaje, ok=True, status=200, extra=None):
+    """AJAX → JSON con el panel del tipo re-renderizado y los totales del APU
+    (fuente económica: backend). Sin AJAX → mensaje + redirección al detalle."""
+    destino = reverse("presupuestos:apu_detail", args=[apu.pk])
+    if not _es_ajax(request):
+        (messages.success if ok else messages.error)(request, mensaje)
+        return redirect(destino)
+    from apps.catalogos.templatetags.catalogo_tags import currency
+    apu.refresh_from_db()
+    data = {
+        "ok": ok,
+        "mensaje": mensaje,
+        "tipo": tipo,
+        "totales": {
+            "total_costo": currency(apu.total_costo),
+            "total_valor_venta": currency(apu.total_valor_venta),
+        },
+    }
+    if tipo in dict((t[0], t[1]) for t in TIPOS_CONFIG_APU):
+        data["html"] = render_to_string(
+            "presupuestos/partials/_apu_config_tipo.html",
+            _contexto_config_apu(apu, tipo), request=request,
+        )
+    if extra:
+        data.update(extra)
+    return JsonResponse(data, status=status)
+
+
+def _bloqueo_json(request, apu, tipo):
+    """Respuesta uniforme para APU aprobado (el servicio también lo bloquea)."""
+    if apu.esta_aprobado:
+        if _es_ajax(request):
+            return _respuesta_config_apu(request, apu, tipo, MENSAJE_BLOQUEO, ok=False, status=403)
+        return redirect_si_bloqueado(request, apu, reverse("presupuestos:apu_detail", args=[apu.pk]))
+    return None
+
+
+class APUConfigurarTipoView(GestionPresupuestosMixin, View):
+    """GET /presupuestos/apu/<pk>/configurar/<tipo>/ — panel del configurador
+    para un TipoAPU no material (HTML parcial). En APU aprobado se muestra en
+    modo lectura."""
+    def get(self, request, pk, tipo):
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        if tipo not in dict((t[0], t[1]) for t in TIPOS_CONFIG_APU):
+            return HttpResponse(status=404)
+        return render(request, "presupuestos/partials/_apu_config_tipo.html", _contexto_config_apu(apu, tipo))
+
+
+class APUPaquetesDisponiblesView(GestionPresupuestosMixin, View):
+    """GET /presupuestos/apu/<pk>/paquetes/disponibles/?tipo= — paquetes maestros
+    activos del tipo que aún no están en el APU, y si agregarlos convierte un
+    tipo con estructura anterior (con las líneas que se reemplazarían)."""
+    def get(self, request, pk):
+        from apps.presupuestos.models import PaqueteAPU
+        from apps.presupuestos.services.apu_service import APUService
+        from apps.presupuestos.services.paquete_service import resumen_paquete
+
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        tipo = request.GET.get("tipo", "")
+        if tipo not in dict((t[0], t[1]) for t in TIPOS_CONFIG_APU):
+            return JsonResponse({"error": "Tipo APU no válido para paquetes."}, status=400)
+        en_apu = set(apu.paquetes.values_list("paquete_origen_id", flat=True))
+        salida = []
+        for p in PaqueteAPU.objects.filter(activo=True, tipo_apu=tipo).exclude(pk__in=en_apu).order_by("nombre"):
+            r = resumen_paquete(p)
+            salida.append({
+                "id": p.pk, "nombre": p.nombre, "descripcion": p.descripcion,
+                "n_componentes": r["n_componentes"], "n_pendientes": r["n_pendientes"],
+                "valor_fmt": r["valor_fmt"],
+            })
+        conversion = None
+        if apu.proyecto_sistema_id and not apu.paquetes.filter(tipo_apu=tipo).exists() \
+                and apu.lineas.filter(tipo=tipo).exists():
+            reemplazadas = APUService.for_apu(apu).lineas_reemplazadas_al_convertir(tipo)
+            conversion = {"lineas": [l.descripcion for l in reemplazadas]}
+        return JsonResponse({"tipo": tipo, "paquetes": salida, "conversion": conversion})
+
+
+class APUPaqueteAgregarView(GestionPresupuestosMixin, View):
+    """POST /presupuestos/apu/<pk>/paquetes/agregar/ — paquete_id.
+    Instancia un paquete maestro activo en el APU (snapshot APUPaquete + líneas)
+    con `APUService.agregar_paquete`. No modifica el subsistema ni el maestro.
+
+    Fase 3.C: si el tipo todavía usa la estructura anterior (resúmenes por
+    categoría), la conversión debe confirmarse explícitamente con
+    `confirmar_conversion=1`; si no, responde 409 con las líneas afectadas."""
+    def post(self, request, pk):
+        from apps.presupuestos.models import PaqueteAPU
+        from apps.presupuestos.services.apu_service import APUService
+
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        paquete = get_object_or_404(PaqueteAPU, pk=request.POST.get("paquete_id") or 0)
+        tipo = paquete.tipo_apu
+        blk = _bloqueo_json(request, apu, tipo)
+        if blk:
+            return blk
+        svc = APUService.for_apu(apu)
+        convierte = (not apu.paquetes.filter(tipo_apu=tipo).exists()
+                     and apu.lineas.filter(tipo=tipo).exists())
+        if convierte and request.POST.get("confirmar_conversion") != "1":
+            lineas = [l.descripcion for l in svc.lineas_reemplazadas_al_convertir(tipo)]
+            return _respuesta_config_apu(
+                request, apu, tipo,
+                "Este tipo usa la estructura de cálculo anterior: confirme la conversión a paquetes.",
+                ok=False, status=409, extra={"requiere_conversion": True, "lineas": lineas},
+            )
+        try:
+            svc.agregar_paquete(paquete)
+        except Exception as exc:
+            logger.exception("[APUPaqueteAgregarView] APU %s paquete %s", pk, paquete.pk)
+            return _respuesta_config_apu(request, apu, tipo, f"No se pudo agregar el paquete: {exc}",
+                                         ok=False, status=400)
+        mensaje = f"Paquete «{paquete.nombre}» agregado a este APU. El APU se recalculó."
+        if convierte:
+            mensaje = (f"Paquete «{paquete.nombre}» agregado. Este tipo ahora se calcula por "
+                       "paquetes y el APU se recalculó.")
+        return _respuesta_config_apu(request, apu, tipo, mensaje)
+
+
+class APUPaqueteEliminarView(GestionPresupuestosMixin, View):
+    """POST /presupuestos/apu/paquete/<pk>/eliminar/ — quita un paquete de ESTE
+    APU (componentes + instancia) de forma atómica y recalcula su tipo. No
+    elimina el PaqueteAPU maestro ni toca el subsistema u otros APUs."""
+    def post(self, request, pk):
+        from apps.presupuestos.models import APUPaquete
+        from apps.presupuestos.services.apu_service import APUService
+
+        ap = get_object_or_404(APUPaquete.objects.select_related("apu"), pk=pk)
+        apu, tipo, nombre = ap.apu, ap.tipo_apu, ap.nombre_snapshot
+        blk = _bloqueo_json(request, apu, tipo)
+        if blk:
+            return blk
+        try:
+            APUService.for_apu(apu).eliminar_paquete(ap)
+        except Exception as exc:
+            logger.exception("[APUPaqueteEliminarView] APUPaquete %s", pk)
+            return _respuesta_config_apu(request, apu, tipo, f"No se pudo quitar el paquete: {exc}",
+                                         ok=False, status=400)
+        return _respuesta_config_apu(
+            request, apu, tipo,
+            f"Paquete «{nombre}» quitado de este APU. El paquete sigue en el catálogo. El APU se recalculó.",
+        )
+
+
+class APUComponenteUpdateView(GestionPresupuestosMixin, View):
+    """POST /presupuestos/apu/componente/<pk>/editar/
+    Override local de un componente: cantidad, precio_referencia (valor diario;
+    marca precio_personalizado) y, en Administración, porcentaje (%, 100 = 1.0).
+    No modifica catálogo, paquete maestro ni otros APUs."""
+    def post(self, request, pk):
+        from apps.presupuestos.services.apu_service import APUService
+
+        linea = get_object_or_404(APULinea.objects.select_related("apu"), pk=pk)
+        apu = linea.apu
+        blk = _bloqueo_json(request, apu, linea.tipo)
+        if blk:
+            return blk
+
+        def _dec(nombre):
+            raw = (request.POST.get(nombre) or "").strip().replace(",", ".")
+            return Decimal(raw) if raw else None
+
+        try:
+            porcentaje = _dec("porcentaje")
+            APUService.for_apu(apu).actualizar_componente(
+                linea,
+                cantidad=_dec("cantidad"),
+                precio=_dec("precio_referencia"),
+                porcentaje=(porcentaje / Decimal("100")) if porcentaje is not None else None,
+            )
+        except Exception as exc:
+            logger.exception("[APUComponenteUpdateView] línea %s", pk)
+            mensaje = str(exc) if not isinstance(exc, ArithmeticError) else "Valor numérico no válido."
+            return _respuesta_config_apu(request, apu, linea.tipo,
+                                         f"No se pudo actualizar «{linea.descripcion}»: {mensaje}",
+                                         ok=False, status=400)
+        return _respuesta_config_apu(request, apu, linea.tipo,
+                                     f"«{linea.descripcion}» actualizado. El APU se recalculó.")
+
+
+class APUComponenteRestablecerPrecioView(GestionPresupuestosMixin, View):
+    """POST /presupuestos/apu/componente/<pk>/restablecer-precio/ — vuelve al
+    valor diario vigente del catálogo (precio_personalizado = False)."""
+    def post(self, request, pk):
+        from apps.presupuestos.services.apu_service import APUService
+
+        linea = get_object_or_404(APULinea.objects.select_related("apu", "item_catalogo"), pk=pk)
+        apu = linea.apu
+        blk = _bloqueo_json(request, apu, linea.tipo)
+        if blk:
+            return blk
+        try:
+            APUService.for_apu(apu).restablecer_precio_catalogo(linea)
+        except Exception as exc:
+            logger.exception("[APUComponenteRestablecerPrecioView] línea %s", pk)
+            return _respuesta_config_apu(request, apu, linea.tipo,
+                                         f"No se pudo restablecer el precio: {exc}", ok=False, status=400)
+        return _respuesta_config_apu(request, apu, linea.tipo,
+                                     f"«{linea.descripcion}» vuelve al precio del catálogo. El APU se recalculó.")
+
+
+class APUResumenRendimientoView(GestionPresupuestosMixin, View):
+    """POST /presupuestos/apu/<pk>/rendimiento/<tipo>/ — fija el rendimiento del
+    resultado de un tipo calculado por paquetes (`rendimiento`, Decimal ≥ 0;
+    en Administración se recibe en %) o lo restablece (`restablecer=1`).
+    costo total = costo unit. × rendimiento; valor total = valor unit. × rendimiento."""
+    def post(self, request, pk, tipo):
+        from decimal import InvalidOperation
+        from apps.presupuestos.services.apu_service import APUService
+
+        apu = get_object_or_404(APUProyecto, pk=pk)
+        if tipo not in dict((t[0], t[1]) for t in TIPOS_CONFIG_APU):
+            return HttpResponse(status=404)
+        blk = _bloqueo_json(request, apu, tipo)
+        if blk:
+            return blk
+        try:
+            if request.POST.get("restablecer") == "1":
+                valor = None
+            else:
+                raw = (request.POST.get("rendimiento") or "").strip().replace(",", ".")
+                valor = Decimal(raw)
+                if not valor.is_finite() or valor < 0:
+                    raise ValueError("El rendimiento debe ser un número mayor o igual a cero.")
+                if tipo == TipoAPU.ADMINISTRACION:
+                    valor = valor / Decimal("100")
+                valor = valor.quantize(Decimal("0.000001"))
+            APUService.for_apu(apu).actualizar_rendimiento_resumen(tipo, valor)
+        except (InvalidOperation, ArithmeticError):
+            return _respuesta_config_apu(request, apu, tipo, "Rendimiento no válido.", ok=False, status=400)
+        except Exception as exc:
+            logger.exception("[APUResumenRendimientoView] APU %s %s", pk, tipo)
+            return _respuesta_config_apu(request, apu, tipo,
+                                         f"No se pudo actualizar el rendimiento: {exc}", ok=False, status=400)
+        mensaje = ("Rendimiento restablecido." if valor is None else "Rendimiento actualizado.")
+        return _respuesta_config_apu(request, apu, tipo, f"{mensaje} El APU se recalculó.")
 
 
 class APUArchivarView(AdminGerenteRequiredMixin, View):
@@ -3130,51 +3561,68 @@ class APUPolizasView(GestionPresupuestosMixin, View):
 # CATÁLOGO APU — Vista principal + CRUD
 # ══════════════════════════════════════════════════════════════════════════════
 
+# Orden de presentación de los TipoAPU en el catálogo.
+_ORDEN_TIPOS_CATALOGO = [
+    TipoAPU.MANO_DE_OBRA,
+    TipoAPU.HERRAMIENTAS_EQUIPOS,
+    TipoAPU.TRANSPORTE,
+    TipoAPU.ADMINISTRACION,
+    TipoAPU.MATERIALES,
+]
+
+from apps.presupuestos.services.paquete_service import TIPO_APU_ICONO  # noqa: E402
+
+
+def _resumen_paquete(paquete) -> dict:
+    """Datos de tarjeta/detalle de un paquete maestro (valor desde el modelo de Fase 2)."""
+    from apps.presupuestos.services.paquete_service import resumen_paquete
+    datos = resumen_paquete(paquete)
+    datos["en_uso_subsistemas"] = paquete.asignaciones_subsistema.count()
+    return datos
+
+
 class CatalogoAPUView(APUSistemaAccesoMixin, ListView):
     """
-    Página principal del catálogo APU.
-    Muestra las CategoriaItemAPU agrupadas por TipoAPU,
-    cada una con sus ítems. Funciona como la vista de catalogos.
+    Catálogo APU (Fase 3.A): paquetes maestros como tarjetas e ítems del
+    catálogo como listado compacto. La búsqueda y los filtros son de cliente.
     """
-    model = CategoriaItemAPU
+    model = ItemCatalogoAPU
     template_name = "presupuestos/catalogo_apu.html"
-    context_object_name = "categorias"
+    context_object_name = "items"
 
     def get_queryset(self):
         return (
-            CategoriaItemAPU.objects
-            .prefetch_related("items")
-            .order_by("tipo_apu", "orden", "nombre")
+            ItemCatalogoAPU.objects
+            .select_related("categoria")
+            .annotate(n_paquetes=Count("paquetes_items", distinct=True))
+            .order_by("categoria__tipo_apu", "categoria__orden", "categoria__nombre", "nombre")
         )
 
     def get_context_data(self, **kwargs):
+        from apps.presupuestos.models import PaqueteAPU
         ctx = super().get_context_data(**kwargs)
-        from collections import defaultdict
-        grupos = defaultdict(list)
-        for cat in ctx["categorias"]:
-            grupos[cat.tipo_apu].append(cat)
-        orden_tipos = [
-            TipoAPU.MANO_DE_OBRA,
-            TipoAPU.HERRAMIENTAS_EQUIPOS,
-            TipoAPU.TRANSPORTE,
-            TipoAPU.ADMINISTRACION,
-            TipoAPU.MATERIALES,
+        labels = dict(TipoAPU.choices)
+        items = list(ctx["items"])
+        for i in items:
+            i.tipo_icono = TIPO_APU_ICONO.get(i.categoria.tipo_apu, "circle")
+        categorias = list(CategoriaItemAPU.objects.annotate(n_items=Count("items")).order_by("tipo_apu", "orden", "nombre"))
+        paquetes = [
+            _resumen_paquete(p) for p in
+            PaqueteAPU.objects.prefetch_related("items__item_catalogo__categoria").order_by("-activo", "tipo_apu", "orden", "nombre")
         ]
-        ctx["grupos"] = [
-            {
-                "tipo": tipo,
-                "label": dict(TipoAPU.choices)[tipo],
-                "categorias": grupos.get(tipo, []),
-            }
-            for tipo in orden_tipos
-            if tipo in grupos
-        ]
-        ctx["presets"] = (
-            CuadrillaPreset.objects
-            .filter(activo=True)
-            .prefetch_related("items__item")
-        )
-        ctx["tipo_choices"] = TipoAPU.choices
+        tipos_presentes = {c.tipo_apu for c in categorias} | {p["obj"].tipo_apu for p in paquetes}
+        ctx.update({
+            "items": items,
+            "paquetes": paquetes,
+            "categorias": categorias,
+            "tipos": [(t, labels[t], TIPO_APU_ICONO[t]) for t in _ORDEN_TIPOS_CATALOGO if t in tipos_presentes],
+            "total_items": len(items),
+            "items_pendientes": sum(1 for i in items if not i.es_calculable),
+            "items_inactivos": sum(1 for i in items if not i.activo),
+            "hay_items_paquetizables": any(
+                i.activo and i.categoria.tipo_apu != TipoAPU.MATERIALES for i in items
+            ),
+        })
         return ctx
 
 
@@ -3194,7 +3642,7 @@ class CategoriaItemAPUUpdateView(APUSistemaAccesoMixin, UpdateView):
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
 
-class CategoriaItemAPUDeleteView(APUSistemaAccesoMixin, DeleteView):
+class CategoriaItemAPUDeleteView(APUSistemaAccesoMixin, EliminacionProtegidaMixin, DeleteView):
     model = CategoriaItemAPU
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
@@ -3202,12 +3650,36 @@ class CategoriaItemAPUDeleteView(APUSistemaAccesoMixin, DeleteView):
 
 # ── ItemCatalogoAPU CRUD ──────────────────────────────────────────────────────
 
-class ItemCatalogoAPUCreateView(APUSistemaAccesoMixin, CreateView):
+class _ItemCatalogoAPUFormMixin:
     model = ItemCatalogoAPU
     form_class = ItemCatalogoAPUForm
     template_name = "presupuestos/catalogo_apu_item_form.html"
-    success_url = reverse_lazy("presupuestos:catalogo_apu")
 
+    def get_success_url(self):
+        return reverse("presupuestos:catalogo_apu") + "#items"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        categorias = list(CategoriaItemAPU.objects.order_by("orden", "nombre"))
+        ctx["categorias_por_tipo"] = [
+            (label, [c for c in categorias if c.tipo_apu == tipo])
+            for tipo, label in TipoAPU.choices
+        ]
+        item = self.object
+        if item is not None and item.pk:
+            ctx["paquetes_del_item"] = list(
+                item.paquetes_items.select_related("paquete").order_by("paquete__nombre")
+            )
+            ctx["n_subsistemas"] = item.asociaciones_subsistema.count()
+        return ctx
+
+    def form_valid(self, form):
+        resp = super().form_valid(form)
+        messages.success(self.request, f"Ítem «{self.object.nombre}» guardado.")
+        return resp
+
+
+class ItemCatalogoAPUCreateView(APUSistemaAccesoMixin, _ItemCatalogoAPUFormMixin, CreateView):
     def get_initial(self):
         initial = super().get_initial()
         cat_pk = self.request.GET.get("categoria")
@@ -3216,11 +3688,8 @@ class ItemCatalogoAPUCreateView(APUSistemaAccesoMixin, CreateView):
         return initial
 
 
-class ItemCatalogoAPUUpdateView(APUSistemaAccesoMixin, UpdateView):
-    model = ItemCatalogoAPU
-    form_class = ItemCatalogoAPUForm
-    template_name = "presupuestos/catalogo_apu_item_form.html"
-    success_url = reverse_lazy("presupuestos:catalogo_apu")
+class ItemCatalogoAPUUpdateView(APUSistemaAccesoMixin, _ItemCatalogoAPUFormMixin, UpdateView):
+    pass
 
 
 class ItemCatalogoAPUDeleteView(APUSistemaAccesoMixin, DeleteView):
@@ -3228,65 +3697,166 @@ class ItemCatalogoAPUDeleteView(APUSistemaAccesoMixin, DeleteView):
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("presupuestos:catalogo_apu")
 
-
-# ── CuadrillaPreset CRUD ──────────────────────────────────────────────────────
-
-class CuadrillaPresetCreateView(AdminRequiredMixin, CreateView):
-    model = CuadrillaPreset
-    form_class = CuadrillaPresetForm
-    template_name = "presupuestos/cuadrilla_preset_form.html"
-    success_url = reverse_lazy("presupuestos:catalogo_apu")
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        if self.request.POST:
-            ctx["formset"] = CuadrillaPresetItemFormSet(self.request.POST)
-        else:
-            ctx["formset"] = CuadrillaPresetItemFormSet()
-        return ctx
-
     def form_valid(self, form):
-        ctx = self.get_context_data()
-        formset = ctx["formset"]
-        if formset.is_valid():
-            self.object = form.save()
-            formset.instance = self.object
-            formset.save()
-            messages.success(self.request, f"Cuadrilla «{self.object.nombre}» creada.")
-            return redirect(self.success_url)
-        return self.form_invalid(form)
+        from django.db.models import ProtectedError
+        try:
+            return super().form_valid(form)
+        except ProtectedError:
+            messages.error(
+                self.request,
+                f"«{self.object.nombre}» es componente de uno o más paquetes APU y no puede "
+                "eliminarse. Quítelo de esos paquetes o desactive el ítem.",
+            )
+            return redirect("presupuestos:catalogo_item_update", pk=self.object.pk)
 
 
-class CuadrillaPresetUpdateView(AdminRequiredMixin, UpdateView):
-    model = CuadrillaPreset
-    form_class = CuadrillaPresetForm
-    template_name = "presupuestos/cuadrilla_preset_form.html"
-    success_url = reverse_lazy("presupuestos:catalogo_apu")
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        if self.request.POST:
-            ctx["formset"] = CuadrillaPresetItemFormSet(self.request.POST, instance=self.object)
-        else:
-            ctx["formset"] = CuadrillaPresetItemFormSet(instance=self.object)
-        return ctx
-
-    def form_valid(self, form):
-        ctx = self.get_context_data()
-        formset = ctx["formset"]
-        if formset.is_valid():
-            self.object = form.save()
-            formset.instance = self.object
-            formset.save()
-            messages.success(self.request, f"Cuadrilla «{self.object.nombre}» actualizada.")
-            return redirect(self.success_url)
-        return self.form_invalid(form)
+class ItemValorDiarioPreviewAPIView(APUSistemaAccesoMixin, View):
+    """
+    GET ?valor_base=&vida_util_dias= → valor diario calculado por el backend
+    (apps.presupuestos.economia). Solo previsualización del formulario del ítem.
+    """
+    def get(self, request):
+        from apps.presupuestos.economia import ValorDiarioError, calcular_valor_diario
+        from apps.presupuestos.services.paquete_service import formato_cop
+        vb = (request.GET.get("valor_base") or "").strip().replace(",", ".")
+        vida = (request.GET.get("vida_util_dias") or "").strip()
+        if not vida:
+            return JsonResponse({"calculable": False, "motivo": "pendiente"})
+        try:
+            vd = calcular_valor_diario(vb or "0", vida)
+        except (ValorDiarioError, ValueError):
+            return JsonResponse({"calculable": False, "motivo": "invalido"})
+        return JsonResponse({"calculable": True, "valor_diario": str(vd), "valor_diario_fmt": formato_cop(vd)})
 
 
-class CuadrillaPresetDeleteView(AdminRequiredMixin, DeleteView):
-    model = CuadrillaPreset
-    template_name = "confirm_delete.html"
-    success_url = reverse_lazy("presupuestos:catalogo_apu")
+# ── Paquetes APU maestros (Fase 3.A) ─────────────────────────────────────────
+
+class PaqueteAPUDetailView(APUSistemaAccesoMixin, View):
+    template_name = "presupuestos/catalogo_paquete_detail.html"
+
+    def get(self, request, pk):
+        from apps.presupuestos.models import PaqueteAPU
+        paquete = get_object_or_404(PaqueteAPU, pk=pk)
+        return render(request, self.template_name, {
+            "p": _resumen_paquete(paquete),
+            "n_instancias": paquete.instancias_apu.count(),
+        })
+
+
+class _PaqueteAPUBuilderView(APUSistemaAccesoMixin, View):
+    """Constructor de paquetes: datos generales + componentes, guardado atómico."""
+    template_name = "presupuestos/catalogo_paquete_form.html"
+
+    def _paquete(self, pk):
+        raise NotImplementedError
+
+    def _items_selector(self, paquete):
+        """Ítems activos no materiales + los ya presentes en el paquete (aunque estén inactivos)."""
+        from apps.presupuestos.services.paquete_service import item_a_dict
+        presentes = set(paquete.items.values_list("item_catalogo_id", flat=True)) if paquete.pk else set()
+        qs = (
+            ItemCatalogoAPU.objects.select_related("categoria")
+            .exclude(categoria__tipo_apu=TipoAPU.MATERIALES)
+            .filter(Q(activo=True) | Q(pk__in=presentes))
+            .order_by("categoria__nombre", "nombre")
+        )
+        return [item_a_dict(i) for i in qs]
+
+    def _render(self, request, paquete, form, filas, errores=None):
+        from apps.presupuestos.models.apu import TIPOS_PAQUETE_APU
+        return render(request, self.template_name, {
+            "paquete": paquete,
+            "form": form,
+            "items_json": self._items_selector(paquete),
+            "filas_json": filas,
+            "errores_componentes": errores or [],
+            "tipos_paquete": TIPOS_PAQUETE_APU,
+            "n_instancias": paquete.instancias_apu.count() if paquete.pk else 0,
+        })
+
+    def get(self, request, pk=None):
+        paquete = self._paquete(pk)
+        form = PaqueteAPUForm(instance=paquete, initial={} if paquete.pk else {"tipo_apu": request.GET.get("tipo", "")})
+        filas = [
+            {"item": c.item_catalogo_id, "cantidad": str(c.cantidad.normalize())}
+            for c in paquete.componentes()
+        ] if paquete.pk else []
+        return self._render(request, paquete, form, filas)
+
+    def post(self, request, pk=None):
+        from django.core.exceptions import ValidationError
+        from apps.presupuestos.services import paquete_service
+        paquete = self._paquete(pk)
+        form = PaqueteAPUForm(request.POST, instance=paquete)
+        try:
+            filas = json.loads(request.POST.get("componentes") or "[]")
+            if not isinstance(filas, list):
+                raise ValueError
+        except ValueError:
+            filas = []
+        if not form.is_valid():
+            return self._render(request, paquete, form, filas)
+        era_nuevo = paquete.pk is None
+        previos = set() if era_nuevo else set(paquete.items.values_list("item_catalogo_id", flat=True))
+        try:
+            componentes = paquete_service.parse_componentes(
+                filas, form.cleaned_data.get("tipo_apu") or paquete.tipo_apu,
+                permitidos_inactivos=previos,
+            )
+            paquete = paquete_service.guardar_paquete(form.save(commit=False), componentes)
+        except ValidationError as exc:
+            if era_nuevo:  # la transacción se revirtió: el paquete sigue sin existir
+                paquete.pk = None
+                paquete._state.adding = True
+            return self._render(request, paquete, form, filas, errores=exc.messages)
+        messages.success(request, f"Paquete «{paquete.nombre}» guardado.")
+        return redirect("presupuestos:catalogo_paquete_detail", pk=paquete.pk)
+
+
+class PaqueteAPUCreateView(_PaqueteAPUBuilderView):
+    def _paquete(self, pk):
+        from apps.presupuestos.models import PaqueteAPU
+        return PaqueteAPU()
+
+
+class PaqueteAPUUpdateView(_PaqueteAPUBuilderView):
+    def _paquete(self, pk):
+        from apps.presupuestos.models import PaqueteAPU
+        return get_object_or_404(PaqueteAPU, pk=pk)
+
+
+class PaqueteAPUToggleActivoView(APUSistemaAccesoMixin, View):
+    """POST: activa/desactiva un paquete. No hay borrado (PROTECT + trazabilidad)."""
+    def post(self, request, pk):
+        from apps.presupuestos.models import PaqueteAPU
+        paquete = get_object_or_404(PaqueteAPU, pk=pk)
+        paquete.activo = not paquete.activo
+        paquete.save(update_fields=["activo", "updated_at"])
+        messages.success(
+            request,
+            f"Paquete «{paquete.nombre}» {'activado' if paquete.activo else 'desactivado'}.",
+        )
+        destino = request.POST.get("next") or ""
+        if destino.startswith("/") and not destino.startswith("//"):
+            return redirect(destino)
+        return redirect(reverse("presupuestos:catalogo_apu") + "#paquetes")
+
+
+class PaquetePreviewAPIView(APUSistemaAccesoMixin, View):
+    """
+    POST JSON {"componentes": [{"item": id, "cantidad": "2"}]} → aportes y total
+    calculados en backend (valor_diario × cantidad). Solo previsualización.
+    """
+    def post(self, request):
+        from apps.presupuestos.services.paquete_service import previsualizar
+        try:
+            data = json.loads(request.body or "{}")
+            filas = data.get("componentes") or []
+            if not isinstance(filas, list):
+                raise ValueError
+        except (ValueError, AttributeError):
+            return JsonResponse({"error": "JSON inválido."}, status=400)
+        return JsonResponse(previsualizar(filas[:500]))
 
 
 # ── API: ítems del catálogo por tipo APU ─────────────────────────────────────
@@ -3301,8 +3871,7 @@ class ItemsCatalogoAPIView(View):
             ItemCatalogoAPU.objects
             .filter(activo=True, categoria__tipo_apu=tipo_apu)
             .select_related("categoria")
-            .values("pk", "nombre", "precio_base", "unidad",
-                    "salario_base", "prestaciones", "vida_util_dias",
+            .values("pk", "nombre", "valor_base", "unidad", "vida_util_dias",
                     "categoria__nombre")
         )
         return JsonResponse({"items": items, "tipo_apu": tipo_apu})
@@ -4354,111 +4923,9 @@ class APUCotizacionFinalView(GestionPresupuestosMixin, View):
         })
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Fase 11.5 — Consolidación opcional de APUs
-# ─────────────────────────────────────────────────────────────────────────────
-
-class APUConsolidarSeleccionarView(GestionPresupuestosMixin, View):
-    """
-    GET — Pinta la página de selección de APUs del proyecto.
-    POST → preview.
-    La consolidación es opcional. El usuario decide si la usa.
-    """
-    template_name = "presupuestos/apu_consolidar_seleccionar.html"
-
-    def get(self, request, pk):
-        proyecto = get_object_or_404(Proyecto, pk=pk)
-        apus = self._apus_del_proyecto(proyecto)
-        return render(request, self.template_name, {
-            "proyecto": proyecto,
-            "apus_individuales": [a for a in apus if not a.es_consolidado],
-            "apus_consolidados": [a for a in apus if a.es_consolidado],
-        })
-
-    @staticmethod
-    def _apus_del_proyecto(proyecto):
-        # APUs individuales del proyecto via ProyectoSistema
-        del_proyecto = APUProyecto.objects.filter(
-            proyecto_sistema__proyecto=proyecto
-        )
-        # APUs consolidados via FK directa
-        consolidados = APUProyecto.objects.filter(proyecto=proyecto)
-        ids = list(del_proyecto.values_list("pk", flat=True)) + \
-              list(consolidados.values_list("pk", flat=True))
-        return (
-            APUProyecto.objects
-            .filter(pk__in=ids)
-            .select_related("proyecto_sistema__subsistema__sistema")
-            .order_by("tipo_apu", "pk")
-        )
-
-
-class APUConsolidarPreviewView(GestionPresupuestosMixin, View):
-    """
-    POST — recibe ids de APUs y muestra el resumen previo. No persiste.
-    Botón "Confirmar" envía a APUConsolidarConfirmarView.
-    """
-    template_name = "presupuestos/apu_consolidar_preview.html"
-
-    def post(self, request, pk):
-        from apps.presupuestos.services.apu_consolidacion_facade import (
-            APUConsolidacionFacade,
-        )
-        proyecto = get_object_or_404(Proyecto, pk=pk)
-        ids = request.POST.getlist("apus")
-        validacion, resumen = APUConsolidacionFacade.preview(proyecto, ids)
-
-        if not validacion.ok:
-            for err in validacion.errores:
-                messages.error(request, err)
-            return redirect("presupuestos:apu_consolidar_seleccionar", pk=proyecto.pk)
-
-        return render(request, self.template_name, {
-            "proyecto": proyecto,
-            "apus_origen": validacion.apus,
-            "resumen": resumen,
-            "ids_csv": ",".join(str(a.pk) for a in validacion.apus),
-        })
-
-
-class APUConsolidarConfirmarView(GestionPresupuestosMixin, View):
-    """
-    POST — confirma y persiste el APU consolidado. Redirige a apu_detail.
-    """
-    def post(self, request, pk):
-        from apps.presupuestos.services.apu_consolidacion_facade import (
-            APUConsolidacionFacade,
-        )
-        proyecto = get_object_or_404(Proyecto, pk=pk)
-        ids_csv = request.POST.get("ids_csv", "")
-        ids = [int(x) for x in ids_csv.split(",") if x.strip().isdigit()]
-        nombre = (request.POST.get("nombre") or "").strip()
-
-        validacion, apu_consolidado = APUConsolidacionFacade.consolidar(
-            proyecto=proyecto, apu_ids=ids, nombre=nombre,
-        )
-        if not validacion.ok or apu_consolidado is None:
-            for err in validacion.errores:
-                messages.error(request, err)
-            return redirect("presupuestos:apu_consolidar_seleccionar", pk=proyecto.pk)
-
-        messages.success(
-            request,
-            f"APU consolidado #{apu_consolidado.pk} creado a partir de "
-            f"{len(validacion.apus)} APUs individuales.",
-        )
-        registrar_log(
-            request,
-            accion="CONSOLIDAR_APU",
-            descripcion=(
-                f"APU consolidado #{apu_consolidado.pk} creado a partir de "
-                f"APUs {[a.pk for a in validacion.apus]} "
-                f"en proyecto {proyecto.consecutivo}"
-            ),
-            modelo_afectado="Proyecto",
-            objeto_id=proyecto.pk,
-        )
-        return redirect("presupuestos:apu_detail", pk=apu_consolidado.pk)
+# Fase 11.5 — La CREACIÓN manual de APU consolidados ("Unir APUs y consolidar
+# materiales") se retiró en la Fase 3.C. Los consolidados históricos se siguen
+# mostrando (detalle, PDF, snapshots) con `_build_apu_consolidado_context`.
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4652,9 +5119,21 @@ class ProyectoPresupuestoView(GestionPresupuestosMixin, View):
             rol__in=[RolSistema.ADMINISTRADOR, RolSistema.GERENTE, RolSistema.PRESUPUESTOS],
         ).order_by("nombre_completo")
 
+        # Fase 3.D — presentación comercial (solo presentación) y resumen
+        # económico de los APU. Ninguno de los dos altera `filas` ni `aiu`.
+        from apps.presupuestos.services import presentacion_comercial_service as pcs
+        from apps.presupuestos.services.presupuesto_resumen_service import resumen_apus_presupuesto
+        items = pcs.construir_items(filas)
+
         return render(request, self.template_name, {
             "proyecto": proyecto,
             "filas": filas,
+            "items": items,
+            "items_json": [pcs.item_a_json(it) for it in items],
+            "items_ajuste": pcs.items_requieren_ajuste(items),
+            "hay_desglose": pcs.hay_desglose(items),
+            "resumen_apus": resumen_apus_presupuesto(apus),
+            "bloqueado": pcs.presupuesto_bloqueado(proyecto, apus),
             "aiu": aiu,
             "pct_imprevistos": pct_i,
             "pct_utilidad": pct_u,
@@ -4666,24 +5145,29 @@ class ProyectoPresupuestoView(GestionPresupuestosMixin, View):
 
     def post(self, request, pk):
         """
-        Guarda las descripciones de los APUs y redirige de vuelta (preview).
-        Si se confirma, guarda el APU principal como "enviado a revisión".
+        Vista previa de porcentajes (redirige de vuelta) o confirmación: guarda
+        AIU/revisor en los APUs y envía el presupuesto a revisión.
+
+        Fase 3.D:
+          - La descripción comercial ya no se edita aquí (ni escribe
+            APUProyecto.descripcion): vive en la presentación comercial.
+          - (D9) Un presupuesto bloqueado por aprobación no admite escrituras.
+          - No se confirma con presentaciones desglosadas que requieren ajuste.
         """
         from decimal import Decimal as _D, InvalidOperation
         from apps.configuracion.models import ConfiguracionSistema
         from apps.common.choices import RolSistema
         from django.utils import timezone
+        from apps.common.apu_lock import MENSAJE_BLOQUEO
+        from apps.presupuestos.services import presentacion_comercial_service as pcs
 
         proyecto = get_object_or_404(Proyecto, pk=pk)
         apus = self._get_apus_guardados(proyecto)
 
-        # 1. Guardar descripciones por APU
-        for apu in apus:
-            desc_key = f"descripcion_{apu.pk}"
-            nueva_desc = request.POST.get(desc_key, "").strip()
-            if nueva_desc != apu.descripcion:
-                apu.descripcion = nueva_desc
-                apu.save(update_fields=["descripcion", "updated_at"])
+        # 1. Bloqueo por aprobación (regla única de apps.common.apu_lock)
+        if pcs.presupuesto_bloqueado(proyecto, apus):
+            messages.error(request, MENSAJE_BLOQUEO)
+            return redirect(reverse("presupuestos:proyecto_presupuesto", args=[pk]))
 
         # 2. Leer porcentajes AIU
         def _pct(name, default):
@@ -4703,6 +5187,20 @@ class ProyectoPresupuestoView(GestionPresupuestosMixin, View):
 
         if accion == "confirmar":
             from apps.common.choices import EstadoProyecto
+
+            # Fase 3.D (D3) — no se envía un presupuesto con un desglose
+            # comercial que ya no suma la cantidad económica actual.
+            ajuste = pcs.items_requieren_ajuste(pcs.construir_items(self._build_filas(apus)))
+            if ajuste:
+                nombres = ", ".join(f"«{it['nombre']}»" for it in ajuste)
+                messages.error(
+                    request,
+                    f"No se puede enviar a revisión: la presentación de {nombres} requiere "
+                    "ajuste (el desglose no suma la cantidad económica actual). "
+                    "Redistribuye las cantidades o vuelve a una sola línea.",
+                )
+                return redirect(reverse("presupuestos:proyecto_presupuesto", args=[pk]))
+
             # Persistir porcentajes en todos los APUs del proyecto
             revisor_id_str = request.POST.get("revisor_id", "")
             revisor_obj = None
@@ -4770,6 +5268,91 @@ class ProyectoPresupuestoView(GestionPresupuestosMixin, View):
         return redirect(
             reverse("presupuestos:proyecto_presupuesto", args=[pk]) + f"?{params}"
         )
+
+
+def _respuesta_presentacion(request, proyecto, ok, mensaje, status=200, **extra):
+    """JSON para el modal (AJAX); si no, mensaje + redirect al presupuesto."""
+    if _es_ajax(request):
+        return JsonResponse({"ok": ok, "mensaje": mensaje, **extra}, status=status)
+    (messages.success if ok else messages.error)(request, mensaje)
+    return redirect(reverse("presupuestos:proyecto_presupuesto", args=[proyecto.pk]))
+
+
+class ProyectoPresentacionGuardarView(GestionPresupuestosMixin, View):
+    """
+    POST /presupuestos/proyectos/<pk>/presupuesto/presentacion/<apu_pk>/
+
+    Fase 3.D — guarda la presentación comercial COMPLETA de un ítem (una sola
+    línea o desglose) en una transacción. Cuerpo JSON:
+        {"modo": "una"|"desglose", "nombre_comercial", "descripcion_comercial",
+         "lineas": [{"nombre", "descripcion", "cantidad"}]}
+    (o el mismo JSON en el campo de formulario `datos`).
+    No modifica el APU, su descripción, la cantidad, el P.U. ni el AIU.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk, apu_pk):
+        from apps.presupuestos.services import presentacion_comercial_service as pcs
+
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        try:
+            crudo = request.body if request.content_type == "application/json" else request.POST.get("datos", "")
+            datos = json.loads(crudo or "{}")
+            if not isinstance(datos, dict):
+                raise ValueError
+        except (ValueError, UnicodeDecodeError):
+            return _respuesta_presentacion(request, proyecto, False,
+                                           "Los datos de la presentación no son válidos.", status=400)
+
+        try:
+            pres = pcs.guardar_presentacion(proyecto, apu_pk, datos, usuario=get_usuario_actual(request))
+        except pcs.PresentacionBloqueada as exc:
+            return _respuesta_presentacion(request, proyecto, False, str(exc), status=403)
+        except pcs.PresentacionError as exc:
+            return _respuesta_presentacion(
+                request, proyecto, False, str(exc), status=400,
+                errores=exc.errores, lineas={str(k): v for k, v in exc.lineas.items()},
+            )
+
+        if pres is None:
+            mensaje = "El ítem vuelve a la presentación original."
+        elif datos.get("modo") == pcs.MODO_DESGLOSE:
+            mensaje = f"Presentación guardada: desglose en {pres.lineas.count()} líneas."
+        else:
+            mensaje = "Presentación guardada: una sola línea."
+        registrar_log(
+            request, accion="PRESENTACION_COMERCIAL",
+            descripcion=f"Presentación comercial del APU {apu_pk} en el presupuesto del proyecto {proyecto.pk}: {mensaje}",
+            modelo_afectado="APUProyecto", objeto_id=apu_pk,
+        )
+        return _respuesta_presentacion(request, proyecto, True, mensaje)
+
+
+class ProyectoPresentacionRestablecerView(GestionPresupuestosMixin, View):
+    """
+    POST /presupuestos/proyectos/<pk>/presupuesto/presentacion/<apu_pk>/restablecer/
+
+    Fase 3.D — elimina la presentación comercial del ítem (CASCADE a sus
+    líneas). El APU no se modifica; vuelven a usarse los datos originales.
+    """
+    http_method_names = ["post"]
+
+    def post(self, request, pk, apu_pk):
+        from apps.presupuestos.services import presentacion_comercial_service as pcs
+
+        proyecto = get_object_or_404(Proyecto, pk=pk)
+        try:
+            pcs.restablecer_presentacion(proyecto, apu_pk)
+        except pcs.PresentacionBloqueada as exc:
+            return _respuesta_presentacion(request, proyecto, False, str(exc), status=403)
+        except pcs.PresentacionError as exc:
+            return _respuesta_presentacion(request, proyecto, False, str(exc), status=400)
+        registrar_log(
+            request, accion="PRESENTACION_COMERCIAL",
+            descripcion=f"Presentación original restablecida para el APU {apu_pk} (proyecto {proyecto.pk}).",
+            modelo_afectado="APUProyecto", objeto_id=apu_pk,
+        )
+        return _respuesta_presentacion(request, proyecto, True, "Presentación original restablecida.")
 
 
 class ProyectoRevisarView(GestionPresupuestosMixin, View):
@@ -4925,6 +5508,13 @@ class ProyectoRevisarView(GestionPresupuestosMixin, View):
         aiu = self._calcular_aiu(filas, pct_i, pct_u, aplica_iva, iva_pct)
         aprobado = (proyecto.estado == EstadoProyecto.APROBADO)
 
+        # Fase 3.D — misma presentación comercial que el presupuesto y el PDF.
+        from apps.presupuestos.services.presentacion_comercial_service import (
+            construir_items, hay_desglose,
+        )
+        from apps.presupuestos.services.presupuesto_resumen_service import resumen_apus_presupuesto
+        items = construir_items(filas)
+
         # Segregación de funciones: la plantilla oculta los botones cuando el
         # usuario no puede autorizar y explica el motivo. El POST vuelve a
         # validar — esto es solo la capa visual.
@@ -4938,6 +5528,9 @@ class ProyectoRevisarView(GestionPresupuestosMixin, View):
         return render(request, self.template_name, {
             "proyecto": proyecto,
             "filas": filas,
+            "items": items,
+            "hay_desglose": hay_desglose(items),
+            "resumen_apus": resumen_apus_presupuesto(apus),
             "aiu": aiu,
             "pct_imprevistos": pct_i,
             "pct_utilidad": pct_u,
@@ -5164,9 +5757,18 @@ class ProyectoPDFClienteView(DescargaPDFMixin, View):
         aiu = revisar_view._calcular_aiu(filas, pct_i, pct_u, aplica_iva, iva_pct)
         aprobado = (proyecto.estado == EstadoProyecto.APROBADO)
 
+        # Fase 3.D — presentación comercial. Un desglose inválido no llega al
+        # documento: el ítem sale en una sola línea económica.
+        from apps.presupuestos.services.presentacion_comercial_service import (
+            construir_items, hay_desglose,
+        )
+        items = construir_items(filas)
+
         ctx = {
             "proyecto": proyecto,
             "filas": filas,
+            "items": items,
+            "hay_desglose": hay_desglose(items),
             "aiu": aiu,
             "aprobado": aprobado,
             "fecha_generacion": date.today().strftime("%d/%m/%Y"),

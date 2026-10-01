@@ -79,10 +79,18 @@
       </div>
     </div>
     <div>
+      {% if cat.est.modo == "paquetes" %}
+      {# Fase 3.C: en tipos calculados por paquetes se muestran los paquetes de este APU #}
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Paquetes en este APU</div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink);">
+        {{ cat.est.bloques|length }}{% if cat.est.sueltos %} · {{ cat.est.sueltos|length }} ítem{{ cat.est.sueltos|length|pluralize }} adicional{{ cat.est.sueltos|length|pluralize:"es" }}{% endif %}
+      </div>
+      {% else %}
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);">Ítems configurados</div>
       <div style="font-size:12px;font-weight:600;color:var(--ink);">
         {{ ic.items_configurados|default:0 }}
       </div>
+      {% endif %}
     </div>
     {# Fase 6L-6: se eliminó "Base de cálculo" — texto técnico no deseado. #}
   </div>

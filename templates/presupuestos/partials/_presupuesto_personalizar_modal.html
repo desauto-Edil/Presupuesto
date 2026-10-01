@@ -1,0 +1,105 @@
+{# Fase 3.D — Modal "Personalizar presentación". Va FUERA de #formPresupuesto (sin formularios anidados). #}
+{# Guarda la presentación completa en un solo POST; el backend valida y persiste atómicamente.         #}
+{# Contexto: proyecto, items_json.                                                                       #}
+{{ items_json|json_script:"prItemsData" }}
+<div class="modal fade pr-modal" id="prPersonalizar" tabindex="-1" aria-labelledby="prPersonalizarTitle" aria-hidden="true"
+     data-pr-modal
+     data-url-guardar="{% url 'presupuestos:proyecto_presentacion_guardar' proyecto.pk 0 %}"
+     data-url-restablecer="{% url 'presupuestos:proyecto_presentacion_restablecer' proyecto.pk 0 %}">
+  {% csrf_token %}
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div style="min-width:0;">
+          <div class="capu-hero__eyebrow">Personalizar presentación</div>
+          <h5 class="modal-title pr-modal__title" id="prPersonalizarTitle" data-pr-titulo></h5>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+
+      <div class="modal-body">
+        {# 1. Origen (economía, solo lectura) #}
+        <div class="pr-origen">
+          <div class="pr-origen__label">Origen económico <span>· no cambia al personalizar</span></div>
+          <dl class="pr-origen__grid">
+            <div><dt>Nombre técnico</dt><dd data-pr-origen-nombre></dd></div>
+            <div><dt>Cantidad</dt><dd><span data-pr-origen-cantidad></span> <span data-pr-unidad></span></dd></div>
+            <div><dt>P.U.</dt><dd data-pr-origen-pu></dd></div>
+            <div><dt>Total</dt><dd data-pr-origen-total></dd></div>
+          </dl>
+        </div>
+
+        {# 2. Modo #}
+        <div class="pr-modo capu-seg" role="radiogroup" aria-label="Modo de presentación">
+          <button type="button" role="radio" data-pr-modo="una"><i class="bi bi-dash-lg"></i> Una sola línea</button>
+          <button type="button" role="radio" data-pr-modo="desglose"><i class="bi bi-diagram-3"></i> Desglosar</button>
+        </div>
+
+        {# 3. Presentación comercial #}
+        <div class="pr-campos">
+          <label class="pr-field">
+            <span>Nombre comercial <em>· vacío = nombre técnico</em></span>
+            <input type="text" class="form-control form-control-sm" maxlength="200" data-pr-nombre autocomplete="off">
+          </label>
+          <label class="pr-field">
+            <span>Descripción comercial <em>· vacío = descripción del APU</em></span>
+            <textarea class="form-control form-control-sm" rows="2" maxlength="2000" data-pr-descripcion></textarea>
+          </label>
+        </div>
+
+        {# 4. Desglose #}
+        <div class="pr-desglose" data-pr-desglose hidden>
+          <div class="pr-desglose__head">
+            <h6>Líneas del desglose</h6>
+            <button type="button" class="btn btn-ghost btn-sm" data-pr-add><i class="bi bi-plus-lg"></i> Agregar línea</button>
+          </div>
+          <p class="pr-desglose__hint">Unidad y P.U. se heredan del ítem económico. La suma de cantidades debe ser exactamente la cantidad económica.</p>
+          <div class="pr-lineas" data-pr-lineas></div>
+
+          {# 5. Validación en vivo (el backend vuelve a validarlo con Decimal) #}
+          <div class="pr-check" data-pr-check aria-live="polite">
+            <div><span>Cantidad económica</span><strong><span data-pr-check-eco></span> <span data-pr-unidad></span></strong></div>
+            <div><span>Distribuido</span><strong data-pr-check-dist></strong></div>
+            <div class="pr-check__diff"><span data-pr-check-diff-label>Pendiente</span><strong data-pr-check-diff></strong></div>
+          </div>
+        </div>
+
+        <div class="capu-note capu-note--error mt-3" data-pr-errores hidden>
+          <i class="bi bi-x-circle"></i><div data-pr-errores-texto></div>
+        </div>
+      </div>
+
+      {# 6. Acciones #}
+      <div class="modal-footer pr-modal__foot">
+        <button type="button" class="btn btn-link btn-sm me-auto pr-reset" data-pr-restablecer hidden>
+          <i class="bi bi-arrow-counterclockwise"></i> <span data-pr-restablecer-texto>Restablecer original</span>
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" data-pr-guardar><i class="bi bi-check2"></i> Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<template id="prLineaTpl">
+  <div class="pr-linea" data-pr-linea>
+    <span class="pr-linea__num" data-pr-num></span>
+    <div class="pr-linea__campos">
+      <input type="text" class="form-control form-control-sm" maxlength="200" placeholder="Nombre de la línea"
+             data-campo="nombre" aria-label="Nombre de la línea">
+      <input type="text" class="form-control form-control-sm pr-linea__desc" maxlength="2000"
+             placeholder="Descripción (opcional)" data-campo="descripcion" aria-label="Descripción de la línea">
+    </div>
+    <div class="pr-linea__cant">
+      <input type="text" inputmode="decimal" class="form-control form-control-sm" placeholder="0"
+             data-campo="cantidad" aria-label="Cantidad de la línea">
+      <span data-pr-unidad></span>
+    </div>
+    <div class="pr-linea__acc">
+      <button type="button" class="btn btn-ghost btn-xs" data-pr-up title="Subir" aria-label="Subir línea"><i class="bi bi-arrow-up"></i></button>
+      <button type="button" class="btn btn-ghost btn-xs" data-pr-down title="Bajar" aria-label="Bajar línea"><i class="bi bi-arrow-down"></i></button>
+      <button type="button" class="btn btn-ghost btn-xs pr-linea__del" data-pr-del title="Eliminar" aria-label="Eliminar línea"><i class="bi bi-trash"></i></button>
+    </div>
+    <div class="pr-linea__error" data-pr-linea-error hidden></div>
+  </div>
+</template>

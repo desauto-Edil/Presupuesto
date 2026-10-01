@@ -145,6 +145,17 @@
   table.main-table tbody tr:nth-child(odd)  { background: var(--white); }
   table.main-table tbody tr td { page-break-inside: avoid; }
 
+  /* Fase 3.D — ítem desglosado: cabecera + sublíneas + total económico */
+  table.main-table tbody.grupo { page-break-inside: avoid; }
+  table.main-table tbody.grupo tr { background: var(--white); }
+  table.main-table tr.grupo-head td { border-bottom-color: var(--gray-mid); }
+  table.main-table tr.grupo-sub td { color: var(--gray-dark); }
+  table.main-table tr.grupo-sub td.td-desc { padding-left: 18px; }
+  table.main-table tr.grupo-sub .importe { color: #666; }
+  table.main-table tr.grupo-total td { background: #F6F6F6; font-weight: 700; border-top: 1px solid var(--gray-mid); }
+  table.main-table .tree { color: var(--gray-mid); margin-right: 4px; }
+  .nota-desglose { font-size: 7pt; color: #666; margin: -10px 0 14px; }
+
   /* ── Resumen AIU ── */
   .resumen-wrap { display: flex; justify-content: flex-end; margin-bottom: 14px; }
   table.resumen-table {
@@ -305,28 +316,69 @@
       <th style="width:120px;">Subtotal</th>
     </tr>
   </thead>
-  <tbody>
-  {% for fila in filas %}
-  <tr>
-    <td>{{ forloop.counter }}</td>
+  {# Fase 3.D — presentación comercial. Solo cambia textos y la distribución de la #}
+  {# cantidad; P.U., totales y AIU son siempre los económicos. Un desglose inválido #}
+  {# no llega aquí: construir_items lo presenta en una sola línea económica.        #}
+  {% for it in items %}
+  {% if it.usa_desglose %}
+  <tbody class="grupo">
+  <tr class="grupo-head">
+    <td><strong>{{ it.numero }}</strong></td>
+    <td class="td-desc" colspan="5">
+      <strong>{{ it.nombre }}</strong>
+      {% if it.descripcion %}<br><span style="font-size:7.5pt;color:#555;">{{ it.descripcion|linebreaksbr }}</span>{% endif %}
+    </td>
+  </tr>
+  {% for sl in it.sublineas %}
+  <tr class="grupo-sub">
+    <td>{{ sl.numero }}</td>
     <td class="td-desc">
-      <strong>{{ fila.nombre }}</strong>
-      {% if fila.descripcion %}
-      <br><span style="font-size:7.5pt;color:#555;">{{ fila.descripcion }}</span>
+      <span class="tree">{% if forloop.last %}└{% else %}├{% endif %}</span>{{ sl.nombre }}
+      {% if sl.descripcion %}<br><span style="font-size:7.5pt;color:#555;">{{ sl.descripcion|linebreaksbr }}</span>{% endif %}
+    </td>
+    <td>{{ it.unidad|default:"und" }}</td>
+    <td class="td-num">{{ sl.cantidad|cantidad_fmt }}</td>
+    <td class="td-num">{{ it.valor_unitario|currency_nodec }}</td>
+    <td class="td-num importe">{{ sl.importe|currency_nodec }}</td>
+  </tr>
+  {% endfor %}
+  <tr class="grupo-total">
+    <td></td>
+    <td class="td-desc">Total ítem {{ it.numero }}</td>
+    <td>{{ it.unidad|default:"und" }}</td>
+    <td class="td-num">{{ it.cantidad|cantidad_fmt }}</td>
+    <td class="td-num">{{ it.valor_unitario|currency_nodec }}</td>
+    <td class="td-num">{{ it.valor_total|currency_nodec }}</td>
+  </tr>
+  </tbody>
+  {% else %}
+  <tbody>
+  <tr>
+    <td>{{ it.numero }}</td>
+    <td class="td-desc">
+      <strong>{{ it.nombre }}</strong>
+      {% if it.descripcion %}
+      <br><span style="font-size:7.5pt;color:#555;">{{ it.descripcion }}</span>
       {% endif %}
     </td>
-    <td>{{ fila.unidad|default:"und" }}</td>
-    <td class="td-num">{{ fila.cantidad|floatformat:2 }}</td>
-    <td class="td-num">{{ fila.valor_unitario|currency_nodec }}</td>
-    <td class="td-num"><strong>{{ fila.valor_total|currency_nodec }}</strong></td>
+    <td>{{ it.unidad|default:"und" }}</td>
+    <td class="td-num">{{ it.cantidad|cantidad_fmt }}</td>
+    <td class="td-num">{{ it.valor_unitario|currency_nodec }}</td>
+    <td class="td-num"><strong>{{ it.valor_total|currency_nodec }}</strong></td>
   </tr>
+  </tbody>
+  {% endif %}
   {% empty %}
+  <tbody>
   <tr>
     <td colspan="6" style="text-align:center;padding:20px;color:#888;">Sin ítems calculados.</td>
   </tr>
-  {% endfor %}
   </tbody>
+  {% endfor %}
 </table>
+{% if hay_desglose %}
+<p class="nota-desglose">En los ítems desglosados, el valor de cada línea es cantidad × valor unitario y es informativo; el subtotal del ítem es el valor total del ítem.</p>
+{% endif %}
 
 <!-- Resumen AIU -->
 <div class="resumen-wrap">

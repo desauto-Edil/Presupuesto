@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import ProyectoSistema, DespieceLinea, ConfiguracionAPU, APUProyecto, APULinea, CategoriaItemAPU
+from .models import (
+    ProyectoSistema, DespieceLinea, ConfiguracionAPU, APUProyecto, APULinea, CategoriaItemAPU,
+    PaqueteAPU, PaqueteAPUItem, APUPaquete,
+)
 
 
 class DespieceLineaInline(admin.TabularInline):
@@ -25,10 +28,10 @@ class DespieceLineaAdmin(admin.ModelAdmin):
 
 @admin.register(CategoriaItemAPU)
 class CategoriaItemAPUAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "tipo_apu", "aplica_dias_mensuales", "activa", "orden")
-    list_filter = ("tipo_apu", "activa", "aplica_dias_mensuales")
+    list_display = ("nombre", "tipo_apu", "activa", "orden")
+    list_filter = ("tipo_apu", "activa")
     search_fields = ("nombre",)
-    list_editable = ("aplica_dias_mensuales", "orden")
+    list_editable = ("orden",)
 
 
 @admin.register(ConfiguracionAPU)
@@ -55,3 +58,32 @@ class APUProyectoAdmin(admin.ModelAdmin):
         "total_costo", "total_valor_venta", "created_at", "updated_at",
     )
     inlines = [APULineaInline]
+
+
+# ── Paquetes APU (Fase 2) — verificación técnica; la UI llega en Fase 3 ──────
+
+class PaqueteAPUItemInline(admin.TabularInline):
+    model = PaqueteAPUItem
+    extra = 1
+    fields = ("item_catalogo", "cantidad", "orden")
+    ordering = ("orden",)
+
+
+@admin.register(PaqueteAPU)
+class PaqueteAPUAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "tipo_apu", "activo", "orden", "valor_paquete_display")
+    list_filter = ("tipo_apu", "activo")
+    search_fields = ("nombre",)
+    inlines = [PaqueteAPUItemInline]
+
+    @admin.display(description="Valor paquete (diario)")
+    def valor_paquete_display(self, obj):
+        valor = obj.valor_paquete()
+        return "Pendiente (ítems sin vida útil)" if valor is None else f"{valor:,.6f}"
+
+
+@admin.register(APUPaquete)
+class APUPaqueteAdmin(admin.ModelAdmin):
+    list_display = ("nombre_snapshot", "tipo_apu", "apu", "paquete_origen", "orden")
+    list_filter = ("tipo_apu",)
+    readonly_fields = ("apu", "paquete_origen", "nombre_snapshot", "tipo_apu", "created_at", "updated_at")

@@ -132,3 +132,30 @@ def currency_nodec(value, moneda_code="COP"):
     else:
         formatted = f"{num:,.0f}"
     return f"{symbol}{formatted}"
+
+
+@register.filter(name="cantidad_fmt")
+def cantidad_fmt(value, decimales=4):
+    """Cantidad con hasta `decimales` decimales, sin ceros sobrantes (Fase 3.D).
+
+    Mismo formato local que `currency` (miles con punto, decimales con coma):
+    5412 → 5.412 · 1500.5 → 1.500,5 · 1912.125 → 1.912,125 · 25.1234 → 25,1234
+    Usa Decimal (no float) para no alterar la cantidad mostrada.
+    """
+    from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
+    if value is None or value == "":
+        return "—"
+    try:
+        num = Decimal(str(value))
+        decimales = int(decimales)
+    except (InvalidOperation, TypeError, ValueError):
+        return str(value)
+    if not num.is_finite():
+        return str(value)
+    num = num.quantize(Decimal(1).scaleb(-decimales), rounding=ROUND_HALF_UP)
+    signo = "-" if num < 0 else ""
+    entero, _, frac = f"{abs(num):f}".partition(".")
+    frac = frac.rstrip("0")
+    entero = f"{int(entero):,}".replace(",", ".")
+    return f"{signo}{entero},{frac}" if frac else f"{signo}{entero}"

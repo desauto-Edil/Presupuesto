@@ -1,0 +1,139 @@
+{% load catalogo_tags %}
+{# Fase 3.D — Ítems del presupuesto con su presentación comercial.                        #}
+{# Compartido por el presupuesto (modo="presupuesto") y la revisión (modo="revision").   #}
+{# La presentación NO cambia el dinero: cantidad, P.U. y total son siempre económicos.   #}
+{# Contexto: items, hay_desglose, aiu, modo, bloqueado (presupuesto), aprobado (revisión). #}
+<div class="pp-section">
+  <div class="pp-section-header pr-items__header">
+    <span>Ítems del presupuesto</span>
+    {% if modo == "revision" %}
+    <span class="pr-resumen__hint">Así se presentan al cliente · solo lectura</span>
+    {% endif %}
+  </div>
+  <div class="pr-items__scroll">
+    <table class="pp-table pr-items">
+      <thead>
+        <tr>
+          <th class="pr-col-num">Ítem</th>
+          <th>Descripción</th>
+          <th class="num pr-col-cant">Cant.</th>
+          <th class="num pr-col-und">Und.</th>
+          <th class="num pr-col-pu">P.U.</th>
+          <th class="num pr-col-total">P.Total</th>
+          <th class="num pr-col-acc"><span class="visually-hidden">Acciones</span></th>
+        </tr>
+      </thead>
+
+      {% for it in items %}
+      <tbody class="pr-item pr-item--{{ it.estado|lower }}" id="pr-item-{{ it.apu.pk }}">
+        {# ── Fila principal: ítem en una línea, o cabecera del grupo desglosado ── #}
+        <tr class="pr-row {% if it.usa_desglose %}pr-row--group{% endif %}">
+          <td class="pr-col-num" data-label="Ítem">{{ it.numero }}</td>
+          <td class="pr-desc">
+            <div class="pr-desc__name">{{ it.nombre }}</div>
+            {% if it.descripcion %}<div class="pr-desc__text">{{ it.descripcion|linebreaksbr }}</div>{% endif %}
+            <div class="pr-desc__meta">
+              <span>APU #{{ it.apu.pk }}</span>
+              <a href="{% url 'presupuestos:apu_detail' it.apu.pk %}{% if modo == 'revision' %}?revisor=1{% endif %}"
+                 title="Ver APU" aria-label="Ver APU #{{ it.apu.pk }}"><i class="bi bi-box-arrow-up-right"></i></a>
+              {% if it.nombre != it.nombre_original %}
+              <span class="pr-desc__tecnico" title="Nombre técnico (subsistema)">Técnico: {{ it.nombre_original }}</span>
+              {% endif %}
+              <span class="pr-state pr-state--{{ it.estado|lower }}">
+                {% if it.estado == "DESGLOSADO" %}<i class="bi bi-diagram-3"></i> Desglosado · {{ it.n_lineas }} líneas
+                {% elif it.estado == "REQUIERE_AJUSTE" %}<i class="bi bi-exclamation-triangle"></i> Requiere ajuste
+                {% elif it.estado == "PERSONALIZADO" %}<i class="bi bi-pencil"></i> Personalizado
+                {% else %}Original{% endif %}
+              </span>
+            </div>
+          </td>
+          {% if it.usa_desglose %}
+          <td class="num pr-col-cant pr-muted" colspan="4">
+            <span class="pr-group-hint">Distribuido en {{ it.n_lineas }} líneas · total del ítem abajo</span>
+          </td>
+          {% else %}
+          <td class="num pr-col-cant" data-label="Cantidad">{{ it.cantidad|cantidad_fmt }}<span class="pr-und-sm"> {{ it.unidad }}</span></td>
+          <td class="num pr-col-und pr-muted" data-label="Unidad">{{ it.unidad }}</td>
+          <td class="num pr-col-pu" data-label="P.U.">{{ it.valor_unitario|currency:"COP" }}</td>
+          <td class="num pr-col-total pr-strong" data-label="P.Total">{{ it.valor_total|currency:"COP" }}</td>
+          {% endif %}
+          <td class="num pr-col-acc">
+            {% if modo == "revision" %}
+              {% include "presupuestos/partials/_revision_item_acciones.html" with fila=it.fila %}
+            {% elif not bloqueado %}
+              <button type="button" class="btn btn-ghost btn-sm pr-personalizar"
+                      data-pr-personalizar="{{ it.apu.pk }}"
+                      data-pu="{{ it.valor_unitario|currency:'COP' }}"
+                      data-total="{{ it.valor_total|currency:'COP' }}">
+                <i class="bi bi-sliders"></i> Personalizar
+              </button>
+            {% endif %}
+          </td>
+        </tr>
+
+        {% if it.usa_desglose %}
+        {# ── Sublíneas: solo distribuyen la cantidad; el importe es derivado ── #}
+        {% for sl in it.sublineas %}
+        <tr class="pr-row pr-row--sub">
+          <td class="pr-col-num" data-label="Ítem">{{ sl.numero }}</td>
+          <td class="pr-desc">
+            <div class="pr-desc__sub"><span class="pr-tree" aria-hidden="true">{% if forloop.last %}└{% else %}├{% endif %}</span>{{ sl.nombre }}</div>
+            {% if sl.descripcion %}<div class="pr-desc__text pr-desc__text--sub">{{ sl.descripcion|linebreaksbr }}</div>{% endif %}
+          </td>
+          <td class="num pr-col-cant" data-label="Cantidad">{{ sl.cantidad|cantidad_fmt }}<span class="pr-und-sm"> {{ it.unidad }}</span></td>
+          <td class="num pr-col-und pr-muted" data-label="Unidad">{{ it.unidad }}</td>
+          <td class="num pr-col-pu pr-muted" data-label="P.U.">{{ it.valor_unitario|currency:"COP" }}</td>
+          <td class="num pr-col-total pr-derivado" data-label="Importe">{{ sl.importe|currency:"COP" }}</td>
+          <td class="pr-col-acc"></td>
+        </tr>
+        {% endfor %}
+        <tr class="pr-row pr-row--total">
+          <td class="pr-col-num"></td>
+          <td class="pr-desc"><span class="pr-total-label">Total ítem {{ it.numero }} · económico</span></td>
+          <td class="num pr-col-cant" data-label="Cantidad">{{ it.cantidad|cantidad_fmt }}<span class="pr-und-sm"> {{ it.unidad }}</span></td>
+          <td class="num pr-col-und pr-muted" data-label="Unidad">{{ it.unidad }}</td>
+          <td class="num pr-col-pu" data-label="P.U.">{{ it.valor_unitario|currency:"COP" }}</td>
+          <td class="num pr-col-total pr-strong" data-label="Total económico">{{ it.valor_total|currency:"COP" }}</td>
+          <td class="pr-col-acc"></td>
+        </tr>
+        {% endif %}
+
+        {% if it.estado == "REQUIERE_AJUSTE" %}
+        <tr class="pr-row pr-row--ajuste">
+          <td class="pr-col-num"></td>
+          <td colspan="6">
+            <div class="capu-note capu-note--warn pr-ajuste">
+              <i class="bi bi-exclamation-triangle"></i>
+              <div>
+                <strong>El desglose guardado ya no suma la cantidad económica.</strong>
+                Se presenta en una sola línea hasta ajustarlo.
+                <span class="pr-ajuste__nums">
+                  Cantidad económica <b>{{ it.cantidad|cantidad_fmt }} {{ it.unidad }}</b> ·
+                  Distribuido <b>{{ it.distribuido|cantidad_fmt }}</b> ·
+                  {% if it.pendiente > 0 %}Pendiente <b>{{ it.pendiente|cantidad_fmt }}</b>{% else %}Exceso <b>{{ it.pendiente|cantidad_fmt|cut:"-" }}</b>{% endif %}
+                </span>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+      </tbody>
+      {% endfor %}
+
+      <tfoot>
+        <tr class="pr-subtotal">
+          <td colspan="5">Subtotal suministro</td>
+          <td class="num" id="ppSubtotalBase">{{ aiu.base_total|currency:"COP" }}</td>
+          <td class="pr-col-acc"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% if hay_desglose %}
+  <p class="pr-items__legend">
+    <i class="bi bi-info-circle"></i>
+    En un ítem desglosado, el importe de cada línea es cantidad × P.U. y es solo informativo;
+    el total del ítem y los totales del presupuesto son los económicos.
+  </p>
+  {% endif %}
+</div>

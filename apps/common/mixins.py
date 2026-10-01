@@ -275,3 +275,39 @@ class WithCreateFormMixin:
         if self.form_class:
             ctx["create_form"] = self.form_class()
         return ctx
+
+
+# ---------------------------------------------------------------------------
+# Mixin: eliminación de registros protegidos (on_delete=PROTECT)
+# ---------------------------------------------------------------------------
+
+class EliminacionProtegidaMixin:
+    """
+    Para DeleteView: si el registro está referenciado por relaciones PROTECT,
+    `delete()` lanza ProtectedError y la página terminaba en un error 500.
+    Con este mixin no se borra nada: se informa qué lo está usando y se vuelve
+    a la URL de éxito (o a la anterior). Se ubica antes de DeleteView en la MRO.
+    """
+
+    def form_valid(self, form):
+        from django.db.models import ProtectedError
+
+        try:
+            return super().form_valid(form)
+        except ProtectedError as exc:
+            usos = {}
+            for obj in getattr(exc, "protected_objects", []) or []:
+                nombre = str(obj._meta.verbose_name_plural)
+                usos[nombre] = usos.get(nombre, 0) + 1
+            detalle = ", ".join(f"{n} ({c})" for n, c in sorted(usos.items()))
+            messages.error(
+                self.request,
+                f"No se puede eliminar «{self.object}» porque está en uso"
+                + (f": {detalle}" if detalle else "")
+                + ". Retire primero esas relaciones o archívelo.",
+            )
+            try:
+                destino = self.get_success_url()
+            except Exception:
+                destino = self.request.META.get("HTTP_REFERER") or "/"
+            return redirect(destino)

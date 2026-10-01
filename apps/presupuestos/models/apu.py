@@ -85,7 +85,7 @@ class CategoriaItemAPU(models.Model):
     """
     Categoría del catálogo APU: agrupa ítems por TipoAPU.
     Permite organizar la UI del catálogo (p. ej. "Herramienta eléctrica",
-    "Herramienta soldadura TPO", "Personal", "Cuadrilla cubierta"…).
+    "Herramienta soldadura TPO", "Personal"…).
     """
 
     tipo_apu = models.CharField(
@@ -96,13 +96,6 @@ class CategoriaItemAPU(models.Model):
     descripcion = models.TextField(blank=True)
     activa = models.BooleanField(default=True)
     orden = models.PositiveIntegerField(default=0, help_text="Orden en la UI.")
-    aplica_dias_mensuales = models.BooleanField(
-        default=False,
-        help_text=(
-            "Si True, los días de duración se dividen entre 30 en la fórmula de costo. "
-            "Usar en categorías de personal donde el salario es mensual."
-        ),
-    )
 
     class Meta:
         app_label = "presupuestos"
@@ -114,23 +107,32 @@ class CategoriaItemAPU(models.Model):
     def __str__(self):
         return f"{self.nombre} [{self.get_tipo_apu_display()}]"
 
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.pk and PaqueteAPUItem.objects.filter(
+            item_catalogo__categoria_id=self.pk,
+        ).exclude(paquete__tipo_apu=self.tipo_apu).exists():
+            raise ValidationError({
+                "tipo_apu": "Hay ítems de esta categoría en paquetes APU de otro tipo; "
+                            "no se puede cambiar el tipo de la categoría.",
+            })
+
 
 class ItemCatalogoAPU(models.Model):
     """
-    Ítem reutilizable del catálogo APU.
+    Ítem reutilizable del catálogo APU (Herramientas/equipos, Mano de obra,
+    Transporte, Administración).
 
-    Representa cualquier recurso que compone un APU:
-      - Personal       (Oficial de obra, Ayudante práctico, Ayudante razo…)
-      - Herramienta    (Atornilladora inalámbrica, Taladro percutor, Triac Leister…)
-      - Dotación       (Jean, Chaleco reflectivo, Botas de seguridad…)
-      - Transporte     (Flete, Viáticos…)
-      - Administración (Gerente de proyecto, Residente, Secretaria…)
+    Regla económica universal (Fase 1), igual para todos los tipos:
 
-    Campos adicionales para personal:
-      salario_base y prestaciones_pct permiten calcular el costo mensual real.
+        valor_diario = valor_base / vida_util_dias
 
-    Campos adicionales para herramientas:
-      vida_util_dias permite derivar el costo por jornada (depreciación).
+    La fuente única del cálculo es `apps.presupuestos.economia`. El tipo del
+    ítem se conoce por `categoria.tipo_apu`; no se infiere ningún
+    comportamiento económico de los datos del ítem.
+
+    `vida_util_dias` es un dato manual e individual del ítem. Si está vacía, el
+    ítem queda pendiente de configuración y no es calculable.
     """
 
     UNIDAD_CHOICES = [
@@ -151,33 +153,24 @@ class ItemCatalogoAPU(models.Model):
     nombre = models.CharField(max_length=200)
     descripcion = models.TextField(blank=True)
 
-    # Precio base: interpreta según la unidad
-    precio_base = models.DecimalField(
+    valor_base = models.DecimalField(
         max_digits=18, decimal_places=4, default=Decimal("0"),
-        help_text="Precio/salario base del ítem por unidad ($/und, $/día, $/mes…).",
+        help_text="Valor base del ítem. valor_diario = valor_base / vida_util_dias.",
     )
     unidad = models.CharField(max_length=20, choices=UNIDAD_CHOICES, default="und")
 
     tienda_referencia = models.CharField(
         max_length=200, blank=True, default="",
         verbose_name="Tienda de referencia",
-        help_text="Proveedor o tienda donde se cotizó el precio base.",
+        help_text="Proveedor o tienda donde se cotizó el valor base.",
     )
 
-    # Solo para personal: prestaciones sociales
-    salario_base = models.DecimalField(
-        max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
-        help_text="Salario base mensual del cargo (solo personal).",
-    )
-    prestaciones = models.DecimalField(
-        max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
-        help_text="Valor de prestaciones sociales mensuales (solo personal).",
-    )
-
-    # Solo para herramientas/dotación: vida útil para calcular depreciación
     vida_util_dias = models.PositiveIntegerField(
         null=True, blank=True,
-        help_text="Vida útil en días. Permite calcular costo por jornada.",
+        help_text=(
+            "Vida útil en días (dato manual del ítem). Obligatoria para calcular "
+            "el valor diario; vacía = ítem pendiente de configuración."
+        ),
     )
 
     activo = models.BooleanField(default=True)
@@ -190,98 +183,60 @@ class ItemCatalogoAPU(models.Model):
         ordering = ["categoria", "nombre"]
         verbose_name = "Ítem de catálogo APU"
         verbose_name_plural = "Ítems de catálogo APU"
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(valor_base__gte=0),
+                name="item_apu_valor_base_no_negativo",
+            ),
+            models.CheckConstraint(
+                check=models.Q(vida_util_dias__isnull=True) | models.Q(vida_util_dias__gt=0),
+                name="item_apu_vida_util_positiva",
+            ),
+        ]
 
     def __str__(self):
-        return f"{self.nombre} — ${self.precio_base:,.0f}/{self.get_unidad_display()}"
+        return f"{self.nombre} — ${self.valor_base:,.0f}/{self.get_unidad_display()}"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        errores = {}
+        if self.valor_base is not None and self.valor_base < 0:
+            errores["valor_base"] = "El valor base no puede ser negativo."
+        if self.vida_util_dias is not None and self.vida_util_dias <= 0:
+            errores["vida_util_dias"] = "La vida útil debe ser mayor que cero."
+        if self.pk and self.categoria_id:
+            tipo = CategoriaItemAPU.objects.filter(pk=self.categoria_id).values_list(
+                "tipo_apu", flat=True,
+            ).first()
+            if PaqueteAPUItem.objects.filter(item_catalogo_id=self.pk).exclude(
+                paquete__tipo_apu=tipo,
+            ).exists():
+                errores["categoria"] = (
+                    "El ítem pertenece a paquetes APU de otro tipo; no puede pasar a una "
+                    "categoría de un TipoAPU diferente."
+                )
+        if errores:
+            raise ValidationError(errores)
 
     @property
-    def total_mes_personal(self) -> Decimal:
-        """Salario base + prestaciones (solo aplica a personal)."""
-        return self.salario_base + self.prestaciones
+    def valor_diario(self) -> Decimal:
+        """valor_base / vida_util_dias. Lanza ValorDiarioError si no es calculable."""
+        from apps.presupuestos.economia import calcular_valor_diario
+        return calcular_valor_diario(self.valor_base, self.vida_util_dias)
 
     @property
-    def costo_por_dia_herramienta(self) -> Decimal:
-        """
-        Depreciación diaria de una herramienta.
-        costo_por_dia = precio_base / vida_util_dias
-        Retorna 0 si no aplica.
-        """
-        if self.vida_util_dias and self.vida_util_dias > 0:
-            return (self.precio_base / Decimal(self.vida_util_dias)).quantize(
-                Decimal("0.0001"), rounding=ROUND_HALF_UP
-            )
-        return Decimal("0")
+    def es_calculable(self) -> bool:
+        from apps.presupuestos.economia import ValorDiarioError
+        try:
+            self.valor_diario
+        except ValorDiarioError:
+            return False
+        return True
 
     @property
-    def costo_por_dia(self) -> Decimal:
-        """Alias de costo_por_dia_herramienta para uso en plantillas."""
-        return self.costo_por_dia_herramienta
-
-
-# ---------------------------------------------------------------------------
-# 3. Cuadrillas preset
-# ---------------------------------------------------------------------------
-
-class CuadrillaPreset(models.Model):
-    """
-    Plantilla de cuadrilla reutilizable.
-
-    Ejemplos:
-        - "Cuadrilla básica"   (Oficial ×1, Ayudante práctico ×1, Ayudante razo ×1)
-        - "Cuadrilla cubierta" (Oficial ×1, Ayudante práctico ×2, Ayudante razo ×4)
-    """
-
-    nombre = models.CharField(max_length=100)
-    descripcion = models.TextField(blank=True)
-    activo = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        app_label = "presupuestos"
-        db_table = "cuadrilla_presets"
-        ordering = ["nombre"]
-        verbose_name = "Preset de cuadrilla"
-        verbose_name_plural = "Presets de cuadrilla"
-
-    def __str__(self):
-        return self.nombre
-
-    @property
-    def total_personas(self) -> int:
-        return sum(i.cantidad for i in self.items.all())
-
-    @property
-    def costo_mes_total(self) -> Decimal:
-        """Suma de (salario_base + prestaciones) × cantidad de cada cargo."""
-        return sum(
-            i.item.total_mes_personal * i.cantidad
-            for i in self.items.select_related("item").all()
-        )
-
-
-class CuadrillaPresetItem(models.Model):
-    """Línea de composición de una cuadrilla preset (un cargo × cantidad)."""
-
-    preset = models.ForeignKey(
-        CuadrillaPreset, on_delete=models.CASCADE, related_name="items"
-    )
-    item = models.ForeignKey(
-        ItemCatalogoAPU,
-        on_delete=models.PROTECT,
-        related_name="cuadrilla_uses",
-    )
-    cantidad = models.PositiveIntegerField(default=1)
-
-    class Meta:
-        app_label = "presupuestos"
-        db_table = "cuadrilla_preset_items"
-        unique_together = [["preset", "item"]]
-        verbose_name = "Ítem de cuadrilla preset"
-        verbose_name_plural = "Ítems de cuadrilla preset"
-
-    def __str__(self):
-        return f"{self.preset.nombre} / {self.item.nombre} ×{self.cantidad}"
+    def valor_diario_o_none(self):
+        """Para plantillas: valor diario, o None si el ítem está pendiente de configuración."""
+        return self.valor_diario if self.es_calculable else None
 
 
 # ---------------------------------------------------------------------------
@@ -299,13 +254,14 @@ class ReglaAPUSubsistema(models.Model):
     las líneas del despiece).
 
     Variables disponibles en formula_costo_unitario:
-        suma             — suma del costo de todos los ítems de la categoría (float)
+        suma             — Σ(valor_diario_item × cantidad) de los ítems de la
+                           categoría (float); ver apps.presupuestos.economia
         aiu              — factor AIU contratista, e.g. 1.30 si AIU=30%
         margen_mano_obra — factor margen de mano de obra, e.g. 1.20 si margen=20%
         margen_material  — factor margen de material, e.g. 1.20 si margen=20%
-        dias             — días efectivos (ya ajustados si aplica_dias_mensuales)
+        dias             — días de duración del APU
         tp               — total_powergrip (denominador)
-        personas         — número de personas en cuadrilla (solo MO)
+        personas         — Proyecto.num_personas (1 si no está definido)
         trm              — TRM vigente (COP/USD)
 
     Alias de compatibilidad (fórmulas antiguas; preferir los nombres nuevos):
@@ -436,6 +392,14 @@ class APUProyecto(models.Model):
     dias_duracion = models.PositiveIntegerField(
         default=30,
         help_text="Días de duración del proyecto. Se usa para calcular el costo unitario de MO, herramientas, etc.",
+    )
+    margen_contratista_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("0"),
+        help_text=(
+            "Margen de contratista (%). Solo afecta el VALOR unitario de Herramientas, "
+            "Mano de obra, Transporte y Administración: valor unit = costo unit × "
+            "(1 + margen/100). No interviene en el costo unitario (fórmula del subsistema)."
+        ),
     )
 
     # -- Tipo de APU y proyecto contenedor (Fase 11.5) --
@@ -698,8 +662,9 @@ class APUProyecto(models.Model):
 
     @property
     def esta_aprobado(self) -> bool:
-        """True si ya se seleccionó una modalidad AIU oficial."""
-        return bool(self.modalidad_aiu_seleccionada)
+        """True si el APU está aprobado: tiene fecha de aprobación o modalidad AIU
+        oficial. Ambas se fijan al aprobar y se limpian al resetear la modalidad."""
+        return self.fecha_aprobacion is not None or bool(self.modalidad_aiu_seleccionada)
 
     # ------------------------------------------------------------------
     # Navegación de relaciones
@@ -1091,6 +1056,16 @@ class APULinea(models.Model):
         related_name="apu_lineas",
         help_text="DespieceMaestro de origen (sólo MATERIALES). NULL en líneas legacy.",
     )
+    apu_paquete = models.ForeignKey(
+        "presupuestos.APUPaquete",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="lineas",
+        help_text=(
+            "Paquete instanciado en el APU al que pertenece este componente (Fase 2). "
+            "NULL en líneas históricas, materiales, resúmenes e ítems sueltos."
+        ),
+    )
     sistema_nombre_snapshot = models.CharField(
         max_length=120, blank=True, default="",
         help_text="Snapshot textual del sistema asociado a la línea (Fase 11.4).",
@@ -1141,14 +1116,38 @@ class APULinea(models.Model):
         help_text="Precio_referencia / vida_util_dias. Calculado automáticamente.",
     )
 
-    # -- Campos adicionales para personal --
+    # -- Histórico (Fase 1): ya no se escriben ni intervienen en el cálculo --
     salario_base = models.DecimalField(
         max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
-        help_text="Salario base mensual (solo personal).",
+        help_text="HISTÓRICO. Salario copiado en líneas anteriores a la Fase 1.",
     )
     prestaciones = models.DecimalField(
         max_digits=18, decimal_places=4, default=Decimal("0"), blank=True,
-        help_text="Prestaciones sociales mensuales (solo personal).",
+        help_text="HISTÓRICO. Prestaciones copiadas en líneas anteriores a la Fase 1.",
+    )
+
+    # -- Selección de catálogo (líneas detalle no-materiales) --
+    cantidad = models.DecimalField(
+        max_digits=14, decimal_places=4, null=True, blank=True,
+        help_text=(
+            "Cantidad del ítem de catálogo seleccionada para este APU. "
+            "aporte a suma = precio_referencia (valor diario) × cantidad. "
+            "NULL en líneas resumen, materiales y líneas anteriores a la Fase 1."
+        ),
+    )
+    rendimiento_personalizado = models.BooleanField(
+        default=False,
+        help_text=(
+            "True si el usuario fijó el rendimiento de la línea resumen de un tipo "
+            "calculado por paquetes; se conserva al recalcular el tipo."
+        ),
+    )
+    precio_personalizado = models.BooleanField(
+        default=False,
+        help_text=(
+            "True si precio_referencia es un valor diario escrito por el usuario "
+            "para este APU (override); False si proviene del catálogo."
+        ),
     )
 
     # -- Resultados calculados --
@@ -1217,24 +1216,21 @@ class APULinea(models.Model):
 
     def calcular(self):
 
+        from apps.presupuestos.economia import ValorDiarioError, calcular_valor_diario
+
         apu = self.apu
 
-        if (
-            self.tipo == TipoAPU.MANO_DE_OBRA
-            and self.item_catalogo_id
-            and self.salario_base == 0
-        ):
-            self.salario_base = self.item_catalogo.salario_base
-            self.prestaciones = self.item_catalogo.prestaciones
-
+        # Informativo (reportes): precio_referencia / vida_util_dias, con la
+        # misma fuente única que el catálogo. 0 si la línea no tiene vida útil.
         vu = self.vida_util_dias or (
             self.item_catalogo.vida_util_dias if self.item_catalogo_id else None
         )
-        if vu and vu > 0 and self.precio_referencia:
+        try:
             self.costo_por_dia = (
-                Decimal(str(self.precio_referencia)) / Decimal(str(vu))
-            ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-        else:
+                calcular_valor_diario(self.precio_referencia, vu)
+                if self.precio_referencia else Decimal("0")
+            )
+        except ValorDiarioError:
             self.costo_por_dia = Decimal("0")
 
         iva_factor = (
@@ -1246,13 +1242,21 @@ class APULinea(models.Model):
         # Sólo aplica a MATERIALES. El resto de categorías obtiene su margen de la
         # fórmula de ReglaAPUSubsistema (variables margen_mano_obra / margen_material),
         # así que aplicarlo también aquí lo cobraría dos veces.
+        # Las demás categorías aplican el margen de contratista SOLO al valor
+        # unitario (el costo unitario sale de la fórmula del subsistema).
         if self.tipo == TipoAPU.MATERIALES:
             margen_material = (
                 Decimal("1") + Decimal(str(apu.margen_material_pct)) / Decimal("100")
             )
         else:
-            margen_material = Decimal("1")
-        rendimiento  = Decimal(str(self.rendimiento)) if self.rendimiento else Decimal("1")
+            margen_material = (
+                Decimal("1") + Decimal(str(apu.margen_contratista_pct or 0)) / Decimal("100")
+            )
+        # Solo un rendimiento ausente vale 1; un 0 explícito (p. ej. 0 % de
+        # administración) es un valor válido y debe dar costo 0.
+        rendimiento  = (
+            Decimal(str(self.rendimiento)) if self.rendimiento is not None else Decimal("1")
+        )
         precio       = Decimal(str(self.precio_referencia))
 
         # Costo unit  = precio_ref × IVA
@@ -1263,7 +1267,7 @@ class APULinea(models.Model):
         self.costo_total = (rendimiento * self.costo_unitario).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
-        # Valor unit  = Costo unit × margen de material   (Ej: 20% → ×1.20)
+        # Valor unit  = Costo unit × margen (material en MATERIALES, contratista en el resto)
         self.valor_unitario = (self.costo_unitario * margen_material).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_UP
         )
@@ -1273,7 +1277,6 @@ class APULinea(models.Model):
         )
 
         self.save(update_fields=[
-            "salario_base", "prestaciones",
             "costo_por_dia",
             "costo_unitario", "costo_total",
             "valor_unitario", "valor_total",
@@ -1446,6 +1449,250 @@ class APUConsolidadoOrigen(models.Model):
 
     def __str__(self):
         return f"{self.apu_consolidado} ← {self.apu_origen}"
+
+
+# ---------------------------------------------------------------------------
+# 9. Paquetes APU (Fase 2)
+# ---------------------------------------------------------------------------
+
+TIPOS_PAQUETE_APU = [c for c in TipoAPU.choices if c[0] != TipoAPU.MATERIALES]
+
+
+class PaqueteAPU(models.Model):
+    """
+    Paquete maestro reutilizable: agrupa ítems EXISTENTES del catálogo APU de un
+    único TipoAPU (MATERIALES está prohibido). Puede mezclar categorías del
+    mismo tipo.
+
+    No guarda valores económicos: el valor se calcula siempre desde los ítems
+    vigentes del catálogo,
+
+        valor_paquete = Σ(item.valor_diario × cantidad)
+
+    así que un cambio de valor_base / vida_util_dias en el catálogo se refleja
+    automáticamente en el maestro. Los APU ya generados NO dependen del maestro:
+    trabajan con su propio snapshot (APUPaquete + APULinea).
+    """
+
+    nombre = models.CharField(max_length=200)
+    tipo_apu = models.CharField(max_length=30, choices=TIPOS_PAQUETE_APU, db_index=True)
+    descripcion = models.TextField(blank=True, default="")
+    activo = models.BooleanField(
+        default=True,
+        help_text="Desactivar en lugar de borrar: un paquete usado no puede eliminarse.",
+    )
+    orden = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "paquetes_apu"
+        ordering = ["tipo_apu", "orden", "nombre"]
+        verbose_name = "Paquete APU"
+        verbose_name_plural = "Paquetes APU"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tipo_apu", "nombre"], name="paquete_apu_nombre_unico_por_tipo",
+            ),
+            models.CheckConstraint(
+                check=~models.Q(tipo_apu=TipoAPU.MATERIALES),
+                name="paquete_apu_no_materiales",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre} [{self.get_tipo_apu_display()}]"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.tipo_apu == TipoAPU.MATERIALES:
+            raise ValidationError({"tipo_apu": "MATERIALES no admite paquetes APU."})
+        if self.pk and self.items.exclude(
+            item_catalogo__categoria__tipo_apu=self.tipo_apu,
+        ).exists():
+            raise ValidationError({
+                "tipo_apu": "El paquete tiene componentes de otro TipoAPU; "
+                            "no se puede cambiar su tipo.",
+            })
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    # ── Cálculo (sin desnormalizar) ─────────────────────────────────────────
+    def componentes(self):
+        return self.items.select_related("item_catalogo__categoria").order_by("orden", "id")
+
+    def componentes_pendientes(self) -> list:
+        """Componentes cuyo ítem no tiene valor diario calculable (p. ej. sin vida útil)."""
+        return [c for c in self.componentes() if not c.item_catalogo.es_calculable]
+
+    @property
+    def es_calculable(self) -> bool:
+        return not self.componentes_pendientes()
+
+    def valor_paquete(self):
+        """Σ(valor_diario × cantidad) con el catálogo vigente; None si hay pendientes."""
+        comps = list(self.componentes())
+        if any(not c.item_catalogo.es_calculable for c in comps):
+            return None
+        return sum((c.aporte for c in comps), Decimal("0"))
+
+
+class PaqueteAPUItem(models.Model):
+    """
+    Componente de un paquete maestro: un ItemCatalogoAPU existente × cantidad.
+
+    No guarda precio ni porcentaje. El aporte se calcula con el valor diario
+    vigente del ítem: aporte = item.valor_diario × cantidad.
+    """
+
+    paquete = models.ForeignKey(PaqueteAPU, on_delete=models.CASCADE, related_name="items")
+    item_catalogo = models.ForeignKey(
+        ItemCatalogoAPU,
+        on_delete=models.PROTECT,
+        related_name="paquetes_items",
+        help_text="Ítem del catálogo (debe existir y ser del mismo TipoAPU del paquete).",
+    )
+    cantidad = models.DecimalField(
+        max_digits=14, decimal_places=4, default=Decimal("1"),
+        help_text="Cantidad del recurso en el paquete. aporte = valor_diario × cantidad.",
+    )
+    orden = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "paquetes_apu_items"
+        ordering = ["paquete", "orden", "id"]
+        verbose_name = "Componente de paquete APU"
+        verbose_name_plural = "Componentes de paquete APU"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["paquete", "item_catalogo"], name="paquete_apu_item_unico",
+            ),
+            models.CheckConstraint(
+                check=models.Q(cantidad__gt=0), name="paquete_apu_item_cantidad_positiva",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.paquete_id} / {self.item_catalogo_id} × {self.cantidad}"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        errores = {}
+        if self.cantidad is not None and self.cantidad <= 0:
+            errores["cantidad"] = "La cantidad debe ser mayor que cero."
+        if self.paquete_id and self.item_catalogo_id:
+            paquete = self.paquete
+            item = self.item_catalogo
+            tipo_item = item.categoria.tipo_apu
+            if paquete.tipo_apu == TipoAPU.MATERIALES or tipo_item != paquete.tipo_apu:
+                errores["item_catalogo"] = (
+                    f"«{item.nombre}» es de tipo {tipo_item} y el paquete es de tipo "
+                    f"{paquete.tipo_apu}: un paquete solo admite ítems de su TipoAPU."
+                )
+        if errores:
+            raise ValidationError(errores)
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def valor_diario(self) -> Decimal:
+        """Valor diario vigente del ítem (fuente única de Fase 1)."""
+        return self.item_catalogo.valor_diario
+
+    @property
+    def aporte(self) -> Decimal:
+        from apps.presupuestos.economia import calcular_aporte
+        return calcular_aporte(self.valor_diario, self.cantidad)
+
+
+class SubsistemaPaqueteAPU(models.Model):
+    """
+    Paquete predeterminado de un subsistema. Un subsistema puede tener varios
+    paquetes del mismo TipoAPU. No existe cantidad de paquete: las cantidades
+    viven en los componentes. Si un tipo tiene paquetes activos, la generación
+    usa paquetes y NO suma SubsistemaItemAPU (que queda como respaldo).
+    """
+
+    subsistema = models.ForeignKey(
+        "ingenieria.Subsistema", on_delete=models.CASCADE, related_name="paquetes_apu",
+    )
+    paquete = models.ForeignKey(
+        PaqueteAPU, on_delete=models.PROTECT, related_name="asignaciones_subsistema",
+    )
+    activo = models.BooleanField(default=True)
+    orden = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "subsistema_paquetes_apu"
+        ordering = ["subsistema", "orden", "id"]
+        verbose_name = "Paquete APU del subsistema"
+        verbose_name_plural = "Paquetes APU del subsistema"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subsistema", "paquete"], name="subsistema_paquete_apu_unico",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.subsistema_id} → {self.paquete}"
+
+
+class APUPaquete(models.Model):
+    """
+    Instancia (snapshot) de un paquete dentro de un APU de proyecto.
+
+    Congela la ESTRUCTURA: qué componentes y cantidades se sembraron desde el
+    maestro. Sus componentes son APULinea (apu_paquete = este registro) con
+    cantidad y precio_referencia locales. El APU nunca vuelve a leer
+    PaqueteAPUItem para reconstruirse. `paquete_origen` es solo trazabilidad.
+    """
+
+    apu = models.ForeignKey(
+        "presupuestos.APUProyecto", on_delete=models.CASCADE, related_name="paquetes",
+    )
+    paquete_origen = models.ForeignKey(
+        PaqueteAPU,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="instancias_apu",
+        help_text="Paquete maestro de origen (trazabilidad; no se usa para calcular).",
+    )
+    nombre_snapshot = models.CharField(max_length=200)
+    tipo_apu = models.CharField(max_length=30, choices=TIPOS_PAQUETE_APU, db_index=True)
+    orden = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "presupuestos"
+        db_table = "apu_paquetes"
+        ordering = ["apu", "tipo_apu", "orden", "id"]
+        verbose_name = "Paquete instanciado en APU"
+        verbose_name_plural = "Paquetes instanciados en APU"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["apu", "paquete_origen"], name="apu_paquete_origen_unico",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre_snapshot} → APU #{self.apu_id}"
+
+    def valor_paquete(self) -> Decimal:
+        """Σ(precio_referencia × cantidad) de sus componentes locales."""
+        total = Decimal("0")
+        for ln in self.lineas.all():
+            total += Decimal(str(ln.precio_referencia or 0)) * Decimal(str(ln.cantidad or 0))
+        return total
 
 
 # ---------------------------------------------------------------------------

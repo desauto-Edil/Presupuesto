@@ -265,6 +265,13 @@ class Proyecto(models.Model):
         help_text="AIU del contratista (%) del proyecto. Siembra el mismo campo del APU, "
                   "donde queda disponible como variable «aiu» en las fórmulas.",
     )
+    margen_contratista_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, default=Decimal("0"),
+        verbose_name="Margen de contratista (%)",
+        help_text="Margen de contratista (%) del proyecto. Siembra el mismo campo del APU, "
+                  "donde se aplica solo al valor unitario de Herramientas, Mano de obra, "
+                  "Transporte y Administración: valor unit = costo unit × (1 + margen/100).",
+    )
     moneda = models.CharField(max_length=3, choices=Moneda.choices, default=Moneda.COP)
     aplica_exencion_iva = models.BooleanField(default=False)
     observaciones = models.TextField(blank=True, null=True)

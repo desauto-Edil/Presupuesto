@@ -59,6 +59,14 @@ class DespieceMaestro(models.Model):
         default=list, blank=True,
         help_text="Snapshot inmutable del resultado del cálculo (lista de líneas).",
     )
+    componentes_excluidos = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "Códigos de componentes de la plantilla eliminados SOLO en este despiece "
+            "(proyecto). No generan línea ni pasan al APU; la plantilla del subsistema "
+            "no cambia. Se siguen evaluando para no romper fórmulas que dependan de ellos."
+        ),
+    )
     notas = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

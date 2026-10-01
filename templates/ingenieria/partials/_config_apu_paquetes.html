@@ -1,0 +1,106 @@
+{# Fase 3.B — Recursos APU del subsistema: qué paquetes maestros usa por TipoAPU.  #}
+{# Se guarda al instante (endpoints propios); no viaja en el POST del formulario.   #}
+{% if form.instance.pk %}
+<div class="capu-cfg-wrap" data-capu-subsistema
+     data-url-disponibles="{% url 'ingenieria:subsistema_paquetes_disponibles' form.instance.pk %}"
+     data-url-agregar="{% url 'ingenieria:subsistema_paquete_agregar' form.instance.pk %}"
+     data-url-quitar="{% url 'ingenieria:subsistema_paquete_quitar' form.instance.pk 0 %}"
+     data-url-mover="{% url 'ingenieria:subsistema_paquete_mover' form.instance.pk 0 %}"
+     data-url-crear="{% url 'presupuestos:catalogo_paquete_create' %}">
+
+  <div class="capu-cfg-intro">
+    <p>
+      Elige qué <strong>paquetes del catálogo</strong> usa este subsistema en cada tipo.
+      Los paquetes se crean y editan en el <a href="{% url 'presupuestos:catalogo_apu' %}#paquetes" target="_blank" rel="noopener">Catálogo APU</a>;
+      aquí solo se seleccionan. Materiales se sigue generando desde el despiece.
+    </p>
+    <span class="capu-cfg-saved"><i class="bi bi-lightning-charge"></i> Se guarda al instante</span>
+  </div>
+
+  <nav class="capu-cfg-summary" aria-label="Resumen por tipo" data-capu-cfg-resumen>
+    {% include "ingenieria/partials/_config_apu_resumen.html" %}
+  </nav>
+
+  <div class="capu-cfg-toast" role="status" aria-live="polite" data-capu-toast hidden></div>
+
+  <div class="capu-cfg-grid">
+    {% for cfg in config_apu %}
+      {% include "ingenieria/partials/_config_apu_tipo.html" %}
+    {% endfor %}
+  </div>
+
+  <p class="capu-cfg-foot">
+    <i class="bi bi-info-circle"></i>
+    Los cambios aplican a los APU que se generen desde ahora; los APU ya generados conservan sus paquetes.
+    <button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-bs-toggle="modal" data-bs-target="#modalConfigApu">
+      Configuración individual anterior (avanzado)
+    </button>
+  </p>
+
+  <!-- Selector de paquetes maestros -->
+  <div class="modal fade capu-picker" id="capuPaquetePicker" tabindex="-1" aria-labelledby="capuPaquetePickerTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="capuPaquetePickerTitle">Agregar paquete</h5>
+            <div class="capu-muted" style="font-size:12px;">Paquetes activos de <strong data-capu-pick-tipo></strong> del catálogo APU</div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="capu-picker__search">
+            <div class="capu-search">
+              <i class="bi bi-search"></i>
+              <input type="search" data-capu-pick-q placeholder="Buscar paquete por nombre" autocomplete="off" aria-label="Buscar paquetes">
+            </div>
+          </div>
+          <div class="capu-picker__confirm" data-capu-pick-confirm hidden>
+            <div class="capu-note capu-note--warn">
+              <i class="bi bi-arrow-left-right"></i>
+              <div>
+                <strong>Empezar a usar paquetes en <span data-capu-confirm-tipo></span></strong><br>
+                Al existir paquetes activos, la generación usará los paquetes en lugar de la configuración
+                individual anterior (<span data-capu-confirm-n></span>). Esa configuración no se borra ni se suma.
+                <div class="d-flex gap-2 mt-2">
+                  <button type="button" class="btn btn-primary btn-sm" data-capu-confirm-ok>Usar paquetes</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-capu-confirm-cancel>Cancelar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="capu-picker__list" data-capu-pick-list></div>
+        </div>
+        <div class="modal-footer">
+          <a class="btn btn-link btn-sm me-auto p-0" data-capu-crear href="{% url 'presupuestos:catalogo_paquete_create' %}" target="_blank" rel="noopener">
+            <i class="bi bi-box-arrow-up-right"></i> Crear paquete en el catálogo
+          </a>
+          <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">Listo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmación al quitar el último paquete activo -->
+  <div class="modal fade" id="capuQuitarConfirm" tabindex="-1" aria-labelledby="capuQuitarConfirmTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="capuQuitarConfirmTitle">Quitar del subsistema</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body" style="font-size:13px;line-height:1.5;" data-capu-quitar-texto></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary btn-sm" data-capu-quitar-ok>Quitar del subsistema</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="capu-note">
+  <i class="bi bi-info-circle"></i>
+  <div>Guarda el subsistema para elegir los paquetes APU que utilizará en cada tipo.</div>
+</div>
+{% endif %}

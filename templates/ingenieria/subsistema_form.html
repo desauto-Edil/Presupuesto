@@ -11,6 +11,7 @@
 {% endblock %}
 
 {% block extra_head %}
+<link href="{% static 'css/catalogo-apu.css' %}" rel="stylesheet">
 <style>
 
 /* ══ Corregir scroll: desactivar overflow bloqueante ════════════════════════ */
@@ -946,16 +947,28 @@ body.modal-open .assist-fab--resumen { display: none !important; }
               </div>
             </div>
 
-            <!-- 4. Reglas APU -->
-            <div class="sf-block" id="anchorReglas">
+            <!-- 4. Configuración APU (Fase 3.B): recursos (paquetes) + reglas de cálculo -->
+            <div class="sf-block" id="anchorConfigApu">
               <div class="sf-block__head">
                 <div class="sf-block__head-left">
                   <span class="sf-block__num">4</span>
-                  <span class="sf-block__label">Reglas de cálculo APU</span>
+                  <span class="sf-block__label">Configuración APU</span>
                 </div>
-                <button type="button" class="btn btn-ghost btn-xs" id="btnAddRegla">+ Regla</button>
               </div>
               <div class="sf-block__body">
+
+                <div class="capu-cfg-sub">
+                  <div class="capu-cfg-sub__head">
+                    <h4 class="capu-cfg-sub__title">Recursos <span>· qué paquetes usa cada tipo</span></h4>
+                  </div>
+                  {% include "ingenieria/partials/_config_apu_paquetes.html" %}
+                </div>
+
+                <div class="capu-cfg-sub" id="anchorReglas">
+                  <div class="capu-cfg-sub__head">
+                    <h4 class="capu-cfg-sub__title">Reglas de cálculo <span>· cómo se calcula el costo de cada tipo</span></h4>
+                    <button type="button" class="btn btn-ghost btn-xs" id="btnAddRegla">+ Regla</button>
+                  </div>
                 <div class="sf-hint">
                   <strong>Variables disponibles:</strong>
                   <code>suma</code> costo total · <code>aiu</code> · <code>margen</code> · <code>dias</code> · <code>tp</code> cant. base · <code>personas</code><br>
@@ -997,6 +1010,8 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                   Sin reglas APU. Usa "+ Regla" para agregar el cálculo de cada tipo.
                 </p>
                 {% endif %}
+                <p class="capu-cfg-foot" style="margin-top:8px;"><i class="bi bi-info-circle"></i> Las reglas se guardan con «Guardar y continuar».</p>
+                </div>
               </div>
             </div>
 
@@ -1033,8 +1048,8 @@ body.modal-open .assist-fab--resumen { display: none !important; }
             <div class="modal-content" style="max-height:85vh;">
               <div class="modal-header" style="padding:14px 18px;">
                 <h5 class="modal-title" id="modalConfigApuLabel" style="font-size:14px;font-weight:700;">
-                  <i class="bi bi-sliders" style="margin-right:6px;"></i>
-                  Configurar APU del subsistema
+                  <i class="bi bi-list-ul" style="margin-right:6px;"></i>
+                  Configuración individual anterior (ítems)
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
               </div>
@@ -1042,9 +1057,9 @@ body.modal-open .assist-fab--resumen { display: none !important; }
                 {% csrf_token %}
                 <div class="modal-body" style="padding:16px 18px;overflow-y:auto;max-height:calc(85vh - 120px);">
                   <div class="sf-hint">
-                    Selecciona los <strong>ítems APU predeterminados</strong> que aplicarán
-                    a este subsistema. El APU del proyecto traerá <strong>solo estos ítems</strong>
-                    para Herramientas, Transporte, Mano de obra y Administración.<br>
+                    Configuración anterior por <strong>ítems individuales</strong>. Solo se usa en los
+                    tipos que <strong>no tienen paquetes activos</strong>; si un tipo tiene paquetes,
+                    la generación usa los paquetes y estos ítems no se suman.<br>
                     <strong>Materiales</strong> no se configura aquí — se genera siempre
                     desde el despiece.
                   </div>
@@ -1155,9 +1170,9 @@ body.modal-open .assist-fab--resumen { display: none !important; }
             try {
               var params = new URLSearchParams(window.location.search);
               if (params.get('abrir_modal_apu') === '1') {
-                if (modalEl && window.bootstrap && bootstrap.Modal) {
-                  bootstrap.Modal.getOrCreateInstance(modalEl).show();
-                }
+                // Fase 3.B: la configuración principal ahora son los paquetes de la sección 4.
+                var destino = document.getElementById('anchorConfigApu');
+                if (destino) destino.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 // Limpiar el query param para que un refresh no reabra el modal
                 if (window.history && window.history.replaceState) {
                   params.delete('abrir_modal_apu');
@@ -1407,6 +1422,7 @@ window.CP_SECCIONES = [
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/catalogo-apu.js' %}"></script>
 <script>
 (function () {
 

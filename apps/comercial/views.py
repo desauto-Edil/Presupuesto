@@ -1,6 +1,7 @@
 """apps/comercial/views.py — Vistas del módulo comercial."""
 
 import logging
+from apps.common.mixins import EliminacionProtegidaMixin
 from django.contrib import messages
 from django.db.models import Count, Prefetch, Q
 from django.db.models import ProtectedError
@@ -346,20 +347,25 @@ class ClienteUpdateView(GestionComercialMixin, UpdateView):
         return redirect("comercial:cliente_list")
 
 
-class ClienteDeleteView(AdminGerenteRequiredMixin, DeleteView):
+class ClienteDeleteView(AdminGerenteRequiredMixin, EliminacionProtegidaMixin, DeleteView):
     model = Cliente
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:cliente_list")
 
     def form_valid(self, form):
-        registrar_log(
-            self.request,
-            accion="ELIMINAR_CLIENTE",
-            descripcion=f"Cliente {self.object.razon_social} eliminado",
-            modelo_afectado="Cliente",
-            objeto_id=self.object.pk,
-        )
-        return super().form_valid(form)
+        pk, razon_social = self.object.pk, self.object.razon_social
+        response = super().form_valid(form)
+        # Solo se registra si realmente se eliminó (un cliente con proyectos
+        # está protegido y EliminacionProtegidaMixin lo informa sin borrar).
+        if not Cliente.objects.filter(pk=pk).exists():
+            registrar_log(
+                self.request,
+                accion="ELIMINAR_CLIENTE",
+                descripcion=f"Cliente {razon_social} eliminado",
+                modelo_afectado="Cliente",
+                objeto_id=pk,
+            )
+        return response
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +393,7 @@ class ContactoUpdateView(GestionComercialMixin, UpdateView):
     success_url = reverse_lazy("comercial:contacto_list")
 
 
-class ContactoDeleteView(AdminGerenteRequiredMixin, DeleteView):
+class ContactoDeleteView(AdminGerenteRequiredMixin, EliminacionProtegidaMixin, DeleteView):
     model = ContactoCliente
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:contacto_list")
@@ -549,20 +555,10 @@ def build_solicitud_detail_context(request, solicitud):
             else:
                 despieces_sin_apu.append(dm)
         apus_data = list(apus_map.values())
-        # Consolidación disponible si el proyecto tiene 2+ despieces guardados
-        # o 2+ APUs ya generados. Cubre los dos escenarios típicos: usuario que
-        # todavía no genera APUs pero quiere ver el flujo, y usuario con APUs
-        # listos para unir.
-        despieces_guardados_count = sum(
-            1 for dm in despieces_raw if dm.esta_guardado
-        )
         proyectos_data.append({
             "proy": p,
             "apus_data": apus_data,
             "despieces_sin_apu": despieces_sin_apu,
-            "puede_consolidar": (
-                despieces_guardados_count >= 2 or len(apus_data) >= 2
-            ),
         })
     ctx["proyectos"] = proyectos_qs
     ctx["proyectos_data"] = proyectos_data
@@ -922,7 +918,7 @@ class TipoProyectoUpdateView(AdminRequiredMixin, UpdateView):
     success_url = reverse_lazy("comercial:tipoproyecto_list")
 
 
-class TipoProyectoDeleteView(AdminRequiredMixin, DeleteView):
+class TipoProyectoDeleteView(AdminRequiredMixin, EliminacionProtegidaMixin, DeleteView):
     model = TipoProyecto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("comercial:tipoproyecto_list")
@@ -1016,12 +1012,6 @@ class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
                 .prefetch_related("origenes_consolidado__apu_origen")
                 .order_by("-created_at")
             )
-            despieces_guardados_count = sum(
-                1 for dm in despieces_raw if dm.esta_guardado
-            )
-            ctx["puede_consolidar"] = (
-                despieces_guardados_count >= 2 or len(apus_map) >= 2
-            )
             # APUs guardados para el presupuesto del proyecto
             try:
                 ctx["n_apus_guardados"] = APUProyecto.objects.filter(
@@ -1036,7 +1026,6 @@ class ProyectoDetailView(UnidadObjectAccessMixin, DetailView):
             ctx["despieces_sin_apu"] = []
             ctx["total_despieces"] = 0
             ctx["apus_consolidados"] = []
-            ctx["puede_consolidar"] = False
 
         # ── Otras versiones de la misma solicitud ─────────────────────────────
         if proyecto.solicitud_id:
@@ -1116,6 +1105,7 @@ class ProyectoUpdateView(GestionComercialMixin, UpdateView):
             "margen_mano_obra_pct": "Margen de mano de obra",
             "iva_pct": "IVA",
             "aiu_contratista_pct": "AIU contratista",
+            "margen_contratista_pct": "Margen de contratista",
             "moneda": "Moneda",
             "tipo_proyecto": "Tipo proyecto",
         })

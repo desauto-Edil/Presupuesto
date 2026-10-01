@@ -89,6 +89,23 @@ class DespieceMaestroService:
 
     # ── Cálculo ───────────────────────────────────────────────────────────────
 
+    def _excluidos(self) -> set:
+        """Códigos de componentes eliminados en este despiece (no en la plantilla)."""
+        return {str(c) for c in (self.despiece.componentes_excluidos or [])}
+
+    def componentes_excluidos_info(self) -> list[dict]:
+        """[{codigo, nombre}] de los componentes eliminados que aún existen en la plantilla."""
+        from apps.ingenieria.models import ComponenteSubsistema
+        codigos = self._excluidos()
+        if not codigos:
+            return []
+        return list(
+            ComponenteSubsistema.objects
+            .filter(subsistema=self.subsistema, codigo__in=codigos)
+            .order_by("orden")
+            .values("codigo", "nombre")
+        )
+
     def calcular(self) -> list[dict]:
         """
         Evalúa las fórmulas de los componentes para los subconjuntos seleccionados.
@@ -133,6 +150,7 @@ class DespieceMaestroService:
             )
 
         resultados: list[dict] = []
+        excluidos = self._excluidos()
 
         import re as _re
         _token_re = _re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b')
@@ -194,6 +212,11 @@ class DespieceMaestroService:
                         "[DespieceMaestroService] Error en '%s' (subsistema %s): %s",
                         comp.codigo, self.subsistema.codigo, exc,
                     )
+
+            # Eliminado en este despiece: se evaluó (sus salidas siguen en el
+            # contexto para las fórmulas dependientes) pero no genera línea.
+            if comp.codigo in excluidos:
+                continue
 
             resultados.append({
                 "subconjunto_id":          comp.subconjunto_id,
@@ -266,8 +289,22 @@ class DespieceMaestroService:
         import re as _re
         _token_re = _re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b')
 
+        excluidos = self._excluidos()
         for comp in qs:
             ctx_componente = dict(ctx)
+
+            if comp.codigo in excluidos:
+                # Eliminado en este despiece: no genera línea ni exige producto.
+                # Si se puede evaluar sin producto, su salida queda en el contexto
+                # para las fórmulas que dependan de él.
+                if not comp.requiere_presentacion_producto:
+                    try:
+                        valor = comp.evaluar(ctx_componente)
+                        if comp.variable_salida:
+                            ctx[comp.variable_salida] = valor
+                    except Exception:
+                        pass
+                continue
 
             if comp.requiere_presentacion_producto:
                 seleccion = seleccion_productos.get(comp.codigo)
@@ -375,7 +412,10 @@ class DespieceMaestroService:
         dm.variables_entrada  = variables_entrada
         dm.resultado_snapshot = resultados
         dm.estado             = dm.GUARDADO
-        dm.save(update_fields=["variables_entrada", "resultado_snapshot", "estado", "updated_at"])
+        dm.save(update_fields=[
+            "variables_entrada", "resultado_snapshot", "estado",
+            "componentes_excluidos", "updated_at",
+        ])
 
         # Recrear líneas (garantiza idempotencia: guardar varias veces no duplica)
         dm.lineas.all().delete()

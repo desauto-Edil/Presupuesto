@@ -185,6 +185,30 @@
 
 .td-comp        { font-weight: 600; color: #222; }
 .td-comp small  { font-size: 11px; color: #999; font-weight: 400; display: block; }
+/* Eliminar componente solo en este despiece */
+.dp-del-btn {
+  display: inline-flex; align-items: center; margin-top: 3px; padding: 1px 6px;
+  border: 0; border-radius: 6px; background: transparent;
+  font-size: 11px; color: var(--ink-soft); cursor: pointer;
+}
+.dp-del-btn:hover { color: var(--brand-red); background: var(--red-bg); }
+.dp-excl-bar {
+  margin: 0 0 10px; padding: 8px 12px; border-radius: 10px;
+  background: var(--surface); border: 1px dashed var(--border); font-size: 12px;
+}
+.dp-excl-bar__title { color: var(--ink-soft); font-weight: 600; margin-bottom: 6px; }
+.dp-excl-bar__items { display: flex; flex-wrap: wrap; gap: 6px; }
+.dp-excl-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px;
+  border-radius: 999px; background: var(--card); border: 1px solid var(--border);
+  color: var(--ink);
+}
+.dp-excl-chip s { text-decoration-color: rgba(14,17,23,.35); }
+.dp-excl-chip button {
+  border: 0; background: transparent; color: var(--theme-accent-h); font-size: 11px;
+  font-weight: 600; cursor: pointer; padding: 2px 6px; border-radius: 999px;
+}
+.dp-excl-chip button:hover { background: var(--theme-accent-pale); }
 .td-cant        { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: #555; }
 .td-red         { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: #222; }
 .td-und         { color: #888; font-size: 12px; white-space: nowrap; }
@@ -546,6 +570,7 @@
     </div>
     {% endif %}
 
+    <div id="dpExcluidosBar" class="dp-excl-bar" hidden></div>
     <div id="resultBody"></div>
   </div>
 
@@ -572,6 +597,9 @@ const PRODUCTOS_URL        = "{% url 'ingenieria:buscar_productos' %}";
 const CSRF                 = "{{ csrf_token }}";
 const LINEAS_INIT          = {{ lineas_json|safe }};
 const CONSOLIDACIONES_INIT = {{ consolidaciones_json|safe }};
+/* Componentes eliminados SOLO en este despiece: [{codigo, nombre}]. */
+const EXCLUIDOS_INIT       = {{ excluidos_json|safe }};
+const DESPIECE_BLOQUEADO   = {{ despiece_bloqueado|yesno:"true,false" }};
 const PUEDE_APU            = {{ puede_generar_apu|yesno:"true,false" }};
 /* Mapa {variable_tecnica: label_visible} para mostrar etiqueta legible
    junto al nombre técnico en el modal de Detalle del cálculo. */
@@ -589,6 +617,9 @@ let sugerenciasConsolidacion = []; // [{key, producto_id, _prod, indices, unidad
 let variablesUsadas = null;
 let modoConsolidacion = false;
 let _nextCid = 0;
+/* Eliminados en este despiece: [{codigo, nombre, fila?, idx?}] (fila/idx solo si
+   se eliminó en esta sesión, para poder restaurarla sin recalcular). */
+let excluidos = EXCLUIDOS_INIT.map(e => ({ codigo: e.codigo, nombre: e.nombre }));
 
 /* ── Variables extra (filtradas) ─────────────────────────────────────────── */
 function mostrarTodasVariables() {
@@ -1156,7 +1187,7 @@ function _rowNormal(f, i, cols) {
   const redHtml = cantRed === null ? '—' : `<span class="td-red-pill">${cantRed}</span>`;
   return `<tr data-idx="${i}" class="${pendiente ? 'dp-pending-row' : ''}">
     ${chk}
-    <td class="td-comp">${esc(f.componente_nombre)}<small>${esc(f.componente_codigo)}</small>${_estadoDiferidoHtml(f)}</td>
+    <td class="td-comp">${esc(f.componente_nombre)}<small>${esc(f.componente_codigo)}</small>${_estadoDiferidoHtml(f)}${_btnEliminarHtml(i)}</td>
     <td class="td-cant">${cantidadHtml}</td>
     <td class="td-red">${redHtml}</td>
     <td class="td-und">${esc(f.unidad)}</td>
@@ -1195,6 +1226,69 @@ function _rowConsolidada(c, cols) {
     <td class="td-precio"><span class="td-precio-val">${_precioHtml(c._prod)}</span></td>
     <td class="td-fecha"><span class="td-fecha-val">${esc(_fechaStr(c._prod))}</span></td>
   </tr>`;
+}
+
+/* ── Eliminar componentes SOLO en este despiece ─────────────────────────────
+   No toca la plantilla del subsistema. El cambio se aplica al Guardar: el
+   componente deja de generar línea y no pasa al APU. */
+function _btnEliminarHtml(i) {
+  if (DESPIECE_BLOQUEADO || modoConsolidacion) return '';
+  return `<button type="button" class="dp-del-btn" title="Eliminar de este despiece (no afecta la plantilla)"
+            aria-label="Eliminar componente" onclick="eliminarComponente(${i})"><i class="bi bi-trash"></i></button>`;
+}
+
+function eliminarComponente(i) {
+  const f = filasCalc[i];
+  if (!f) return;
+  const nombre = f.componente_nombre || f.componente_codigo;
+  if (!confirm(`¿Eliminar «${nombre}» de este despiece?\n\nSolo se quita en este proyecto: la plantilla del subsistema no cambia. Se aplica al guardar y ya no pasará al APU.`)) return;
+  filasCalc.splice(i, 1);
+  consolidaciones = consolidaciones.map(c => ({
+    ...c, indices: (c.indices || []).filter(x => x !== i).map(x => (x > i ? x - 1 : x)),
+  })).filter(c => c.indices.length >= 2);
+  excluidos.push({ codigo: f.componente_codigo, nombre, fila: f, idx: i });
+  _renderBody();
+  _renderExcluidos();
+  _refrescarSugerenciasConsolidacion();
+  document.getElementById('btnGuardar').disabled = false;
+  showToast(`«${nombre}» eliminado de este despiece. Guarda para aplicarlo.`, 'ok');
+}
+
+function restaurarComponente(codigo) {
+  const k = excluidos.findIndex(e => e.codigo === codigo);
+  if (k < 0) return;
+  const e = excluidos[k];
+  excluidos.splice(k, 1);
+  if (e.fila) {
+    const pos = Math.min(e.idx ?? filasCalc.length, filasCalc.length);
+    filasCalc.splice(pos, 0, e.fila);
+    consolidaciones = consolidaciones.map(c => ({
+      ...c, indices: (c.indices || []).map(x => (x >= pos ? x + 1 : x)),
+    }));
+    _renderBody();
+    _renderExcluidos();
+    _refrescarSugerenciasConsolidacion();
+    showToast(`«${e.nombre}» restaurado. Guarda para aplicarlo.`, 'ok');
+  } else {
+    // Eliminado en un guardado anterior: hay que recalcular para obtener su línea.
+    _renderExcluidos();
+    calcular({ preservar: true });
+  }
+}
+
+function _renderExcluidos() {
+  const bar = document.getElementById('dpExcluidosBar');
+  if (!bar) return;
+  if (!excluidos.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+  bar.hidden = false;
+  bar.innerHTML = `
+    <div class="dp-excl-bar__title"><i class="bi bi-eye-slash"></i>
+      Eliminados en este despiece (${excluidos.length}) · no pasan al APU · la plantilla no cambia</div>
+    <div class="dp-excl-bar__items">${excluidos.map(e => `
+      <span class="dp-excl-chip"><s>${esc(e.nombre)}</s>
+        ${DESPIECE_BLOQUEADO ? '' : `<button type="button" onclick="restaurarComponente('${_escAttr(e.codigo)}')"
+          title="Restaurar en este despiece"><i class="bi bi-arrow-counterclockwise"></i> Restaurar</button>`}
+      </span>`).join('')}</div>`;
 }
 
 /* ── Render principal ────────────────────────────────────────────────────── */
@@ -1900,21 +1994,44 @@ function verDetalleConsolidada(cid) {
 }
 
 /* ── Calcular ─────────────────────────────────────────────────────────────── */
-async function calcular() {
+async function calcular(opts) {
   setLoading('btnCalcular', 'calcSpinner', 'calcIcon', true);
   const vars = getVariables();
+  // Al restaurar un componente se conservan productos y consolidaciones por código.
+  const preservar = !!(opts && opts.preservar);
+  const prodPorCodigo = {};
+  const consPorCodigo = [];
+  if (preservar) {
+    filasCalc.forEach(f => { if (f._prod) prodPorCodigo[f.componente_codigo] = f._prod; });
+    consolidaciones.forEach(c => consPorCodigo.push(
+      (c.indices || []).map(i => filasCalc[i] && filasCalc[i].componente_codigo)));
+  }
 
   try {
     const resp = await fetch(CALCULAR_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-      body:    JSON.stringify({ variables_entrada: vars }),
+      body:    JSON.stringify({
+        variables_entrada: vars,
+        componentes_excluidos: excluidos.map(e => e.codigo),
+      }),
     });
     const data = await resp.json();
 
     if (data.ok) {
       const lineas = [];
       data.subconjuntos.forEach(sq => sq.lineas.forEach(l => lineas.push(l)));
+      if (preservar) {
+        lineas.forEach(l => {
+          const p = prodPorCodigo[l.componente_codigo];
+          if (p && !l.producto_id) Object.assign(l, p);
+        });
+        const idxPorCodigo = {};
+        lineas.forEach((l, i) => { idxPorCodigo[l.componente_codigo] = i; });
+        consolidaciones.forEach((c, k) => {
+          c.indices = (consPorCodigo[k] || []).map(cod => idxPorCodigo[cod]).filter(i => i !== undefined);
+        });
+      }
 
       // Recalcular ACTUALIZA consolidaciones existentes con las nuevas cantidades.
       // No las borra: si el usuario creó consolidaciones antes de recalcular,
@@ -2013,6 +2130,7 @@ async function guardar() {
   const payload = {
     variables_entrada:   variablesActuales,
     seleccion_productos: seleccion,
+    componentes_excluidos: excluidos.map(e => e.codigo),
     consolidaciones:     consolidaciones.map(c => ({
       label:               c.label,
       indices:             c.indices,
@@ -2195,6 +2313,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
 
     renderTabla(LINEAS_INIT);
+    _renderExcluidos();
     document.getElementById('btnGuardar').disabled = false;
   } else {
     document.getElementById('resultBody').innerHTML = `
@@ -2204,6 +2323,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="small text-muted">Los resultados aparecerán aquí.</div>
       </div>`;
     document.getElementById('resultCount').textContent = 'Pendiente de calcular';
+    _renderExcluidos();
   }
 });
 

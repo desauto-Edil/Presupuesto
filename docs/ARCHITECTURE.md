@@ -1215,6 +1215,16 @@ incluidos si no fueron seleccionados explícitamente.
 
 ## 16. Fase 11.5 — Consolidación opcional de APUs
 
+> **Retirado en la Fase 3.C (2026-09-30).** La creación manual de APU consolidados
+> ("Unir APUs y consolidar materiales") ya no existe: se eliminaron las vistas
+> `APUConsolidar{Seleccionar,Preview,Confirmar}View`, sus URLs, los servicios
+> `apu_consolidacion_facade`, `apu_consolidado_builder` y `apu_merge_strategies`, y
+> las plantillas `apu_consolidar_*.html`. Se conservan los modelos y la lectura de
+> los consolidados históricos (detalle, PDF, snapshots). La consolidación del
+> despiece y la unión automática del presupuesto no cambian. Lo que sigue es
+> documentación histórica.
+
+
 > **La consolidación de APUs es opcional y solo se ejecuta por confirmación
 > explícita del usuario. Los APUs individuales conservan su independencia y
 > trazabilidad.**
@@ -1921,3 +1931,33 @@ esas unidades se ve afectado por agregar EDILANDINA.
 No se tocó AIU matemático, garantía Red Shield, snapshot CotizacionAPU,
 Builder, Facade, Strategies, PDFs, aprobación, devolución, archivado,
 PROTECT ni Fase 13. No se usa "Cuadrilla".
+
+---
+
+## §21 — Fase 3.D · Presupuesto: resumen económico y presentación comercial (2026-09-30)
+
+**Principio:** la economía del APU define el dinero; la presentación comercial define cómo lo
+ve el cliente. La presentación nunca modifica APU, APULinea, cantidad, P.U., AIU ni total oferta.
+
+- **Modelos** (`models/presentacion_comercial.py`, migración 0042):
+  `PresentacionItemPresupuesto` (OneToOne → APUProyecto, CASCADE; nombre/descripción comerciales)
+  y `LineaPresentacionPresupuesto` (nombre, descripción, cantidad 18,4, orden). No guardan unidad,
+  P.U., totales ni cantidad económica. Sin cabecera = original; cabecera sin líneas = una línea
+  personalizada; ≥2 líneas = desglose, válido solo si Σ cantidad = `cantidad_base_apu`.
+- **Servicios:** `presupuesto_resumen_service.resumen_apus_presupuesto` (solo lectura e
+  informativo: por cada APU, sus valores UNITARIOS tal cual el detalle del APU — costo =
+  subtotal_*, valor = líneas con la selección de `recalcular()` —, sin multiplicar por la
+  cantidad del presupuesto; no usa `valor_materiales`) y `presentacion_comercial_service` (`construir_items` — helper común de
+  presupuesto, revisión y PDF —, `guardar_presentacion` atómico, `restablecer_presentacion`).
+- **Descripción:** el presupuesto ya no escribe `APUProyecto.descripcion`; usa
+  `descripcion_comercial` con la del APU como valor por defecto.
+- **Cantidad económica cambiada:** el desglose se conserva y queda «Requiere ajuste»; no se
+  puede confirmar/enviar a revisión y el PDF preliminar usa una sola línea económica.
+- **Bloqueo (D9):** `ProyectoPresupuestoView.post`, `APUGuardarView` y la presentación respetan
+  la regla única de `apps.common.apu_lock` (proyecto o cualquier APU del presupuesto aprobado).
+- **Deuda documentada (no corregida):** P.U. mostrado redondeado × cantidad ≠ total mostrado;
+  diferencias históricas valor/costo de Administración dentro del P.U.; `valor_materiales`
+  desactualizado en APUs antiguos; pólizas fuera de la A del presupuesto; sin snapshot del
+  presupuesto de proyecto; lógica duplicada presupuesto/revisión; el bloque `extra_scripts` de
+  `presupuesto_proyecto.html`/`proyecto_revisar.html` no se renderiza (base usa `extra_js`), así
+  que el recálculo AIU en vivo nunca se ejecutó; la rejilla AIU en dos columnas no es responsive.

@@ -1,0 +1,148 @@
+{% load catalogo_tags %}
+{# Fase 3.B — bloque de un TipoAPU en la Configuración APU del subsistema.       #}
+{# Contexto: cfg (subsistema_service.config_apu_tipo), subsistema.               #}
+{# Re-renderizado vía AJAX tras agregar / quitar / mover.                        #}
+<section class="capu-cfg capu-t-{{ cfg.tipo }}" id="cfg-{{ cfg.tipo }}"
+         data-capu-cfg-tipo="{{ cfg.tipo }}"
+         data-label="{{ cfg.label }}"
+         data-fuente="{{ cfg.fuente }}"
+         data-n-efectivos="{{ cfg.n_paquetes_efectivos }}"
+         data-n-sia="{{ cfg.n_sia_efectivos }}"
+         data-asignados="{{ cfg.asignados_ids|join:',' }}">
+
+  <header class="capu-cfg__head">
+    <span class="capu-pkg__icon"><i class="bi bi-{{ cfg.icono }}"></i></span>
+    <div class="capu-cfg__titles">
+      <h3 class="capu-cfg__title">{{ cfg.label }}</h3>
+      {% if cfg.fuente == "paquetes" %}
+        <span class="capu-source capu-source--paquetes"><i class="bi bi-stack"></i> Usa paquetes</span>
+      {% elif cfg.fuente == "sia" %}
+        <span class="capu-source capu-source--sia"><i class="bi bi-list-ul"></i> Usa configuración individual · {{ cfg.n_sia_efectivos }} ítem{{ cfg.n_sia_efectivos|pluralize }}</span>
+      {% else %}
+        <span class="capu-source capu-source--vacio">Sin configurar</span>
+      {% endif %}
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm capu-cfg__add" data-capu-add-paquete>
+      <i class="bi bi-plus-lg"></i> <span>Agregar paquete</span>
+    </button>
+  </header>
+
+  <div class="capu-cfg__body">
+    {% if cfg.paquetes %}
+    <div class="capu-pkg-rows">
+      {% for f in cfg.paquetes %}
+      {% with p=f.obj asig=f.asignacion %}
+      <div class="capu-pkg-row{% if not f.efectivo %} is-inactive{% endif %}" data-paquete="{{ p.pk }}">
+        {% if cfg.paquetes|length > 1 %}
+        <div class="capu-comp__order">
+          <button type="button" data-capu-mover="arriba" data-asig="{{ asig.pk }}" aria-label="Subir {{ p.nombre }}"{% if forloop.first %} disabled{% endif %}><i class="bi bi-chevron-up"></i></button>
+          <button type="button" data-capu-mover="abajo" data-asig="{{ asig.pk }}" aria-label="Bajar {{ p.nombre }}"{% if forloop.last %} disabled{% endif %}><i class="bi bi-chevron-down"></i></button>
+        </div>
+        {% endif %}
+        <div class="capu-pkg-row__main">
+          <a class="capu-pkg-row__name" href="{% url 'presupuestos:catalogo_paquete_detail' p.pk %}" target="_blank" rel="noopener"
+             title="Ver paquete en el catálogo (nueva pestaña)">{{ p.nombre }}</a>
+          <div class="capu-pkg-row__meta">
+            <span><i class="bi bi-diagram-3"></i> {{ f.n_componentes }} componente{{ f.n_componentes|pluralize }}</span>
+            {% if not p.activo %}
+              <span class="capu-state capu-state--off">Paquete inactivo · no se usa</span>
+            {% elif not asig.activo %}
+              <span class="capu-state capu-state--off">Asignación inactiva · no se usa</span>
+            {% elif f.n_pendientes %}
+              <span class="capu-state capu-state--pending">{{ f.n_pendientes }} pendiente{{ f.n_pendientes|pluralize }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="capu-pkg-row__value">
+          {% if f.valor is not None %}
+            <strong>{{ f.valor|currency }}</strong><small>/ día</small>
+          {% elif not f.n_componentes %}
+            <span class="capu-na">Sin componentes</span>
+          {% else %}
+            <span class="capu-na">Valor no disponible</span>
+          {% endif %}
+        </div>
+        <div class="capu-pkg-row__actions">
+          <a class="capu-icon-btn" href="{% url 'presupuestos:catalogo_paquete_detail' p.pk %}" target="_blank" rel="noopener"
+             aria-label="Ver {{ p.nombre }}" title="Ver paquete"><i class="bi bi-box-arrow-up-right"></i></a>
+          <button type="button" class="btn btn-ghost btn-xs capu-quitar" data-capu-quitar data-asig="{{ asig.pk }}"
+                  data-nombre="{{ p.nombre }}" data-efectivo="{{ f.efectivo|yesno:'1,0' }}"
+                  title="Quita el paquete de este subsistema. El paquete sigue en el catálogo.">
+            <i class="bi bi-x-lg"></i> Quitar del subsistema
+          </button>
+        </div>
+      </div>
+      {% endwith %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if cfg.hay_pendientes %}
+    <div class="capu-note capu-note--warn mt-2">
+      <i class="bi bi-hourglass-split"></i>
+      <div>Hay paquetes con componentes sin vida útil. Mientras no se completen en el catálogo,
+        generar un APU con este subsistema mostrará un error.</div>
+    </div>
+    {% endif %}
+
+    {% if cfg.paquetes and not cfg.n_paquetes_efectivos %}
+    <div class="capu-note mt-2">
+      <i class="bi bi-info-circle"></i>
+      <div>Ningún paquete asignado está activo, así que no se usan.
+        {% if cfg.fuente == "sia" %}Se usa la configuración individual anterior.{% endif %}</div>
+    </div>
+    {% endif %}
+
+    {% if cfg.fuente == "sia" %}
+    <div class="capu-cfg__legacy">
+      <p>Este tipo todavía usa la <strong>configuración individual anterior</strong>. Sigue funcionando;
+        puedes empezar a usar paquetes cuando quieras.</p>
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="btn btn-outline-primary btn-sm" data-capu-add-paquete>
+          <i class="bi bi-stack"></i> Usar paquetes
+        </button>
+      </div>
+    </div>
+    {% elif cfg.fuente == "vacio" and not cfg.paquetes %}
+    <p class="capu-cfg__empty">Sin configuración. Los APU nuevos no tendrán recursos de este tipo.</p>
+    {% endif %}
+
+    {% if cfg.sia %}
+    <details class="capu-cfg__sia"{% if cfg.fuente == "sia" %} data-sia-activa{% endif %}>
+      <summary>
+        {% if cfg.fuente == "paquetes" %}
+          Configuración individual anterior · {{ cfg.sia|length }} ítem{{ cfg.sia|length|pluralize }} <span class="capu-muted">(no se usa mientras haya paquetes)</span>
+        {% else %}
+          Ver configuración actual · {{ cfg.sia|length }} ítem{{ cfg.sia|length|pluralize }}
+        {% endif %}
+      </summary>
+      <div class="capu-table-scroll">
+        <table class="capu-table capu-table--mini">
+          <thead><tr><th>Ítem</th><th class="capu-hide-sm">Categoría</th><th class="num">Cantidad</th><th>Estado</th></tr></thead>
+          <tbody>
+            {% for s in cfg.sia %}
+            {% with it=s.item_catalogo %}
+            <tr>
+              <td><span class="capu-name">{{ it.nombre }}</span>
+                <div class="capu-sub">{% if it.codigo %}<span class="capu-code">{{ it.codigo }}</span>{% endif %}<span class="capu-only-sm">{{ it.categoria.nombre }}</span></div></td>
+              <td class="capu-hide-sm">{{ it.categoria.nombre }}</td>
+              <td class="num">{{ s.cantidad }}</td>
+              <td>
+                {% if not s.activo %}<span class="capu-state capu-state--off">Inactivo</span>
+                {% elif not it.activo %}<span class="capu-state capu-state--off">Ítem inactivo</span>
+                {% elif not it.es_calculable %}<span class="capu-state capu-state--pending">Pendiente</span>
+                {% else %}<span class="capu-state capu-state--ok">Activo</span>{% endif %}
+              </td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-ghost btn-xs mt-2" data-bs-toggle="modal" data-bs-target="#modalConfigApu">
+        <i class="bi bi-pencil"></i> Editar configuración individual
+      </button>
+    </details>
+    {% endif %}
+  </div>
+</section>

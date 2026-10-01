@@ -1067,6 +1067,16 @@ proyectos grandes multisistema.
 
 ## 24. Fase 11.5 — Consolidación opcional de APUs
 
+> **Retirado en la Fase 3.C (2026-09-30).** La creación manual de APU consolidados
+> ("Unir APUs y consolidar materiales") ya no existe: se eliminaron las vistas
+> `APUConsolidar{Seleccionar,Preview,Confirmar}View`, sus URLs, los servicios
+> `apu_consolidacion_facade`, `apu_consolidado_builder` y `apu_merge_strategies`, y
+> las plantillas `apu_consolidar_*.html`. Se conservan los modelos y la lectura de
+> los consolidados históricos (detalle, PDF, snapshots). La consolidación del
+> despiece y la unión automática del presupuesto no cambian. Lo que sigue es
+> documentación histórica.
+
+
 > *La consolidación de APUs es opcional y solo se ejecuta por confirmación
 > explícita del usuario. Los APUs individuales conservan su independencia y
 > trazabilidad.*

@@ -23,14 +23,17 @@ from apps.presupuestos.views import (
     APUManoObraView, APUHerramientasView, APUTransporteView, APUAdminView, APUPolizasView,
     APULineaUpdateView, APULineaDeleteView, APUArchivarView, APUProyectoEliminarView,
     APUGuardarView,
+    APUPaqueteAgregarView, APUPaqueteEliminarView, APUComponenteUpdateView,
+    APUComponenteRestablecerPrecioView, APUConfigurarTipoView, APUPaquetesDisponiblesView,
+    APUResumenRendimientoView,
     APUPDFInternoView, APUPDFClienteView, APUEnviarRevisionView,
     CotizacionPDFInternoView, CotizacionPDFClienteView,
     APURevisarView, APUAprobarModalidadView, APUResetModalidadView,
     APUCotizacionFinalView,
-    # APU consolidado (Fase 11.5)
-    APUConsolidarSeleccionarView, APUConsolidarPreviewView, APUConsolidarConfirmarView,
     # Presupuesto por proyecto (nueva vista consolidada)
     ProyectoPresupuestoView,
+    ProyectoPresentacionGuardarView,
+    ProyectoPresentacionRestablecerView,
     ProyectoRevisarView,
     ProyectoReasignarRevisorView,
     ProyectoPDFClienteView,
@@ -38,6 +41,10 @@ from apps.presupuestos.views import (
     CatalogoAPUView,
     CategoriaItemAPUCreateView, CategoriaItemAPUUpdateView, CategoriaItemAPUDeleteView,
     ItemCatalogoAPUCreateView, ItemCatalogoAPUUpdateView, ItemCatalogoAPUDeleteView,
+    ItemValorDiarioPreviewAPIView,
+    # Paquetes APU maestros (Fase 3.A)
+    PaqueteAPUDetailView, PaqueteAPUCreateView, PaqueteAPUUpdateView,
+    PaqueteAPUToggleActivoView, PaquetePreviewAPIView,
     # CuadrillaPresetCreateView, CuadrillaPresetUpdateView, CuadrillaPresetDeleteView,  # oculto
     ItemsCatalogoAPIView,
     # Consumo
@@ -91,6 +98,13 @@ urlpatterns = [
     path("catalogo-apu/item/nuevo/",                   ItemCatalogoAPUCreateView.as_view(),  name="catalogo_item_create"),
     path("catalogo-apu/item/<int:pk>/editar/",         ItemCatalogoAPUUpdateView.as_view(),  name="catalogo_item_update"),
     path("catalogo-apu/item/<int:pk>/eliminar/",       ItemCatalogoAPUDeleteView.as_view(),  name="catalogo_item_delete"),
+    path("catalogo-apu/item/valor-diario/",            ItemValorDiarioPreviewAPIView.as_view(), name="catalogo_item_valor_diario"),
+    # Fase 3.A — paquetes APU maestros
+    path("catalogo-apu/paquete/nuevo/",                PaqueteAPUCreateView.as_view(),       name="catalogo_paquete_create"),
+    path("catalogo-apu/paquete/<int:pk>/",             PaqueteAPUDetailView.as_view(),       name="catalogo_paquete_detail"),
+    path("catalogo-apu/paquete/<int:pk>/editar/",      PaqueteAPUUpdateView.as_view(),       name="catalogo_paquete_update"),
+    path("catalogo-apu/paquete/<int:pk>/activo/",      PaqueteAPUToggleActivoView.as_view(), name="catalogo_paquete_toggle"),
+    path("catalogo-apu/paquete/previsualizar/",        PaquetePreviewAPIView.as_view(),      name="catalogo_paquete_preview"),
     # Cuadrilla presets: ocultos de la interfaz (modelos conservados en BD)
     # path("catalogo-apu/cuadrilla/nueva/",              CuadrillaPresetCreateView.as_view(),  name="catalogo_cuadrilla_create"),
     # path("catalogo-apu/cuadrilla/<int:pk>/editar/",    CuadrillaPresetUpdateView.as_view(),  name="catalogo_cuadrilla_update"),
@@ -118,6 +132,16 @@ urlpatterns = [
     path("apu/<int:pk>/polizas/",        APUPolizasView.as_view(),        name="apu_polizas"),
     path("apu/linea/<int:pk>/editar/",   APULineaUpdateView.as_view(),    name="apu_linea_update"),
     path("apu/linea/<int:pk>/eliminar/", APULineaDeleteView.as_view(),    name="apu_linea_delete"),
+    # Fase 2 — paquetes APU instanciados en el proyecto
+    path("apu/<int:pk>/paquetes/agregar/",    APUPaqueteAgregarView.as_view(),   name="apu_paquete_agregar"),
+    path("apu/paquete/<int:pk>/eliminar/",    APUPaqueteEliminarView.as_view(),  name="apu_paquete_eliminar"),
+    path("apu/componente/<int:pk>/editar/",   APUComponenteUpdateView.as_view(), name="apu_componente_update"),
+    # Fase 3.C — Configurar APU
+    path("apu/componente/<int:pk>/restablecer-precio/", APUComponenteRestablecerPrecioView.as_view(), name="apu_componente_restablecer_precio"),
+    path("apu/<int:pk>/rendimiento/<str:tipo>/", APUResumenRendimientoView.as_view(),
+         name="apu_resumen_rendimiento"),
+    path("apu/<int:pk>/configurar/<str:tipo>/",         APUConfigurarTipoView.as_view(),     name="apu_configurar_tipo"),
+    path("apu/<int:pk>/paquetes/disponibles/",          APUPaquetesDisponiblesView.as_view(), name="apu_paquetes_disponibles"),
     path("apu/<int:pk>/archivar/",       APUArchivarView.as_view(),       name="apu_archivar"),
     path("apu/<int:pk>/eliminar/",       APUProyectoEliminarView.as_view(), name="apu_eliminar"),
     path("apu/<int:pk>/xlsx/",            APUXLSXDownloadView.as_view(),   name="apu_xlsx"),
@@ -134,12 +158,12 @@ urlpatterns = [
     path("cotizacion/<int:pk>/pdf-interno/", CotizacionPDFInternoView.as_view(), name="cotizacion_pdf_interno"),
     path("cotizacion/<int:pk>/pdf-cliente/", CotizacionPDFClienteView.as_view(), name="cotizacion_pdf_cliente"),
 
-    # Fase 11.5 — Consolidación opcional de APUs (por proyecto)
-    path("proyectos/<int:pk>/apu/consolidar/",          APUConsolidarSeleccionarView.as_view(), name="apu_consolidar_seleccionar"),
-    path("proyectos/<int:pk>/apu/consolidar/preview/",  APUConsolidarPreviewView.as_view(),     name="apu_consolidar_preview"),
-    path("proyectos/<int:pk>/apu/consolidar/confirmar/", APUConsolidarConfirmarView.as_view(),  name="apu_consolidar_confirmar"),
     # Presupuesto por proyecto (vista consolidada AIU)
     path("proyectos/<int:pk>/presupuesto/",             ProyectoPresupuestoView.as_view(),      name="proyecto_presupuesto"),
+    path("proyectos/<int:pk>/presupuesto/presentacion/<int:apu_pk>/",
+         ProyectoPresentacionGuardarView.as_view(), name="proyecto_presentacion_guardar"),
+    path("proyectos/<int:pk>/presupuesto/presentacion/<int:apu_pk>/restablecer/",
+         ProyectoPresentacionRestablecerView.as_view(), name="proyecto_presentacion_restablecer"),
     # Vista del revisor/aprobador
     path("proyectos/<int:pk>/revisar/",                 ProyectoRevisarView.as_view(),          name="proyecto_revisar"),
     # Segregación de funciones: cambiar a quién le toca autorizar

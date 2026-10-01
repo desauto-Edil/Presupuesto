@@ -15,7 +15,7 @@ class AuthCustomMiddleware:
 
         # Si no está logueado y la URL no es pública, redirigir al login
         if "usuario_id" not in request.session:
-            if not any(request.path.startswith(url) for url in public_urls):
+            if request.path != "/admin" and not any(request.path.startswith(url) for url in public_urls):
                 return redirect("configuracion:login")
 
         # ── Retroalimentar 'rol' en sesiones antiguas que no lo tengan ──────

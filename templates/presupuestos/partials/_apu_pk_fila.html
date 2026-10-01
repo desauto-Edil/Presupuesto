@@ -1,0 +1,18 @@
+{% load catalogo_tags %}
+{# Fila de consulta de un componente (paquete o ítem adicional). Contexto: ln, es_admin. #}
+<tr class="apu-pk-row" id="apu-comp-{{ ln.pk }}" data-search="{{ ln.search_text }}">
+  <td class="apu-pk-comp">
+    <span class="apu-pk-comp__name">{{ ln.descripcion }}</span>
+    {% if ln.item_catalogo %}
+    <span class="apu-pk-comp__sub">{% if ln.item_catalogo.codigo %}{{ ln.item_catalogo.codigo }} · {% endif %}{{ ln.item_catalogo.categoria.nombre }}</span>
+    {% endif %}
+    <span class="apu-pk-comp__sub apu-pk-only-sm">{{ ln.precio_referencia|currency:"COP" }} / día{% if ln.precio_personalizado %} · personalizado{% endif %}</span>
+  </td>
+  <td class="text-end apu-num">{{ ln.cantidad_efectiva.normalize }}</td>
+  <td class="text-end apu-num apu-pk-hide-sm">
+    {{ ln.precio_referencia|currency:"COP" }}
+    {% if ln.precio_personalizado %}<span class="apu-price-tag" title="Precio personalizado en este APU{% if ln.valor_diario_catalogo is not None %} · catálogo: {{ ln.valor_diario_catalogo|currency:'COP' }}{% endif %}">Personalizado</span>{% endif %}
+  </td>
+  {% if es_admin %}<td class="text-end apu-num">{% if ln.porcentaje is not None %}{{ ln.porcentaje|floatformat:"-2" }}%{% else %}—{% endif %}</td>{% endif %}
+  <td class="text-end apu-num apu-pk-aporte">{{ ln.aporte|currency:"COP" }}</td>
+</tr>

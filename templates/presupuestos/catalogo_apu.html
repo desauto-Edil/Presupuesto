@@ -1,293 +1,327 @@
 {% extends "base.html" %}
+{% load static catalogo_tags %}
 {% block nav_apu %}active{% endblock %}
 {% block title %}Catálogo APU{% endblock %}
+{% block page_title %}Catálogo APU{% endblock %}
+{% block breadcrumb %}Ítems y paquetes{% endblock %}
 
 {% block extra_head %}
-<style>
-.capu-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 10px;
-  border-bottom: 0.5px solid var(--border, #e2e8f0);
-  margin-bottom: 14px;
-  gap: 8px;
-}
-.capu-header h1 { font-size: 14px; font-weight: 600; margin: 0; color: var(--color-text, #0f172a); }
-.capu-header .sub { font-size: 11px; color: var(--color-text-muted, #94a3b8); margin: 2px 0 0; }
-.capu-header-actions { display: flex; gap: 6px; flex-shrink: 0; }
-
-.capu-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 10px; font-size: 11.5px; font-weight: 500;
-  border-radius: 5px; border: 0.5px solid var(--border, #e2e8f0);
-  background: transparent; color: var(--color-text, #0f172a);
-  text-decoration: none; white-space: nowrap; cursor: pointer;
-  transition: background 0.1s;
-}
-.capu-btn:hover { background: var(--color-background-secondary, #f8fafc); color: inherit; }
-.capu-btn-primary { background: var(--color-primary, #3b82f6); color: #fff !important; border-color: var(--color-primary, #3b82f6); }
-.capu-btn-primary:hover { background: #2563eb; }
-
-/* Sección */
-.capu-section { margin-bottom: 16px; }
-
-.capu-section-head {
-  display: flex; align-items: center; gap: 6px;
-  margin-bottom: 8px; cursor: pointer; user-select: none;
-}
-.capu-pill {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; line-height: 1.7;
-}
-.capu-pill.labor  { background: #dcfce7; color: #166534; }
-.capu-pill.tools  { background: #fef9c3; color: #854d0e; }
-.capu-pill.transp { background: #dbeafe; color: #1e40af; }
-.capu-pill.admin  { background: #f1f5f9; color: #475569; }
-.capu-pill.mats   { background: #f0fdf4; color: #14532d; }
-
-.capu-section-add {
-  font-size: 10.5px; color: var(--color-text-muted, #94a3b8); text-decoration: none;
-  padding: 1px 6px; border-radius: 4px; border: 0.5px solid var(--border, #e2e8f0);
-  display: inline-flex; align-items: center; gap: 2px;
-}
-.capu-section-add:hover { background: var(--color-background-secondary, #f8fafc); color: inherit; }
-
-.capu-chevron {
-  margin-left: auto; font-size: 13px;
-  color: var(--color-text-muted, #94a3b8); transition: transform 0.18s ease; flex-shrink: 0;
-}
-.capu-section.collapsed .capu-chevron { transform: rotate(-90deg); }
-.capu-section.collapsed .capu-section-body { display: none; }
-
-/* Grid responsive: 1 → 2 → 3 → 4 columnas */
-.capu-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
-}
-
-/* Tarjeta */
-.capu-card {
-  border: 0.5px solid var(--border, #e2e8f0); border-radius: 6px;
-  background: var(--color-background, #fff);
-  display: flex; flex-direction: column; overflow: hidden;
-}
-.capu-card.inactive { opacity: 0.5; }
-
-.capu-card-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 10px; border-bottom: 0.5px solid var(--border, #e2e8f0); gap: 4px;
-}
-.capu-card-head-name {
-  font-size: 11.5px; font-weight: 500; color: var(--color-text, #0f172a);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0;
-}
-.capu-card-head-name .badge-inactive { font-size: 9.5px; font-weight: 400; color: #94a3b8; margin-left: 3px; }
-.capu-card-head-actions { display: flex; gap: 2px; flex-shrink: 0; }
-
-.capu-icon-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; border-radius: 4px; border: none;
-  background: transparent; color: var(--color-text-muted, #94a3b8);
-  text-decoration: none; font-size: 12px; transition: background 0.1s, color 0.1s; cursor: pointer;
-}
-.capu-icon-btn:hover { background: var(--color-background-secondary, #f1f5f9); color: var(--color-text, #0f172a); }
-.capu-icon-btn.danger:hover { color: #ef4444; background: #fff1f2; }
-
-/* Ítems */
-.capu-item {
-  display: flex; align-items: center;
-  padding: 5px 10px; border-bottom: 0.5px solid var(--border, #f1f5f9);
-  font-size: 11.5px; position: relative;
-}
-.capu-item:last-child { border-bottom: none; }
-.capu-item:hover { background: var(--color-background-secondary, #f8fafc); }
-.capu-item:hover .capu-item-actions { opacity: 1; }
-
-.capu-item-main { flex: 1; min-width: 0; }
-.capu-item-name {
-  font-size: 11.5px; font-weight: 450; color: var(--color-text, #0f172a);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.capu-item-code { font-size: 9.5px; font-family: monospace; color: #94a3b8; margin-right: 3px; }
-
-.capu-item-meta {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 1px;
-}
-.capu-meta-price { font-size: 10.5px; color: var(--color-text-muted, #94a3b8); }
-.capu-meta-days {
-  font-size: 9.5px; font-weight: 500; background: #fef3c7; color: #92400e;
-  padding: 0 4px; border-radius: 3px; display: inline-flex; align-items: center; gap: 2px;
-}
-.capu-meta-rate { font-size: 10.5px; color: #16a34a; font-weight: 500; }
-
-.capu-item-actions {
-  display: flex; gap: 1px; flex-shrink: 0; margin-left: 6px;
-  opacity: 0; transition: opacity 0.12s;
-}
-
-.capu-card-empty {
-  padding: 10px; text-align: center;
-  font-size: 10.5px; color: var(--color-text-muted, #94a3b8);
-}
-.capu-card-empty a { font-size: 10.5px; color: var(--color-primary, #3b82f6); }
-
-.capu-card-foot {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 4px 10px; background: var(--color-background-secondary, #f8fafc);
-  border-top: 0.5px solid var(--border, #e2e8f0);
-  font-size: 10.5px; color: var(--color-text-muted, #94a3b8);
-}
-
-.capu-global-empty { text-align: center; padding: 50px 20px; color: var(--color-text-muted, #94a3b8); }
-.capu-global-empty .icon { font-size: 28px; margin-bottom: 8px; display: block; }
-.capu-global-empty h5 { font-size: 13px; font-weight: 500; margin-bottom: 5px; color: var(--color-text, #0f172a); }
-.capu-global-empty p { font-size: 11.5px; margin-bottom: 12px; }
-.capu-section-empty { font-size: 11px; color: var(--color-text-muted, #94a3b8); padding: 0 0 6px; }
-</style>
+<link href="{% static 'css/catalogo-apu.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
+<div data-capu-catalogo>
 
-<div class="capu-header">
-  <div>
-    <h1>Catálogo APU</h1>
-    <p class="sub">Ítems reutilizables por tipo de análisis de precios unitarios</p>
-  </div>
-  <div class="capu-header-actions">
-    <a href="{% url 'presupuestos:catalogo_categoria_create' %}" class="capu-btn">
-      <i class="bi bi-folder-plus"></i> Nueva categoría
-    </a>
-    <a href="{% url 'presupuestos:catalogo_item_create' %}" class="capu-btn capu-btn-primary">
-      <i class="bi bi-plus-lg"></i> Nuevo ítem
-    </a>
-  </div>
-</div>
-
-{% if messages %}
-  {% for msg in messages %}
-    <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
-      {{ msg }} <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-  {% endfor %}
-{% endif %}
-
-{% if not grupos %}
-<div class="capu-global-empty">
-  <i class="bi bi-inbox icon"></i>
-  <h5>El catálogo está vacío</h5>
-  <p>Cree categorías e ítems para empezar a construir APUs.</p>
-  <a href="{% url 'presupuestos:catalogo_categoria_create' %}" class="capu-btn capu-btn-primary">
-    <i class="bi bi-folder-plus"></i> Crear primera categoría
-  </a>
-</div>
-
-{% else %}
-{% for grupo in grupos %}
-{% with tipo=grupo.tipo label=grupo.label %}
-
-<div class="capu-section" id="section-{{ tipo }}">
-
-  <div class="capu-section-head" onclick="toggleSection('{{ tipo }}')">
-    <span class="capu-pill {% if tipo == 'MANO_DE_OBRA' %}labor{% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}tools{% elif tipo == 'TRANSPORTE' %}transp{% elif tipo == 'ADMINISTRACION' %}admin{% else %}mats{% endif %}">
-      <i class="bi bi-{% if tipo == 'MANO_DE_OBRA' %}people-fill{% elif tipo == 'HERRAMIENTAS_EQUIPOS' %}tools{% elif tipo == 'TRANSPORTE' %}truck{% elif tipo == 'ADMINISTRACION' %}briefcase{% else %}box{% endif %}"></i>
-      {{ label }}
-    </span>
-    <a href="{% url 'presupuestos:catalogo_categoria_create' %}?tipo={{ tipo }}"
-       class="capu-section-add" onclick="event.stopPropagation()">
-      <i class="bi bi-plus"></i> Categoría
-    </a>
-    <i class="bi bi-chevron-down capu-chevron"></i>
-  </div>
-
-  <div class="capu-section-body">
-    {% if grupo.categorias %}
-    <div class="capu-grid">
-      {% for cat in grupo.categorias %}
-      <div class="capu-card{% if not cat.activa %} inactive{% endif %}">
-
-        <div class="capu-card-head">
-          <span class="capu-card-head-name">
-            {{ cat.nombre }}
-            {% if not cat.activa %}<span class="badge-inactive">(inactiva)</span>{% endif %}
-          </span>
-          <div class="capu-card-head-actions">
-            <a href="{% url 'presupuestos:catalogo_item_create' %}?categoria={{ cat.pk }}"
-               class="capu-icon-btn" title="Agregar ítem">
-              <i class="bi bi-plus-lg"></i>
-            </a>
-            <a href="{% url 'presupuestos:catalogo_categoria_update' cat.pk %}"
-               class="capu-icon-btn" title="Editar">
-              <i class="bi bi-pencil"></i>
-            </a>
-          </div>
-        </div>
-
-        <div class="capu-items">
-          {% for item in cat.items.all %}
-          <div class="capu-item">
-            <div class="capu-item-main">
-              <div class="capu-item-name">
-                {% if item.codigo %}<span class="capu-item-code">{{ item.codigo }}</span>{% endif %}
-                {{ item.nombre }}{% if not item.activo %}<span style="font-size:9.5px;color:#94a3b8;"> · inactivo</span>{% endif %}
-              </div>
-              <div class="capu-item-meta">
-                <span class="capu-meta-price">${{ item.precio_base|floatformat:0 }} / {{ item.get_unidad_display }}</span>
-                {% if item.vida_util_dias %}
-                  <span class="capu-meta-days"><i class="bi bi-clock" style="font-size:9px;"></i> {{ item.vida_util_dias }}d</span>
-                  <span class="capu-meta-rate">${{ item.costo_por_dia|floatformat:2 }}/día</span>
-                {% endif %}
-                {% if item.salario_base %}
-                  <span class="capu-meta-price">Sal. ${{ item.salario_base|floatformat:0 }}</span>
-                {% endif %}
-              </div>
-            </div>
-            <div class="capu-item-actions">
-              <a href="{% url 'presupuestos:catalogo_item_update' item.pk %}" class="capu-icon-btn" title="Editar">
-                <i class="bi bi-pencil"></i>
-              </a>
-              <a href="{% url 'presupuestos:catalogo_item_delete' item.pk %}" class="capu-icon-btn danger" title="Eliminar">
-                <i class="bi bi-trash"></i>
-              </a>
-            </div>
-          </div>
-          {% empty %}
-          <div class="capu-card-empty">
-            <i class="bi bi-inbox"></i> Sin ítems —
-            <a href="{% url 'presupuestos:catalogo_item_create' %}?categoria={{ cat.pk }}">agregar</a>
-          </div>
-          {% endfor %}
-        </div>
-
-        <div class="capu-card-foot">
-          <span>{{ cat.items.count }} ítem{{ cat.items.count|pluralize }}</span>
-          <a href="{% url 'presupuestos:catalogo_categoria_delete' cat.pk %}"
-             class="capu-icon-btn danger" title="Eliminar categoría"
-             onclick="return confirm('¿Eliminar la categoría «{{ cat.nombre }}»?')">
-            <i class="bi bi-trash3" style="font-size:11px;"></i>
-          </a>
-        </div>
-
+  <!-- ── Cabecera ─────────────────────────────────────────────────────── -->
+  <header class="capu-hero fade-up">
+    <div>
+      <div class="capu-hero__eyebrow">Análisis de precios unitarios</div>
+      <h1 class="capu-hero__title">Catálogo APU</h1>
+      <p class="capu-hero__sub">
+        Administra los recursos individuales (ítems) y los paquetes reutilizables
+        que los agrupan para construir los APU de cada proyecto.
+      </p>
+      <div class="capu-stats">
+        <span class="capu-stat"><strong>{{ paquetes|length }}</strong>paquete{{ paquetes|length|pluralize }}</span>
+        <span class="capu-stat"><strong>{{ total_items }}</strong>ítem{{ total_items|pluralize }}</span>
+        {% if items_pendientes %}
+        <span class="capu-stat capu-stat--warn"><strong>{{ items_pendientes }}</strong>pendiente{{ items_pendientes|pluralize }} de vida útil</span>
+        {% endif %}
       </div>
+    </div>
+    <div class="capu-hero__actions">
+      <a href="{% url 'presupuestos:catalogo_item_create' %}" class="btn btn-outline-primary">
+        <i class="bi bi-plus-lg"></i> Agregar ítem
+      </a>
+      {% if hay_items_paquetizables %}
+      <a href="{% url 'presupuestos:catalogo_paquete_create' %}" class="btn btn-primary">
+        <i class="bi bi-stack"></i> Crear paquete
+      </a>
+      {% else %}
+      <span class="d-inline-block" tabindex="0" title="Primero agrega al menos un ítem activo al catálogo">
+        <button type="button" class="btn btn-primary" disabled style="pointer-events:none;opacity:.5;">
+          <i class="bi bi-stack"></i> Crear paquete
+        </button>
+      </span>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- ── Búsqueda y filtros ───────────────────────────────────────────── -->
+  <div class="capu-toolbar fade-up-1" role="search">
+    <div class="capu-search" data-capu-search-wrap>
+      <i class="bi bi-search"></i>
+      <input type="search" id="capuQ" placeholder="Buscar ítems o paquetes por nombre o código"
+             autocomplete="off" aria-label="Buscar en el catálogo">
+      <button type="button" class="capu-search__clear" data-capu-clear aria-label="Limpiar búsqueda">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <div class="capu-seg" role="tablist" aria-label="Filtrar por tipo APU">
+      <button type="button" class="active" data-capu-tipo="">Todos</button>
+      {% for tipo, label, icono in tipos %}
+      <button type="button" class="capu-t-{{ tipo }}" data-capu-tipo="{{ tipo }}">
+        <span class="capu-dot"></span>{{ label }}
+      </button>
       {% endfor %}
     </div>
-    {% else %}
-    <p class="capu-section-empty"><i class="bi bi-info-circle"></i> No hay categorías de este tipo todavía.</p>
-    {% endif %}
+
+    <div class="dropdown">
+      <button type="button" class="btn btn-ghost btn-sm capu-filter-btn" data-bs-toggle="dropdown"
+              data-bs-auto-close="outside" aria-expanded="false">
+        <i class="bi bi-sliders2"></i> Filtros <span class="capu-count" data-capu-filter-count></span>
+      </button>
+      <div class="dropdown-menu dropdown-menu-end capu-menu capu-filter-panel">
+        <label for="capuCat" class="d-block">Categoría</label>
+        <select id="capuCat" class="form-select form-select-sm">
+          <option value="">Todas las categorías</option>
+          {% for c in categorias %}
+          <option value="{{ c.pk }}" data-tipo="{{ c.tipo_apu }}">{{ c.nombre }} · {{ c.get_tipo_apu_display }}</option>
+          {% endfor %}
+        </select>
+        <label for="capuEstado" class="d-block">Estado</label>
+        <select id="capuEstado" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          <option value="activo">Activos</option>
+          <option value="pendiente">Pendientes de configuración</option>
+          <option value="inactivo">Inactivos</option>
+        </select>
+        <button type="button" class="btn btn-ghost btn-sm w-100 justify-content-center" data-capu-reset>
+          Restablecer filtros
+        </button>
+      </div>
+    </div>
   </div>
 
+  <!-- ── PAQUETES (tarjetas) ─────────────────────────────────────────── -->
+  <section class="capu-section" id="paquetes" data-capu-scope="paquetes">
+    <div class="capu-section-head">
+      <h2 class="section-heading">Paquetes <span class="capu-badge-count" data-capu-visible>{{ paquetes|length }}</span></h2>
+      <span class="capu-hint d-none d-md-inline">Agrupaciones reutilizables de ítems</span>
+    </div>
+
+    <div class="capu-pkg-grid">
+      {% for p in paquetes %}
+      {% with pq=p.obj %}
+      <article class="capu-pkg capu-t-{{ pq.tipo_apu }}{% if not pq.activo %} is-inactive{% endif %}"
+               data-capu-row
+               data-tipo="{{ pq.tipo_apu }}"
+               data-cats="{% for c in p.categoria_ids %}{{ c }}{% if not forloop.last %},{% endif %}{% endfor %}"
+               data-estado="{% if not pq.activo %}inactivo{% elif p.n_pendientes %}pendiente{% else %}activo{% endif %}"
+               data-search="{{ pq.nombre|lower }} {{ pq.descripcion|lower }}{% for c in p.componentes %} {{ c.item_catalogo.nombre|lower }} {{ c.item_catalogo.codigo|default:''|lower }}{% endfor %}"
+               style="animation-delay: {% widthratio forloop.counter0 1 30 %}ms">
+        <div class="capu-pkg__top">
+          <span class="capu-pkg__icon"><i class="bi bi-{{ p.icono }}"></i></span>
+          <div class="dropdown">
+            <button type="button" class="capu-icon-btn" data-bs-toggle="dropdown" aria-expanded="false"
+                    aria-label="Acciones de {{ pq.nombre }}">
+              <i class="bi bi-three-dots"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end capu-menu">
+              <li><a class="dropdown-item" href="{% url 'presupuestos:catalogo_paquete_detail' pq.pk %}"><i class="bi bi-eye"></i> Ver paquete</a></li>
+              <li><a class="dropdown-item" href="{% url 'presupuestos:catalogo_paquete_update' pq.pk %}"><i class="bi bi-pencil"></i> Editar</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <form method="post" action="{% url 'presupuestos:catalogo_paquete_toggle' pq.pk %}" class="m-0">
+                  {% csrf_token %}
+                  <button type="submit" class="dropdown-item">
+                    {% if pq.activo %}<i class="bi bi-pause-circle"></i> Desactivar{% else %}<i class="bi bi-play-circle"></i> Activar{% endif %}
+                  </button>
+                </form>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <h3 class="capu-pkg__name">
+          <a href="{% url 'presupuestos:catalogo_paquete_detail' pq.pk %}">{{ pq.nombre }}</a>
+        </h3>
+        <div class="capu-pkg__type">{{ pq.get_tipo_apu_display }}</div>
+
+        <div class="capu-pkg__meta">
+          <span><i class="bi bi-diagram-3 me-1"></i>{{ p.n_componentes }} componente{{ p.n_componentes|pluralize }}</span>
+          {% if not pq.activo %}
+            <span class="capu-state capu-state--off">Inactivo</span>
+          {% elif p.n_pendientes %}
+            <span class="capu-state capu-state--pending">{{ p.n_pendientes }} pendiente{{ p.n_pendientes|pluralize }}</span>
+          {% endif %}
+        </div>
+
+        <div class="capu-pkg__value">
+          {% if p.valor is not None %}
+            <div class="capu-pkg__amount">{{ p.valor|currency }}<small>/ día</small></div>
+            <div class="capu-pkg__caption">Valor actual del paquete</div>
+          {% elif not p.n_componentes %}
+            <div class="capu-pkg__amount is-na">Sin componentes</div>
+            <div class="capu-pkg__caption">Agrega ítems para calcular su valor</div>
+          {% else %}
+            <div class="capu-pkg__amount is-na">Valor no disponible</div>
+            <div class="capu-pkg__caption">Hay componentes pendientes de configuración</div>
+          {% endif %}
+        </div>
+
+        <div class="capu-pkg__foot">
+          <span class="capu-pkg__link">Ver paquete <i class="bi bi-arrow-right"></i></span>
+        </div>
+      </article>
+      {% endwith %}
+      {% empty %}
+        {% if hay_items_paquetizables %}
+        <div class="capu-empty">
+          <div class="capu-empty__icon"><i class="bi bi-stack"></i></div>
+          <div class="capu-empty__title">Aún no hay paquetes</div>
+          <p class="capu-empty__text">Crea paquetes reutilizables agrupando ítems del catálogo.</p>
+          <a href="{% url 'presupuestos:catalogo_paquete_create' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-stack"></i> Crear paquete
+          </a>
+        </div>
+        {% else %}
+        <div class="capu-empty">
+          <div class="capu-empty__icon"><i class="bi bi-box"></i></div>
+          <div class="capu-empty__title">Primero necesitas ítems</div>
+          <p class="capu-empty__text">
+            Un paquete agrupa ítems existentes del catálogo. Agrega al menos un ítem
+            (mano de obra, herramientas, transporte o administración) para poder crear paquetes.
+          </p>
+          <a href="{% url 'presupuestos:catalogo_item_create' %}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> Agregar ítem
+          </a>
+        </div>
+        {% endif %}
+      {% endfor %}
+
+      {% if paquetes %}
+      <div class="capu-empty capu-empty--search" data-capu-noresults hidden>
+        <div class="capu-empty__icon"><i class="bi bi-search"></i></div>
+        <div class="capu-empty__title">Ningún paquete coincide</div>
+        <p class="capu-empty__text">Prueba con otro término o restablece los filtros.</p>
+        <button type="button" class="btn btn-ghost btn-sm" data-capu-reset>Limpiar búsqueda y filtros</button>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ── ÍTEMS (listado compacto) ────────────────────────────────────── -->
+  <section class="capu-section" id="items" data-capu-scope="items">
+    <div class="capu-section-head">
+      <h2 class="section-heading">Ítems del catálogo <span class="capu-badge-count" data-capu-visible>{{ total_items }}</span></h2>
+      <div class="dropdown">
+        <button type="button" class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-folder2"></i> Categorías
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end capu-menu" style="max-height:360px;overflow:auto;">
+          {% for c in categorias %}
+          <li>
+            <a class="dropdown-item capu-t-{{ c.tipo_apu }}" href="{% url 'presupuestos:catalogo_categoria_update' c.pk %}">
+              <span class="capu-dot" style="width:7px;height:7px;border-radius:50%;background:var(--t);flex-shrink:0;"></span>
+              <span class="flex-grow-1">{{ c.nombre }}{% if not c.activa %} <span class="capu-muted">(inactiva)</span>{% endif %}</span>
+              <span class="capu-muted" style="font-size:11px;">{{ c.n_items }}</span>
+            </a>
+          </li>
+          {% endfor %}
+          {% if categorias %}<li><hr class="dropdown-divider"></li>{% endif %}
+          <li><a class="dropdown-item" href="{% url 'presupuestos:catalogo_categoria_create' %}"><i class="bi bi-folder-plus"></i> Nueva categoría</a></li>
+        </ul>
+      </div>
+    </div>
+
+    {% if items %}
+    <div class="capu-table-wrap">
+      <div class="capu-table-scroll">
+        <table class="capu-table">
+          <thead>
+            <tr>
+              <th>Ítem</th>
+              <th class="capu-hide-sm">Tipo</th>
+              <th class="capu-hide-md">Categoría</th>
+              <th class="num capu-hide-sm">Valor base</th>
+              <th class="num capu-hide-md">Vida útil</th>
+              <th class="num">Valor diario</th>
+              <th class="capu-hide-sm">Estado</th>
+              <th class="capu-actions"><span class="visually-hidden">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+            {% with vd=item.valor_diario_o_none tipo=item.categoria.tipo_apu %}
+            <tr class="{% if not item.activo %}is-inactive{% endif %}"
+                data-capu-row
+                data-tipo="{{ tipo }}"
+                data-cats="{{ item.categoria_id }}"
+                data-estado="{% if not item.activo %}inactivo{% elif vd is None %}pendiente{% else %}activo{% endif %}"
+                data-search="{{ item.nombre|lower }} {{ item.codigo|default:''|lower }} {{ item.categoria.nombre|lower }}">
+              <td>
+                <a class="capu-row-link capu-name" href="{% url 'presupuestos:catalogo_item_update' item.pk %}">{{ item.nombre }}</a>
+                <div class="capu-sub">
+                  {% if item.codigo %}<span class="capu-code">{{ item.codigo }}</span><span>·</span>{% endif %}
+                  <span>{{ item.get_unidad_display }}</span>
+                  <span class="capu-only-sm">· {{ item.categoria.nombre }}</span>
+                  {% if item.n_paquetes %}<span>· en {{ item.n_paquetes }} paquete{{ item.n_paquetes|pluralize }}</span>{% endif %}
+                  {% if not item.activo %}<span class="capu-only-sm">· Inactivo</span>{% elif vd is None %}<span class="capu-only-sm capu-na" style="font-size:11.5px;">· Pendiente</span>{% endif %}
+                </div>
+              </td>
+              <td class="capu-hide-sm"><span class="capu-type capu-t-{{ tipo }}"><i class="bi bi-{{ item.tipo_icono }}"></i>{{ item.categoria.get_tipo_apu_display }}</span></td>
+              <td class="capu-hide-md">{{ item.categoria.nombre }}</td>
+              <td class="num capu-hide-sm">{{ item.valor_base|currency }}</td>
+              <td class="num capu-hide-md">
+                {% if item.vida_util_dias %}{{ item.vida_util_dias }} día{{ item.vida_util_dias|pluralize }}{% else %}<span class="capu-na">Pendiente</span>{% endif %}
+              </td>
+              <td class="num">
+                {% if vd is not None %}<strong>{{ vd|currency }}</strong>{% else %}<span class="capu-muted">No disponible</span>{% endif %}
+              </td>
+              <td class="capu-hide-sm">
+                {% if not item.activo %}<span class="capu-state capu-state--off">Inactivo</span>
+                {% elif vd is None %}<span class="capu-state capu-state--pending">Pendiente</span>
+                {% else %}<span class="capu-state capu-state--ok">Activo</span>{% endif %}
+              </td>
+              <td class="capu-actions">
+                <div class="dropdown">
+                  <button type="button" class="capu-icon-btn" data-bs-toggle="dropdown" aria-expanded="false"
+                          aria-label="Acciones de {{ item.nombre }}">
+                    <i class="bi bi-three-dots"></i>
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end capu-menu">
+                    <li><a class="dropdown-item" href="{% url 'presupuestos:catalogo_item_update' item.pk %}"><i class="bi bi-pencil"></i> Editar ítem</a></li>
+                    {% if item.n_paquetes %}
+                    <li><span class="dropdown-item-text capu-muted px-2" style="font-size:12px;"><i class="bi bi-lock me-1"></i>Está en {{ item.n_paquetes }} paquete{{ item.n_paquetes|pluralize }}: no se puede eliminar</span></li>
+                    {% else %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="{% url 'presupuestos:catalogo_item_delete' item.pk %}"><i class="bi bi-trash3"></i> Eliminar…</a></li>
+                    {% endif %}
+                  </ul>
+                </div>
+              </td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="capu-empty capu-empty--search" data-capu-noresults hidden style="border:none;border-radius:0;">
+        <div class="capu-empty__icon"><i class="bi bi-search"></i></div>
+        <div class="capu-empty__title">Ningún ítem coincide</div>
+        <p class="capu-empty__text">No hay ítems que cumplan la búsqueda y los filtros actuales.</p>
+        <button type="button" class="btn btn-ghost btn-sm" data-capu-reset>Limpiar búsqueda y filtros</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="capu-empty">
+      <div class="capu-empty__icon"><i class="bi bi-box"></i></div>
+      <div class="capu-empty__title">El catálogo no tiene ítems</div>
+      <p class="capu-empty__text">
+        Los ítems son los recursos individuales (un oficial, un taladro, un transporte…)
+        con su valor base y vida útil. Son la base de todos los paquetes.
+      </p>
+      <a href="{% url 'presupuestos:catalogo_item_create' %}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-plus-lg"></i> Agregar ítem
+      </a>
+    </div>
+    {% endif %}
+  </section>
 </div>
-{% endwith %}
-{% endfor %}
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
-<script>
-function toggleSection(tipo) {
-  const sec = document.getElementById('section-' + tipo);
-  if (sec) sec.classList.toggle('collapsed');
-}
-</script>
+<script src="{% static 'js/catalogo-apu.js' %}"></script>
 {% endblock %}

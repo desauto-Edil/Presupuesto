@@ -1,0 +1,98 @@
+{% load catalogo_tags %}
+{# Fase 3.C — TipoAPU calculado por paquetes (vista de CONSULTA).                   #}
+{# Contexto: cat (con cat.est = _estructura_tipo_apu), apu.                          #}
+{# Jerarquía: paquetes (snapshot APUPaquete) → ítems adicionales → resultado.       #}
+{% with est=cat.est %}{% with es_admin=est.es_admin %}
+<div class="apu-pk-wrap">
+  <table class="apu-table apu-pk-table">
+    <thead>
+      <tr>
+        <th>Componente</th>
+        <th class="text-end">Cant.</th>
+        <th class="text-end apu-pk-hide-sm">Precio diario</th>
+        {% if es_admin %}<th class="text-end">% aplicado</th>{% endif %}
+        <th class="text-end">Aporte</th>
+      </tr>
+    </thead>
+
+    {% for b in est.bloques %}
+    <tbody class="apu-pk-group" data-search="{{ b.search_text }}">
+      <tr class="apu-pk-head" onclick="apuPkToggle(this)" aria-expanded="true">
+        <td colspan="{% if es_admin %}4{% else %}3{% endif %}">
+          <i class="bi bi-chevron-down apu-pk-chev"></i>
+          <span class="apu-pk-name">{{ b.ap.nombre_snapshot }}</span>
+          <span class="apu-pk-meta">Paquete · {{ b.componentes|length }} componente{{ b.componentes|length|pluralize }}</span>
+        </td>
+        <td class="text-end apu-pk-subtotal">{{ b.subtotal|currency:"COP" }}</td>
+      </tr>
+      {% for ln in b.componentes %}
+      {% include "presupuestos/partials/_apu_pk_fila.html" %}
+      {% empty %}
+      <tr class="apu-pk-row"><td colspan="5" class="apu-pk-empty">Sin componentes.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% endfor %}
+
+    {% if est.sueltos %}
+    <tbody class="apu-pk-group apu-pk-group--sueltos" data-search="ítems adicionales">
+      <tr class="apu-pk-head" onclick="apuPkToggle(this)" aria-expanded="true">
+        <td colspan="{% if es_admin %}4{% else %}3{% endif %}">
+          <i class="bi bi-chevron-down apu-pk-chev"></i>
+          <span class="apu-pk-name">Ítems adicionales</span>
+          <span class="apu-pk-meta">Fuera de paquetes · {{ est.sueltos|length }} ítem{{ est.sueltos|length|pluralize }}</span>
+        </td>
+        <td class="text-end apu-pk-subtotal">{{ est.suma_sueltos|currency:"COP" }}</td>
+      </tr>
+      {% for ln in est.sueltos %}
+      {% include "presupuestos/partials/_apu_pk_fila.html" %}
+      {% endfor %}
+    </tbody>
+    {% endif %}
+
+    <tfoot>
+      <tr class="apu-pk-suma">
+        <td colspan="{% if es_admin %}4{% else %}3{% endif %}">Suma de aportes</td>
+        <td class="text-end">{{ est.suma|currency:"COP" }}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  {% if est.resumen %}
+  {# Resultado del tipo: costo unit. = fórmula del subsistema sobre la suma de aportes; #}
+  {# costo total = costo unit. × rendimiento; valor unit. = costo unit. × (1 + margen   #}
+  {# de contratista); valor total = valor unit. × rendimiento.                          #}
+  <table class="apu-table apu-pk-resultado">
+    <thead>
+      <tr>
+        <th>Concepto</th>
+        <th class="text-end">Rendimiento</th>
+        <th>Unidad</th>
+        <th class="text-end">Costo unit.</th>
+        <th class="th-costo text-end">Costo total</th>
+        <th class="th-valor text-end">Valor unit.</th>
+        <th class="th-valor text-end">Valor total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td data-label="Resultado">
+          <span class="apu-pk-name">Resultado {{ cat.label|lower }}</span>
+          <span class="apu-pk-meta">regla del subsistema{% if est.resumen.rendimiento_personalizado %} · rendimiento ajustado{% endif %}</span>
+        </td>
+        <td class="text-end" data-label="Rendimiento">{% if es_admin %}{{ est.resumen.rendimiento|multiply:100|floatformat:"-2" }}%{% else %}{{ est.resumen.rendimiento|floatformat:"-4" }}{% endif %}</td>
+        <td data-label="Unidad">{{ est.resumen.unidad }}</td>
+        <td class="text-end" data-label="Costo unit.">{{ est.resumen.costo_unitario|currency:"COP" }}</td>
+        <td class="td-costo text-end apu-costo-total" data-label="Costo total">{{ est.resumen.costo_total|currency:"COP" }}</td>
+        <td class="text-end" data-label="Valor unit.">{{ est.resumen.valor_unitario|currency:"COP" }}</td>
+        <td class="td-valor text-end apu-valor-total" data-label="Valor total">{{ est.resumen.valor_total|currency:"COP" }}</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="apu-pk-formula">
+    Costo unit. = fórmula del subsistema sobre la suma de aportes ({{ est.suma|currency:"COP" }}) ·
+    Valor unit. = costo unit. × (1 + {{ apu.margen_contratista_pct|floatformat:"-2" }}% margen de contratista) ·
+    Totales = unitario × rendimiento
+  </p>
+  {% endif %}
+</div>
+{% endwith %}{% endwith %}

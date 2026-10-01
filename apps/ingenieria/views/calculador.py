@@ -429,6 +429,12 @@ class DespieceMaestroView(CalculadorAccesoMixin, DetailView):
             })
         ctx["consolidaciones_json"] = json.dumps(consolidaciones_data, ensure_ascii=False)
 
+        # Componentes eliminados SOLO en este despiece (no pasan al APU).
+        ctx["excluidos_json"] = json.dumps(
+            svc.componentes_excluidos_info(), ensure_ascii=False,
+        ).replace("<", "\\u003c")
+        ctx["despiece_bloqueado"] = objeto_bloqueado_por_apu(getattr(dm, "proyecto", None))
+
         return ctx
 
 
@@ -441,6 +447,25 @@ def _agrupar_lineas(lineas_qs):
             grupos[key] = {"nombre": key, "lineas": []}
         grupos[key]["lineas"].append(linea)
     return list(grupos.values())
+
+
+def _leer_excluidos(body, dm):
+    """Lista de códigos de componentes eliminados en ESTE despiece, enviada por el
+    cliente. Solo se aceptan códigos de la plantilla del subsistema; si el body no
+    trae la clave, se conservan los ya guardados."""
+    if not isinstance(body, dict) or "componentes_excluidos" not in body:
+        return list(dm.componentes_excluidos or [])
+    crudos = body.get("componentes_excluidos")
+    if not isinstance(crudos, list):
+        return list(dm.componentes_excluidos or [])
+    from apps.ingenieria.models import ComponenteSubsistema
+    pedidos = {str(c) for c in crudos if isinstance(c, (str, int))}
+    validos = set(
+        ComponenteSubsistema.objects
+        .filter(subsistema=dm.subsistema, codigo__in=pedidos)
+        .values_list("codigo", flat=True)
+    )
+    return sorted(validos)
 
 
 # ── 4. Calcular (AJAX, sin guardar) ──────────────────────────────────────────
@@ -487,8 +512,9 @@ class CalcularDespieceMaestroView(CalculadorAccesoMixin, View):
         if not isinstance(variables_entrada, dict):
             variables_entrada = {}
 
-        # Actualizar variables_entrada en el objeto en memoria (sin guardar)
+        # Actualizar variables_entrada y componentes eliminados en memoria (sin guardar)
         dm.variables_entrada = variables_entrada
+        dm.componentes_excluidos = _leer_excluidos(body, dm)
 
         # Fase 3D — primera adopción de DespieceFacade.
         # Equivalente a: DespieceMaestroService(dm).calcular()
@@ -550,7 +576,8 @@ class GuardarDespieceMaestroView(CalculadorAccesoMixin, View):
             variables_entrada    = body.get("variables_entrada", {})
             seleccion_productos  = body.get("seleccion_productos", {})
             consolidaciones_data = body.get("consolidaciones", [])
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            body                 = {}
             variables_entrada    = {}
             seleccion_productos  = {}
             consolidaciones_data = []
@@ -563,6 +590,8 @@ class GuardarDespieceMaestroView(CalculadorAccesoMixin, View):
             consolidaciones_data = []
 
         dm.variables_entrada = variables_entrada
+        # Componentes eliminados SOLO en este despiece (la plantilla no cambia).
+        dm.componentes_excluidos = _leer_excluidos(body, dm)
         svc = DespieceMaestroService(dm)
 
         from django.db import transaction as _db_transaction

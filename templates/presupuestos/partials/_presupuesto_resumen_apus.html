@@ -1,0 +1,123 @@
+{% load catalogo_tags %}
+{# Fase 3.D — Resumen de los APU del presupuesto, tal cual se ve en cada APU: valores UNITARIOS  #}
+{# (por la unidad del APU), sin multiplicar por la cantidad — eso ya lo hace el ítem.            #}
+{# Informativo. Por cada APU: tarjeta de costo y tarjeta de valor. Contexto: resumen_apus.        #}
+{# Carrusel: se ve un APU a la vez y se cambia con las flechas (o ← → con el foco dentro).        #}
+{% with n=resumen_apus.n_apus %}
+<section class="pr-resumen" aria-labelledby="prResumenTitle" aria-roledescription="carrusel" data-pr-carrusel>
+  <div class="pr-resumen__head">
+    <h2 class="pr-resumen__title" id="prResumenTitle">Resumen económico de los APU</h2>
+    <span class="pr-resumen__hint">
+      Valores unitarios de cada APU{% if n > 1 %} · <span data-pr-pos aria-live="polite">1 de {{ n }}</span>{% endif %}
+    </span>
+  </div>
+
+  <div class="pr-carrusel{% if n > 1 %} pr-carrusel--nav{% endif %}">
+    {% if n > 1 %}
+    <button type="button" class="pr-carrusel__btn" data-pr-prev aria-label="APU anterior" disabled>
+      <i class="bi bi-caret-left-fill"></i>
+    </button>
+    {% endif %}
+
+    <div class="pr-carrusel__slides">
+  {% for r in resumen_apus.apus %}
+  <div class="pr-resumen__apu" data-pr-slide role="group" aria-roledescription="APU"
+       aria-label="{{ forloop.counter }} de {{ n }}"{% if not forloop.first %} hidden{% endif %}>
+    <div class="pr-resumen__apu-head">
+      <span class="pr-resumen__apu-name">{{ r.nombre }}</span>
+      <span class="pr-resumen__apu-meta">
+        APU #{{ r.apu.pk }}{% if r.unidad %} · valores por {{ r.unidad }}{% endif %}
+      </span>
+    </div>
+
+    <div class="pr-cards">
+      <article class="pr-card pr-card--costo" aria-label="Costo total del APU {{ r.apu.pk }}">
+        <header class="pr-card__head">
+          <span class="pr-card__badge"><i class="bi bi-receipt"></i></span>
+          <div>
+            <span class="pr-card__label">Costo total</span>
+            <strong class="pr-card__value">{{ r.costo_total|currency:"COP" }}</strong>
+          </div>
+        </header>
+        <ul class="pr-card__tipos">
+          {% for t in r.tipos %}
+          <li class="pr-tipo pr-tipo--{{ t.tipo }}">
+            <span class="pr-tipo__ic"><i class="bi bi-{{ t.icono }}"></i></span>
+            <span class="pr-tipo__label">{{ t.label }}</span>
+            <span class="pr-tipo__val">{{ t.costo|currency:"COP" }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </article>
+
+      <article class="pr-card pr-card--valor" aria-label="Valor total del APU {{ r.apu.pk }}">
+        <header class="pr-card__head">
+          <span class="pr-card__badge"><i class="bi bi-cash-coin"></i></span>
+          <div>
+            <span class="pr-card__label">Valor total</span>
+            <strong class="pr-card__value">{{ r.valor_total|currency:"COP" }}</strong>
+          </div>
+        </header>
+        <ul class="pr-card__tipos">
+          {% for t in r.tipos %}
+          <li class="pr-tipo pr-tipo--{{ t.tipo }}">
+            <span class="pr-tipo__ic"><i class="bi bi-{{ t.icono }}"></i></span>
+            <span class="pr-tipo__label">{{ t.label }}</span>
+            <span class="pr-tipo__val">{{ t.valor|currency:"COP" }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </article>
+    </div>
+  </div>
+  {% endfor %}
+    </div>
+
+    {% if n > 1 %}
+    <button type="button" class="pr-carrusel__btn" data-pr-next aria-label="APU siguiente">
+      <i class="bi bi-caret-right-fill"></i>
+    </button>
+    {% endif %}
+  </div>
+
+  {% if resumen_apus.inconsistencias %}
+  <div class="capu-note capu-note--warn pr-resumen__note">
+    <i class="bi bi-exclamation-triangle"></i>
+    <div>
+      Datos históricos: en {{ resumen_apus.inconsistencias|length }} caso{{ resumen_apus.inconsistencias|length|pluralize }}
+      el total guardado del APU no cuadra con la suma de sus tipos (se muestra tal cual, sin corregir):
+      {% for inc in resumen_apus.inconsistencias %}APU #{{ inc.apu_id }} ({{ inc.campo }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% if n > 1 %}
+<script>
+(function () {
+  "use strict";
+  var root = document.querySelector("[data-pr-carrusel]");
+  if (!root) return;
+  var slides = root.querySelectorAll("[data-pr-slide]");
+  var prev = root.querySelector("[data-pr-prev]");
+  var next = root.querySelector("[data-pr-next]");
+  var pos = root.querySelector("[data-pr-pos]");
+  var i = 0;
+  function ir(k) {
+    if (k < 0 || k >= slides.length) return;
+    slides[i].hidden = true;
+    i = k;
+    slides[i].hidden = false;
+    prev.disabled = i === 0;
+    next.disabled = i === slides.length - 1;
+    if (pos) pos.textContent = (i + 1) + " de " + slides.length;
+  }
+  prev.addEventListener("click", function () { ir(i - 1); });
+  next.addEventListener("click", function () { ir(i + 1); });
+  root.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") { ir(i - 1); }
+    else if (e.key === "ArrowRight") { ir(i + 1); }
+  });
+})();
+</script>
+{% endif %}
+{% endwith %}

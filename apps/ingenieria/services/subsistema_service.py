@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import json
 
+from django.db import transaction
+
 from apps.ingenieria.models import (
     ComponenteSubsistema,
     VariableSubsistema,
@@ -410,26 +412,27 @@ def guardar_items_apu_subsistema(subsistema, post):
     """
     Persiste los ítems APU predeterminados del subsistema en SubsistemaItemAPU.
 
-    Reemplaza completamente las asociaciones existentes con las nuevas
-    seleccionadas en el formulario. Solo aplica a las categorías
-    no-Materiales (Herramientas, Transporte, Mano de obra, Administración).
-    Materiales NO se persiste aquí: se genera siempre desde el despiece.
+    Solo aplica a las categorías no-Materiales (Herramientas, Transporte, Mano
+    de obra, Administración). Materiales NO se persiste aquí: se genera
+    siempre desde el despiece.
 
-    POST arrays esperados (uno por categoría):
-        sia_HERRAMIENTAS_EQUIPOS_item_id[]   sia_HERRAMIENTAS_EQUIPOS_cantidad[]
-        sia_TRANSPORTE_item_id[]             sia_TRANSPORTE_cantidad[]
-        sia_MANO_DE_OBRA_item_id[]           sia_MANO_DE_OBRA_cantidad[]
-        sia_ADMINISTRACION_item_id[]         sia_ADMINISTRACION_cantidad[]
+    POST esperado (uno por categoría <TIPO>):
+        sia_<TIPO>_item_id[]           checkboxes de los ítems marcados
+        sia_<TIPO>_cantidad_<pk>       cantidad del ítem (opcional)
+        sia_<TIPO>_cantidad[]          formato posicional legacy (opcional;
+                                       solo si viene alineado con item_id[])
+        sia_ADMINISTRACION_rendimiento[]  % de aplicación, alineado con los
+                                       ítems marcados (los inputs de los no
+                                       marcados van disabled)
 
-    Cada checkbox marcado emite un valor en sia_<TIPO>_item_id[]; el input
-    de cantidad asociado se envía en sia_<TIPO>_cantidad[] alineado por
-    índice (gracias a hidden inputs paralelos).
-
-    Reglas:
-      - Se borran TODAS las SubsistemaItemAPU del subsistema y se recrean.
+    Reglas (Fase 1):
+      - Los ítems marcados se crean/actualizan; los desmarcados se eliminan.
+        Ya no se borra todo para recrearlo.
+      - Si el POST no trae cantidad para un ítem (la UI actual no la envía),
+        se CONSERVA la cantidad guardada; si el ítem es nuevo, 1.
+      - Cantidad inválida (< 1 o no numérica) → se conserva la guardada o 1.
       - Si no llega ningún item para un tipo, la categoría queda vacía
         (regla 6L-D: APUService no rellena con catálogo completo).
-      - Cantidad inválida (<1) → 1.
     """
     from apps.presupuestos.models import SubsistemaItemAPU, ItemCatalogoAPU
     from apps.common.choices import TipoAPU
@@ -441,17 +444,25 @@ def guardar_items_apu_subsistema(subsistema, post):
         TipoAPU.ADMINISTRACION,
     ]
 
-    # Reemplazo completo
-    SubsistemaItemAPU.objects.filter(subsistema=subsistema).delete()
+    existentes = {
+        (sia.tipo, sia.item_catalogo_id): sia
+        for sia in SubsistemaItemAPU.objects.filter(subsistema=subsistema)
+    }
+    conservar = set()
+
+    def _cantidad(raw):
+        try:
+            cant = int(str(raw).strip())
+        except (TypeError, ValueError):
+            return None
+        return cant if cant >= 1 else None
 
     for tipo in TIPOS:
         items_raw     = post.getlist(f"sia_{tipo}_item_id[]")
         cantidades    = post.getlist(f"sia_{tipo}_cantidad[]")
         rendimientos  = post.getlist(f"sia_{tipo}_rendimiento[]")
+        posicional_ok = len(cantidades) == len(items_raw)
 
-        # El frontend emite checkboxes + un hidden de cantidad por cada ítem
-        # mostrado. Para mantener el alineamiento por índice, se procesa por
-        # par (item_id, cantidad) — solo se persisten los marcados.
         orden = 0
         for idx, item_pk_raw in enumerate(items_raw):
             item_pk_raw = (item_pk_raw or "").strip()
@@ -463,15 +474,14 @@ def guardar_items_apu_subsistema(subsistema, post):
             except ItemCatalogoAPU.DoesNotExist:
                 continue
 
-            raw_cant = cantidades[idx].strip() if idx < len(cantidades) else ""
-            try:
-                cant = int(raw_cant) if raw_cant else 1
-            except (TypeError, ValueError):
-                cant = 1
-            if cant < 1:
-                cant = 1
+            previo = existentes.get((tipo, item_pk))
+            cant = _cantidad(post.get(f"sia_{tipo}_cantidad_{item_pk}"))
+            if cant is None and posicional_ok:
+                cant = _cantidad(cantidades[idx])
+            if cant is None:
+                cant = previo.cantidad if previo is not None else 1
 
-            raw_rend = rendimientos[idx].strip().replace(",",".") if idx < len(rendimientos) else ""
+            raw_rend = rendimientos[idx].strip().replace(",", ".") if idx < len(rendimientos) else ""
             try:
                 # Guardar como factor (10% -> 0.10)
                 rend = float(raw_rend) / 100.0 if raw_rend else None
@@ -490,6 +500,11 @@ def guardar_items_apu_subsistema(subsistema, post):
                     "activo": True,
                 },
             )
+            conservar.add((tipo, item_pk))
+
+    for clave, sia in existentes.items():
+        if clave not in conservar:
+            sia.delete()
 
 
 # ── Guardado de M2M de catálogo de consumo ───────────────────────────────────
@@ -583,3 +598,238 @@ def guardar_productos_tecnicos_componentes_quimicos(subsistema, post):
             categoria=categoria,
             orden=idx + 1,
         )
+
+
+# ── Paquetes APU del subsistema (Fase 3.B) ───────────────────────────────────
+#
+# El subsistema solo SELECCIONA paquetes maestros (SubsistemaPaqueteAPU). No
+# crea ni modifica PaqueteAPU / PaqueteAPUItem, no toca SubsistemaItemAPU y no
+# afecta APUs ya generados (trabajan con su snapshot APUPaquete).
+#
+# Precedencia (Fase 2, APUService._auto_generar_desde_catalogo), replicada aquí
+# con los MISMOS filtros para que la interfaz muestre la fuente real:
+#   paquetes efectivos = asignación activa + paquete activo + mismo TipoAPU
+#   SIA efectivos      = SubsistemaItemAPU activo + ítem activo + mismo tipo
+#   fuente = "paquetes" si hay paquetes efectivos; si no, "sia" si hay SIA
+#            efectivos; si no, "vacio".
+
+FUENTE_PAQUETES = "paquetes"
+FUENTE_SIA = "sia"
+FUENTE_VACIO = "vacio"
+
+
+class ConfigPaquetesError(ValueError):
+    """Operación inválida sobre los paquetes del subsistema (mensaje para el usuario)."""
+
+
+def tipos_config_apu():
+    """Los 4 TipoAPU que admiten paquetes, en el orden de presentación."""
+    from apps.common.choices import TipoAPU
+    orden = [TipoAPU.MANO_DE_OBRA, TipoAPU.HERRAMIENTAS_EQUIPOS,
+             TipoAPU.TRANSPORTE, TipoAPU.ADMINISTRACION]
+    labels = dict(TipoAPU.choices)
+    return [(t, labels[t]) for t in orden]
+
+
+def _paquetes_efectivos_qs(subsistema, tipo):
+    from apps.presupuestos.models import SubsistemaPaqueteAPU
+    return SubsistemaPaqueteAPU.objects.filter(
+        subsistema=subsistema, activo=True, paquete__activo=True, paquete__tipo_apu=tipo,
+    )
+
+
+def _sia_efectivos_qs(subsistema, tipo):
+    from apps.presupuestos.models import SubsistemaItemAPU
+    return SubsistemaItemAPU.objects.filter(
+        subsistema=subsistema, tipo=tipo, activo=True, item_catalogo__activo=True,
+    )
+
+
+def fuente_apu_tipo(subsistema, tipo) -> str:
+    """Fuente que usará la generación de un APU nuevo para este subsistema y tipo."""
+    if _paquetes_efectivos_qs(subsistema, tipo).exists():
+        return FUENTE_PAQUETES
+    if _sia_efectivos_qs(subsistema, tipo).exists():
+        return FUENTE_SIA
+    return FUENTE_VACIO
+
+
+def config_apu_tipo(subsistema, tipo, label=None) -> dict:
+    """Estado de un TipoAPU para la sección Configuración APU del subsistema."""
+    from apps.presupuestos.models import SubsistemaItemAPU, SubsistemaPaqueteAPU
+    from apps.presupuestos.services.paquete_service import TIPO_APU_ICONO, resumen_paquete
+
+    asignaciones = list(
+        SubsistemaPaqueteAPU.objects
+        .filter(subsistema=subsistema, paquete__tipo_apu=tipo)
+        .select_related("paquete")
+        .order_by("orden", "id")
+    )
+    filas = []
+    for asig in asignaciones:
+        r = resumen_paquete(asig.paquete)
+        r["asignacion"] = asig
+        r["efectivo"] = asig.activo and asig.paquete.activo
+        filas.append(r)
+    sia = list(
+        SubsistemaItemAPU.objects.filter(subsistema=subsistema, tipo=tipo)
+        .select_related("item_catalogo__categoria")
+        .order_by("orden", "item_catalogo__nombre")
+    )
+    n_sia_efectivos = sum(1 for s in sia if s.activo and s.item_catalogo.activo)
+    n_efectivos = sum(1 for f in filas if f["efectivo"])
+    if n_efectivos:
+        fuente = FUENTE_PAQUETES
+    elif n_sia_efectivos:
+        fuente = FUENTE_SIA
+    else:
+        fuente = FUENTE_VACIO
+    return {
+        "tipo": tipo,
+        "label": label or dict(tipos_config_apu()).get(tipo, tipo),
+        "icono": TIPO_APU_ICONO.get(tipo, "stack"),
+        "fuente": fuente,
+        "paquetes": filas,
+        "n_paquetes_efectivos": n_efectivos,
+        "hay_pendientes": any(f["efectivo"] and f["n_pendientes"] for f in filas),
+        "sia": sia,
+        "n_sia_efectivos": n_sia_efectivos,
+        "asignados_ids": [f["obj"].pk for f in filas],
+    }
+
+
+def config_apu_subsistema(subsistema) -> list:
+    """Estado de los 4 TipoAPU con paquetes para el subsistema (vacío si no existe aún)."""
+    if subsistema is None or not getattr(subsistema, "pk", None):
+        return []
+    return [config_apu_tipo(subsistema, t, l) for t, l in tipos_config_apu()]
+
+
+def paquetes_disponibles(tipo=None, q="") -> list:
+    """
+    Paquetes maestros ACTIVOS (no materiales) que pueden asignarse, para el
+    selector. Filtra por TipoAPU y por texto (nombre o descripción).
+    Los inactivos no se ofrecen como nuevas asignaciones.
+    """
+    from django.db.models import Q
+    from apps.presupuestos.models import PaqueteAPU
+    from apps.presupuestos.services.paquete_service import resumen_paquete
+
+    qs = PaqueteAPU.objects.filter(activo=True).exclude(tipo_apu="MATERIALES")
+    if tipo:
+        qs = qs.filter(tipo_apu=tipo)
+    q = (q or "").strip()
+    if q:
+        qs = qs.filter(Q(nombre__icontains=q) | Q(descripcion__icontains=q))
+    salida = []
+    for p in qs.order_by("nombre"):
+        r = resumen_paquete(p)
+        salida.append({
+            "id": p.pk,
+            "nombre": p.nombre,
+            "tipo_apu": p.tipo_apu,
+            "descripcion": p.descripcion,
+            "n_componentes": r["n_componentes"],
+            "n_pendientes": r["n_pendientes"],
+            "valor_fmt": r["valor_fmt"],
+        })
+    return salida
+
+
+@transaction.atomic
+def asignar_paquete_subsistema(subsistema, paquete_id, tipo):
+    """
+    Asigna un paquete maestro existente al subsistema para `tipo`.
+
+    Valida en backend: paquete existente, activo, no MATERIALES, del mismo
+    TipoAPU de la operación y no asignado ya. Si existe una asignación previa
+    desactivada (p. ej. desde el admin) se reactiva en lugar de duplicarla.
+    Devuelve (asignacion, fuente_anterior, fuente_nueva).
+    """
+    from apps.presupuestos.models import PaqueteAPU, SubsistemaPaqueteAPU
+
+    tipos = dict(tipos_config_apu())
+    if tipo not in tipos:
+        raise ConfigPaquetesError("Tipo APU no válido para paquetes.")
+    try:
+        paquete = PaqueteAPU.objects.select_for_update().get(pk=int(paquete_id))
+    except (PaqueteAPU.DoesNotExist, TypeError, ValueError):
+        raise ConfigPaquetesError("El paquete seleccionado no existe.")
+    if paquete.tipo_apu != tipo:
+        raise ConfigPaquetesError(
+            f"«{paquete.nombre}» es de {paquete.get_tipo_apu_display()}; "
+            f"no puede asignarse a {tipos[tipo]}."
+        )
+    if not paquete.activo:
+        raise ConfigPaquetesError(f"«{paquete.nombre}» está inactivo y no puede asignarse.")
+
+    antes = fuente_apu_tipo(subsistema, tipo)
+    existente = SubsistemaPaqueteAPU.objects.filter(subsistema=subsistema, paquete=paquete).first()
+    if existente is not None:
+        if existente.activo:
+            raise ConfigPaquetesError(f"«{paquete.nombre}» ya está asignado a este subsistema.")
+        existente.activo = True
+        existente.save(update_fields=["activo", "updated_at"])
+        asig = existente
+    else:
+        ultimo = (
+            SubsistemaPaqueteAPU.objects.filter(subsistema=subsistema, paquete__tipo_apu=tipo)
+            .order_by("-orden").values_list("orden", flat=True).first()
+        )
+        asig = SubsistemaPaqueteAPU.objects.create(
+            subsistema=subsistema, paquete=paquete,
+            orden=(ultimo + 1) if ultimo is not None else 0,
+        )
+    return asig, antes, fuente_apu_tipo(subsistema, tipo)
+
+
+@transaction.atomic
+def quitar_paquete_subsistema(subsistema, asignacion_id):
+    """
+    Quita un paquete del subsistema: elimina SOLO la relación
+    SubsistemaPaqueteAPU. El PaqueteAPU, sus componentes, los
+    SubsistemaItemAPU y los APU ya generados no se tocan.
+    Devuelve (tipo, nombre_paquete, fuente_anterior, fuente_nueva).
+    """
+    from apps.presupuestos.models import SubsistemaPaqueteAPU
+
+    try:
+        asig = SubsistemaPaqueteAPU.objects.select_related("paquete").get(
+            pk=int(asignacion_id), subsistema=subsistema,
+        )
+    except (SubsistemaPaqueteAPU.DoesNotExist, TypeError, ValueError):
+        raise ConfigPaquetesError("La asignación no existe en este subsistema.")
+    tipo, nombre = asig.paquete.tipo_apu, asig.paquete.nombre
+    antes = fuente_apu_tipo(subsistema, tipo)
+    asig.delete()
+    return tipo, nombre, antes, fuente_apu_tipo(subsistema, tipo)
+
+
+@transaction.atomic
+def mover_paquete_subsistema(subsistema, asignacion_id, delta: int) -> str:
+    """
+    Sube (-1) o baja (+1) un paquete dentro de su TipoAPU. El orden define el
+    orden de instanciación (y presentación) de los paquetes en APUs nuevos.
+    Renumera el tipo 0..n-1. Devuelve el TipoAPU afectado.
+    """
+    from apps.presupuestos.models import SubsistemaPaqueteAPU
+
+    try:
+        asig = SubsistemaPaqueteAPU.objects.select_related("paquete").get(
+            pk=int(asignacion_id), subsistema=subsistema,
+        )
+    except (SubsistemaPaqueteAPU.DoesNotExist, TypeError, ValueError):
+        raise ConfigPaquetesError("La asignación no existe en este subsistema.")
+    tipo = asig.paquete.tipo_apu
+    lista = list(
+        SubsistemaPaqueteAPU.objects.select_for_update()
+        .filter(subsistema=subsistema, paquete__tipo_apu=tipo).order_by("orden", "id")
+    )
+    idx = next(i for i, a in enumerate(lista) if a.pk == asig.pk)
+    destino = idx + (1 if delta > 0 else -1)
+    if 0 <= destino < len(lista):
+        lista[idx], lista[destino] = lista[destino], lista[idx]
+    for orden, a in enumerate(lista):
+        if a.orden != orden:
+            SubsistemaPaqueteAPU.objects.filter(pk=a.pk).update(orden=orden)
+    return tipo

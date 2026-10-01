@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% load static catalogo_tags %}
+{% block nav_apu %}active{% endblock %}
+{% block title %}{{ p.obj.nombre }} · Paquetes APU{% endblock %}
+{% block page_title %}Catálogo APU{% endblock %}
+{% block breadcrumb %}Paquete{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'css/catalogo-apu.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+{% with pq=p.obj %}
+<div class="capu-page fade-up capu-t-{{ pq.tipo_apu }}">
+
+  <a href="{% url 'presupuestos:catalogo_apu' %}#paquetes" class="capu-back"><i class="bi bi-arrow-left"></i> Catálogo APU</a>
+
+  <header class="capu-detail-head">
+    <div class="d-flex gap-3 align-items-start" style="min-width:0;">
+      <span class="capu-pkg__icon"><i class="bi bi-{{ p.icono }}"></i></span>
+      <div style="min-width:0;">
+        <div class="capu-hero__eyebrow">Paquete APU</div>
+        <h1 class="capu-detail-title">{{ pq.nombre }}</h1>
+        <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+          <span class="capu-type capu-t-{{ pq.tipo_apu }}"><i class="bi bi-{{ p.icono }}"></i>{{ pq.get_tipo_apu_display }}</span>
+          {% if pq.activo %}<span class="capu-state capu-state--ok">Activo</span>{% else %}<span class="capu-state capu-state--off">Inactivo</span>{% endif %}
+        </div>
+        {% if pq.descripcion %}<p class="capu-detail-desc">{{ pq.descripcion|linebreaksbr }}</p>{% endif %}
+      </div>
+    </div>
+    <div class="capu-hero__actions">
+      <form method="post" action="{% url 'presupuestos:catalogo_paquete_toggle' pq.pk %}" class="m-0">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button type="submit" class="btn btn-ghost">
+          {% if pq.activo %}<i class="bi bi-pause-circle"></i> Desactivar{% else %}<i class="bi bi-play-circle"></i> Activar{% endif %}
+        </button>
+      </form>
+      <a href="{% url 'presupuestos:catalogo_paquete_update' pq.pk %}" class="btn btn-primary">
+        <i class="bi bi-pencil"></i> Editar paquete
+      </a>
+    </div>
+  </header>
+
+  <div class="capu-kpis">
+    <div class="capu-kpi capu-kpi--accent">
+      <div class="capu-kpi__label">Valor del paquete</div>
+      {% if p.valor is not None %}
+        <div class="capu-kpi__value">{{ p.valor|currency }} <small style="font-size:12px;font-weight:600;color:var(--ink-soft);">/ día</small></div>
+        <div class="capu-kpi__sub">Σ valor diario × cantidad, con el catálogo vigente</div>
+      {% elif not p.n_componentes %}
+        <div class="capu-kpi__value is-na">Sin componentes</div>
+        <div class="capu-kpi__sub">Edita el paquete para agregar ítems</div>
+      {% else %}
+        <div class="capu-kpi__value is-na">No disponible</div>
+        <div class="capu-kpi__sub">Hay componentes pendientes de configuración</div>
+      {% endif %}
+    </div>
+    <div class="capu-kpi">
+      <div class="capu-kpi__label">Componentes</div>
+      <div class="capu-kpi__value">{{ p.n_componentes }}</div>
+      <div class="capu-kpi__sub">{% if p.n_pendientes %}{{ p.n_pendientes }} pendiente{{ p.n_pendientes|pluralize }}{% else %}Todos calculables{% endif %}</div>
+    </div>
+    <div class="capu-kpi">
+      <div class="capu-kpi__label">Uso</div>
+      <div class="capu-kpi__value">{{ p.en_uso_subsistemas }}</div>
+      <div class="capu-kpi__sub">subsistema{{ p.en_uso_subsistemas|pluralize }} · {{ n_instancias }} APU{{ n_instancias|pluralize }} generado{{ n_instancias|pluralize }}</div>
+    </div>
+  </div>
+
+  {% if p.n_pendientes %}
+  <div class="capu-note capu-note--warn mb-3">
+    <i class="bi bi-hourglass-split"></i>
+    <div>
+      {{ p.n_pendientes }} componente{{ p.n_pendientes|pluralize }} no tiene{{ p.n_pendientes|pluralize:"n" }} vida útil configurada,
+      así que el valor del paquete no se puede calcular. Completa la vida útil desde el ítem del catálogo.
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="capu-section-head">
+    <h2 class="section-heading">Componentes <span class="capu-badge-count">{{ p.n_componentes }}</span></h2>
+  </div>
+
+  {% if p.componentes %}
+  <div class="capu-table-wrap">
+    <div class="capu-table-scroll">
+      <table class="capu-table">
+        <thead>
+          <tr>
+            <th>Ítem</th>
+            <th class="capu-hide-md">Categoría</th>
+            <th class="num">Valor diario</th>
+            <th class="num">Cantidad</th>
+            <th class="num">Aporte</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in p.componentes %}
+          {% with it=c.item_catalogo vd=c.item_catalogo.valor_diario_o_none %}
+          <tr class="{% if not it.activo %}is-inactive{% endif %}">
+            <td>
+              <a class="capu-row-link capu-name" href="{% url 'presupuestos:catalogo_item_update' it.pk %}" title="Editar el ítem en el catálogo">{{ it.nombre }}</a>
+              <div class="capu-sub">
+                {% if it.codigo %}<span class="capu-code">{{ it.codigo }}</span><span>·</span>{% endif %}
+                <span>{{ it.get_unidad_display }}</span>
+                <span class="capu-only-sm">· {{ it.categoria.nombre }}</span>
+                {% if not it.activo %}<span class="capu-state capu-state--off">Inactivo</span>{% endif %}
+              </div>
+            </td>
+            <td class="capu-hide-md">{{ it.categoria.nombre }}</td>
+            <td class="num">{% if vd is not None %}{{ vd|currency }}{% else %}<span class="capu-na">Pendiente</span>{% endif %}</td>
+            <td class="num"><span class="capu-formula">×</span> <strong>{{ c.cantidad.normalize }}</strong></td>
+            <td class="num">{% if vd is not None %}<strong>{{ c.aporte|currency }}</strong>{% else %}<span class="capu-muted">No disponible</span>{% endif %}</td>
+          </tr>
+          {% endwith %}
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5">
+              <div class="d-flex justify-content-between align-items-center gap-3">
+                <span>Valor del paquete <span class="capu-formula" style="font-weight:600;">· Σ valor diario × cantidad</span></span>
+                <span class="num">{% if p.valor is not None %}{{ p.valor|currency }} / día{% else %}<span class="capu-na">No disponible</span>{% endif %}</span>
+              </div>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  <p class="capu-muted mt-2" style="font-size:12px;">
+    <i class="bi bi-info-circle me-1"></i>El valor diario proviene de cada ítem del catálogo; el paquete solo define la cantidad.
+    Los APU ya generados conservan su propia copia del paquete.
+  </p>
+  {% else %}
+  <div class="capu-empty">
+    <div class="capu-empty__icon"><i class="bi bi-diagram-3"></i></div>
+    <div class="capu-empty__title">Este paquete no tiene componentes</div>
+    <p class="capu-empty__text">Agrega ítems existentes del catálogo de {{ pq.get_tipo_apu_display }} y define su cantidad.</p>
+    <a href="{% url 'presupuestos:catalogo_paquete_update' pq.pk %}" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i> Editar paquete</a>
+  </div>
+  {% endif %}
+</div>
+{% endwith %}
+{% endblock %}

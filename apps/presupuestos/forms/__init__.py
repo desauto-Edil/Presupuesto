@@ -1,7 +1,8 @@
 """apps/presupuestos/forms — Formularios del módulo de presupuestos."""
 
+from decimal import Decimal
+
 from django import forms
-from django.forms import inlineformset_factory
 
 from apps.presupuestos.models import (
     ProyectoSistema,
@@ -10,8 +11,7 @@ from apps.presupuestos.models import (
     APUProyecto,
     CategoriaItemAPU,
     ItemCatalogoAPU,
-    CuadrillaPreset,
-    CuadrillaPresetItem,
+    PaqueteAPU,
 )
 from apps.catalogos.models import Producto
 
@@ -76,7 +76,8 @@ class APUProyectoForm(forms.ModelForm):
         fields = [
             "nombre", "descripcion",
             "margen_material_pct", "iva_pct", "aplica_iva",
-            "aiu_contratista_pct", "margen_mano_obra_pct", "dias_duracion",
+            "aiu_contratista_pct", "margen_mano_obra_pct", "margen_contratista_pct",
+            "dias_duracion",
         ]
         widgets = {
             "nombre":              forms.TextInput(attrs={"class": "form-control"}),
@@ -86,6 +87,7 @@ class APUProyectoForm(forms.ModelForm):
             "aplica_iva":           forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "aiu_contratista_pct":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
             "margen_mano_obra_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+            "margen_contratista_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
             "dias_duracion":        forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
         }
         labels = {
@@ -94,8 +96,22 @@ class APUProyectoForm(forms.ModelForm):
             "aplica_iva":           "Aplica IVA",
             "aiu_contratista_pct":  "AIU contratista (%)",
             "margen_mano_obra_pct": "Margen de mano de obra (%)",
+            "margen_contratista_pct": "Margen de contratista (%)",
             "dias_duracion":        "Días de duración",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Opcional: si no se envía, se conserva el valor actual del APU.
+        self.fields["margen_contratista_pct"].required = False
+
+    def clean_margen_contratista_pct(self):
+        valor = self.cleaned_data.get("margen_contratista_pct")
+        if valor is None:
+            return self.instance.margen_contratista_pct or Decimal("0")
+        if valor < 0:
+            raise forms.ValidationError("El margen no puede ser negativo.")
+        return valor
 
 
 # ── Catálogo APU — Categorías ─────────────────────────────────────────────────
@@ -120,8 +136,7 @@ class ItemCatalogoAPUForm(forms.ModelForm):
         model = ItemCatalogoAPU
         fields = [
             "categoria", "codigo", "nombre", "descripcion",
-            "precio_base", "unidad", "tienda_referencia",
-            "salario_base", "prestaciones",
+            "valor_base", "unidad", "tienda_referencia",
             "vida_util_dias", "activo",
         ]
         widgets = {
@@ -129,71 +144,47 @@ class ItemCatalogoAPUForm(forms.ModelForm):
             "codigo":            forms.TextInput(attrs={"class": "form-control"}),
             "nombre":            forms.TextInput(attrs={"class": "form-control"}),
             "descripcion":       forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "precio_base":       forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
+            "valor_base":        forms.NumberInput(attrs={"class": "form-control", "step": "1", "min": "0"}),
             "unidad":            forms.Select(attrs={"class": "form-select"}),
             "tienda_referencia": forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: Home Center, Homecenter en línea…"}),
-            "salario_base":      forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
-            "prestaciones":      forms.NumberInput(attrs={"class": "form-control", "step": "1"}),
-            "vida_util_dias":    forms.NumberInput(attrs={"class": "form-control"}),
+            "vida_util_dias":    forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
             "activo":            forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
         labels = {
-            "salario_base":      "Salario base mensual",
-            "prestaciones":      "Prestaciones sociales ($/mes)",
-            "vida_util_dias":    "Vida útil (días) — solo herramientas/dotación",
+            "valor_base":        "Valor base",
+            "vida_util_dias":    "Vida útil (días)",
             "tienda_referencia": "Tienda de referencia",
         }
 
 
-# ── Cuadrilla Preset ──────────────────────────────────────────────────────────
+class PaqueteAPUForm(forms.ModelForm):
+    """
+    Datos generales de un paquete maestro (Fase 3.A). La composición se envía
+    aparte y la valida `paquete_service.parse_componentes`.
 
-class CuadrillaPresetForm(forms.ModelForm):
+    El TipoAPU queda bloqueado cuando el paquete ya tiene componentes guardados:
+    `PaqueteAPU.clean()` impide cambiarlo mientras existan componentes.
+    """
+
     class Meta:
-        model = CuadrillaPreset
-        fields = ["nombre", "descripcion", "activo"]
+        model = PaqueteAPU
+        fields = ["nombre", "tipo_apu", "descripcion", "activo"]
         widgets = {
-            "nombre":      forms.TextInput(attrs={"class": "form-control"}),
-            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "activo":      forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nombre":      forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej: Herramientas de instalación", "autocomplete": "off"}),
+            "tipo_apu":    forms.Select(attrs={"class": "form-select"}),
+            "descripcion": forms.Textarea(attrs={"class": "form-control", "rows": 2, "placeholder": "Para qué se usa este paquete (opcional)"}),
+            "activo":      forms.CheckboxInput(attrs={"class": "form-check-input", "role": "switch"}),
         }
-
-
-class CuadrillaPresetItemForm(forms.ModelForm):
-    class Meta:
-        model = CuadrillaPresetItem
-        fields = ["item", "cantidad"]
-        widgets = {
-            "item":     forms.Select(attrs={"class": "form-select"}),
-            "cantidad": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
-        }
+        labels = {"tipo_apu": "Tipo APU", "activo": "Paquete activo"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["item"].queryset = (
-            ItemCatalogoAPU.objects
-            .filter(activo=True, categoria__tipo_apu="MANO_DE_OBRA")
-            .select_related("categoria")
-            .order_by("nombre")
-        )
-
-
-CuadrillaPresetItemFormSet = inlineformset_factory(
-    CuadrillaPreset,
-    CuadrillaPresetItem,
-    form=CuadrillaPresetItemForm,
-    extra=3,
-    can_delete=True,
-)
+        self.tipo_bloqueado = bool(self.instance.pk and self.instance.items.exists())
+        if self.tipo_bloqueado:
+            self.fields["tipo_apu"].disabled = True
 
 
 # ── Formularios legacy (se conservan para compatibilidad) ──────────────────────
-
-class APUManoObraForm(forms.Form):
-    cuadrilla_personas = forms.IntegerField(
-        label="Personas en la cuadrilla", initial=7, min_value=1,
-        widget=forms.NumberInput(attrs={"class": "form-control"}),
-    )
-
 
 class APUAdminForm(forms.Form):
     MODO_CHOICES = [

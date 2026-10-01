@@ -65,46 +65,81 @@ def calcular_rendimiento_por_producto_principal(cantidad_linea, cantidad_base) -
     return (linea / base).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
 
+# Diferencia máxima entre un precio recibido del modal y el valor diario del
+# catálogo para considerarlo "el mismo" (el modal redondea a 2 decimales).
+TOLERANCIA_OVERRIDE = Decimal("0.005")
+
+
+def _parse_override(precio_override):
+    if precio_override is None or precio_override == "":
+        return None
+    try:
+        valor = Decimal(str(precio_override))
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+    if valor < 0:
+        return None
+    return valor.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+
+
+def resolver_precio_item(item, precio_override=None):
+    """
+    Precio diario efectivo de un ItemCatalogoAPU para el APU y si es override.
+
+    Regla universal (Fase 1), idéntica para HERRAMIENTAS_EQUIPOS, MANO_DE_OBRA,
+    TRANSPORTE y ADMINISTRACION:
+        valor_diario = valor_base / vida_util_dias   (apps.presupuestos.economia)
+
+    `precio_override` es un valor diario escrito por el usuario para ESTE APU;
+    nunca modifica el catálogo. Si coincide con el valor diario del catálogo
+    (±TOLERANCIA_OVERRIDE) no se considera override.
+
+    Devuelve (Decimal precio, bool personalizado). Lanza ValorDiarioError si no
+    hay override y el ítem no es calculable (p. ej. vida útil vacía).
+    """
+    from apps.presupuestos.economia import ValorDiarioError
+
+    valor_diario = None
+    error = None
+    try:
+        valor_diario = item.valor_diario
+    except ValorDiarioError as exc:
+        error = exc
+
+    override = _parse_override(precio_override)
+    if override is not None:
+        if valor_diario is not None and abs(override - valor_diario) < TOLERANCIA_OVERRIDE:
+            return valor_diario, False
+        return override, True
+    if error is not None:
+        raise error
+    return valor_diario, False
+
+
+def normalizar_cantidad(valor) -> Decimal:
+    """Cantidad de un componente como Decimal > 0 (4 decimales).
+
+    Vacía, no numérica o <= 0 → 1, igual que el contrato de Fase 1 para los
+    modales (que solo envían enteros >= 1). Los paquetes admiten decimales.
+    """
+    try:
+        cantidad = Decimal(str(valor)) if valor not in (None, "") else Decimal("1")
+    except (TypeError, ValueError, ArithmeticError):
+        return Decimal("1")
+    if cantidad <= 0:
+        return Decimal("1")
+    return cantidad.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+
+def cantidad_para_formulario(cantidad):
+    """int si la cantidad es entera (los inputs numéricos no aceptan '2.0000')."""
+    cantidad = Decimal(str(cantidad))
+    return int(cantidad) if cantidad == cantidad.to_integral_value() else cantidad.normalize()
+
+
 def precio_efectivo_item(item, precio_override=None) -> Decimal:
-    """
-    Precio unitario efectivo de un ItemCatalogoAPU para el cálculo del APU.
-
-    Derivación por defecto (según el tipo de ítem):
-        personal      → salario_base + prestaciones   (tarifa del periodo)
-        herramienta   → precio_base / vida_util_dias  (depreciación diaria)
-        resto         → precio_base
-
-    Si `precio_override` viene informado y es >= 0, ese valor manda y se usa
-    tal cual: es el precio que el usuario escribió en el modal "Configurar…"
-    para ESTE APU. No modifica el catálogo — el override vive solo en las
-    APULineas generadas.
-
-    Devuelve Decimal siempre, para que el llamador decida si lo pasa a float
-    (fórmulas) o lo persiste (precio_referencia).
-    """
-    if precio_override is not None:
-        try:
-            precio = Decimal(str(precio_override))
-        except (TypeError, ValueError, ArithmeticError):
-            precio = None
-        if precio is not None and precio >= 0:
-            return precio.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-
-    if (item.salario_base and item.salario_base > 0) or (item.prestaciones and item.prestaciones > 0):
-        return Decimal(str(item.salario_base + item.prestaciones))
-    if item.vida_util_dias:
-        return (
-            Decimal(str(item.precio_base)) / Decimal(str(item.vida_util_dias))
-        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return Decimal(str(item.precio_base))
-
-
-def _es_personal(item) -> bool:
-    """True si el ítem representa personal (tiene salario o prestaciones)."""
-    return bool(
-        (item.salario_base and item.salario_base > 0)
-        or (item.prestaciones and item.prestaciones > 0)
-    )
+    """Precio diario efectivo (ver `resolver_precio_item`)."""
+    return resolver_precio_item(item, precio_override)[0]
 
 
 _CLAVES_UNIDAD_REFERENCIA = (
@@ -259,6 +294,8 @@ class APUService:
                 "aplica_iva": not getattr(_proyecto, "aplica_exencion_iva", False),
                 "aiu_contratista_pct": _pct("aiu_contratista_pct"),
                 "margen_mano_obra_pct": _pct("margen_mano_obra_pct"),
+                # Sin respaldo global: 0 % si el proyecto no lo define.
+                "margen_contratista_pct": getattr(_proyecto, "margen_contratista_pct", None) or Decimal("0"),
                 "dias_duracion": _dias,
             },
         )
@@ -284,16 +321,102 @@ class APUService:
         return instance
 
     @classmethod
-    def generar(cls, proyecto_sistema) -> "APU":
+    def generar(cls, proyecto_sistema, despiece_origen=None) -> "APU":
         """
         Punto de entrada principal.
-        Genera líneas de materiales + auto-puebla desde catálogo activo, finaliza.
+        Regenera materiales del despiece raíz, conserva los de los despieces
+        secundarios activos (multi-despiece), auto-puebla los tipos
+        no-materiales vacíos desde SubsistemaItemAPU y finaliza.
+
+        `despiece_origen`: DespieceMaestro cuyo contenido acaba de volcarse en
+        el ProyectoSistema (flujo "Armar mi APU"). Si es None se conserva el
+        origen que el APU ya tenía.
         """
         svc = cls(proyecto_sistema)
+        origen_previo_id = svc._despiece_origen_actual_id()
         svc.generar_materiales()
+        svc._restaurar_multidespiece(origen_previo_id, despiece_origen)
         svc._auto_generar_desde_catalogo()
         svc.finalizar()
         return svc.apu
+
+    # ── Multi-despiece: conservar despieces secundarios ──────────────────────
+
+    def _despiece_origen_actual_id(self):
+        """DespieceMaestro de las líneas MATERIALES que vienen del ProyectoSistema
+        raíz (despiece_linea no nulo). None si no hay (APU nuevo o legacy)."""
+        from apps.common.choices import TipoAPU
+        return (
+            self.apu.lineas
+            .filter(
+                tipo=TipoAPU.MATERIALES,
+                despiece_linea__isnull=False,
+                despiece_maestro__isnull=False,
+            )
+            .values_list("despiece_maestro_id", flat=True)
+            .first()
+        )
+
+    def _restaurar_multidespiece(self, origen_previo_id, despiece_origen=None) -> int:
+        """Tras `generar_materiales()` (que borra TODOS los materiales), vuelve a
+        anotar el despiece raíz y reconstruye los materiales de cada despiece
+        secundario activo en APUDespieceIncluido.
+
+        - Si llega `despiece_origen` y reemplaza a otro origen previo, la
+          inclusión del origen previo se desactiva (su contenido ya no está
+          en el ProyectoSistema).
+        - Devuelve el número de líneas secundarias creadas.
+        """
+        from apps.common.choices import TipoAPU
+        from apps.presupuestos.services.apu_multi_builder import APUMultiDespieceBuilder
+
+        inclusiones = list(
+            self.apu.despieces_incluidos
+            .filter(activo=True)
+            .select_related("despiece_maestro", "despiece_maestro__subsistema",
+                            "despiece_maestro__subsistema__sistema")
+            .order_by("orden", "id")
+        )
+        if despiece_origen is not None:
+            origen_id = despiece_origen.pk
+            if origen_previo_id and origen_previo_id != origen_id:
+                self.apu.despieces_incluidos.filter(
+                    despiece_maestro_id=origen_previo_id
+                ).update(activo=False)
+                inclusiones = [i for i in inclusiones if i.despiece_maestro_id != origen_previo_id]
+        elif origen_previo_id:
+            origen_id = origen_previo_id
+        elif inclusiones:
+            # Legacy sin anotación: el origen es la primera inclusión (orden 0).
+            origen_id = inclusiones[0].despiece_maestro_id
+        else:
+            return 0
+
+        # Re-anotar las líneas del PS raíz con su despiece de origen.
+        inc_origen = next((i for i in inclusiones if i.despiece_maestro_id == origen_id), None)
+        if inc_origen is not None:
+            self.apu.lineas.filter(
+                tipo=TipoAPU.MATERIALES, despiece_maestro__isnull=True,
+            ).update(
+                despiece_maestro_id=origen_id,
+                sistema_nombre_snapshot=inc_origen.sistema_nombre_snapshot,
+                subsistema_nombre_snapshot=inc_origen.subsistema_nombre_snapshot,
+            )
+
+        secundarios = [i.despiece_maestro for i in inclusiones if i.despiece_maestro_id != origen_id]
+        if not secundarios:
+            return 0
+        builder = APUMultiDespieceBuilder(
+            apu=self.apu,
+            despieces_seleccionados=[i.despiece_maestro for i in inclusiones],
+            despiece_origen=inc_origen.despiece_maestro if inc_origen else None,
+        )
+        creadas = sum(builder._materiales_secundarios(dm) for dm in secundarios)
+        logger.info(
+            "[APUService] APU %s: %d materiales restaurados de %d despiece(s) secundario(s).",
+            self.apu.pk, creadas, len(secundarios),
+        )
+        return creadas
 
     def _items_apu_subsistema(self, tipo_apu: str) -> list:
         """Fase 6L-D — Devuelve items_data para una categoría leyendo SOLO
@@ -333,139 +456,57 @@ class APUService:
             for row in qs
         ]
 
+    def _paquetes_subsistema(self, tipo_apu: str) -> list:
+        """Fase 2 — paquetes maestros activos asignados al subsistema para el tipo."""
+        from apps.presupuestos.models import SubsistemaPaqueteAPU
+
+        ps = self.ps
+        if not ps or not ps.subsistema_id:
+            return []
+        return [
+            asig.paquete
+            for asig in SubsistemaPaqueteAPU.objects
+            .filter(subsistema_id=ps.subsistema_id, activo=True,
+                    paquete__activo=True, paquete__tipo_apu=tipo_apu)
+            .select_related("paquete")
+            .order_by("orden", "id")
+        ]
+
     def _auto_generar_desde_catalogo(self) -> None:
         """
-        Auto-puebla el APU con los ítems APU predeterminados del subsistema
-        (Fase 6L-D). Por cada categoría no-Materiales que aún no tenga
-        líneas generadas, consulta SubsistemaItemAPU y solo genera si hay
-        ítems asociados. Si no hay ítems configurados para una categoría,
-        NO se llena con todo el catálogo (cambio respecto al comportamiento
-        anterior): la categoría queda vacía y el template muestra mensaje
-        explicativo.
+        Auto-puebla el APU por cada TipoAPU no-material que aún no tenga líneas.
+
+        Fase 2: si el subsistema tiene paquetes activos para el tipo, se
+        instancian (APUPaquete + APULinea snapshot) y SubsistemaItemAPU NO se
+        suma. Si no tiene paquetes, se usa SubsistemaItemAPU como respaldo
+        (comportamiento de Fase 1). Sin ninguno de los dos, el tipo queda vacío:
+        nunca se llena con todo el catálogo.
         """
         from apps.common.choices import TipoAPU
 
         tipos_existentes = set(self.apu.lineas.values_list("tipo", flat=True))
-
-        if TipoAPU.MANO_DE_OBRA not in tipos_existentes:
-            items_data = self._items_apu_subsistema(TipoAPU.MANO_DE_OBRA)
-            if items_data:
-                self.generar_mano_obra_desde_catalogo(items_data)
-            else:
-                logger.info(
-                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para MO; "
-                    "la categoría queda vacía.",
-                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
-                )
-
-        if TipoAPU.HERRAMIENTAS_EQUIPOS not in tipos_existentes:
-            items_data = self._items_apu_subsistema(TipoAPU.HERRAMIENTAS_EQUIPOS)
-            if items_data:
-                self.generar_herramientas_desde_catalogo(items_data)
-            else:
-                logger.info(
-                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para "
-                    "HERRAMIENTAS; la categoría queda vacía.",
-                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
-                )
-
-        if TipoAPU.TRANSPORTE not in tipos_existentes:
-            items_data = self._items_apu_subsistema(TipoAPU.TRANSPORTE)
-            if items_data:
-                self.generar_transporte_desde_catalogo(items_data)
-            else:
-                logger.info(
-                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para "
-                    "TRANSPORTE; la categoría queda vacía.",
-                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
-                )
-
-        if TipoAPU.ADMINISTRACION not in tipos_existentes:
-            items_data = self._items_apu_subsistema(TipoAPU.ADMINISTRACION)
-            if items_data:
-                self.generar_administracion_desde_catalogo(items_data)
-            else:
-                logger.info(
-                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para "
-                    "ADMINISTRACION; la categoría queda vacía.",
-                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None),
-                )
-
-    @transaction.atomic
-    def _generar_administracion_detallada(self, items_data: List[Dict]) -> List[dict]:
-        """
-        Genera líneas de ADMINISTRACION usando valor diario real del ítem.
-
-        Fórmula: valor_total = valor_dia * dias_duracion * cantidad * porcentaje
-
-        Cálculo de valor_dia según tipo de ítem:
-          - Personal (salario_base > 0 o prestaciones > 0): (salario_base + prestaciones) / 30
-          - Herramienta (vida_util_dias):                    precio_base / vida_util_dias
-          - Unidad "mes":                                     precio_base / 30
-          - Unidad "dia":                                     precio_base
-          - Otros (hora, und, global…):                       precio_base
-            NOTA: unidad "hora" usa precio_base como fallback; no se multiplica por
-            horas/día porque no hay ese parámetro configurado en el sistema aún.
-
-        precio_referencia en APULinea almacena valor_dia (no precio_base bruto).
-        """
-        from apps.presupuestos.models import APULinea, ItemCatalogoAPU
-        from apps.common.choices import TipoAPU
-
-        if not items_data:
-            return []
-
-        self.apu.lineas.filter(tipo=TipoAPU.ADMINISTRACION).delete()
-
-        dias_duracion = self.apu.dias_duracion or 0
-        if dias_duracion <= 0:
-            raise ValueError("El parámetro 'Días de duración' del APU debe ser mayor que cero.")
-        dias_d = Decimal(str(dias_duracion))
-
-        creadas = []
-        for data in items_data:
-            item = ItemCatalogoAPU.objects.get(pk=data["item_id"])
-            cantidad = Decimal(str(data.get("cantidad", 1)))
-            porcentaje_raw = data.get("porcentaje")
-            porcentaje = Decimal(str(porcentaje_raw)) if porcentaje_raw is not None else Decimal("1.0")
-
-            # Calcular valor diario según tipo de ítem
-            if (item.salario_base and item.salario_base > 0) or (item.prestaciones and item.prestaciones > 0):
-                valor_dia = (item.salario_base + item.prestaciones) / Decimal("30")
-            elif item.vida_util_dias and item.vida_util_dias > 0:
-                valor_dia = item.precio_base / Decimal(str(item.vida_util_dias))
-            elif item.unidad == "mes":
-                valor_dia = item.precio_base / Decimal("30")
-            else:
-                # "dia", "hora" (fallback sin horas/día), "und", "global", etc.
-                valor_dia = item.precio_base
-
-            valor_dia = valor_dia.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
-            valor_total = (valor_dia * dias_d * cantidad * porcentaje).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
-
-            linea = APULinea.objects.create(
-                apu=self.apu,
-                tipo=TipoAPU.ADMINISTRACION,
-                item_catalogo=item,
-                descripcion=item.nombre,
-                rendimiento=porcentaje,
-                unidad=item.unidad,
-                precio_referencia=valor_dia,   # almacena valor_dia (no precio_base bruto)
-                costo_total=valor_total,
-                valor_total=valor_total,
-                costo_unitario=valor_total,
-                valor_unitario=valor_total,
-                iva_aplicado=False,
-                editable=True,
-            )
-            creadas.append(linea)
-
-        logger.info(
-            "[APUService] %d líneas de Administración para APU %s.", len(creadas), self.apu.pk
+        generadores = (
+            (TipoAPU.MANO_DE_OBRA, "MO", self.generar_mano_obra_desde_catalogo),
+            (TipoAPU.HERRAMIENTAS_EQUIPOS, "HERRAMIENTAS", self.generar_herramientas_desde_catalogo),
+            (TipoAPU.TRANSPORTE, "TRANSPORTE", self.generar_transporte_desde_catalogo),
+            (TipoAPU.ADMINISTRACION, "ADMINISTRACION", self.generar_administracion_desde_catalogo),
         )
-        return creadas
+        for tipo, etiqueta, generar in generadores:
+            if tipo in tipos_existentes:
+                continue
+            paquetes = self._paquetes_subsistema(tipo)
+            if paquetes:
+                self.instanciar_paquetes(paquetes)
+                continue
+            items_data = self._items_apu_subsistema(tipo)
+            if items_data:
+                generar(items_data)
+            else:
+                logger.info(
+                    "[APUService] PS=%s subsistema=%s sin ítems APU configurados para %s; "
+                    "la categoría queda vacía.",
+                    self.ps.pk, getattr(self.ps.subsistema, "codigo", None), etiqueta,
+                )
 
     # ── Helpers: referencia del producto base (PowerGrip) ─────────────────────
 
@@ -588,34 +629,17 @@ class APUService:
 
         return Decimal(str(tp)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
-    def _get_num_personas(self, items_personal: list | None = None) -> int:
+    def _get_num_personas(self) -> int:
         """
-        Determina el número total de personas en la cuadrilla.
+        Valor de la variable `personas` de ReglaAPUSubsistema.
 
-        Prioridad:
-          1. Suma de cantidades en items_personal (cargos personales del lote actual).
-          2. proyecto.num_personas si está definido.
-          3. Fallback: 1.
-
-        Args:
-            items_personal: lista de {"cantidad": int} con solo los ítems de personal
-                            del lote que se está procesando actualmente.
+        Fase 1: ya no se detecta "personal" por salario/prestaciones.
+        personas = Proyecto.num_personas si está definido; si no, 1.
         """
-        # 1. Suma de personas en el lote de personal recibido
-        if items_personal:
-            total = sum(max(int(d.get("cantidad", 1)), 1) for d in items_personal)
-            if total > 0:
-                return total
-
-        # 2. Campo num_personas del proyecto comercial
-        if self.ps:
-            try:
-                np = self.ps.proyecto.num_personas
-                if np and int(np) > 0:
-                    return int(np)
-            except Exception:
-                pass
-
+        if self.ps is not None:
+            np = getattr(self.ps.proyecto, "num_personas", None)
+            if np and int(np) > 0:
+                return int(np)
         return 1
 
     # ── Helper: contexto de regla APU ─────────────────────────────────────────
@@ -632,13 +656,11 @@ class APUService:
         """
         Delegado a build_formula_context() — mantiene la interfaz interna
         para no romper llamadas existentes dentro de APUService.
+
+        El Proyecto se pasa para que `trm` use Proyecto.trm cuando exista
+        (build_formula_context aplica el respaldo global si es NULL).
         """
-        proyecto = None
-        if self.ps:
-            try:
-                proyecto = self.ps.proyecto_sistema.proyecto if self.ps.proyecto_sistema_id else None
-            except Exception:
-                pass
+        proyecto = self.ps.proyecto if self.ps is not None else None
         return build_formula_context(
             suma=suma,
             dias=dias_efectivos,
@@ -651,6 +673,71 @@ class APUService:
             ps=self.ps,
         )
 
+    # ── Carga de ítems de catálogo (regla económica universal) ───────────────
+
+    def _cargar_items_catalogo(self, tipo_apu: str, items_data: List[Dict]) -> List[dict]:
+        """Resuelve cada fila de `items_data` a su precio diario efectivo.
+
+        Devuelve dicts {item, cantidad, precio, personalizado, porcentaje}.
+        Si algún ítem no tiene valor diario calculable (p. ej. vida útil
+        vacía) y no trae override, lanza ValorDiarioError listándolos todos:
+        el APU no se calcula con datos incompletos.
+        """
+        from apps.presupuestos.models import ItemCatalogoAPU
+        from apps.presupuestos.economia import ValorDiarioError
+
+        cargados: List[dict] = []
+        pendientes: List[str] = []
+        for d in items_data:
+            item = ItemCatalogoAPU.objects.select_related("categoria").get(pk=d["item_id"])
+            cantidad = normalizar_cantidad(d.get("cantidad"))
+            try:
+                precio, personalizado = resolver_precio_item(item, d.get("precio_override"))
+            except ValorDiarioError as exc:
+                pendientes.append(f"«{item.nombre}» ({exc})")
+                continue
+            porcentaje = d.get("porcentaje")
+            cargados.append({
+                "item": item,
+                "cantidad": cantidad,
+                "precio": precio,
+                "personalizado": personalizado,
+                "porcentaje": 1.0 if porcentaje is None else float(porcentaje),
+            })
+        if pendientes:
+            raise ValorDiarioError(
+                f"No se puede calcular {tipo_apu}: hay ítems sin valor diario calculable "
+                f"(configure su vida útil en el catálogo APU): {'; '.join(pendientes)}."
+            )
+        return cargados
+
+    def _crear_linea_detalle(self, tipo_apu: str, cargado: dict, rendimiento: Decimal,
+                             apu_paquete=None):
+        """Línea detalle de catálogo (costo 0; el costo real vive en la resumen)."""
+        from apps.presupuestos.models import APULinea
+
+        item = cargado["item"]
+        return APULinea.objects.create(
+            apu=self.apu,
+            apu_paquete=apu_paquete,
+            tipo=tipo_apu,
+            item_catalogo=item,
+            descripcion=item.nombre,
+            rendimiento=rendimiento,
+            cantidad=Decimal(cargado["cantidad"]),
+            unidad=item.unidad,
+            precio_referencia=cargado["precio"],
+            precio_personalizado=cargado["personalizado"],
+            vida_util_dias=item.vida_util_dias,
+            costo_unitario=Decimal("0"),
+            costo_total=Decimal("0"),
+            valor_unitario=Decimal("0"),
+            valor_total=Decimal("0"),
+            iva_aplicado=False,
+            editable=False,
+            tienda_referencia=item.tienda_referencia,
+        )
+
     # ── Generador unificado por categoría (no-MATERIALES) ────────────────────
 
     @transaction.atomic
@@ -660,7 +747,7 @@ class APUService:
         items_data: List[Dict],
     ) -> List[dict]:
         """
-        Genera APULineas para cualquier tipo de APU distinto de MATERIALES,
+        Genera APULineas para HERRAMIENTAS_EQUIPOS, MANO_DE_OBRA y TRANSPORTE
         usando ReglaAPUSubsistema para obtener el costo unitario.
 
         Patrón: por cada CategoriaItemAPU presente en items_data se crean:
@@ -669,17 +756,18 @@ class APUService:
 
         items_data: [{"item_id": int, "cantidad": int, "precio_override": num|None}]
 
-        `precio_override` es opcional: cuando viene informado sustituye al
-        precio derivado del catálogo SOLO para este APU (ver
-        `precio_efectivo_item`). El catálogo nunca se modifica.
-
-        La fórmula se busca en ReglaAPUSubsistema filtrada por:
-            subsistema = self.ps.subsistema
-            tipo_apu   = tipo_apu
-        Si no existe regla, lanza ValueError descriptivo.
+        Regla económica universal (Fase 1):
+            valor_diario = valor_base / vida_util_dias   (o override del APU)
+            suma         = Σ(valor_diario × cantidad)    por categoría
+        `suma` y el resto del contexto llegan a la fórmula sin cambios de nombre.
+        El catálogo nunca se modifica.
         """
-        from apps.presupuestos.models import APULinea, ItemCatalogoAPU, ReglaAPUSubsistema
+        from apps.presupuestos.models import APULinea, ReglaAPUSubsistema
+        from apps.presupuestos.economia import calcular_aporte
         from collections import defaultdict
+
+        if self._tipo_usa_paquetes(tipo_apu):
+            return self._reemplazar_sueltos(tipo_apu, items_data)
 
         dias_duracion = float(self.apu.dias_duracion or 0)
         if dias_duracion <= 0:
@@ -701,78 +789,38 @@ class APUService:
                 f"y tipo_apu='{tipo_apu}'. Defínala en la edición del Subsistema."
             )
 
-        # Cargar ítems. `precio` ya viene resuelto: override del usuario si lo
-        # hay, derivación del catálogo si no.
-        items_cargados = []
-        for d in items_data:
-            item     = ItemCatalogoAPU.objects.select_related("categoria").get(pk=d["item_id"])
-            cantidad = max(int(d.get("cantidad", 1)), 1)
-            precio   = precio_efectivo_item(item, d.get("precio_override"))
-            items_cargados.append((item, cantidad, precio))
-
-        # Número de personas (relevante para MO)
-        items_personal_data = [
-            {"cantidad": cant}
-            for item, cant, _ in items_cargados
-            if item.salario_base or item.prestaciones
-        ]
-        num_personas = self._get_num_personas(items_personal_data)
+        cargados = self._cargar_items_catalogo(tipo_apu, items_data)
+        num_personas = self._get_num_personas()
 
         # Eliminar líneas existentes del tipo para regenerar limpio
         self.apu.lineas.filter(tipo=tipo_apu).delete()
 
         # Agrupar por categoría
         por_categoria: dict = defaultdict(list)
-        for item, cantidad, precio in items_cargados:
-            por_categoria[item.categoria_id].append((item, cantidad, precio))
+        for c in cargados:
+            por_categoria[c["item"].categoria_id].append(c)
 
         creadas = []
         for cat_id, items_en_cat in por_categoria.items():
-            categoria = items_en_cat[0][0].categoria
+            categoria = items_en_cat[0]["item"].categoria
 
-            # Días efectivos: si la categoría tiene aplica_dias_mensuales → dias/30
-            dias_efectivos = dias_duracion / 30.0 if categoria.aplica_dias_mensuales else dias_duracion
-
-            # Suma del costo de los ítems de la categoría.
-            # `precio` es el precio efectivo ya resuelto por item (override del
-            # usuario o derivación del catálogo — ver precio_efectivo_item).
-            suma = 0.0
-            for item, cantidad, precio in items_en_cat:
-                suma += float(precio) * cantidad
+            suma = sum(
+                (calcular_aporte(c["precio"], c["cantidad"]) for c in items_en_cat),
+                Decimal("0"),
+            )
 
             # Evaluar fórmula → costo unitario de la categoría
-            ctx = self._build_regla_context(suma, dias_efectivos, aiu, mmo, tp, num_personas)
+            ctx = self._build_regla_context(float(suma), dias_duracion, aiu, mmo, tp, num_personas)
             costo_unitario_cat = regla.evaluar(ctx)
 
             logger.debug(
-                "[APUService] %s cat='%s' | suma=%.2f | dias_ef=%.2f | ctx=%s | cu=%.6f",
-                tipo_apu, categoria.nombre, suma, dias_efectivos, ctx, costo_unitario_cat,
+                "[APUService] %s cat='%s' | suma=%s | ctx=%s | cu=%.6f",
+                tipo_apu, categoria.nombre, suma, ctx, costo_unitario_cat,
             )
 
-            # Líneas detalle (referencia visual, costo_total=0).
-            # precio_referencia guarda el precio efectivo usado en la suma, así
-            # que al reabrir el modal se relee el override que el usuario fijó.
-            for item, cantidad, precio_ref_detalle in items_en_cat:
-                es_personal = _es_personal(item)
-                APULinea.objects.create(
-                    apu=self.apu,
-                    tipo=tipo_apu,
-                    item_catalogo=item,
-                    descripcion=item.nombre,
-                    rendimiento=Decimal(str(cantidad)),
-                    unidad=item.unidad,
-                    precio_referencia=precio_ref_detalle,
-                    vida_util_dias=item.vida_util_dias,
-                    costo_unitario=Decimal("0"),
-                    costo_total=Decimal("0"),
-                    valor_unitario=Decimal("0"),
-                    valor_total=Decimal("0"),
-                    salario_base=item.salario_base if es_personal else Decimal("0"),
-                    prestaciones=item.prestaciones if es_personal else Decimal("0"),
-                    iva_aplicado=False,
-                    editable=False,
-                    tienda_referencia=item.tienda_referencia,
-                )
+            # Líneas detalle: guardan cantidad, valor diario usado y si es override.
+            for c in items_en_cat:
+                self._crear_linea_detalle(tipo_apu, c, rendimiento=Decimal(c["cantidad"]))
 
             # Línea resumen (con el costo real calculado por la regla)
             precio_ref = Decimal(str(costo_unitario_cat)).quantize(
@@ -794,11 +842,11 @@ class APUService:
 
             creadas.append({
                 "descripcion": categoria.nombre,
-                "suma_items":  suma,
+                "suma_items":  float(suma),
                 "costo_total": float(linea_resumen.costo_total),
             })
             logger.info(
-                "[APUService] %s cat='%s' | n=%d | suma=%.2f | tp=%.4f | cu=%.6f",
+                "[APUService] %s cat='%s' | n=%d | suma=%s | tp=%.4f | cu=%.6f",
                 tipo_apu, categoria.nombre, len(items_en_cat), suma, float(tp), costo_unitario_cat,
             )
 
@@ -1017,22 +1065,27 @@ class APUService:
         Genera APULineas ADMINISTRACION usando ReglaAPUSubsistema × porcentaje.
 
         Por cada CategoriaItemAPU crea:
-          - N líneas detalle (item_catalogo set, costo_total=0, rendimiento=porcentaje)
-            → sirven para pre-marcar el modal al reabrirlo
+          - N líneas detalle (item_catalogo set, costo_total=0):
+              cantidad          = cantidad del ítem
+              precio_referencia = valor diario (catálogo u override)
+              rendimiento       = porcentaje individual (fracción) → re-marcado del modal
           - 1 línea resumen (item_catalogo=None):
               precio_referencia = resultado bruto de la fórmula del subsistema
               rendimiento       = porcentaje promedio de la categoría (fracción 0–2)
               costo_total       = precio_referencia × rendimiento   (via calcular())
 
-        Esto permite que admin_porcentaje_aplicado = rendimiento × 100 muestre
-        el porcentaje real aplicado (no 100 %).
+        `suma` = Σ(valor_diario × cantidad), igual que en las demás categorías.
         """
-        from apps.presupuestos.models import APULinea, ItemCatalogoAPU, ReglaAPUSubsistema
+        from apps.presupuestos.models import APULinea, ReglaAPUSubsistema
+        from apps.presupuestos.economia import calcular_aporte
         from collections import defaultdict
         from apps.common.choices import TipoAPU
 
         if not items_data:
             return []
+
+        if self._tipo_usa_paquetes(TipoAPU.ADMINISTRACION):
+            return self._reemplazar_sueltos(TipoAPU.ADMINISTRACION, items_data)
 
         dias_duracion = float(self.apu.dias_duracion or 0)
         if dias_duracion <= 0:
@@ -1053,74 +1106,41 @@ class APUService:
                 f"y tipo_apu='ADMINISTRACION'. Defínala en la edición del Subsistema."
             )
 
-        # Cargar ítems con categoría, porcentaje y precio efectivo
-        # (override del usuario si lo hay, derivación del catálogo si no).
-        items_cargados = []
-        for d in items_data:
-            item      = ItemCatalogoAPU.objects.select_related("categoria").get(pk=d["item_id"])
-            cantidad  = max(int(d.get("cantidad", 1)), 1)
-            porcentaje = float(d.get("porcentaje", 1.0) or 1.0)
-            precio    = precio_efectivo_item(item, d.get("precio_override"))
-            items_cargados.append((item, cantidad, porcentaje, precio))
+        cargados = self._cargar_items_catalogo(TipoAPU.ADMINISTRACION, items_data)
+        num_personas = self._get_num_personas()
 
         # Eliminar líneas ADMINISTRACION existentes
         self.apu.lineas.filter(tipo=TipoAPU.ADMINISTRACION).delete()
 
-        # Agrupar por categoría
         por_categoria: dict = defaultdict(list)
-        for item, cantidad, porcentaje, precio in items_cargados:
-            por_categoria[item.categoria_id].append((item, cantidad, porcentaje, precio))
+        for c in cargados:
+            por_categoria[c["item"].categoria_id].append(c)
 
         creadas = []
         for cat_id, items_en_cat in por_categoria.items():
-            categoria = items_en_cat[0][0].categoria
+            categoria = items_en_cat[0]["item"].categoria
 
-            # Días efectivos
-            dias_efectivos = dias_duracion / 30.0 if categoria.aplica_dias_mensuales else dias_duracion
-
-            # Suma de costos para la fórmula, con el precio efectivo por ítem.
-            suma = 0.0
-            for item, cantidad, _, precio in items_en_cat:
-                suma += float(precio) * cantidad
-
-            # Número de personas (para la regla)
-            items_personal = [{"cantidad": cant} for item, cant, _, _ in items_en_cat
-                              if item.salario_base or item.prestaciones]
-            num_personas = self._get_num_personas(items_personal)
+            suma = sum(
+                (calcular_aporte(c["precio"], c["cantidad"]) for c in items_en_cat),
+                Decimal("0"),
+            )
 
             # Evaluar fórmula del subsistema → resultado BRUTO (sin porcentaje)
-            ctx        = self._build_regla_context(suma, dias_efectivos, aiu, mmo, tp, num_personas)
+            ctx        = self._build_regla_context(float(suma), dias_duracion, aiu, mmo, tp, num_personas)
             costo_bruto = regla.evaluar(ctx)
 
             # Porcentaje promedio de la categoría
-            pcts_cat = [pct for _, _, pct, _ in items_en_cat]
+            pcts_cat = [c["porcentaje"] for c in items_en_cat]
             escala   = sum(pcts_cat) / len(pcts_cat) if pcts_cat else 1.0
 
             # ── Líneas detalle (referencia visual + re-marcado de modal) ─────
-            for item, cantidad, porcentaje, precio_ref_det in items_en_cat:
-                es_personal = _es_personal(item)
-                APULinea.objects.create(
-                    apu=self.apu,
-                    tipo=TipoAPU.ADMINISTRACION,
-                    item_catalogo=item,
-                    descripcion=item.nombre,
-                    rendimiento=Decimal(str(round(porcentaje, 6))),   # porcentaje individual (fracción)
-                    unidad=item.unidad,
-                    precio_referencia=precio_ref_det,
-                    costo_unitario=Decimal("0"),
-                    costo_total=Decimal("0"),
-                    valor_unitario=Decimal("0"),
-                    valor_total=Decimal("0"),
-                    salario_base=item.salario_base if es_personal else Decimal("0"),
-                    prestaciones=item.prestaciones if es_personal else Decimal("0"),
-                    iva_aplicado=False,
-                    editable=False,
+            for c in items_en_cat:
+                self._crear_linea_detalle(
+                    TipoAPU.ADMINISTRACION, c,
+                    rendimiento=Decimal(str(round(c["porcentaje"], 6))),
                 )
 
             # ── Línea resumen ─────────────────────────────────────────────────
-            # precio_referencia = costo bruto de la fórmula (sin porcentaje)
-            # rendimiento       = escala (porcentaje promedio de la categoría)
-            # calcular()        → costo_total = precio_referencia × rendimiento
             precio_ref = Decimal(str(costo_bruto)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
             linea_resumen = APULinea.objects.create(
                 apu=self.apu,
@@ -1138,14 +1158,14 @@ class APUService:
 
             creadas.append({
                 "descripcion": categoria.nombre,
-                "suma_items":  suma,
+                "suma_items":  float(suma),
                 "costo_bruto": costo_bruto,
                 "escala":      escala,
                 "costo_total": float(linea_resumen.costo_total),
             })
             logger.info(
-                "[APUService] Admin cat='%s' | bruto=%.2f | escala=%.4f | total=%.2f",
-                categoria.nombre, costo_bruto, escala, float(linea_resumen.costo_total),
+                "[APUService] Admin cat='%s' | suma=%s | bruto=%.2f | escala=%.4f | total=%.2f",
+                categoria.nombre, suma, costo_bruto, escala, float(linea_resumen.costo_total),
             )
 
         return creadas
@@ -1168,79 +1188,475 @@ class APUService:
         )
         return creadas
 
-    # ── Métodos legados (mantenidos por compatibilidad con vistas existentes) ──
+    # ── Recálculo por cambio de parámetros (Fase 1) ──────────────────────────
 
-    @transaction.atomic
-    def generar_transporte_items(self, items: List[Dict]) -> List[dict]:
+    def items_data_desde_lineas(self, tipo_apu: str) -> List[Dict]:
+        """Reconstruye la selección aplicada al APU para `tipo_apu` a partir de
+        sus líneas detalle (ítem de catálogo, cantidad, override y % admin).
+
+        Es la fuente de verdad de lo que el usuario/subsistema dejó en el APU;
+        NUNCA se completa con el resto del catálogo activo.
+
+        Líneas anteriores a la Fase 1 (sin `cantidad`): en no-materiales la
+        cantidad se guardaba en `rendimiento`; en ADMINISTRACION `rendimiento`
+        es el porcentaje y la cantidad no se guardaba (→ 1).
         """
-        Legado: genera APULineas TRANSPORTE a partir de ítems libres (sin catálogo).
-        items: [{"descripcion": str, "precio_total": float}]
-        Para proyectos nuevos, use generar_transporte_desde_catalogo.
-        """
-        from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
-        tp = self._get_total_powergrip()
-        creadas = []
+        data: List[Dict] = []
+        # Solo ítems sueltos: los componentes de paquetes (apu_paquete) tienen su
+        # propio ciclo de vida y nunca se reconstruyen desde aquí.
+        lineas = (
+            self.apu.lineas
+            .filter(tipo=tipo_apu, item_catalogo__isnull=False, apu_paquete__isnull=True)
+            .order_by("id")
+        )
+        for ln in lineas:
+            if tipo_apu == TipoAPU.ADMINISTRACION:
+                cantidad = ln.cantidad if ln.cantidad is not None else Decimal("1")
+                porcentaje = float(ln.rendimiento) if ln.rendimiento is not None else None
+            else:
+                cantidad = ln.cantidad if ln.cantidad is not None else ln.rendimiento
+                porcentaje = None
+            data.append({
+                "item_id": ln.item_catalogo_id,
+                "cantidad": cantidad_para_formulario(normalizar_cantidad(cantidad)),
+                "precio_override": ln.precio_referencia if ln.precio_personalizado else None,
+                "porcentaje": porcentaje,
+            })
+        return data
 
-        for item in items:
-            desc = item["descripcion"].strip()
-            precio_total = float(item["precio_total"])
-            precio_ref = precio_total / float(tp)
+    @transaction.atomic
+    def recalcular_por_parametros(self) -> dict:
+        """Recalcula el APU tras cambiar parámetros (márgenes, IVA, AIU, días).
 
-            linea, _ = APULinea.objects.update_or_create(
-                apu=self.apu,
-                tipo=TipoAPU.TRANSPORTE,
-                descripcion=desc,
-                defaults={
-                    "rendimiento": Decimal("1"),
-                    "unidad": "global",
-                    "precio_referencia": Decimal(str(round(precio_ref, 6))),
-                    "iva_aplicado": False,
-                    "editable": True,
-                },
+        - MATERIALES: `iva_aplicado` se alinea con `apu.aplica_iva` y cada línea
+          vuelve a ejecutar `calcular()` con el margen/IVA vigentes. No toca el
+          despiece.
+        - No-materiales: cada tipo se regenera con SU PROPIA selección
+          (`items_data_desde_lineas`): mismos ítems, cantidades, overrides
+          válidos y porcentajes de Administración. Tipos sin líneas de
+          catálogo no se tocan.
+        """
+        from apps.common.choices import TipoAPU
+
+        self._verificar_editable()
+        materiales = 0
+        for ln in self.apu.lineas.filter(tipo=TipoAPU.MATERIALES):
+            if ln.iva_aplicado != self.apu.aplica_iva:
+                ln.iva_aplicado = self.apu.aplica_iva
+                ln.save(update_fields=["iva_aplicado", "updated_at"])
+            ln.calcular()
+            materiales += 1
+
+        regenerados = []
+        if self.ps is not None:
+            for tipo in (
+                TipoAPU.MANO_DE_OBRA,
+                TipoAPU.HERRAMIENTAS_EQUIPOS,
+                TipoAPU.TRANSPORTE,
+                TipoAPU.ADMINISTRACION,
+            ):
+                if self.recalcular_tipo(tipo, refrescar_catalogo=True):
+                    regenerados.append(tipo)
+
+        # Tipos que no se regeneran (p. ej. líneas manuales sin ítem de catálogo):
+        # se recalculan con sus mismos datos para aplicar márgenes/IVA vigentes
+        # (margen de contratista en el valor unitario).
+        for ln in self.apu.lineas.exclude(tipo=TipoAPU.MATERIALES).exclude(tipo__in=regenerados):
+            ln.calcular()
+
+        self.apu.recalcular()
+        return {"materiales": materiales, "tipos_regenerados": regenerados}
+
+    # ── Paquetes APU (Fase 2) ─────────────────────────────────────────────────
+
+    def _verificar_editable(self) -> None:
+        """Un APU aprobado es de solo lectura (regla de apps.common.apu_lock)."""
+        from apps.common.apu_lock import MENSAJE_BLOQUEO
+        if self.apu.esta_aprobado:
+            raise PermissionError(MENSAJE_BLOQUEO)
+
+    def _tipo_usa_paquetes(self, tipo_apu: str) -> bool:
+        return self.apu.paquetes.filter(tipo_apu=tipo_apu).exists()
+
+    def _lineas_componentes(self, tipo_apu: str):
+        """Líneas detalle del tipo: componentes de paquetes + ítems sueltos."""
+        from django.db.models import Q
+        return (
+            self.apu.lineas
+            .filter(tipo=tipo_apu)
+            .filter(Q(item_catalogo__isnull=False) | Q(apu_paquete__isnull=False))
+            .select_related("item_catalogo", "apu_paquete")
+            .order_by("apu_paquete__orden", "apu_paquete_id", "id")
+        )
+
+    def _lineas_resumen(self, tipo_apu: str):
+        return self.apu.lineas.filter(
+            tipo=tipo_apu, item_catalogo__isnull=True,
+            despiece_linea__isnull=True, apu_paquete__isnull=True,
+        )
+
+    @staticmethod
+    def _cantidad_linea(ln, tipo_apu: str) -> Decimal:
+        """Cantidad del componente; líneas previas a Fase 1 la guardaban en rendimiento."""
+        from apps.common.choices import TipoAPU
+        if ln.cantidad is not None:
+            return Decimal(str(ln.cantidad))
+        if tipo_apu == TipoAPU.ADMINISTRACION:
+            return Decimal("1")
+        return Decimal(str(ln.rendimiento or 1))
+
+    def _recalcular_tipo_paquetes(self, tipo_apu: str, refrescar_catalogo: bool = False):
+        """Resumen única del TipoAPU cuando el tipo tiene paquetes instanciados.
+
+            aporte          = precio_referencia × cantidad        (por componente)
+            valor_paquete   = Σ aportes del APUPaquete
+            suma            = Σ valor_paquete + Σ aportes de ítems sueltos del tipo
+            resumen         = ReglaAPUSubsistema(suma)  — evaluada UNA vez
+            ADMINISTRACION  : rendimiento de la resumen = promedio simple de los
+                              porcentajes (rendimiento) de todos sus componentes
+
+        La categoría no fragmenta la suma. `refrescar_catalogo` aplica el
+        contrato de Fase 1: los componentes sin precio_personalizado toman el
+        valor diario vigente del catálogo; los personalizados conservan el suyo.
+        Nunca se consulta PaqueteAPUItem.
+        """
+        from apps.common.choices import TipoAPU
+        from apps.presupuestos.economia import ValorDiarioError, calcular_aporte
+        from apps.presupuestos.models import APULinea, ReglaAPUSubsistema
+
+        componentes = list(self._lineas_componentes(tipo_apu))
+
+        if refrescar_catalogo:
+            pendientes = []
+            for ln in componentes:
+                if ln.precio_personalizado or ln.item_catalogo_id is None:
+                    continue
+                try:
+                    vd = ln.item_catalogo.valor_diario
+                except ValorDiarioError as exc:
+                    pendientes.append(f"«{ln.descripcion}» ({exc})")
+                    continue
+                if ln.precio_referencia != vd:
+                    ln.precio_referencia = vd
+                    ln.save(update_fields=["precio_referencia", "updated_at"])
+            if pendientes:
+                raise ValorDiarioError(
+                    f"No se puede calcular {tipo_apu}: hay ítems sin valor diario calculable "
+                    f"(configure su vida útil en el catálogo APU): {'; '.join(pendientes)}."
+                )
+
+        if not componentes:
+            self._lineas_resumen(tipo_apu).delete()
+            return None
+
+        dias_duracion = float(self.apu.dias_duracion or 0)
+        if dias_duracion <= 0:
+            raise ValueError("El parámetro 'Días de duración' del APU debe ser mayor que cero.")
+        tp  = self._get_total_powergrip()
+        aiu = 1 + float(self.apu.aiu_contratista_pct) / 100
+        mmo = 1 + float(self.apu.margen_mano_obra_pct) / 100
+        try:
+            regla = ReglaAPUSubsistema.objects.get(subsistema=self.ps.subsistema, tipo_apu=tipo_apu)
+        except ReglaAPUSubsistema.DoesNotExist:
+            raise ValueError(
+                f"No existe ReglaAPUSubsistema para subsistema='{self.ps.subsistema}' "
+                f"y tipo_apu='{tipo_apu}'. Defínala en la edición del Subsistema."
             )
-            linea.calcular()
-            creadas.append({"descripcion": linea.descripcion, "costo_unitario": float(linea.costo_unitario)})
 
-        logger.info("[APUService] %d líneas transporte (legado) para APU %s.", len(creadas), self.apu.pk)
-        return creadas
+        suma = sum(
+            (calcular_aporte(ln.precio_referencia, self._cantidad_linea(ln, tipo_apu))
+             for ln in componentes),
+            Decimal("0"),
+        )
+        ctx = self._build_regla_context(
+            float(suma), dias_duracion, aiu, mmo, tp, self._get_num_personas(),
+        )
+        costo = regla.evaluar(ctx)
 
-    @transaction.atomic
-    def generar_administracion(self, costo_total_admin: float) -> dict:
-        """Legado: genera una APULinea ADMINISTRACION con costo absoluto."""
-        return self.generar_administracion_item("Administración", costo_total_admin)
+        # Rendimiento de la resumen: el que fijó el usuario (se conserva al
+        # recalcular); si no, 1 — o, en ADMINISTRACION, el promedio de los %.
+        previa = self._lineas_resumen(tipo_apu).filter(rendimiento_personalizado=True).first()
+        if previa is not None:
+            rendimiento = Decimal(str(previa.rendimiento))
+        else:
+            rendimiento = self._rendimiento_resumen_default(tipo_apu, componentes)
 
-    @transaction.atomic
-    def generar_administracion_item(self, descripcion: str, costo_total: float) -> dict:
+        self._lineas_resumen(tipo_apu).delete()
+        resumen = APULinea.objects.create(
+            apu=self.apu,
+            tipo=tipo_apu,
+            item_catalogo=None,
+            despiece_linea=None,
+            descripcion=TipoAPU(tipo_apu).label,
+            rendimiento=rendimiento,
+            rendimiento_personalizado=previa is not None,
+            unidad="global",
+            precio_referencia=Decimal(str(costo)).quantize(
+                Decimal("0.000001"), rounding=ROUND_HALF_UP),
+            iva_aplicado=False,
+            editable=True,
+        )
+        resumen.calcular()
+        logger.info(
+            "[APUService] %s (paquetes) APU %s | n=%d | suma=%s | cu=%.6f | rend=%s",
+            tipo_apu, self.apu.pk, len(componentes), suma, costo, rendimiento,
+        )
+        return resumen
+
+    @staticmethod
+    def _rendimiento_resumen_default(tipo_apu: str, componentes) -> Decimal:
+        """1 por defecto; ADMINISTRACION = promedio simple de los % de sus componentes."""
+        from apps.common.choices import TipoAPU
+        if tipo_apu == TipoAPU.ADMINISTRACION and componentes:
+            pcts = [Decimal(str(ln.rendimiento if ln.rendimiento is not None else 1))
+                    for ln in componentes]
+            return (sum(pcts) / len(pcts)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+        return Decimal("1")
+
+    def actualizar_rendimiento_resumen(self, tipo_apu: str, rendimiento) -> None:
+        """Fija (o restablece con None) el rendimiento de la resumen de un tipo
+        calculado por paquetes y recalcula el APU. Solo cambia el rendimiento:
+        costo unitario (fórmula) y componentes quedan igual."""
+        if not self._tipo_usa_paquetes(tipo_apu):
+            raise ValueError("Solo los tipos calculados por paquetes tienen rendimiento editable.")
+        self._verificar_editable()
+        with transaction.atomic():
+            resumen = self._lineas_resumen(tipo_apu).first()
+            if resumen is None:
+                raise ValueError("El tipo no tiene resultado calculado.")
+            if rendimiento is None:
+                resumen.rendimiento = self._rendimiento_resumen_default(
+                    tipo_apu, list(self._lineas_componentes(tipo_apu)))
+                resumen.rendimiento_personalizado = False
+            else:
+                resumen.rendimiento = rendimiento
+                resumen.rendimiento_personalizado = True
+            resumen.save(update_fields=["rendimiento", "rendimiento_personalizado", "updated_at"])
+            resumen.calcular()
+            self.apu.recalcular()
+
+    def recalcular_tipo(self, tipo_apu: str, refrescar_catalogo: bool = False) -> bool:
+        """Recalcula un TipoAPU no-material con su propia estructura local.
+
+        - Con paquetes instanciados → resumen única del tipo (_recalcular_tipo_paquetes).
+        - Sin paquetes (APU histórico o solo ítems sueltos) → flujo de Fase 1
+          por categoría a partir de sus propias líneas.
+        Devuelve True si el tipo tenía algo que recalcular.
         """
-        Legado: genera/actualiza una APULinea ADMINISTRACION con descripción específica.
-        Para proyectos nuevos, use generar_administracion_desde_catalogo.
-        """
-        from apps.presupuestos.models import APULinea
         from apps.common.choices import TipoAPU
 
-        tp = self._get_total_powergrip()
-        precio_ref = costo_total / float(tp)
+        if self._tipo_usa_paquetes(tipo_apu):
+            self._recalcular_tipo_paquetes(tipo_apu, refrescar_catalogo=refrescar_catalogo)
+            return True
+        items_data = self.items_data_desde_lineas(tipo_apu)
+        if not items_data:
+            # Tipo sin componentes (p. ej. se eliminó su último paquete): sin resumen.
+            if not self._lineas_componentes(tipo_apu).exists():
+                self._lineas_resumen(tipo_apu).delete()
+            return False
+        if tipo_apu == TipoAPU.ADMINISTRACION:
+            self._generar_administracion_con_regla(items_data)
+        else:
+            self._generar_categoria_desde_catalogo(tipo_apu, items_data)
+        return True
 
-        linea, _ = APULinea.objects.update_or_create(
+    def _reemplazar_sueltos(self, tipo_apu: str, items_data: List[Dict]) -> List[dict]:
+        """Modales en un tipo con paquetes: reemplaza SOLO los ítems sueltos
+        (sin apu_paquete) y recalcula la resumen del tipo. Nunca toca los
+        componentes de paquetes."""
+        from apps.common.choices import TipoAPU
+
+        cargados = self._cargar_items_catalogo(tipo_apu, items_data)
+        self.apu.lineas.filter(
+            tipo=tipo_apu, item_catalogo__isnull=False, apu_paquete__isnull=True,
+        ).delete()
+        for c in cargados:
+            rendimiento = (
+                Decimal(str(round(c["porcentaje"], 6)))
+                if tipo_apu == TipoAPU.ADMINISTRACION else Decimal(c["cantidad"])
+            )
+            self._crear_linea_detalle(tipo_apu, c, rendimiento=rendimiento)
+        resumen = self._recalcular_tipo_paquetes(tipo_apu)
+        return [{
+            "descripcion": resumen.descripcion if resumen else tipo_apu,
+            "costo_total": float(resumen.costo_total) if resumen else 0.0,
+        }]
+
+    def instanciar_paquetes(self, paquetes) -> list:
+        """Siembra el APU con uno o varios paquetes maestros del mismo o distinto
+        tipo y recalcula la resumen de cada tipo afectado."""
+        from apps.presupuestos.economia import ValorDiarioError
+
+        creados = []
+        tipos = []
+        with transaction.atomic():
+            for paquete in paquetes:
+                creados.append(self._instanciar_paquete(paquete))
+                if paquete.tipo_apu not in tipos:
+                    tipos.append(paquete.tipo_apu)
+            for tipo in tipos:
+                self._recalcular_tipo_paquetes(tipo)
+        return creados
+
+    def _instanciar_paquete(self, paquete):
+        """Crea el snapshot APUPaquete + una APULinea por componente:
+            cantidad          = PaqueteAPUItem.cantidad
+            precio_referencia = valor diario vigente del ítem (sin override)
+            rendimiento       = cantidad; en ADMINISTRACION, 1 (100 %: el % es del APU)
+        Si algún ítem no tiene valor diario calculable, no crea nada."""
+        from apps.common.choices import TipoAPU
+        from apps.presupuestos.economia import ValorDiarioError
+        from apps.presupuestos.models import APUPaquete
+
+        if paquete.tipo_apu == TipoAPU.MATERIALES:
+            raise ValueError("MATERIALES no admite paquetes APU.")
+        if self.apu.paquetes.filter(paquete_origen=paquete).exists():
+            raise ValueError(f"El paquete «{paquete.nombre}» ya está en este APU.")
+
+        componentes = list(paquete.componentes())
+        cargados, pendientes = [], []
+        for comp in componentes:
+            item = comp.item_catalogo
+            try:
+                precio, _ = resolver_precio_item(item)
+            except ValorDiarioError as exc:
+                pendientes.append(f"«{item.nombre}» ({exc})")
+                continue
+            cargados.append({
+                "item": item,
+                "cantidad": Decimal(str(comp.cantidad)),
+                "precio": precio,
+                "personalizado": False,
+                "porcentaje": 1.0,
+            })
+        if pendientes:
+            raise ValorDiarioError(
+                f"No se puede instanciar el paquete «{paquete.nombre}»: hay ítems sin valor "
+                f"diario calculable (configure su vida útil en el catálogo APU): "
+                f"{'; '.join(pendientes)}."
+            )
+
+        orden = self.apu.paquetes.filter(tipo_apu=paquete.tipo_apu).count()
+        ap = APUPaquete.objects.create(
             apu=self.apu,
-            tipo=TipoAPU.ADMINISTRACION,
-            descripcion=descripcion,
-            defaults={
-                "rendimiento": Decimal("1"),
-                "unidad": "global",
-                "precio_referencia": Decimal(str(round(precio_ref, 6))),
-                "iva_aplicado": False,
-                "editable": True,
-            },
+            paquete_origen=paquete,
+            nombre_snapshot=paquete.nombre,
+            tipo_apu=paquete.tipo_apu,
+            orden=orden,
         )
-        linea.calcular()
-        logger.debug(
-            "[APUService] Admin '%s' APU %s | costo_total=%.2f | tp=%.4f | precio_ref=%.6f",
-            descripcion, self.apu.pk, costo_total, float(tp), precio_ref,
+        for c in cargados:
+            rendimiento = (
+                Decimal("1") if paquete.tipo_apu == TipoAPU.ADMINISTRACION else c["cantidad"]
+            )
+            self._crear_linea_detalle(paquete.tipo_apu, c, rendimiento=rendimiento, apu_paquete=ap)
+        logger.info(
+            "[APUService] APU %s: paquete «%s» instanciado (%d componentes).",
+            self.apu.pk, paquete.nombre, len(cargados),
         )
-        return {"descripcion": descripcion, "costo_unitario": float(linea.costo_unitario)}
+        return ap
+
+    def agregar_paquete(self, paquete):
+        """Agrega un paquete maestro activo a un APU editable."""
+        self._verificar_editable()
+        if not paquete.activo:
+            raise ValueError(f"El paquete «{paquete.nombre}» está inactivo.")
+        with transaction.atomic():
+            ap = self.instanciar_paquetes([paquete])[0]
+            self.apu.recalcular()
+        return ap
+
+    def eliminar_paquete(self, apu_paquete) -> None:
+        """Operación de dominio atómica: elimina los componentes del paquete, el
+        APUPaquete y recalcula la resumen de su tipo. Sin eliminación parcial."""
+        if apu_paquete.apu_id != self.apu.pk:
+            raise ValueError("El paquete no pertenece a este APU.")
+        self._verificar_editable()
+        tipo = apu_paquete.tipo_apu
+        with transaction.atomic():
+            self.apu.lineas.filter(apu_paquete=apu_paquete).delete()
+            apu_paquete.delete()
+            self.recalcular_tipo(tipo)
+            self.apu.recalcular()
+
+    def actualizar_componente(self, linea, cantidad=None, precio=None, porcentaje=None):
+        """Override local de un componente (paquete o ítem suelto) del APU:
+        cantidad, valor diario (marca precio_personalizado) y, en
+        ADMINISTRACION, porcentaje (rendimiento). No toca catálogo ni maestro."""
+        from apps.common.choices import TipoAPU
+
+        if linea.apu_id != self.apu.pk:
+            raise ValueError("La línea no pertenece a este APU.")
+        if linea.tipo == TipoAPU.MATERIALES or (
+            linea.item_catalogo_id is None and linea.apu_paquete_id is None
+        ):
+            raise ValueError("Solo se pueden editar componentes de catálogo no materiales.")
+        self._verificar_editable()
+
+        campos = ["updated_at"]
+        if cantidad is not None:
+            cantidad = Decimal(str(cantidad))
+            if cantidad <= 0:
+                raise ValueError("La cantidad debe ser mayor que cero.")
+            linea.cantidad = cantidad
+            campos.append("cantidad")
+            if linea.tipo != TipoAPU.ADMINISTRACION:
+                linea.rendimiento = cantidad
+                campos.append("rendimiento")
+        if precio is not None:
+            precio = Decimal(str(precio))
+            if precio < 0:
+                raise ValueError("El valor diario no puede ser negativo.")
+            linea.precio_referencia = precio.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+            linea.precio_personalizado = True
+            campos += ["precio_referencia", "precio_personalizado"]
+        if porcentaje is not None:
+            if linea.tipo != TipoAPU.ADMINISTRACION:
+                raise ValueError("El porcentaje solo aplica a Administración.")
+            porcentaje = Decimal(str(porcentaje))
+            if porcentaje < 0:
+                raise ValueError("El porcentaje no puede ser negativo.")
+            linea.rendimiento = porcentaje
+            campos.append("rendimiento")
+
+        with transaction.atomic():
+            linea.save(update_fields=campos)
+            self.recalcular_tipo(linea.tipo)
+            self.apu.recalcular()
+
+    def restablecer_precio_catalogo(self, linea) -> None:
+        """Fase 3.C — deshace el override local de precio de un componente:
+            precio_referencia    = valor diario vigente del ItemCatalogoAPU
+            precio_personalizado = False
+        y recalcula el TipoAPU. Conserva cantidad, rendimiento (% en
+        Administración) y la composición del APUPaquete. No toca catálogo,
+        paquete maestro ni subsistema. Lanza ValorDiarioError si el ítem no
+        tiene valor diario calculable."""
+        from apps.common.choices import TipoAPU
+
+        if linea.apu_id != self.apu.pk:
+            raise ValueError("La línea no pertenece a este APU.")
+        if linea.tipo == TipoAPU.MATERIALES or linea.item_catalogo_id is None:
+            raise ValueError("Solo los componentes de catálogo tienen precio de catálogo.")
+        self._verificar_editable()
+        valor_diario = linea.item_catalogo.valor_diario  # ValorDiarioError si no es calculable
+        with transaction.atomic():
+            linea.precio_referencia = valor_diario
+            linea.precio_personalizado = False
+            linea.save(update_fields=["precio_referencia", "precio_personalizado", "updated_at"])
+            self.recalcular_tipo(linea.tipo)
+            self.apu.recalcular()
+
+    def lineas_reemplazadas_al_convertir(self, tipo_apu: str) -> list:
+        """Fase 3.C — si el TipoAPU todavía no usa paquetes, devuelve las líneas
+        que `_recalcular_tipo_paquetes` reemplazaría al agregar el primer
+        paquete (las que el servicio trata como resumen: sin ítem de catálogo,
+        sin paquete y sin despiece). Lista vacía si el tipo ya usa paquetes o
+        no tiene líneas. Solo lectura: no modifica nada."""
+        if self._tipo_usa_paquetes(tipo_apu):
+            return []
+        return list(self._lineas_resumen(tipo_apu).order_by("id"))
 
     # ── Helper: estimar días de trabajo ───────────────────────────────────────
 

@@ -1,0 +1,47 @@
+{% load catalogo_tags %}
+{# Fila editable de un componente en "Configurar APU". Contexto: ln, est, bloqueado. #}
+<div class="apu-cfg-row" data-linea="{{ ln.pk }}">
+  <div class="apu-cfg-row__main">
+    <div class="apu-cfg-row__name">{{ ln.descripcion }}</div>
+    {% if ln.item_catalogo %}<div class="apu-cfg-row__sub">{% if ln.item_catalogo.codigo %}{{ ln.item_catalogo.codigo }} · {% endif %}{{ ln.item_catalogo.categoria.nombre }}</div>{% endif %}
+  </div>
+
+  <label class="apu-cfg-field">
+    <span>Cantidad</span>
+    <input type="text" inputmode="decimal" data-campo="cantidad" value="{{ ln.cantidad_efectiva.normalize }}"
+           {% if bloqueado %}disabled{% endif %} aria-label="Cantidad de {{ ln.descripcion }}">
+  </label>
+
+  <label class="apu-cfg-field apu-cfg-field--precio">
+    <span>Precio diario</span>
+    <input type="text" inputmode="decimal" data-campo="precio_referencia"
+           value="{{ ln.precio_referencia|floatformat:'-2u' }}"
+           {% if bloqueado %}disabled{% endif %} aria-label="Precio diario de {{ ln.descripcion }}">
+    {% if ln.precio_personalizado %}
+      <em class="apu-price-state apu-price-state--custom">Precio personalizado</em>
+      {% if not bloqueado and ln.valor_diario_catalogo is not None %}
+      <button type="button" class="apu-price-reset" data-apu-restablecer="{{ ln.pk }}"
+              title="Catálogo: {{ ln.valor_diario_catalogo|currency:'COP' }}">Restablecer precio del catálogo</button>
+      {% endif %}
+    {% else %}
+      <em class="apu-price-state">Precio catálogo</em>
+    {% endif %}
+  </label>
+
+  {% if est.es_admin %}
+  <label class="apu-cfg-field apu-cfg-field--pct">
+    <span>Porcentaje</span>
+    <div class="apu-cfg-pct">
+      <input type="text" inputmode="decimal" data-campo="porcentaje"
+             value="{% if ln.porcentaje is not None %}{{ ln.porcentaje|floatformat:'-2u' }}{% endif %}"
+             {% if bloqueado %}disabled{% endif %} aria-label="Porcentaje de {{ ln.descripcion }}">
+      <b>%</b>
+    </div>
+  </label>
+  {% endif %}
+
+  <div class="apu-cfg-row__aporte">
+    <span>Aporte</span>
+    <strong>{{ ln.aporte|currency:"COP" }}</strong>
+  </div>
+</div>

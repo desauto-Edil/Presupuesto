@@ -1,5 +1,6 @@
 """apps/catalogos/views.py — Vistas CRUD para catálogos maestros."""
 
+from apps.common.mixins import EliminacionProtegidaMixin
 from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.views.generic import (
@@ -104,7 +105,7 @@ class CategoriaUpdateView(GestionCatalogoCategoriasMixin, UpdateView):
         return super().form_valid(form)
 
 
-class CategoriaDeleteView(GestionCatalogoCategoriasMixin, DeleteView):
+class CategoriaDeleteView(GestionCatalogoCategoriasMixin, EliminacionProtegidaMixin, DeleteView):
     model = CategoriaProducto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
@@ -191,7 +192,7 @@ class ProductoUpdateView(GestionCatalogosProductosMixin, UpdateView):
         return response
 
 
-class ProductoDeleteView(GestionCatalogosProductosMixin, DeleteView):
+class ProductoDeleteView(GestionCatalogosProductosMixin, EliminacionProtegidaMixin, DeleteView):
     model = Producto
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
@@ -220,7 +221,7 @@ class UnidadUpdateView(GestionCatalogoCategoriasMixin, UpdateView):
     success_url = reverse_lazy("catalogos:catalogo")
 
 
-class UnidadDeleteView(GestionCatalogoCategoriasMixin, DeleteView):
+class UnidadDeleteView(GestionCatalogoCategoriasMixin, EliminacionProtegidaMixin, DeleteView):
     model = UnidadMedida
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
@@ -248,7 +249,7 @@ class ProveedorUpdateView(GestionCatalogoProveedoresMixin, UpdateView):
     success_url = reverse_lazy("catalogos:catalogo")
 
 
-class ProveedorDeleteView(GestionCatalogoProveedoresMixin, DeleteView):
+class ProveedorDeleteView(GestionCatalogoProveedoresMixin, EliminacionProtegidaMixin, DeleteView):
     model = Proveedor
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:catalogo")
@@ -283,7 +284,7 @@ class ProductoProveedorUpdateView(GestionCatalogosProductosMixin, UpdateView):
     success_url = reverse_lazy("catalogos:productoproveedor_list")
 
 
-class ProductoProveedorDeleteView(GestionCatalogosProductosMixin, DeleteView):
+class ProductoProveedorDeleteView(GestionCatalogosProductosMixin, EliminacionProtegidaMixin, DeleteView):
     model = ProductoProveedor
     template_name = "confirm_delete.html"
     success_url = reverse_lazy("catalogos:productoproveedor_list")

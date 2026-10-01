@@ -1,5 +1,6 @@
 # Imperandina — dependencias de producción
-# Python 3.9 (los pines están fijados a versiones compatibles con 3.9)
+# Pines fijados para Python 3.9. El servidor de producción corre 3.12:
+# revisar compatibilidad antes de subir versiones.
 # Instalar:  pip install -r requirements.txt
 
 # ── Núcleo ───────────────────────────────────────────────────────────────
@@ -25,8 +26,15 @@ whitenoise[brotli]==6.11.0
 # ── Exportaciones ────────────────────────────────────────────────────────
 openpyxl==3.1.5          # Excel: despiece y APU (apps/presupuestos/xlsx_exports.py)
 weasyprint==66.0         # PDF: presupuestos y APU (apps/presupuestos/views)
-                         # Requiere librerías del sistema: pango, cairo, gdk-pixbuf
-                         # Debian/Ubuntu: apt-get install libpango-1.0-0 libpangoft2-1.0-0
+                         # Requiere librerías del sistema que pip NO instala: Pango,
+                         # HarfBuzz y Fontconfig (desde WeasyPrint 53 ya no usa cairo
+                         # ni gdk-pixbuf). Sin ellas el import falla con
+                         # OSError: cannot load library 'libpango-1.0-0'.
+                         # Debian/Ubuntu:
+                         #   apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 \
+                         #       libharfbuzz0b libfontconfig1 fonts-dejavu-core
+                         # fonts-dejavu-core evita que el PDF salga con cuadritos
+                         # en un servidor sin fuentes instaladas.
 
 # ── Imágenes (ImageField: Subsistema.imagen_tecnica, logos) ───────────────
 pillow==11.3.0

@@ -2,6 +2,8 @@
 
 import mimetypes
 
+from decimal import Decimal
+
 from django import forms
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -167,6 +169,7 @@ _PROYECTO_WIDGETS = {
     "margen_mano_obra_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
     "iva_pct":              forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
     "aiu_contratista_pct":  forms.NumberInput(attrs={"class": "form-control", "step": "0.01"}),
+    "margen_contratista_pct": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "min": "0"}),
     "moneda":               forms.Select(attrs={"class": "form-select"}),
     "aplica_exencion_iva":  forms.CheckboxInput(attrs={"class": "form-check-input"}),
     "observaciones":        forms.Textarea(attrs={"class": "form-control", "rows": 2}),
@@ -176,26 +179,43 @@ _PROYECTO_LABELS = {
     "margen_material_pct":  "Margen de material (%)",
     "margen_mano_obra_pct": "Margen de mano de obra (%)",
     "aiu_contratista_pct":  "AIU contratista (%)",
+    "margen_contratista_pct": "Margen de contratista (%)",
     "iva_pct":              "IVA (%)",
     "trm":                  "TRM (COP/USD)",
 }
 
 
-class ProyectoForm(forms.ModelForm):
+class _MargenContratistaOpcionalMixin:
+    """Margen de contratista opcional: vacío = valor actual (0 en proyectos nuevos)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["margen_contratista_pct"].required = False
+
+    def clean_margen_contratista_pct(self):
+        valor = self.cleaned_data.get("margen_contratista_pct")
+        if valor is None:
+            return getattr(self.instance, "margen_contratista_pct", None) or Decimal("0")
+        if valor < 0:
+            raise forms.ValidationError("El margen no puede ser negativo.")
+        return valor
+
+
+class ProyectoForm(_MargenContratistaOpcionalMixin, forms.ModelForm):
     class Meta:
         model = Proyecto
         fields = [
             "cliente", "nombre", "descripcion",
             "dias_duracion", "num_personas",
             "trm", "margen_material_pct", "margen_mano_obra_pct",
-            "iva_pct", "aiu_contratista_pct",
+            "iva_pct", "aiu_contratista_pct", "margen_contratista_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
         widgets = {"cliente": forms.Select(attrs={"class": "form-select"}), **_PROYECTO_WIDGETS}
         labels = _PROYECTO_LABELS
 
 
-class ProyectoFromSolicitudForm(forms.ModelForm):
+class ProyectoFromSolicitudForm(_MargenContratistaOpcionalMixin, forms.ModelForm):
     """Formulario para crear Proyecto desde una Solicitud (cliente y solicitud los asigna la vista)."""
     class Meta:
         model = Proyecto
@@ -203,7 +223,7 @@ class ProyectoFromSolicitudForm(forms.ModelForm):
             "nombre", "descripcion",
             "dias_duracion", "num_personas",
             "trm", "margen_material_pct", "margen_mano_obra_pct",
-            "iva_pct", "aiu_contratista_pct",
+            "iva_pct", "aiu_contratista_pct", "margen_contratista_pct",
             "moneda", "aplica_exencion_iva", "observaciones",
         ]
         widgets = _PROYECTO_WIDGETS

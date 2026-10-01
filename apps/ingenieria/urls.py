@@ -8,6 +8,8 @@ from apps.ingenieria.views import (
     SubsistemaCreateView, SubsistemaUpdateView, SubsistemaDeleteView,
     SubsistemaClonarView,
     SubsistemaConfigApuGuardarView,
+    SubsistemaPaquetesDisponiblesView,
+    SubsistemaPaqueteAgregarView, SubsistemaPaqueteQuitarView, SubsistemaPaqueteMoverView,
     CalculadoraConsumoView,
     FuncionConsumoCreateView, FuncionConsumoDeleteView,
     ProblemaResueltoCreateView, ProblemaResueltoDeleteView,
@@ -49,6 +51,15 @@ urlpatterns = [
     path("subsistemas/<int:pk>/config-apu/guardar/",
          SubsistemaConfigApuGuardarView.as_view(),
          name="subsistema_config_apu_guardar"),
+    # Fase 3.B: paquetes APU del subsistema
+    path("subsistemas/<int:pk>/paquetes-apu/disponibles/",
+         SubsistemaPaquetesDisponiblesView.as_view(), name="subsistema_paquetes_disponibles"),
+    path("subsistemas/<int:pk>/paquetes-apu/agregar/",
+         SubsistemaPaqueteAgregarView.as_view(), name="subsistema_paquete_agregar"),
+    path("subsistemas/<int:pk>/paquetes-apu/<int:asig_pk>/quitar/",
+         SubsistemaPaqueteQuitarView.as_view(), name="subsistema_paquete_quitar"),
+    path("subsistemas/<int:pk>/paquetes-apu/<int:asig_pk>/mover/",
+         SubsistemaPaqueteMoverView.as_view(), name="subsistema_paquete_mover"),
 
     # Catálogos de consumo
     path("catalogo/funciones/nueva/", FuncionConsumoCreateView.as_view(), name="funcion_consumo_create"),
