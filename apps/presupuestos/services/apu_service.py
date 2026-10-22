@@ -1071,10 +1071,10 @@ class APUService:
               rendimiento       = porcentaje individual (fracción) → re-marcado del modal
           - 1 línea resumen (item_catalogo=None):
               precio_referencia = resultado bruto de la fórmula del subsistema
-              rendimiento       = porcentaje promedio de la categoría (fracción 0–2)
+              rendimiento       = 1 (el porcentaje ya va en cada aporte)
               costo_total       = precio_referencia × rendimiento   (via calcular())
 
-        `suma` = Σ(valor_diario × cantidad), igual que en las demás categorías.
+        `suma` = Σ(valor_diario × cantidad × porcentaje del ítem).
         """
         from apps.presupuestos.models import APULinea, ReglaAPUSubsistema
         from apps.presupuestos.economia import calcular_aporte
@@ -1120,18 +1120,16 @@ class APUService:
         for cat_id, items_en_cat in por_categoria.items():
             categoria = items_en_cat[0]["item"].categoria
 
+            # Cada aporte ya lleva el porcentaje de su ítem.
             suma = sum(
-                (calcular_aporte(c["precio"], c["cantidad"]) for c in items_en_cat),
+                (calcular_aporte(c["precio"], c["cantidad"]) * Decimal(str(round(c["porcentaje"], 6)))
+                 for c in items_en_cat),
                 Decimal("0"),
             )
 
-            # Evaluar fórmula del subsistema → resultado BRUTO (sin porcentaje)
             ctx        = self._build_regla_context(float(suma), dias_duracion, aiu, mmo, tp, num_personas)
             costo_bruto = regla.evaluar(ctx)
-
-            # Porcentaje promedio de la categoría
-            pcts_cat = [c["porcentaje"] for c in items_en_cat]
-            escala   = sum(pcts_cat) / len(pcts_cat) if pcts_cat else 1.0
+            escala      = 1.0
 
             # ── Líneas detalle (referencia visual + re-marcado de modal) ─────
             for c in items_en_cat:
@@ -1175,11 +1173,10 @@ class APUService:
         """Genera APULineas ADMINISTRACION usando ReglaAPUSubsistema × porcentaje.
 
         Fórmula:
-            costo = regla_subsistema(ítems_categoría) × porcentaje_usuario
+            costo = regla_subsistema(Σ valor_diario × cantidad × porcentaje_ítem)
 
-        El porcentaje (0.0–1.0, fracción) se promedia por categoría y se almacena
-        en `rendimiento` de la línea resumen. La línea detalle guarda el porcentaje
-        individual por ítem para pre-llenar el modal al reabrirlo.
+        El porcentaje (fracción) se aplica al aporte de cada ítem; la línea
+        detalle lo guarda en `rendimiento` para pre-llenar el modal al reabrirlo.
         """
         creadas = self._generar_administracion_con_regla(items_data)
         logger.info(
@@ -1307,15 +1304,27 @@ class APUService:
             return Decimal("1")
         return Decimal(str(ln.rendimiento or 1))
 
+    @classmethod
+    def _aporte_linea(cls, ln, tipo_apu: str) -> Decimal:
+        """Aporte del componente a `suma`: precio × cantidad; en ADMINISTRACION
+        además × su porcentaje (rendimiento, fracción; sin dato = 100 %)."""
+        from apps.common.choices import TipoAPU
+        from apps.presupuestos.economia import calcular_aporte
+        aporte = calcular_aporte(ln.precio_referencia, cls._cantidad_linea(ln, tipo_apu))
+        if tipo_apu == TipoAPU.ADMINISTRACION and ln.rendimiento is not None:
+            aporte *= Decimal(str(ln.rendimiento))
+        return aporte
+
     def _recalcular_tipo_paquetes(self, tipo_apu: str, refrescar_catalogo: bool = False):
         """Resumen única del TipoAPU cuando el tipo tiene paquetes instanciados.
 
             aporte          = precio_referencia × cantidad        (por componente)
+                              ADMINISTRACION: × porcentaje del componente
             valor_paquete   = Σ aportes del APUPaquete
             suma            = Σ valor_paquete + Σ aportes de ítems sueltos del tipo
             resumen         = ReglaAPUSubsistema(suma)  — evaluada UNA vez
-            ADMINISTRACION  : rendimiento de la resumen = promedio simple de los
-                              porcentajes (rendimiento) de todos sus componentes
+            rendimiento     = 1 por defecto (también en ADMINISTRACION: el % ya
+                              va en cada aporte) o el que fijó el usuario
 
         La categoría no fragmenta la suma. `refrescar_catalogo` aplica el
         contrato de Fase 1: los componentes sin precio_personalizado toman el
@@ -1323,7 +1332,7 @@ class APUService:
         Nunca se consulta PaqueteAPUItem.
         """
         from apps.common.choices import TipoAPU
-        from apps.presupuestos.economia import ValorDiarioError, calcular_aporte
+        from apps.presupuestos.economia import ValorDiarioError
         from apps.presupuestos.models import APULinea, ReglaAPUSubsistema
 
         componentes = list(self._lineas_componentes(tipo_apu))
@@ -1365,18 +1374,14 @@ class APUService:
                 f"y tipo_apu='{tipo_apu}'. Defínala en la edición del Subsistema."
             )
 
-        suma = sum(
-            (calcular_aporte(ln.precio_referencia, self._cantidad_linea(ln, tipo_apu))
-             for ln in componentes),
-            Decimal("0"),
-        )
+        suma = sum((self._aporte_linea(ln, tipo_apu) for ln in componentes), Decimal("0"))
         ctx = self._build_regla_context(
             float(suma), dias_duracion, aiu, mmo, tp, self._get_num_personas(),
         )
         costo = regla.evaluar(ctx)
 
         # Rendimiento de la resumen: el que fijó el usuario (se conserva al
-        # recalcular); si no, 1 — o, en ADMINISTRACION, el promedio de los %.
+        # recalcular); si no, 1.
         previa = self._lineas_resumen(tipo_apu).filter(rendimiento_personalizado=True).first()
         if previa is not None:
             rendimiento = Decimal(str(previa.rendimiento))
@@ -1407,12 +1412,7 @@ class APUService:
 
     @staticmethod
     def _rendimiento_resumen_default(tipo_apu: str, componentes) -> Decimal:
-        """1 por defecto; ADMINISTRACION = promedio simple de los % de sus componentes."""
-        from apps.common.choices import TipoAPU
-        if tipo_apu == TipoAPU.ADMINISTRACION and componentes:
-            pcts = [Decimal(str(ln.rendimiento if ln.rendimiento is not None else 1))
-                    for ln in componentes]
-            return (sum(pcts) / len(pcts)).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+        """Siempre 1: en ADMINISTRACION el % de cada componente ya está en su aporte."""
         return Decimal("1")
 
     def actualizar_rendimiento_resumen(self, tipo_apu: str, rendimiento) -> None:

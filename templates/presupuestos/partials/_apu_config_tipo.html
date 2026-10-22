@@ -105,11 +105,11 @@
           <em class="apu-price-state apu-price-state--custom">Ajustado</em>
           {% if not bloqueado %}
           <button type="button" class="apu-price-reset" data-apu-rend-restablecer>
-            Volver a {% if est.es_admin %}promedio de %{% else %}1{% endif %}
+            Volver a {% if est.es_admin %}100 %{% else %}1{% endif %}
           </button>
           {% endif %}
         {% else %}
-          <em class="apu-price-state">{% if est.es_admin %}Promedio de los %{% else %}Por defecto{% endif %}</em>
+          <em class="apu-price-state">Por defecto</em>
         {% endif %}
       </label>
       <div class="apu-cfg-res__grid">

@@ -2981,15 +2981,14 @@ def _estructura_tipo_apu(apu, tipo, lineas_tipo=None, paquetes=None) -> dict:
     """
     Fase 3.C — estructura de un TipoAPU no material para la vista y el
     configurador. Solo presentación: los importes salen de las líneas ya
-    calculadas por APUService (aporte = precio_referencia × cantidad con la
-    misma `_cantidad_linea` del servicio).
+    calculadas por APUService (aporte con el mismo `_aporte_linea` del
+    servicio: precio × cantidad, y × % en Administración).
 
       modo = "paquetes" → hay APUPaquete del tipo: bloques por paquete +
                           ítems adicionales + una resumen (solo lectura).
              "legacy"   → estructura anterior (resúmenes por categoría).
              "vacio"    → sin líneas.
     """
-    from apps.presupuestos.economia import calcular_aporte
     from apps.presupuestos.services.apu_service import APUService
 
     if lineas_tipo is None:
@@ -3004,7 +3003,7 @@ def _estructura_tipo_apu(apu, tipo, lineas_tipo=None, paquetes=None) -> dict:
 
     def _anotar(ln):
         ln.cantidad_efectiva = APUService._cantidad_linea(ln, tipo)
-        ln.aporte = calcular_aporte(ln.precio_referencia, ln.cantidad_efectiva)
+        ln.aporte = APUService._aporte_linea(ln, tipo)
         ln.porcentaje = (ln.rendimiento * 100) if ln.rendimiento is not None else None
         item = ln.item_catalogo
         ln.valor_diario_catalogo = item.valor_diario_o_none if item is not None else None
