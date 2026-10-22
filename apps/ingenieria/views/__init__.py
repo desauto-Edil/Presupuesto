@@ -292,6 +292,29 @@ def _catalogo_consumo_context():
     }
 
 
+def _componente_a_dict(c):
+    """Serializa un ComponenteSubsistema para el editor JS de la receta."""
+    prod = c.producto_predeterminado
+    return {
+        "codigo": c.codigo,
+        "nombre": c.nombre,
+        "categoria_id": c.categoria_id,
+        "producto_predeterminado_id": c.producto_predeterminado_id,
+        "producto_predeterminado": (
+            {"id": prod.pk, "codigo": prod.codigo, "nombre": prod.nombre, "activo": prod.activo}
+            if prod else None
+        ),
+        "formula_texto": c.formula_texto,
+        "variable_salida": c.variable_salida,
+        "unidad": c.unidad,
+        "variable_referencia_apu": c.variable_referencia_apu,
+        "unidad_apu": c.unidad_apu,
+        "requiere_presentacion_producto": c.requiere_presentacion_producto,
+        "variable_presentacion_producto": c.variable_presentacion_producto,
+        "campo_presentacion_producto": c.campo_presentacion_producto or "CANTIDAD",
+    }
+
+
 def _build_subconjuntos_json(subconjuntos, componentes_legacy):
     """
     Serializa subconjuntos (con sus componentes) y componentes legacy a JSON
@@ -303,43 +326,13 @@ def _build_subconjuntos_json(subconjuntos, componentes_legacy):
         data.append({
             "nombre": sq.nombre,
             "descripcion": sq.descripcion,
-            "componentes": [
-                {
-                    "codigo": c.codigo,
-                    "nombre": c.nombre,
-                    "categoria_id": c.categoria_id,
-                    "formula_texto": c.formula_texto,
-                    "variable_salida": c.variable_salida,
-                    "unidad": c.unidad,
-                    "variable_referencia_apu": c.variable_referencia_apu,
-                    "unidad_apu": c.unidad_apu,
-                    "requiere_presentacion_producto": c.requiere_presentacion_producto,
-                    "variable_presentacion_producto": c.variable_presentacion_producto,
-                    "campo_presentacion_producto": c.campo_presentacion_producto or "CANTIDAD",
-                }
-                for c in sq.componentes.all()
-            ],
+            "componentes": [_componente_a_dict(c) for c in sq.componentes.all()],
         })
     if componentes_legacy:
         data.append({
             "nombre": "General",
             "descripcion": "Componentes migrados de versión anterior (puedes renombrar este subconjunto)",
-            "componentes": [
-                {
-                    "codigo": c.codigo,
-                    "nombre": c.nombre,
-                    "categoria_id": c.categoria_id,
-                    "formula_texto": c.formula_texto,
-                    "variable_salida": c.variable_salida,
-                    "unidad": c.unidad,
-                    "variable_referencia_apu": c.variable_referencia_apu,
-                    "unidad_apu": c.unidad_apu,
-                    "requiere_presentacion_producto": c.requiere_presentacion_producto,
-                    "variable_presentacion_producto": c.variable_presentacion_producto,
-                    "campo_presentacion_producto": c.campo_presentacion_producto or "CANTIDAD",
-                }
-                for c in componentes_legacy
-            ],
+            "componentes": [_componente_a_dict(c) for c in componentes_legacy],
         })
     return json.dumps(data, ensure_ascii=False)
 
@@ -354,7 +347,9 @@ def _subconjuntos_context(subsistema):
         .prefetch_related(
             Prefetch(
                 "componentes",
-                queryset=ComponenteSubsistema.objects.select_related("categoria").order_by("orden"),
+                queryset=ComponenteSubsistema.objects.select_related(
+                    "categoria", "producto_predeterminado",
+                ).order_by("orden"),
             )
         )
         .order_by("orden", "id")
@@ -362,7 +357,7 @@ def _subconjuntos_context(subsistema):
     # Componentes legacy: creados antes de la versión con subconjuntos
     componentes_legacy = list(
         ComponenteSubsistema.objects.filter(subsistema=subsistema, subconjunto__isnull=True)
-        .select_related("categoria")
+        .select_related("categoria", "producto_predeterminado")
         .order_by("orden")
     )
     return subconjuntos, componentes_legacy

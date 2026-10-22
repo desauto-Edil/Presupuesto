@@ -476,8 +476,13 @@ class CalcularDespieceMaestroView(CalculadorAccesoMixin, View):
 
     Body JSON esperado:
       {
-        "variables_entrada": {"total_powergrip": 2000, "desperdicio": 1.05}
+        "variables_entrada": {"total_powergrip": 2000, "desperdicio": 1.05},
+        "componentes_excluidos": ["..."],
+        "productos_seleccionados": {"comp_a": 42, "comp_b": null}
       }
+
+    Los componentes que no vienen en `productos_seleccionados` reciben el
+    producto predeterminado de la receta (clave `producto_predeterminado`).
 
     Respuesta JSON:
       {
@@ -512,6 +517,12 @@ class CalcularDespieceMaestroView(CalculadorAccesoMixin, View):
         if not isinstance(variables_entrada, dict):
             variables_entrada = {}
 
+        # Productos ya elegidos en pantalla ({codigo: producto_id | None}); ganan
+        # sobre el producto predeterminado de la receta.
+        productos_seleccionados = body.get("productos_seleccionados", {})
+        if not isinstance(productos_seleccionados, dict):
+            productos_seleccionados = {}
+
         # Actualizar variables_entrada y componentes eliminados en memoria (sin guardar)
         dm.variables_entrada = variables_entrada
         dm.componentes_excluidos = _leer_excluidos(body, dm)
@@ -521,7 +532,7 @@ class CalcularDespieceMaestroView(CalculadorAccesoMixin, View):
         # (la facade es un wrapper estático sobre el mismo service; no
         # captura excepciones, las propaga igual que el código previo).
         try:
-            resultados = DespieceFacade.calcular_maestro(dm)
+            resultados = DespieceFacade.calcular_maestro(dm, productos_seleccionados)
         except Exception as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
@@ -804,17 +815,34 @@ class APUDespieceMaestroView(CalculadorAccesoMixin, View):
 class BuscarProductosView(View):
     """
     GET /calculador/productos/buscar/?q=<texto>&categoria=<nombre>
+    GET /calculador/productos/buscar/?categoria_id=<pk>&limite=<n>
 
-    Retorna hasta 20 productos activos que coincidan con el término de búsqueda.
+    Retorna productos activos que coincidan con el término de búsqueda
+    (hasta 20 por defecto; `limite` admite hasta 500, para llenar el selector
+    de producto predeterminado de la receta técnica).
     Incluye precio_actual, moneda, unidad y fecha_actualizacion_precio para
     poblar la tabla del workbench sin necesidad de recargar la página.
+
+    `categoria_id` filtra por categoría exacta; `categoria` (por nombre,
+    contiene) se mantiene por compatibilidad con el despiece.
     """
+
+    LIMITE_DEFECTO = 20
+    LIMITE_MAXIMO = 500
 
     def get(self, request):
         from apps.catalogos.models import Producto
+        from apps.ingenieria.helpers.productos import producto_a_dict
 
-        q         = request.GET.get("q", "").strip()
-        categoria = request.GET.get("categoria", "").strip()
+        q            = request.GET.get("q", "").strip()
+        categoria    = request.GET.get("categoria", "").strip()
+        categoria_id = request.GET.get("categoria_id", "").strip()
+
+        try:
+            limite = int(request.GET.get("limite") or self.LIMITE_DEFECTO)
+        except ValueError:
+            limite = self.LIMITE_DEFECTO
+        limite = max(1, min(limite, self.LIMITE_MAXIMO))
 
         qs = Producto.objects.filter(activo=True).select_related(
             "unidad", "categoria", "unidad_presentacion",
@@ -826,34 +854,14 @@ class BuscarProductosView(View):
             ).select_related("unidad", "categoria")
             qs = qs.distinct()
 
-        if categoria:
+        if categoria_id:
+            if not categoria_id.isdigit():
+                return JsonResponse({"ok": True, "productos": []})
+            qs = qs.filter(categoria_id=int(categoria_id))
+        elif categoria:
             qs = qs.filter(categoria__nombre__icontains=categoria)
 
-        qs = qs.order_by("nombre")[:20]
+        qs = qs.order_by("nombre")[:limite]
 
-        productos = []
-        for p in qs:
-            productos.append({
-                "id":                        p.pk,
-                "codigo":                    p.codigo,
-                "nombre":                    p.nombre,
-                "unidad":                    p.unidad.abreviatura if p.unidad else "",
-                # precio_unitario = precio real por unidad (precio_actual / unidades_por_presentacion)
-                "precio_unitario":           float(p.precio_unitario_real),
-                "precio_presentacion":       float(p.precio_actual),
-                "unidades_por_presentacion": p.unidades_por_presentacion or 1,
-                "moneda":                    p.moneda,
-                "fecha_actualizacion_precio": (
-                    p.fecha_actualizacion_precio.strftime("%Y-%m-%dT%H:%M:%S")
-                    if p.fecha_actualizacion_precio else None
-                ),
-                # ── Presentación técnica (opcional, para advertencias futuras) ──
-                "presentacion_nombre":   p.presentacion_nombre or "",
-                "ancho_presentacion":    float(p.ancho_presentacion) if p.ancho_presentacion is not None else None,
-                "largo_presentacion":    float(p.largo_presentacion) if p.largo_presentacion is not None else None,
-                "unidad_dimension":      p.unidad_dimension or "",
-                "cantidad_presentacion": float(p.cantidad_presentacion) if p.cantidad_presentacion is not None else None,
-                "unidad_presentacion":   p.unidad_presentacion.abreviatura if p.unidad_presentacion else "",
-            })
-
+        productos = [producto_a_dict(p) for p in qs]
         return JsonResponse({"ok": True, "productos": productos})

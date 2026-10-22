@@ -106,19 +106,69 @@ class DespieceMaestroService:
             .values("codigo", "nombre")
         )
 
-    def calcular(self) -> list[dict]:
+    def _resolver_productos(self, componentes, productos_seleccionados: dict) -> dict:
+        """
+        Devuelve {componente_codigo: (producto | None, es_predeterminado)}.
+
+        La elección del usuario (`productos_seleccionados`, código → id o None)
+        siempre gana: un None explícito significa que el usuario quitó el
+        producto y no se vuelve a sugerir el predeterminado. Si el componente no
+        viene en la selección se usa su producto predeterminado, solo si está
+        activo y sigue siendo de la categoría del componente.
+        """
+        from apps.catalogos.models import Producto
+
+        ids_usuario = set()
+        for v in productos_seleccionados.values():
+            try:
+                if v:
+                    ids_usuario.add(int(v))
+            except (TypeError, ValueError):
+                pass
+        productos_usuario = {
+            p.pk: p for p in Producto.objects.filter(pk__in=ids_usuario)
+            .select_related("unidad", "unidad_presentacion")
+        }
+
+        resueltos = {}
+        for comp in componentes:
+            if comp.codigo in productos_seleccionados:
+                try:
+                    pid = int(productos_seleccionados[comp.codigo] or 0)
+                except (TypeError, ValueError):
+                    pid = 0
+                resueltos[comp.codigo] = (productos_usuario.get(pid), False)
+                continue
+            pred = comp.producto_predeterminado
+            if pred and pred.activo and pred.categoria_id == comp.categoria_id:
+                resueltos[comp.codigo] = (pred, True)
+            else:
+                resueltos[comp.codigo] = (None, False)
+        return resueltos
+
+    def calcular(self, productos_seleccionados: dict | None = None) -> list[dict]:
         """
         Evalúa las fórmulas de los componentes para los subconjuntos seleccionados.
 
         NO guarda en base de datos — solo devuelve la lista de resultados.
         Para persistir, llama a guardar() después.
 
+        `productos_seleccionados` ({componente_codigo: producto_id | None}) son
+        los productos que el usuario ya eligió en pantalla. Los componentes que
+        no aparecen ahí toman el producto predeterminado de la receta. Los
+        componentes con cálculo diferido se calculan de una vez si tienen
+        producto con presentación válida (y con ellos sus dependientes).
+
         Retorna:
           Lista de dicts con:
             subconjunto_id, subconjunto_nombre, componente_codigo, componente_nombre,
             formula_texto, cantidad_calculada, unidad, variable_salida,
-            variable_referencia_apu, unidad_apu, categoria_nombre, error
+            variable_referencia_apu, unidad_apu, categoria_nombre, error,
+            producto_predeterminado (dict | None, solo si se aplicó el de la receta),
+            aviso_producto (str | None)
         """
+        from apps.ingenieria.helpers.presentacion import obtener_valor_presentacion
+        from apps.ingenieria.helpers.productos import producto_a_dict
         from apps.ingenieria.models import ComponenteSubsistema
 
         ctx = self._build_contexto()
@@ -137,7 +187,11 @@ class DespieceMaestroService:
             qs = (
                 ComponenteSubsistema.objects
                 .filter(subsistema=self.subsistema, subconjunto__in=sq_ids)
-                .select_related("subconjunto", "categoria")
+                .select_related(
+                    "subconjunto", "categoria",
+                    "producto_predeterminado__unidad",
+                    "producto_predeterminado__unidad_presentacion",
+                )
                 .order_by("subconjunto__orden", "subconjunto__id", "orden")
             )
         else:
@@ -145,12 +199,18 @@ class DespieceMaestroService:
             qs = (
                 ComponenteSubsistema.objects
                 .filter(subsistema=self.subsistema)
-                .select_related("subconjunto", "categoria")
+                .select_related(
+                    "subconjunto", "categoria",
+                    "producto_predeterminado__unidad",
+                    "producto_predeterminado__unidad_presentacion",
+                )
                 .order_by("orden")
             )
 
         resultados: list[dict] = []
         excluidos = self._excluidos()
+        qs = list(qs)
+        productos = self._resolver_productos(qs, productos_seleccionados or {})
 
         import re as _re
         _token_re = _re.compile(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b')
@@ -175,8 +235,21 @@ class DespieceMaestroService:
             error = None
             pendiente_producto = False
             pendiente_dependencia = False
+            aviso_producto = None
+            producto, es_predeterminado = productos.get(comp.codigo, (None, False))
 
-            if comp.requiere_presentacion_producto:
+            # Diferido con producto (elegido o predeterminado): se intenta
+            # calcular ya con su presentación.
+            ctx_comp = ctx
+            if comp.requiere_presentacion_producto and producto is not None:
+                valor_pres, error_pres = obtener_valor_presentacion(comp, producto)
+                if valor_pres is not None and comp.variable_presentacion_producto:
+                    ctx_comp = {**ctx, comp.variable_presentacion_producto: valor_pres}
+                    valores_usados[comp.variable_presentacion_producto] = valor_pres
+                else:
+                    aviso_producto = error_pres or "Falta la variable de presentación en la receta."
+
+            if comp.requiere_presentacion_producto and ctx_comp is ctx:
                 pendiente_producto = True
                 if comp.variable_salida:
                     variables_pendientes.add(comp.variable_salida)
@@ -197,7 +270,7 @@ class DespieceMaestroService:
 
             else:
                 try:
-                    cantidad_float = comp.evaluar(ctx)
+                    cantidad_float = comp.evaluar(ctx_comp)
                     if comp.variable_salida:
                         ctx[comp.variable_salida] = cantidad_float
                     cantidad = Decimal(str(cantidad_float)).quantize(
@@ -238,6 +311,10 @@ class DespieceMaestroService:
                 "pendiente_dependencia":   pendiente_dependencia,
                 "requiere_presentacion_producto": comp.requiere_presentacion_producto,
                 "variable_presentacion_producto": comp.variable_presentacion_producto,
+                "producto_predeterminado": (
+                    producto_a_dict(producto) if producto is not None and es_predeterminado else None
+                ),
+                "aviso_producto":          aviso_producto,
             })
 
         logger.info(
@@ -274,14 +351,22 @@ class DespieceMaestroService:
         if sq_ids:
             qs = (
                 ComponenteSubsistema.objects.filter(subsistema=self.subsistema, subconjunto__in=sq_ids)
-                .select_related("subconjunto", "categoria")
+                .select_related(
+                    "subconjunto", "categoria",
+                    "producto_predeterminado__unidad",
+                    "producto_predeterminado__unidad_presentacion",
+                )
                 .order_by("subconjunto__orden", "subconjunto__id", "orden")
             )
         else:
             qs = (
                 ComponenteSubsistema.objects
                 .filter(subsistema=self.subsistema)
-                .select_related("subconjunto", "categoria")
+                .select_related(
+                    "subconjunto", "categoria",
+                    "producto_predeterminado__unidad",
+                    "producto_predeterminado__unidad_presentacion",
+                )
                 .order_by("orden")
             )
 

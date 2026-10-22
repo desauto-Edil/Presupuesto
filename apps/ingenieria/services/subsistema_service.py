@@ -265,6 +265,7 @@ def guardar_subconjuntos_componentes(subsistema, post):
             "codigo": "viga",
             "nombre": "Viga principal",
             "categoria_id": 3,          // null si sin categoría
+            "producto_predeterminado_id": 42,  // null; debe ser de la categoría
             "formula_texto": "longitud * 1.05",
             "variable_salida": "",
             "unidad": "ml",
@@ -279,7 +280,7 @@ def guardar_subconjuntos_componentes(subsistema, post):
     Compatibilidad: si un subsistema antiguo tiene componentes sin subconjunto,
     se eliminan también al guardar con la nueva estructura.
     """
-    from apps.catalogos.models import CategoriaProducto
+    from apps.catalogos.models import CategoriaProducto, Producto
 
     raw = post.get("subconjuntos_json", "").strip()
     if not raw:
@@ -341,6 +342,32 @@ def guardar_subconjuntos_componentes(subsistema, post):
                 except (CategoriaProducto.DoesNotExist, ValueError, TypeError):
                     pass
 
+            # Producto predeterminado: solo se acepta si existe, está activo y
+            # pertenece a la categoría del componente. Si no, se descarta con aviso.
+            producto_pred = None
+            prod_id = comp_data.get("producto_predeterminado_id")
+            if prod_id:
+                try:
+                    producto_pred = Producto.objects.get(pk=int(prod_id))
+                except (Producto.DoesNotExist, ValueError, TypeError):
+                    errores_validacion.append(
+                        f"Componente «{nombre}» (cód. {codigo}): el producto predeterminado "
+                        "no existe; se guardó sin producto."
+                    )
+                else:
+                    if categoria is None or producto_pred.categoria_id != categoria.pk:
+                        errores_validacion.append(
+                            f"Componente «{nombre}» (cód. {codigo}): el producto «{producto_pred.nombre}» "
+                            "no pertenece a la categoría seleccionada; se guardó sin producto."
+                        )
+                        producto_pred = None
+                    elif not producto_pred.activo:
+                        errores_validacion.append(
+                            f"Componente «{nombre}» (cód. {codigo}): el producto «{producto_pred.nombre}» "
+                            "está inactivo; se guardó sin producto."
+                        )
+                        producto_pred = None
+
             req_pres = bool(comp_data.get("requiere_presentacion_producto", False))
             var_pres = str(comp_data.get("variable_presentacion_producto", "")).strip()
             campo_pres = str(comp_data.get("campo_presentacion_producto", "CANTIDAD")).strip().upper()
@@ -366,6 +393,7 @@ def guardar_subconjuntos_componentes(subsistema, post):
                 codigo=codigo,
                 nombre=nombre,
                 categoria=categoria,
+                producto_predeterminado=producto_pred,
                 formula_texto=formula,
                 variable_salida=str(comp_data.get("variable_salida", "")).strip(),
                 unidad=str(comp_data.get("unidad", "")).strip(),

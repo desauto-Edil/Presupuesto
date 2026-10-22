@@ -1,0 +1,519 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Formulario de subsistemas (templates/ingenieria/subsistema_form.html)
+   Usa la base común de formularios (form-page-*, section tokens de
+   imperandina.css) y agrega solo lo propio de esta pantalla:
+   pestañas por sección, bloques, tablas de filas y la receta técnica.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ══ Scroll: la página usa el scroll del documento (la barra inferior es sticky).
+   Solo <html> hace scroll: si <body> también tuviera overflow distinto de
+   visible se volvería contenedor de scroll y la barra sticky no se fijaría. */
+html     { overflow-y: auto !important; height: auto !important; }
+body     { overflow: visible !important; height: auto !important; }
+#appMain { overflow: visible !important; }
+
+/* ══ Página ═════════════════════════════════════════════════════════════════ */
+.sf-page.form-page-card {
+  max-width: 1240px;
+  overflow: visible;          /* sin esto la barra inferior sticky no funciona */
+}
+.sf-head { gap: 12px; flex-wrap: wrap; }
+.sf-head__info {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0;
+}
+.sf-head__actions { display: flex; align-items: center; gap: 10px; }
+.sf-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+.sf-chip--tipo {
+  color: var(--theme-accent);
+  background: var(--theme-accent-pale);
+  border-color: var(--theme-accent-border);
+}
+
+/* ══ Pestañas de sección ════════════════════════════════════════════════════ */
+.sf-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+.sf-tab {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: center;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 12px 14px 10px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+.sf-tab[hidden] { display: none; }
+.sf-tab i {
+  grid-row: span 2;
+  font-size: 16px;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+.sf-tab span  { font-size: 13px; font-weight: 700; color: inherit; }
+.sf-tab small { font-size: 10.5px; color: var(--ink-soft); }
+.sf-tab:hover { color: var(--ink); }
+.sf-tab:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: -2px; }
+.sf-tab.is-active {
+  color: var(--ink);
+  border-bottom-color: var(--theme-accent);
+}
+.sf-tab.is-active i {
+  color: var(--theme-accent);
+  background: var(--theme-accent-pale);
+  border-color: var(--theme-accent-border);
+}
+@media (max-width: 720px) {
+  .sf-tab small { display: none; }
+  .sf-tab { padding: 10px 10px 8px; }
+}
+
+/* ══ Cuerpo y barra inferior ════════════════════════════════════════════════ */
+.sf-body { padding: 20px 22px 8px; }
+.sf-panel[hidden] { display: none; }
+
+.sf-foot.form-page-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 -4px 14px rgba(14,17,23,.05);
+  /* Deja libre la esquina de los botones flotantes de Ayuda/Resumen */
+  padding-right: 76px;
+}
+.sf-foot__nav,
+.sf-foot__actions { display: flex; align-items: center; gap: 8px; }
+.sf-foot__nav .btn[hidden] { display: none; }
+@media (max-width: 768px) {
+  .sf-foot.form-page-footer { padding-right: 68px; }
+}
+
+/* ══ Bloque de sección ══════════════════════════════════════════════════════ */
+.sf-block {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.sf-block__head {
+  padding: 14px 18px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sf-block__title {
+  font-family: 'Lato';
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--theme-accent);
+  margin: 0;
+}
+.sf-block__title small {
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0; text-transform: none;
+  color: var(--ink-soft); margin-left: 6px;
+}
+.sf-block__desc {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 3px 0 0;
+  max-width: 760px;
+}
+.sf-block__head-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sf-block__body { padding: 14px 18px 16px; }
+
+/* Sección consumo — oculta por defecto */
+.sf-block--consumo { display: none; }
+.sf-block--consumo.visible { display: block; }
+
+/* ══ Campo con label ════════════════════════════════════════════════════════ */
+.sf-field { display: flex; flex-direction: column; gap: 5px; }
+.sf-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.sf-label span { color: var(--ink); }
+.sf-label .sf-opt { color: var(--ink-soft); font-weight: 400; font-size: 10.5px; }
+.sf-error { color: var(--brand-red, #c0392b); font-size: 11px; margin-top: 2px; }
+.sf-check { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12.5px; font-weight: 500; }
+.sf-empty {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+  margin: 8px 0 0;
+}
+.sf-empty--warn { color: #92400e; }
+
+/* ══ Ayuda plegable ═════════════════════════════════════════════════════════ */
+.sf-help {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border-left: 3px solid var(--theme-accent-border);
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 14px;
+}
+.sf-help > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 7px 12px;
+  font-weight: 600;
+  color: var(--ink);
+  display: flex; align-items: center; gap: 6px;
+}
+.sf-help > summary::-webkit-details-marker { display: none; }
+.sf-help > summary::after {
+  content: "\F282";                 /* bi-chevron-down */
+  font-family: "bootstrap-icons";
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform .15s;
+}
+.sf-help[open] > summary::after { transform: rotate(180deg); }
+.sf-help__body { padding: 0 12px 10px; line-height: 1.6; }
+.sf-help__body strong { color: var(--ink); }
+
+/* Nota fija (modal APU) */
+.sf-hint {
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border-left: 3px solid rgba(14,17,23,.15);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 12px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.sf-hint strong { color: var(--ink); font-weight: 700; }
+
+/* ══ Tabla de filas inline ══════════════════════════════════════════════════ */
+.sf-table-wrap { overflow-x: auto; }
+.rows-table { width: 100%; border-collapse: collapse; }
+.rows-table th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  text-align: left;
+  background: var(--surface);
+  white-space: nowrap;
+}
+.rows-table th small { font-weight: 400; font-size: 9px; letter-spacing: 0; text-transform: none; }
+.rows-table td {
+  padding: 5px 6px;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(14,17,23,.04);
+}
+.rows-table tr:last-child td { border-bottom: none; }
+.rows-table tbody tr:hover td { background: rgba(14,17,23,.025); }
+.rows-table input,
+.rows-table select { font-size: 12px !important; padding: 5px 8px !important; }
+.rows-table .td-center { text-align: center; }
+.rows-table .td-idx { color: var(--ink-soft); font-size: 11px; text-align: center; vertical-align: middle; }
+.sf-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sf-del {
+  color: rgba(14,17,23,.3);
+}
+.sf-del:hover { color: var(--brand-red, #c0392b); }
+
+/* ══ Consumo ════════════════════════════════════════════════════════════════ */
+.consumo-range-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: end;
+}
+.consumo-range-sep {
+  padding-bottom: 9px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.m2m-grid { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.m2m-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; cursor: pointer;
+}
+.m2m-item input[type=checkbox] { cursor: pointer; }
+.cq-total { margin-top: 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.cq-total__ok  { color: #108250; font-size: 11px; }
+.cq-total__err { color: #c0392b; font-size: 11px; }
+
+/* ══ Imagen técnica ═════════════════════════════════════════════════════════ */
+.img-tecnica-preview {
+  max-height: 160px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+  background: var(--surface);
+  display: block;
+}
+.img-tecnica-wrap { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.img-tecnica-meta { font-size: 11px; color: var(--ink-soft); margin: 4px 0 0; }
+
+/* ══ Receta técnica: barra de herramientas ══════════════════════════════════ */
+.sq-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.sq-toolbar__info { font-size: 12px; color: var(--ink-soft); }
+
+/* ══ Tarjetas de subconjunto ════════════════════════════════════════════════ */
+.sq-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  background: var(--card);
+  transition: box-shadow .15s;
+}
+.sq-card:focus-within { box-shadow: 0 0 0 2px var(--theme-accent-pale); }
+.sq-card__head {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  border-radius: 10px 10px 0 0;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sq-card.is-collapsed .sq-card__head { border-bottom: none; border-radius: 10px; }
+.sq-card.is-collapsed .sq-card__body { display: none; }
+.sq-toggle {
+  background: none; border: none; padding: 2px 4px; cursor: pointer;
+  color: var(--ink-soft); font-size: 13px; line-height: 1;
+  transition: transform .15s;
+}
+.sq-card.is-collapsed .sq-toggle { transform: rotate(-90deg); }
+.sq-idx-badge {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: var(--theme-accent-pale);
+  color: var(--theme-accent);
+  border: 1px solid var(--theme-accent-border);
+  font-size: 10px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sq-nombre {
+  flex: 1;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  padding: 4px 8px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: var(--ink) !important;
+  border-radius: 6px !important;
+  transition: border-color .15s, background .15s;
+  min-width: 0;
+}
+.sq-nombre:hover { border-color: var(--border) !important; }
+.sq-nombre:focus {
+  border-color: var(--border) !important;
+  background: var(--card) !important;
+  outline: none;
+}
+.sq-count { flex-shrink: 0; }
+.sq-rm {
+  color: rgba(14,17,23,.35);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sq-rm:hover { color: var(--brand-red, #c0392b); }
+.sq-card__body { padding: 12px 14px 12px; }
+.sq-desc {
+  font-size: 12px !important;
+  color: var(--ink-soft);
+  resize: vertical;
+  min-height: 34px;
+  margin-bottom: 10px;
+  padding: 6px 10px !important;
+}
+.sq-comp-table { min-width: 1000px; }
+.sq-empty-msg {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+  margin: 6px 0 10px;
+}
+.sq-card__actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+#noSubconjuntosMsg {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+  text-align: center;
+  padding: 24px 0 8px;
+}
+
+/* Código del componente: autogenerado y de solo lectura → etiqueta discreta */
+.comp-cod {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 3px;
+  font-size: 10px; color: var(--ink-soft);
+}
+.rows-table .comp-cod .comp-f-codigo {
+  width: 64px;
+  height: auto;
+  padding: 0 4px !important;
+  font-size: 10px !important;
+  border: none;
+  background: var(--surface);
+  color: var(--ink-soft);
+  border-radius: 4px;
+}
+.comp-diferido { display: flex; flex-direction: column; gap: 4px; }
+.rows-table .comp-f-formula { font-size: 11px !important; }
+.rows-table .comp-f-var-pres,
+.rows-table .comp-f-var_ref_apu { font-size: 10.5px !important; }
+
+/* ══ Botones de agregar ═════════════════════════════════════════════════════ */
+.sf-btn-add {
+  background: var(--theme-accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.sf-btn-add:hover { background: var(--theme-accent-h, var(--theme-accent)); color: #fff; }
+.sq-add-comp-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--theme-accent);
+  background: var(--theme-accent-pale);
+  border: 1.5px solid var(--theme-accent-border);
+  border-radius: 7px;
+  padding: 5px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.sq-add-comp-btn:hover { border-color: var(--theme-accent); color: var(--theme-accent); }
+
+/* ══ Interruptores compactos para tablas ════════════════════════════════════ */
+.sw-comp-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none; margin: 0;
+}
+.sw-native {
+  /* visualmente oculto pero accesible por teclado */
+  position: absolute;
+  opacity: 0; width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.sw-track {
+  display: inline-block;
+  position: relative;
+  width: 50px; height: 20px; border-radius: 10px;
+  background: #ced4da;
+  transition: background .2s ease;
+  flex-shrink: 0;
+}
+.sw-track::before {
+  content: "OFF";
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  font-size: 8px; font-weight: 800; color: rgba(255,255,255,.85);
+  letter-spacing: .05em; line-height: 1; pointer-events: none;
+  transition: opacity .15s;
+}
+.sw-track::after {
+  content: "ON";
+  position: absolute; left: 5px; top: 50%; transform: translateY(-50%);
+  font-size: 8px; font-weight: 800; color: rgba(255,255,255,.9);
+  letter-spacing: .05em; line-height: 1; pointer-events: none;
+  opacity: 0; transition: opacity .15s;
+}
+.sw-thumb {
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  transition: left .2s ease;
+}
+.sw-native:checked ~ .sw-track { background: var(--theme-accent, #14b8a6); }
+.sw-native:checked ~ .sw-track .sw-thumb { left: 33px; /* 50-14-3 */ }
+.sw-native:checked ~ .sw-track::before { opacity: 0; }
+.sw-native:checked ~ .sw-track::after  { opacity: 1; }
+.sw-native:disabled ~ .sw-track { opacity: .45; }
+.sw-native:disabled ~ .sw-caption { opacity: .45; }
+.sw-comp-label:has(.sw-native:disabled) { cursor: not-allowed; }
+.sw-comp-label:focus-within .sw-track {
+  outline: 2px solid var(--theme-accent, #14b8a6); outline-offset: 2px;
+}
+.sw-caption { font-size: 11px; white-space: nowrap; color: var(--ink); }
+
+/* Selector de campo de presentación — píldora con el color de la unidad */
+.rows-table .comp-f-campo-pres {
+  font-size: 10.5px !important;
+  border-radius: 14px !important;
+  border: 1.5px solid var(--theme-accent) !important;
+  color: var(--theme-accent) !important;
+  background-color: transparent !important;
+  padding: 2px 8px !important;
+  cursor: pointer;
+  min-width: 130px;
+}
+.rows-table .comp-f-campo-pres:focus {
+  outline: 2px solid var(--theme-accent) !important;
+  outline-offset: 1px;
+}
+
+/* Producto predeterminado del componente */
+.comp-prod-aviso {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: #b45309;
+}
+.comp-prod-aviso:empty { display: none; }
+
+/* ══ Ocultar pill de progreso y FABs de ayuda mientras un modal está abierto
+   (Bootstrap añade body.modal-open al mostrar un modal). ═══════════════════ */
+body.modal-open #cpPill,
+body.modal-open .cp-offcanvas-toggle,
+body.modal-open .assist-fab,
+body.modal-open .assist-fab--help,
+body.modal-open .assist-fab--resumen { display: none !important; }

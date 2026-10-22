@@ -225,6 +225,10 @@
 }
 .dp-pending-state i { font-size: 11px; }
 .dp-pending-state--ready { color: #0f6b3e; }
+.dp-pred-tag {
+  display: flex; align-items: center; gap: 4px; margin-top: 3px;
+  font-size: 10px; font-weight: 600; color: var(--theme-accent, #14b8a6);
+}
 .dp-pending-pill {
   display: inline-flex; align-items: center; gap: 5px;
   background: rgba(255,193,7,.16); color: #765600;
@@ -1032,14 +1036,12 @@ function initSelector(tr, fila) {
       _buscar(q, fila.categoria_nombre || '', drop, p => {
         inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
         fila._prod = _buildProdObj(p);
+        delete fila._prodLimpiado;
         _updateProdUI(tr, fila._prod);
         _renderProdWarning(tr, lineaUnidad, fila._prod);
         _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
         _refrescarSugerenciasConsolidacion();
-        if (_esCalculoDiferido(fila)) {
-          _renderBody();
-          showToast('Producto seleccionado. Guarda el despiece para calcular la cantidad.', 'ok');
-        }
+        _alCambiarProductoFila(fila);
       }), 260);
   });
 
@@ -1048,14 +1050,12 @@ function initSelector(tr, fila) {
     if (q) _buscar(q, fila.categoria_nombre || '', drop, p => {
       inp.value = _displayProductoLabel(p); inp.classList.add('has-product'); clear.classList.add('visible');
       fila._prod = _buildProdObj(p);
+      delete fila._prodLimpiado;
       _updateProdUI(tr, fila._prod);
       _renderProdWarning(tr, lineaUnidad, fila._prod);
       _renderCoherenciaChip(tr, fila.formula_texto, fila._prod);
       _refrescarSugerenciasConsolidacion();
-      if (_esCalculoDiferido(fila)) {
-        _renderBody();
-        showToast('Producto seleccionado. Guarda el despiece para calcular la cantidad.', 'ok');
-      }
+      _alCambiarProductoFila(fila);
     });
   });
 
@@ -1063,20 +1063,28 @@ function initSelector(tr, fila) {
     e.stopPropagation();
     inp.value = ''; inp.classList.remove('has-product'); clear.classList.remove('visible');
     drop.classList.remove('open'); fila._prod = null;
+    // Quitar el producto es una elección: al recalcular no vuelve el predeterminado.
+    fila._prodLimpiado = true;
     const precioEl = tr.querySelector('.td-precio-val');
     const fechaEl  = tr.querySelector('.td-fecha-val');
     if (precioEl) precioEl.innerHTML  = '<span class="text-pendiente">Sin producto</span>';
     if (fechaEl)  fechaEl.textContent = '—';
     _renderProdWarning(tr, lineaUnidad, null);
     _renderCoherenciaChip(tr, fila.formula_texto, null);
-    if (_esCalculoDiferido(fila)) {
-      fila.cantidad_calculada = null;
-      fila.cantidad_redondeada = null;
-      fila.pendiente_producto = true;
-      _renderBody();
-    }
     _refrescarSugerenciasConsolidacion();
+    _alCambiarProductoFila(fila);
   });
+}
+
+/* Un componente de cálculo diferido depende de la presentación del producto:
+   al cambiarlo se recalcula en el servidor (cantidad y dependientes). Las
+   demás líneas solo actualizan su producto y el sello «sugerido». */
+function _alCambiarProductoFila(fila) {
+  if (fila.requiere_presentacion_producto) {
+    calcular({ preservar: true });
+  } else {
+    _renderBody();
+  }
 }
 
 /* Selector para fila consolidada */
@@ -1159,11 +1167,24 @@ function _cantidadRedondeada(f) {
   return null;
 }
 
+function _productoSugeridoHtml(f) {
+  return (f._prod && f._prod.predeterminado)
+    ? '<div class="dp-pred-tag" title="Producto predeterminado de la plantilla; puedes cambiarlo"><i class="bi bi-magic"></i> Sugerido por la plantilla</div>'
+    : '';
+}
+
+function _avisoProductoHtml(f) {
+  return f.aviso_producto
+    ? `<div class="dp-pending-state"><i class="bi bi-exclamation-triangle"></i> ${esc(f.aviso_producto)}</div>`
+    : '';
+}
+
 function _estadoDiferidoHtml(f) {
   if (!f.pendiente_producto) {
     return f.pendiente_dependencia ? '<div class="dp-pending-state"><i class="bi bi-hourglass-split"></i> Pendiente de cálculo previo</div>' : '';
   }
-  const listo = Boolean(f._prod && f._prod.producto_id);
+  // Con aviso de presentación el producto no sirve para calcular: no está «listo».
+  const listo = Boolean(f._prod && f._prod.producto_id && !f.aviso_producto);
   return `<div class="dp-pending-state${listo ? ' dp-pending-state--ready' : ''}">
     <i class="bi ${listo ? 'bi-check-circle-fill' : 'bi-hourglass-split'}"></i>
     ${listo ? 'Producto listo · se calculará al guardar' : 'Requiere producto para calcular'}
@@ -1187,7 +1208,7 @@ function _rowNormal(f, i, cols) {
   const redHtml = cantRed === null ? '—' : `<span class="td-red-pill">${cantRed}</span>`;
   return `<tr data-idx="${i}" class="${pendiente ? 'dp-pending-row' : ''}">
     ${chk}
-    <td class="td-comp">${esc(f.componente_nombre)}<small>${esc(f.componente_codigo)}</small>${_estadoDiferidoHtml(f)}${_btnEliminarHtml(i)}</td>
+    <td class="td-comp">${esc(f.componente_nombre)}<small>${esc(f.componente_codigo)}</small>${_estadoDiferidoHtml(f)}${_avisoProductoHtml(f)}${_productoSugeridoHtml(f)}${_btnEliminarHtml(i)}</td>
     <td class="td-cant">${cantidadHtml}</td>
     <td class="td-red">${redHtml}</td>
     <td class="td-und">${esc(f.unidad)}</td>
@@ -1295,7 +1316,9 @@ function _renderExcluidos() {
 function renderTabla(lineas) {
   filasCalc = lineas.map(l => ({
     ...l,
-    _prod: (l.producto_id || l.producto_nombre) ? {
+    // `_prod` explícito (elección del usuario o predeterminado) gana sobre los
+    // campos planos del snapshot guardado.
+    _prod: l._prod !== undefined ? l._prod : (l.producto_id || l.producto_nombre) ? {
       producto_id:     l.producto_id,
       // Los siguientes son snapshots del momento del cálculo/guardado
       producto_codigo: l.producto_codigo || '',
@@ -1997,15 +2020,34 @@ function verDetalleConsolidada(cid) {
 async function calcular(opts) {
   setLoading('btnCalcular', 'calcSpinner', 'calcIcon', true);
   const vars = getVariables();
-  // Al restaurar un componente se conservan productos y consolidaciones por código.
+  // Al restaurar un componente se conservan las consolidaciones por código.
   const preservar = !!(opts && opts.preservar);
-  const prodPorCodigo = {};
   const consPorCodigo = [];
   if (preservar) {
-    filasCalc.forEach(f => { if (f._prod) prodPorCodigo[f.componente_codigo] = f._prod; });
     consolidaciones.forEach(c => consPorCodigo.push(
       (c.indices || []).map(i => filasCalc[i] && filasCalc[i].componente_codigo)));
   }
+
+  // La elección del usuario siempre gana sobre el producto predeterminado:
+  //  - prodPorCodigo: el producto propio de la línea (para volver a pintarlo).
+  //  - seleccion:     id que usa el servidor para calcular diferidos (si la
+  //                   línea está consolidada, manda el producto del grupo).
+  //  - limpiados:     líneas a las que el usuario quitó el producto (null).
+  const prodPorCodigo = {};
+  const limpiados = new Set();
+  const seleccion = {};
+  const prodGrupo = new Map();
+  consolidaciones.forEach(c => {
+    if (c._prod && c._prod.producto_id) (c.indices || []).forEach(i => prodGrupo.set(i, c._prod));
+  });
+  filasCalc.forEach((f, i) => {
+    const cod = f.componente_codigo;
+    if (f._prod && f._prod.producto_id) prodPorCodigo[cod] = f._prod;
+    else if (f._prodLimpiado) limpiados.add(cod);
+    const efectivo = prodGrupo.get(i) || f._prod;
+    if (efectivo && efectivo.producto_id) seleccion[cod] = efectivo.producto_id;
+    else if (f._prodLimpiado) seleccion[cod] = null;
+  });
 
   try {
     const resp = await fetch(CALCULAR_URL, {
@@ -2014,6 +2056,7 @@ async function calcular(opts) {
       body:    JSON.stringify({
         variables_entrada: vars,
         componentes_excluidos: excluidos.map(e => e.codigo),
+        productos_seleccionados: seleccion,
       }),
     });
     const data = await resp.json();
@@ -2021,11 +2064,18 @@ async function calcular(opts) {
     if (data.ok) {
       const lineas = [];
       data.subconjuntos.forEach(sq => sq.lineas.forEach(l => lineas.push(l)));
+      lineas.forEach(l => {
+        const cod = l.componente_codigo;
+        if (prodPorCodigo[cod]) {
+          l._prod = prodPorCodigo[cod];
+        } else if (limpiados.has(cod)) {
+          l._prod = null;
+          l._prodLimpiado = true;
+        } else if (l.producto_predeterminado) {
+          l._prod = { ..._buildProdObj(l.producto_predeterminado), predeterminado: true };
+        }
+      });
       if (preservar) {
-        lineas.forEach(l => {
-          const p = prodPorCodigo[l.componente_codigo];
-          if (p && !l.producto_id) Object.assign(l, p);
-        });
         const idxPorCodigo = {};
         lineas.forEach((l, i) => { idxPorCodigo[l.componente_codigo] = i; });
         consolidaciones.forEach((c, k) => {

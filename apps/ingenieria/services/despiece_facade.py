@@ -38,14 +38,15 @@ class DespieceFacade(Facade):
     # ── Despiece maestro ─────────────────────────────────────────────────
 
     @staticmethod
-    def calcular_maestro(despiece) -> list[dict]:
+    def calcular_maestro(despiece, productos_seleccionados: dict | None = None) -> list[dict]:
         """Calcula las líneas del despiece maestro a partir de su receta y
-        variables actuales.
+        variables actuales. `productos_seleccionados` son las elecciones del
+        usuario por código de componente (ganan sobre el predeterminado).
 
         Wrapper sobre `DespieceMaestroService(despiece).calcular()`.
         """
         from apps.ingenieria.services.despiece_maestro_service import DespieceMaestroService
-        return DespieceMaestroService(despiece).calcular()
+        return DespieceMaestroService(despiece).calcular(productos_seleccionados)
 
     @staticmethod
     def guardar_maestro(despiece, resultados: list[dict], variables_entrada: dict, **kwargs):

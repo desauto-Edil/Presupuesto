@@ -392,6 +392,17 @@ class ComponenteSubsistema(models.Model):
         related_name="componentes_subsistema",
         help_text="Categoría de producto donde se seleccionará el material",
     )
+    producto_predeterminado = models.ForeignKey(
+        "catalogos.Producto",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="componentes_subsistema_predeterminado",
+        verbose_name="Producto predeterminado",
+        help_text=(
+            "Producto sugerido al calcular un despiece con esta plantilla. "
+            "Debe pertenecer a la categoría del componente; el usuario puede cambiarlo."
+        ),
+    )
     formula_texto = models.TextField(
         help_text=(
             "Expresión aritmética Python. Puede usar variables de entrada y salidas previas. "

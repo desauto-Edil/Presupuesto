@@ -213,6 +213,7 @@ def clonar_subsistema(
             codigo=c.codigo,
             nombre=c.nombre,
             categoria_id=c.categoria_id,
+            producto_predeterminado_id=c.producto_predeterminado_id,
             formula_texto=c.formula_texto,
             variable_salida=c.variable_salida,
             unidad=c.unidad,

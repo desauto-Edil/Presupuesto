@@ -68,7 +68,7 @@ class DespieceService:
         # ── Elegir fuente de componentes ──────────────────────────────────────
         componentes_db = list(
             ComponenteSubsistema.objects.filter(subsistema=ps.subsistema)
-            .select_related("categoria")
+            .select_related("categoria", "producto_predeterminado")
             .order_by("orden")
         )
 
@@ -105,19 +105,30 @@ class DespieceService:
 
         for comp in componentes_db:
             categoria = comp.categoria
+            linea_exist = lineas_existentes.get(comp.codigo)
+
+            # Producto predeterminado de la receta: solo para líneas NUEVAS.
+            # Las existentes conservan lo que el usuario eligió (o retiró).
+            pred = comp.producto_predeterminado
+            producto_nuevo = (
+                pred
+                if linea_exist is None and pred is not None
+                and pred.activo and pred.categoria_id == comp.categoria_id
+                else None
+            )
+            extra_producto = {"producto": producto_nuevo} if producto_nuevo else {}
 
             # ── Componente con cálculo diferido por presentación ──────────────
             if comp.requiere_presentacion_producto:
-                linea_exist = lineas_existentes.get(comp.codigo)
                 cantidad_float_def: float | None = None
+                producto_calc = (
+                    linea_exist.producto if linea_exist and linea_exist.producto_id
+                    else producto_nuevo
+                )
 
-                if (
-                    linea_exist
-                    and linea_exist.producto_id
-                    and comp.variable_presentacion_producto
-                ):
+                if producto_calc is not None and comp.variable_presentacion_producto:
                     from apps.ingenieria.helpers.presentacion import obtener_valor_presentacion
-                    valor_pres_db, error_pres_db = obtener_valor_presentacion(comp, linea_exist.producto)
+                    valor_pres_db, error_pres_db = obtener_valor_presentacion(comp, producto_calc)
                     if valor_pres_db is not None:
                         ctx_tmp = {**contexto, comp.variable_presentacion_producto: valor_pres_db}
                         try:
@@ -146,6 +157,7 @@ class DespieceService:
                             "presentacion_snapshot": Decimal(str(valor_pres_db)),
                             "categoria_producto": categoria,
                             "es_dependencia_automatica": False,
+                            **extra_producto,
                         },
                     )
                     linea.capturar_precio()
@@ -172,6 +184,7 @@ class DespieceService:
                             "pendiente_producto": True,
                             "categoria_producto": categoria,
                             "es_dependencia_automatica": False,
+                            **extra_producto,
                         },
                     )
                     resultados.append({
@@ -208,6 +221,7 @@ class DespieceService:
                             "pendiente_producto": True,
                             "categoria_producto": categoria,
                             "es_dependencia_automatica": False,
+                            **extra_producto,
                         },
                     )
                     resultados.append({
@@ -242,11 +256,13 @@ class DespieceService:
                     "pendiente_producto": False,  # reset si antes era cascade-bloqueado
                     "categoria_producto": categoria,
                     "es_dependencia_automatica": False,
+                    **extra_producto,
                 },
             )
 
-            # No auto-asignar producto: el usuario elige manualmente desde el despiece.
-            # Solo capturar precio si ya tiene producto asignado previamente.
+            # Solo se asigna el producto predeterminado de la receta en líneas
+            # nuevas; en las demás manda la elección del usuario.
+            # Capturar precio si la línea tiene producto.
             linea.capturar_precio()
 
             resultados.append({
